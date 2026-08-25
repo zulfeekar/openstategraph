@@ -429,3 +429,102 @@ protected was the thing being removed.
 
 Ticket: launch-readiness/76
 Ticket: launch-readiness/77
+
+## 2026-08-25 — dwell-time ground truth, named-place validator check, freshness framing, Genie MCP spike
+
+Four tickets worked in value order under a tight budget (12 warehouse calls
+total, no sub-agents).
+
+**Dwell time (launch-readiness/67).** Hand-written SQL against
+`idle_events_v1r2`, run directly against the warehouse, bypassing the agent:
+the current pipeline's number (4447 rows, mean 39.12h) reproduces exactly —
+one raw row is one visit, and that is not double-counting. Collapsing
+adjacent/overlapping rows per vessel (gap < 1h) into merged visits *raises*
+the mean (48.44h over 3596 visits), ruling out double-counting as the cause
+of the gap to Genie's 18.4h. The median (22.43h) sits much closer to Genie's
+number than the mean (39.12h) — the distribution is heavily right-skewed
+(max 744h), and only 51 of 4447 rows exceed 10 days yet carry 13% of total
+dwell-hours. Trimming those only drops the mean to 34.4h. Conclusion: a
+definition/statistic disagreement (mean vs. median/trimmed-mean), not a bug
+in row counting or the bounding box — the remaining ~20% gap could not be
+fully closed without Genie's own generated SQL, which was not inspectable.
+Left `partially` on purpose — ground truth established, root cause narrowed,
+no code changed, per "never tune toward 18.4h."
+
+**Named-place coordinate filter (launch-readiness/73).** Added check 5 to
+`tools/sql_validator.py`: a WHERE predicate on a latitude/longitude-named
+column is rejected when the question names a place with a real
+`geofences_v3r1.geofence_name` entry (matched via an injectable, live-by-default
+gazetteer lookup), unless `entity-dictionary.md` documents that place as a
+confirmed no-geofence bounding-box workaround (parsed at runtime, never
+hardcoded). A gazetteer lookup failure warns, never rejects, matching every
+other check's doctrine. TDD, 5 new tests, 40/40 passing. Resolved.
+
+**Freshness framing (launch-readiness/77).** The date-answer half was
+already resolved (`ae327f5`). Extended `agent1`'s system prompt so a
+freshness/recency question surfaces the relevant lens's `typical_lag_days`
+in the ticket's own phrasing ("today is X; data runs N days behind, so the
+last complete window is Y"), reading the number from the lens file. Shape
+invariants (31 edges, 12 -> agent1.skill, 4 router branches,
+`gate1.revise -> agent1.feedback`) verified unchanged; not exercised live
+this session. Left `partially`.
+
+**Genie MCP spike (launch-readiness/71).** Documentation-only spike, no
+code. Databricks' own docs: the per-space endpoint is async ask/poll,
+returns a prose answer by default with SQL/rows available only via a
+second `genie_get_query_result` call; auth is OAuth on-behalf-of-user with
+the `genie` scope, and the broader Genie One server's docs explicitly say
+service principals aren't supported — a real blocker for an unattended
+workflow run, independent of preview status. The per-space endpoint is
+documented as Public Preview. Decision: **wait for GA**, and re-check
+service-principal support specifically when it lands, not just the preview
+banner. Resolved as a decision, no code.
+
+`~/osg-demo` commit `6ad9fbe` (tickets 73, 77 code/prompt changes).
+
+Ticket: launch-readiness/67
+Ticket: launch-readiness/73
+Ticket: launch-readiness/77
+Ticket: launch-readiness/71
+
+**Duration aggregation (launch-readiness/78).** A lens pinning `quantity_aggregation`
+had no equivalent for a derived duration (dwell/idle time), so which
+statistic came back was decided by whichever model wrote the query.
+Extended `geofence_dwell` and `vessel_idle_periods` with `duration_column`,
+`duration_aggregation: median` (long tail; the mean misleads) and
+`report_alongside: mean`. Added a check to `tools/sql_validator.py` that
+matches a duration aggregate by which two columns feed it — the lens's own
+`date_columns` pair — never by the alias a model gives the result. That
+distinction mattered live: an early version keyed on the alias
+`duration_column` names, and the model's own answer used
+`AVG(...) AS avg_dwell_hours` against a lens declaring `duration_column:
+dwell_hours` — an alias-matching check would have missed it silently. TDD
+first (7 new tests covering pass/reject/no-duration-fields/non-duration-
+column/unreadable-lens), 69/70 passing (the one pre-existing failure,
+`test_document_shape`, reproduces unchanged against the pre-ticket
+`workflow.json` and is unrelated to this change).
+
+`report_alongside` (both numbers, name the skew) is added to
+`skills/answering.md` as a prompt-level instruction only — not mechanically
+enforced, and said so there rather than implied as guaranteed.
+
+Live verification against the Fujairah anchorage question: the fix does
+catch a wrong aggregation — one attempt inside the revision loop tried
+`AVG(...)` and was rejected naming the expected `median`, and a later
+attempt's `PERCENTILE_APPROX(..., 0.5)` was accepted once that function was
+added to the accepted-median set. But the final verification run this
+session did not produce a clean end-to-end answer: the grader exhausted its
+revision attempts on an unrelated complaint (about which metadata tools
+`agent1` called, not about the aggregation), and separately the model
+routes this specific question to `vessel_idle_periods` via a documented
+coordinate-bounding-box workaround rather than `geofence_dwell` — both
+lenses now carry the same schema, so the fix reaches whichever one answers.
+Session ran out of its 4-call warehouse budget before a clean verbatim
+answer could be captured; reporting this rather than a fabricated pass.
+Closing `partially`: the schema and the validator enforcement are done and
+tested, but the end-to-end "does the customer actually see a median" claim
+is unverified this session.
+
+`~/osg-demo` commit `7a2beb9`.
+
+Ticket: launch-readiness/78
