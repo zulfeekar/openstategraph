@@ -1734,6 +1734,32 @@ class WorkflowCompiler:
         if not plan.entry and plan.nodes:
             plan.warnings.append("No entry node: every node has an incoming edge")
 
+        # A grader/guard whose `revise` is wired but whose `pass` is not: the
+        # `pass` verdict is unmapped, so `_router_for` falls through to the
+        # only wired destination — `revise` — and every passing judgement
+        # loops back instead of leaving. That is not a missing-decision stall
+        # (`UNWIRED_REVISE`'s case, which is a legal graph that never
+        # revises); it is a decision the node understands but has nowhere to
+        # go, and the fallback turns it into a run that cannot terminate.
+        # `UNWIRED_REVISE` is deliberately a report, not a refusal, because a
+        # grader-as-recorder with no `revise` wired is fine — it just never
+        # sends anything back. There is no matching safe reading here: a
+        # `pass` with no exit can only loop, so this is checked on
+        # `plan.warnings`, the hard channel, at compile time rather than
+        # left to raise mid-run (launch-readiness 66).
+        for src_id, branches in plan.conditional.items():
+            node = nodes.get(src_id)
+            if node is None or node.get("type") not in (GRADER_TYPE, GUARD_CHECK_TYPE):
+                continue
+            if "revise" in branches and "pass" not in branches:
+                mapped = ", ".join(f"{k!r} -> {v!r}" for k, v in sorted(branches.items()))
+                plan.warnings.append(
+                    f"Grader {src_id!r} has an unmapped 'pass' verdict: only "
+                    f"{mapped} is wired, so a passing judgement falls through "
+                    "to 'revise' and the run never terminates. Wire the "
+                    "'pass' port to a destination."
+                )
+
         # Two archetypes with one dispatch key cannot both be reachable — the
         # later one silently shadows the earlier in the dispatch map. Warn at
         # plan time, where the collision is a document fact, not a run fact.
