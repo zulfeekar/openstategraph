@@ -729,3 +729,51 @@ lens was never opened.
 
 Ticket 101: partially. The seam is found and documented; the conversion is
 not built. No commit touches `~/osg-demo`.
+
+## Ticket 98: a fans-out join declared without checking cardinality
+
+`dim_vessel_latest` was declared as a joined dimension on four lenses
+(`cargoflow`, `geofence_dwell`, `vessel_positions`, `vessel_idle_periods`) to
+fix a different bug, and nobody checked its cardinality. Direct query: 479,464
+rows for 57,893 distinct IMOs; 143,277 rows with `imo = 0`/null; 83,293 rows
+remain at the current-version sentinel (~1.44x per IMO) even after filtering
+it, because the sentinel is a `TIMESTAMP` (`9999-12-31T23:59:59`) and
+`valid_to = DATE('9999-12-31')` silently returns zero rows. A plain equi-join
+inflates any `COUNT`/`SUM` by ~1.4x, or ~8.9x where `imo = 0` rows match.
+
+Fixed by making cardinality a declared, enforced fact rather than an assumed
+one. Each of the four `joins:` entries now carries `cardinality: fans-out`
+plus these numbers recorded beside the join, so the next reader sees the
+measurement instead of repeating the index's "one row per vessel" claim.
+`joins:` gained a `cardinality:` field (`one-to-one` / `many-to-one` /
+`fans-out`), and `tools/sql_validator.py` enforces the `fans-out` case: the
+joined table must be reached through a nested SELECT — a subquery or a CTE —
+carrying a visible dedup signal (`DISTINCT` / `GROUP BY` / `QUALIFY` /
+`ROW_NUMBER`-style window). A bare table reference in the join is a certain
+rejection, named clearly enough that the revision loop can repair it. A
+`joins:` entry with no `cardinality:` field is outside the check entirely,
+same doctrine as `quantity_aggregation` — no other package regresses.
+
+The check's own first version was itself an instance of "read tolerantly":
+it only recognised `exp.Subquery` as a dedup wrapper. Running the second live
+gate found that the agent's genuine fix — `WITH dim_vessel_dedup AS (...
+GROUP BY imo)` — is parsed by sqlglot as `exp.CTE`, a distinct node type, so
+the check rejected a correct fix as unfixed. Widened to check for
+`exp.Subquery` **or** `exp.CTE`; 63 tests pass, including one pinning the
+CTE case so it cannot regress silently.
+
+Both live gates verified against the running demo, each passing on the first
+attempt after the fix:
+- *mongstad/product breakdown*: untouched — no vessel join in that query, so
+  the fans-out check does not fire; full breakdown returned.
+- *"get me all vessel details of imo from the result"*: previously refused
+  outright (validator rejected the agent's bare join, then rejected the
+  agent's own correct CTE dedup because of the `exp.Subquery`-only bug above,
+  exhausting the revision loop). After both fixes: 19 vessel rows returned,
+  via
+  `LEFT JOIN (SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY imo
+  ORDER BY updated_at DESC NULLS LAST) AS rn FROM
+  ms_cpl_app_prod.shipping.dim_vessel_latest) t WHERE rn = 1) v ON
+  cf_imos.vessel_imo = v.imo`.
+
+Ticket 98: resolved.
