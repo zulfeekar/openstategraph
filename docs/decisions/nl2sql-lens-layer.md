@@ -153,3 +153,82 @@ intact. Server restarted at the end, healthy.
 Ticket 70 closed — both the tool-availability suspicion (ruled out) and the
 validator enforcement now hold under the owner's own real failing question,
 not just synthetic ones.
+
+## 2026-08-25 — lens files made load-bearing for the validator (launch-readiness/69)
+
+Extended `tools/sql_validator.py` with four AST-vs-lens checks, following the
+`resolve_before_filter` pattern (launch-readiness/70) exactly: read the same
+`skills/lenses/*.md` YAML blocks at runtime via a new `_load_lenses()`, no
+hardcoded table/column/lens name.
+
+1. **Known table** (`unknown_table_for_lens`, reject) — every table in the
+   SQL must be some lens's `canonical_table` or a declared join dimension.
+2. **Declared joins only** (`undeclared_join`, reject) — two lens tables
+   referenced together must be a pair some lens's `joins` list declares.
+3. **Declared date column** (`date_column`) — a date predicate's column must
+   be in its lens's `date_columns`; not the lens's `default_date_column` is a
+   warning naming the default; not in the lens's `date_columns` at all is a
+   rejection.
+4. **Pinned aggregation** (`quantity_aggregation`, reject) — when a lens
+   pins `quantity_aggregation` for its `quantity_column`, the SQL's
+   aggregation function of that column must match the declared one.
+
+All four are additive to the existing table/column-existence and
+`resolve_before_filter` checks; none change existing behavior on SQL that
+never touches a lens table. A missing/unreadable lens directory, or a lens
+file whose YAML fence fails to parse, WARNS (`lens_layer` facet) and skips
+checks 1-4 — never rejects, matching the parse-failure doctrine the rest of
+this validator already follows.
+
+Check 5 (reject coordinate filters on a named place unless no geofence
+exists for it) was **not** built this session — it needs a live lookup
+against `geofences_v3r1` plus the entity dictionary's documented-workaround
+list, which is a different shape of check than 1-4's pure AST-vs-YAML
+comparison, and forcing it in risked a shaky five instead of a clean four.
+Filed as `launch-readiness/73`.
+
+14 new unit tests added to `tests/test_sql_validator.py` (fixture lenses,
+no filesystem/warehouse access), covering each check passing and failing,
+a missing-lens-directory warn-and-skip, and a query touching one lens
+correctly left untouched by all four. `python3 -m pytest tests/ -q`: 32/32
+pass in `test_sql_validator.py`; the pre-existing `test_shape.py` failure
+(scaffold's `node_types` list is stale against the current document, which
+has grown routers/gates/skill nodes since scaffold) is unrelated to this
+change and predates it.
+
+### Live verification — blocked by an environment capability failure, not this change
+
+All three verification questions returned `CAPABILITY_NOTICE` ("part of
+this workflow was unavailable for this answer") with `outputs.prefetch1`
+empty on every run — the metadata-prefetch/search tool never reached the
+warehouse, in all three runs, before the agent ever drafted SQL. Since
+`sql_validator.py` is only called after SQL is drafted, none of today's
+four checks were exercised by any of the three live runs; this is not a
+regression this change could have caused.
+
+- **Mongstad control question**: no product/product-group breakdown
+  produced — the agent asked for the exact `load_port` casing instead of
+  resolving `mongstad -> 'Mongstad [NO]'` as it did on 2026-08-24. Same
+  capability-unavailable note. **Regression gate result: did not pass**,
+  but attributed to the tool-unavailable condition above, not to this
+  session's edit — reverting `tools/sql_validator.py` would not restore
+  the capability, since the failure occurs upstream of it.
+- **"Port Vandelay"**: no invented answer — the agent listed three possible
+  interpretations and asked which was meant. Acceptable, matches the
+  no-invented-answer requirement even without a literal `CLARIFICATION
+  NEEDED` string.
+- **Fujairah anchorage dwell time**: router still selected the
+  `geofence_dwell` branch (`decisions.router1 == "b1"`), confirming
+  2026-08-25's earlier routing-rule fix held — but no number was produced;
+  the agent asked to look up the exact `GEOFENCE` literal instead, same
+  capability-unavailable condition.
+
+`workflow.json` invariants reverified before and after: 31 edges, 12
+`-> agent1.skill` edges, `in1 -> router1` (4 branches), `gate1.revise ->
+agent1.feedback` intact. Server restarted at the end, healthy
+(`/api/health` returned `{"ok":true,...,"model_configured":true}`).
+
+Ticket 69 stays `partially resolved`: checks 1-4 are built, tested, and
+believed sound by code review against the lens YAML, but the live
+regression gate could not be re-confirmed this session due to an
+environment issue outside this change's scope.
