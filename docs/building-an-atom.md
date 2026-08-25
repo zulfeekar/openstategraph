@@ -11,8 +11,16 @@ atomic-design tier, declared once in
 | `Inputs · atoms` | `input.text`, `input.skill`, `input.markdown` |
 | `Tools · atoms` | every tool node — the built-ins, the platform family, and anything a workflow or a plugin adds |
 | `Output · atoms` | `output.formatted` |
-| `Reasoning & control · molecules` | `agent.llm`, `route.classifier`, `route.grader`, `guard.policy`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report` |
+| `Reasoning & control · molecules` | `agent.llm`, `route.classifier`, `route.grader`, `guard.check`, `guard.policy`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report` |
 | `Memory · molecules` | `memory.segment` — its own section on purpose: a segment decides what is *remembered*, not what happens next, so filing it under `Reasoning & control` would have made that heading false |
+
+A check decided by **code** — a schema conformance rule, a lookup against a
+known set, anything with a deterministic pass/fail — belongs on
+`guard.check`. `route.grader` is for a verdict a **model** must reach by
+judgement; routing a deterministic check through it means a model relays
+(and can leak) internal detail meant to stay internal, which is exactly how
+this project's own SQL validator ended up surfacing internal check names in
+a user-facing answer before that was fixed.
 | `Composition · organisms` | `workflow.subgraph` — the only organism *node type* (schema v3 collapsed `team.workflow` into it). The section also carries the shipped **assemblies**, which are drag-out arrangements of several nodes rather than a type: the revision loop and the starter flow |
 | `Annotate · no tier` | `group`, `note` — canvas furniture, deliberately tier-less |
 
