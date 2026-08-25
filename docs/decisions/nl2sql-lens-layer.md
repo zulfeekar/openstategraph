@@ -232,3 +232,68 @@ Ticket 69 stays `partially resolved`: checks 1-4 are built, tested, and
 believed sound by code review against the lens YAML, but the live
 regression gate could not be re-confirmed this session due to an
 environment issue outside this change's scope.
+
+## 2026-08-25 — three false-rejection bugs in `sql_validator.py`, fixed live
+
+Owner reported a correct query rejected four times in a row, with the
+rejection text leaking to the user as the final answer. Three bugs found
+and fixed in `~/osg-demo/workflows/cpl-nl2sql/tools/sql_validator.py`
+(`~/osg-demo/` is not a git repo, so no commit exists there — the fix lives
+only on disk; this entry is the record).
+
+1. **`_default_distinct_values` read a failed lookup as "value absent".**
+   `execute_statement`'s response `status.state` was never checked, so a
+   non-`SUCCEEDED` statement (the known token-race failure) returned an
+   empty `data_array` with no exception — `_resolve_check` then treated
+   "empty list" as "literal not found" and rejected. Now raises on any
+   non-`SUCCEEDED`/`None` result, which routes into the existing
+   warn-and-pass path (`_resolve_check`'s `except Exception` clause), never
+   a rejection. That warn-and-pass path itself, and the `[enumerable]`
+   sample-based check staying warning-only, were already correct — this
+   was the one gap.
+2. **The lens "declared date column" check ran on every `WHERE`
+   predicate, not just date ones.** It iterated `_DATE_PREDICATE_TYPES`
+   (every comparison operator: `=`, `!=`, `<`, `IN`, ...) without checking
+   whether the column was actually date/time-typed first, so
+   `load_port = 'Mongstad [NO]'` was judged against `date_columns` and
+   rejected as "not a declared date column". Added the same
+   `_is_date_typed` guard the `date_predicate_seen` scan above it already
+   used.
+3. **The T-SQL dialect check was a blind regex over the raw SQL text**,
+   matching backtick-quoted identifiers as "[bracketed]" — correct
+   Databricks quoting flagged as T-SQL. Replaced with AST-anchored
+   detection: `ISNULL(...)` parses as `exp.Anonymous` and is matched
+   structurally by call name; `GETDATE()` is normalised away by sqlglot's
+   databricks dialect into `exp.CurrentTimestamp`, so it is matched only
+   when that AST node is present *and* the literal text still says
+   `GETDATE(` — never on backticks/brackets alone. `TOP n` was already
+   handled upstream as a parse failure and needed no change.
+
+All three stay warnings-only where the doctrine requires it
+(`resolve_before_filter` rejects only on a *confirmed* absence,
+`dialect` never gates). `tests/test_sql_validator.py` (32 tests) passes,
+including the pre-existing GETDATE/ISNULL dialect test, unmodified in
+assertions. `workflow.json` was not touched — 31 edges, 12
+`-> agent1.skill`, router 4 branches, `gate1.revise -> agent1` reverified
+unchanged.
+
+Live regression gate, server restarted:
+- **Mongstad control question** ("how many vessels departed from mongstad
+  last week broken down by product and product group") now returns the
+  full product/product-group breakdown (e.g. Crude/Condensates — Crude: 9,
+  ... 8 rows total) on the run that reached `gate1: pass`, with only the
+  soft `[enumerable]` sample-miss warning attached, never a rejection.
+  `attempts: 4` is normal ReAct tool-calling (distinct-values lookup,
+  describe_table, draft, validate), not four validator rejections — the
+  validator's own trace shows a single `VALIDATION: PASS`.
+- **"Port Vandelay"** still produces a clarification, not an invented
+  answer — the resolution guarantee survived the fix.
+
+Filed `launch-readiness/74` for the separate, graph-shape issue: on a
+genuinely exhausted revision loop, `summarize1` still returns the
+validator's internal check/facet/lens text verbatim as the user-visible
+answer, rather than a plain "could not answer reliably" message. Not fixed
+here — out of scope for a validator-only change and touching `workflow.json`
+prompt composition was judged too risky for this session's budget.
+
+Ticket: launch-readiness/69
