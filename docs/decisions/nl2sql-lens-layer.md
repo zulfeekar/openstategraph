@@ -528,3 +528,49 @@ is unverified this session.
 `~/osg-demo` commit `7a2beb9`.
 
 Ticket: launch-readiness/78
+
+## The dwell time, answered — and a lesson about harnesses (2026-08-25)
+
+Verified live, with `workflow_slug` set on the run request:
+
+> "Typical (median) dwell at Fujairah anchorage: 22.430000 hours; average
+> (mean) dwell: 39.1188386670 hours — calculated across 4,447 idle visits."
+
+The SQL used `percentile_approx(..., 0.5)` and `AVG(...)` together — exactly
+the shape `report_alongside` asks for, and exactly the shape the first version
+of the duration check refused, costing four attempts and returning no number at
+all. That fix is `launch-readiness/79`: **the pinned statistic must be present,
+not alone.** A median anywhere over the declared columns passes; none, and every
+aggregate over them is still a violation, because a mean-only answer over a
+long tail is the defect the pin exists to catch.
+
+The reply states its own assumptions unprompted — no named Fujairah geofence
+exists, so the documented bounding box stands in, and in-progress idles are
+excluded. That sentence is what makes the number usable rather than merely
+correct.
+
+**This closes `67` and `78` together.** The gap against Genie's ~18.4h was
+never a bug: anchorage stays have a long tail, our median is 22.43h, and Genie
+reports a middle where we reported an average. Double-counting was ruled out
+(collapsing adjacent rows *raises* the mean to 48.44h) and so were outliers
+(trimming the longest 1.1% only reaches 34.4h). The fix was not to change the
+number. It was to stop reporting one statistic where two are needed.
+
+**`80` is withdrawn, and its reason is worth more than the ticket was.** Two
+runs showed the assistant replying *"Shall I go ahead and fetch them now?"*
+about a lookup it is wired to perform. Both were driven through `/api/runs`
+with a bare document and **no `workflow_slug`**, so package-local functions
+could not resolve their package root: `prefetch1` returned empty and the agent
+had no schema context whatsoever. Asking rather than acting is a reasonable
+response to being handed nothing.
+
+A negative result from an unvalidated harness is not a finding, and it was
+reported as one twice before the missing field was noticed. The rule this
+project already applies to agents' reports — testimony is not evidence —
+applies to one's own test rig, and the same care is owed to a run that fails as
+to one that succeeds.
+
+The answering rule added alongside it stays, because it is correct on its own
+terms: **ask about the user's intent, which only they know; never ask
+permission for mechanics you can settle by looking.** It was simply not the fix
+for a bug that did not exist.
