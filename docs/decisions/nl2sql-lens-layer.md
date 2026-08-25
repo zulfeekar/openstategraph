@@ -600,3 +600,25 @@ platform code or docs changed. `cpl-nl2sql` commit `d1e1f8e`, tests in
 `tests/test_statement_failure_visibility.py` (mocked `statement_execution`,
 no warehouse call). Both regression gates (Mongstad breakdown, Fujairah
 median/mean) still pass afterward.
+
+## `launch-readiness/64` — a date predicate has more than one correct spelling
+
+The mechanical validator's time-window check only walked `col = 'literal'`
+predicates, so `BETWEEN`, paired `>=`/`<=`, `date_trunc(...)`, `date_sub`/
+`CURRENT_DATE - INTERVAL n DAY`, and string-typed `yyyyMMdd` partition
+columns — every one of them correct, warehouse-real SQL — were invisible to
+the check. Same principle as `launch-readiness/13`/`15`/`17` and
+`Grader.normalise`, this time applied to a SQL AST instead of a model's
+prose: the checker must accept the forms a correct query actually uses, not
+one canonical spelling.
+
+Widened structurally through the sqlglot AST (no regex over predicate
+text) in `cpl-nl2sql`'s `tools/sql_validator.py`. Turned out most forms
+were already recognised; the one real gap was a predicate on a column
+whose type could not be resolved at all (a computed SELECT-list alias),
+which had been treated the same as "no date predicate" — a hard rejection.
+Per the standing doctrine "a rejection must be certain; anything
+inconclusive warns," that case now produces a soft warning instead.
+`cpl-nl2sql` commit `ce28e64`, tests in `tests/test_sql_validator.py` (55
+passing, no warehouse call). Both regression gates (Mongstad breakdown,
+Fujairah median/mean) still pass afterward.
