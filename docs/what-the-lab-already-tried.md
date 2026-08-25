@@ -77,3 +77,82 @@ admission rule, no staleness check, no schema for an entry anywhere in this
 repository. This settles nothing for `launch-readiness/99`: it is evidence that the
 tool *name* is a known convention across at least two Equinor-adjacent projects, not
 evidence of how an entry gets verified or expired.
+
+## Offload backend and skills loading — the two things the last pass missed
+
+**[test-proven]** `server/offload_backend.py::OffloadLogMiddleware` is a
+**transparent logging wrapper**, not the offload mechanism itself. Per its own
+docstring and `tests/test_offload_backend.py`: the authoritative store for
+`/large_tool_results/` is `StateBackend` — LangGraph's per-thread checkpointed
+state, in-memory/state-backed exactly like ours, not real files. The
+middleware only (a) emits grep-friendly log lines (`[OFFLOAD WRITE]` /
+`READ`/`LS`/`GLOB`/`GREP`, thread-scoped) and (b) optionally **mirrors**
+`write_file` content to `.dev-offload/<thread_id>/<relative_path>` on disk for
+an operator to inspect after the fact — `mirror_root=None` disables the mirror
+entirely (log-only mode, proven by `test_no_mirror_when_root_is_none`). The
+mirror is written but never read back by the agent; retrieval during a run
+still goes through the state-backed `ls`/`grep`/`read_file` tools, matching
+`skills/reuse-fetched-data/SKILL.md`'s instructions. So: **what/when/where** —
+the agent writes when it offloads a large tool result; middleware observes
+every `write_file`/`read_file`/`ls`/`glob`/`grep` call whose path starts with
+`/large_tool_results/` and no others (`TestNoNoise`, test-proven); the
+authoritative copy stays in LangGraph state, the disk copy is a side-channel
+mirror. **What stays in context** in place of content: nothing special beyond
+the normal tool-call/result exchange — the model still calls `write_file` with
+the full content itself; the offload discipline is "write it out, then refer
+to it by path," enforced only by skill-doc instruction (see below), not by
+middleware substitution.
+
+**[test-proven]** `.dev-offload/` on disk is real and does survive a
+process/run — three thread-id directories with real `.json`/`.geojson`/`.txt`
+files sit there right now — but this does **not** touch `launch-readiness/99`.
+It is an operator debug artefact (namespaced by `thread_id`, one dir per
+session, files named exactly as the agent named them), not a queryable,
+cross-session store the *agent* reads from on a later run: nothing in this
+repo lists, greps, or loads `.dev-offload/` back into an agent's context.
+`launch-readiness/99`'s "verified pattern store" (admitted only on
+success+grader-pass, with a staleness sweep) is a different, unbuilt thing;
+this mirror has no admission rule and no reader. No update to ticket 99 is
+warranted.
+
+**[test-proven]** `core/sandbox.py::GeneratedArtifactBackend` is the actual
+jail (`tests/test_sandbox_jail.py`, all green-path assertions are direct calls
+into `_validate`, not mocks): normalises the path, rejects any component equal
+to `..`, rejects `~`, rejects escapes above the `/zee/` virtual root, and
+rejects any extension outside `ALLOWED_WRITE_EXTS` (`.pdf .json .md .csv .txt
+.html .docx .pptx .xlsx` — explicitly excludes `.py`/`.exe`/`.sh`). A refusal
+returns a `WriteResult(error=...)`, never raises — the agent sees a
+ToolMessage, not a stack trace (`test_write_file_refuses_bad_path_without_raising`).
+This is **disk**, separate from the `/large_tool_results/` offload path
+entirely: it mounts real deepagents `FilesystemBackend(virtual_mode=True)` at
+`/zee/<safe_user>/` in a `CompositeBackend`, rooted per authenticated user
+(`safe_user()` sanitises the email to `[A-Za-z0-9._-]`, defaults to `"zee"`
+for anonymous). The jail is enforced by `virtual_mode=True` (deepagents' own
+path normalisation/sandboxing) plus this project's own extension allow-list
+and traversal checks layered on top — belt and suspenders, both test-proven.
+
+**[test-proven]** Skills are loaded through `deepagents.middleware.skills.SkillsMiddleware`
+(a library feature, not custom code) via the *same* `CompositeBackend` routing
+mechanism as everything else: `/skills/` routes to a `FilesystemBackend`
+rooted at the `skills/` dir. Each skill is a directory containing exactly one
+`SKILL.md` with YAML frontmatter (`name`, `description`, optionally
+`allowed-tools`) followed by Markdown body — a plain file, i.e. **data, not
+code**. At startup only the **name + description** of every skill go into the
+system prompt (confirmed by reading
+`deepagents/middleware/skills.py`: "progressive disclosure — you see their
+name and description above, but only read full instructions when needed").
+The model then **chooses at runtime**, based on whether the task matches a
+skill's description, to `read_file` the full `SKILL.md` body — there is no
+keyword router and no capability-based scoping; selection is entirely
+model-judgement over the description string, and `using-mcp/SKILL.md`'s own
+frontmatter leans on this by writing `description: "MANDATORY: Read this
+skill file BEFORE calling ANY MCP server tool..."` to bias the model into
+reading it. This directly contrasts with our own approach: we attach all
+twelve Markdown files at once, unconditionally, with no equivalent selection
+step and no per-skill token cost only paid when relevant. Here only the
+short descriptions are a fixed system-prompt cost; the body is loaded lazily,
+per skill, only when the model decides it applies — which is exactly the
+scaling lever our flat-attachment design lacks. Cost/tradeoff worth noting
+plainly: this shifts the failure mode from "always paying the tokens" to
+"sometimes the model doesn't recognise a skill applies and never reads it" —
+untested here, no eval of skill-selection recall exists in this repo.
