@@ -34,25 +34,24 @@ not checked.
 
 ## 1 — Triage: derive the list, never inherit it
 
-Read the newest `.scratch/HANDOFF-<date>.md` and run the ledger. Then derive the
-open set yourself — a handoff list is a snapshot and goes stale within hours.
+Read the newest `.scratch/HANDOFF-<date>.md` and run the ledger. Then derive
+the open set yourself — a handoff list is a snapshot and goes stale within
+hours.
 
 ```bash
-python3 - <<'PY'
-import re,pathlib
-S=pathlib.Path('.scratch')
-ST=re.compile(r"^(?:Labels:.*?)?Status:\s*(.+?)(?:·|$)",re.M)
-CLOSED=('resolved','closed','done','superseded','withdrawn','rejected','moved to','merged into','backlog')
-for f in sorted(S.glob('*/tickets/*.md')):
-    t=f.read_text(errors='ignore'); m=ST.search(t)
-    st=(m.group(1).strip().lower() if m else '(none)')
-    if any(w in st for w in CLOSED) and not st.startswith('partially'): continue
-    lab=re.search(r"^Labels:\s*(.+)$",t,re.M)
-    kind=(re.findall(r"wayfinder:([a-z-]+)",lab.group(1) if lab else '') or ['?'])[0]
-    size=(re.search(r"Size:\s*([A-Z]+)",t) or [None,'?'])[1]
-    print(f"{f.parent.parent.name}/{f.name.split('-')[0]:<4} {kind:<11} {size:<2} {st[:10]:<10} {t.splitlines()[0].lstrip('# ').strip()[:56]}")
-PY
+python3 scripts/ticket_census.py --unattended
 ```
+
+It reads the tickets rather than any summary of them, ranks by what a defect
+costs rather than by size, and `--unattended` drops the ones that end in a
+judgement the owner owns. Drop the flag to see those too — they still need
+batching into a question, they just must not be dispatched.
+
+(This used to be a heredoc pasted into each orienting session. A pasted script
+has no way to fail, and it shares its definition of "open" with
+`ticket_ledger.py` — including the trap that `partially resolved` contains the
+word `resolved`, so a naive check closes a ticket that is still live. One
+definition, one file, pinned by a test.)
 
 **Expect the list to be wrong in your favour.** Of the first thirteen tickets
 taken on 2026-08-23, only six needed new code: four were already fixed with
@@ -105,6 +104,40 @@ Genuinely parallel work is fine only across **different repositories**.
 
 **Wait for the gate before starting the next.** It costs five minutes and buys
 a clean bisect when something breaks.
+
+---
+
+## 3.5 — What you write must name the ticket, never the skill
+
+**Nothing a session produces may mention a skill by name.** Not a code comment,
+not a test docstring, not a commit message, not a generated file. The reference
+is always the **ticket** — `launch-readiness/67`, `production-ready/46` — and,
+where it helps, the commit sha.
+
+The rule is about what a reference is *for*. A ticket says why a line of code
+exists: what was broken, what was decided, what the argument was. It is dated,
+it is attached to a diff, and a reader can go and check it. A skill name says
+only which procedure was in fashion when somebody typed — it is a fact about
+the author's tooling, not about the code, and it rots the moment the skill is
+renamed, split, or retired, taking the reader's only thread with it.
+
+It also quietly changes who the code is written for. A comment saying *the
+failure mode `skills/ticket-loop` names* is legible to whoever has that skill
+loaded and opaque to everybody else — including the same author six months on.
+Name the failure mode. If it needs a citation, cite the ticket.
+
+So:
+
+- **Wrong** — `# the exact miss skills/ticket-loop warns about`
+- **Right** — `# a green test at the wrong layer: launch-readiness/33`
+
+**The one exception is a file whose subject genuinely *is* the skill** — a test
+that pins the skill's own claims, or a document that links it as a procedure a
+reader should go and follow. There the name is the content, not a breadcrumb.
+
+Put this in every brief. It is the kind of rule that is obvious once stated and
+invisible until then, which is why it went unstated long enough to reach
+fourteen files.
 
 ---
 
