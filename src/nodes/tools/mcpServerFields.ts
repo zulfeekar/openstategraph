@@ -164,8 +164,13 @@ export const validateEnvVarName = (value: FieldValue): string | null => {
  * Not a pre-filled editable box — that was the original `RouterNode` bug. The
  * three facts here are the ones a developer cannot discover from the card and
  * would otherwise learn from a support thread: where the credential lives,
- * that an empty filter keeps following the server, and that roughly half of
- * every call is the handshake.
+ * that an empty filter keeps following the server, and that the connection is
+ * held open rather than rebuilt per call.
+ *
+ * That last sentence used to say the opposite — "each call reconnects, which
+ * costs roughly 0.8 seconds" — and it was true of a defect rather than of MCP.
+ * `backend/openstategraph/mcp_sessions.py` holds one session per server for
+ * the life of the process, so the handshake is paid once at compile.
  */
 export const MCP_LOCKED_NOTE =
   'The tools this server offers are discovered fresh every time the workflow ' +
@@ -175,8 +180,8 @@ export const MCP_LOCKED_NOTE =
   'environment variable you name — the name is saved in this workflow, the ' +
   'value never is. A server that is unreachable, that rejects the credential, ' +
   'or that does not speak MCP costs this agent its tools and says so in the ' +
-  'run’s warnings; it never fails the compile. Each call reconnects, which ' +
-  'costs roughly 0.8 seconds on top of whatever the server itself takes.';
+  'run’s warnings; it never fails the compile. The connection is opened once ' +
+  'and held open, so a call costs what the server takes and no handshake.';;
 
 /**
  * The one sentence a developer needs before adding a second row, on the card

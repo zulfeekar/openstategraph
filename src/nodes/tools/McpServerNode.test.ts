@@ -340,11 +340,15 @@ describe('the machinery is shown, never pre-filled into an editable box', () => 
   });
 
   it('says the three things the card itself cannot show', () => {
-    // Where the credential lives, what an empty filter means, and that half
-    // of every call is the handshake. Each is a support thread otherwise.
+    // Where the credential lives, what an empty filter means, and that the
+    // connection is held rather than rebuilt. Each is a support thread
+    // otherwise. The third used to assert `0.8 seconds` — the handshake the
+    // session pool removed — so it is pinned to the *absence* too: a note
+    // that quotes a cost nobody pays any more is worse than no note.
     expect(MCP_LOCKED_NOTE).toMatch(/environment variable/);
     expect(MCP_LOCKED_NOTE).toMatch(/now and later/);
-    expect(MCP_LOCKED_NOTE).toMatch(/0\.8 seconds/);
+    expect(MCP_LOCKED_NOTE).toMatch(/held open/);
+    expect(MCP_LOCKED_NOTE).not.toMatch(/0\.8 seconds/);
   });
 });
 

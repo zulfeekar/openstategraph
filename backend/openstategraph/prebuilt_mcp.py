@@ -9,22 +9,31 @@ answered structurally rather than worked around:
   defaults to `[self.as_langchain_tool()]`, so every existing atom is
   unchanged and the singular case is simply the plural case with one element.
 - **Sync.** Each async tool is re-wrapped as a `StructuredTool` carrying the
-  original `coroutine` *and* a `func` that runs it with `asyncio.run`.
+  original `coroutine` *and* a `func`. Both entry points marshal the call onto
+  the one long-lived loop in `mcp_sessions`, which is where the session lives.
 
-`asyncio.run` here is legal for a checkable reason rather than by luck: the
-graph is driven by `graph.invoke()`/`graph.stream()` on a worker thread where
-**no event loop is running** (`api/streaming.py` says so outright — the
-threadpool exists *because* the stream blocks), so there is no loop to nest
-inside. And it is not the hidden-loop antipattern, because
-`MultiServerMCPClient` is stateless by default: `call_tool` opens a fresh
-`ClientSession` per call under `async with`. Loop lifetime *is* session
-lifetime *is* one tool call. Nothing outlives the call, so there is nothing to
-shut down and nothing to leak.
+## The handshake used to be half of every call
 
-The honest cost, measured on `langchain-mcp-adapters` 0.3.2 against the live
-docs server: a call is 1.2–1.5 s, of which ≈0.8 s is reconnection. Roughly
-half of every MCP tool call is the handshake. That number is on the card,
-because a cost nobody can see gets blamed on the model.
+Until this was fixed, the two sentences below stood in this header as a
+measured cost rather than as a defect:
+
+> a call is 1.2–1.5 s, of which ≈0.8 s is reconnection. Roughly half of every
+> MCP tool call is the handshake.
+
+That was true, and it was ours. `MultiServerMCPClient` is stateless *by
+default* — `get_tools()` builds tools carrying a `connection`, and the
+adapters' tool body then re-opens the socket and re-runs `initialize` +
+`notifications/initialized` + `tools/list` before every single `tools/call`.
+The library's other arm takes a live `session` and calls it directly.
+
+So `_discover_tools` now hands `load_mcp_tools` a **session** — a pooled
+`McpSessionProxy` — and the handshake is paid once per server per process
+instead of once per call. `asyncio.run` is gone from every entry point here
+for the same reason: a loop per call is a session per call.
+
+`mcp_sessions` carries the full account, including why the session needs a
+loop of its own and why the proxy, not the raw session, is what gets handed
+over.
 
 ## One card, N servers (ticket 04)
 
@@ -484,9 +493,14 @@ def validate_mcp_server(
     if problem:
         return McpValidation(status=STATUS_AUTH_REQUIRED, message=problem)
 
+    from openstategraph.mcp_sessions import run_on_mcp_loop
+
     started = time.monotonic()
     try:
-        name, version, tools = asyncio.run(
+        # A *fresh* session on purpose — a panel asking "is this reachable"
+        # must open a socket rather than inherit a healthy pooled one. Only
+        # the loop is shared, so probing does not tear down live sessions.
+        name, version, tools = run_on_mcp_loop(
             asyncio.wait_for(_handshake(definition.connection(headers)), timeout)
         )
     except BaseException as exc:  # noqa: BLE001 — an ExceptionGroup is a BaseException
@@ -525,7 +539,9 @@ async def _discover_tools(
 
     Measured: 1.08 s for one remote server on 0.3.2. A coroutine rather than a
     blocking call because a card carries N rows and `_discover_all` gathers
-    over them, so N servers cost roughly one server's latency.
+    over them, so N servers cost roughly one server's latency — and since the
+    session it opens is pooled and kept, this is also the *only* time most
+    runs pay a handshake at all.
 
     **One client per row, not one client holding every connection.** The
     library would gather for us if handed all the connections at once, and it
@@ -533,16 +549,22 @@ async def _discover_tools(
     say which server it came from. Attribution is the feature; the concurrency
     is available either way.
     """
-    from langchain_mcp_adapters.client import MultiServerMCPClient
+    from langchain_mcp_adapters.tools import load_mcp_tools
 
-    # `cast`, not a TypedDict of our own: `Connection` is a union of four
-    # library shapes, and building one here would put a vendor type in our
-    # vocabulary — which the portability guardrails forbid. The dict is
-    # correct by construction (`url` + `transport`, both required keys of
-    # `StreamableHttpConnection`), and the seam is one line.
-    connections = cast(Any, {definition.name: definition.connection(headers)})
-    client = MultiServerMCPClient(connections)
-    return await asyncio.wait_for(client.get_tools(server_name=definition.name), timeout)
+    from openstategraph.mcp_sessions import session_proxy
+
+    # A **session**, not a connection. `load_mcp_tools(connection=…)` builds
+    # tools that re-handshake on every call — the defect this whole seam was
+    # rewritten to remove. Handed a session, the adapters' tool body takes its
+    # other arm and calls `session.call_tool` directly.
+    #
+    # The session is a pooled `McpSessionProxy`, so it is shared with every
+    # other card naming this server and it reconnects itself; nothing here
+    # captures a socket that can go stale.
+    proxy = session_proxy(definition.connection(headers), timeout=timeout)
+    return await asyncio.wait_for(
+        load_mcp_tools(cast(Any, proxy), server_name=definition.name), timeout
+    )
 
 
 def _discover_all(
@@ -572,7 +594,12 @@ def _discover_all(
         )
         return results
 
-    return asyncio.run(gather())
+    from openstategraph.mcp_sessions import run_on_mcp_loop
+
+    # Not `asyncio.run`: sessions opened here have to outlive this call, and a
+    # loop that is torn down at the end of discovery takes every one of them
+    # with it. `gather` still turns three servers into one server's wait.
+    return run_on_mcp_loop(gather())
 
 
 def _wrap_async_tool(tool: Any, server: str) -> Any:
@@ -597,6 +624,8 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:
     """
     from langchain_core.tools import StructuredTool
 
+    from openstategraph.mcp_sessions import run_on_mcp_loop, run_on_mcp_loop_async
+
     inner = tool.coroutine
     # Composed once, here, rather than per call: the two entry points must
     # not be able to say different things about the same call.
@@ -604,11 +633,18 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:
 
     async def _coroutine(**kwargs: Any) -> Any:
         report_progress(line)
-        return await inner(**kwargs)
+        # The session belongs to the MCP loop, and anyio streams cannot be
+        # awaited from a foreign one. `run_on_mcp_loop_async` suspends this
+        # loop on an ordinary future while the work happens over there — no
+        # thread is blocked, which is what makes an async agent running four
+        # of these at once still concurrent.
+        return await run_on_mcp_loop_async(inner(**kwargs))
 
     def _call(**kwargs: Any) -> Any:
         report_progress(line)
-        return asyncio.run(inner(**kwargs))
+        # Not `asyncio.run`: that opened a loop per call, and a loop per call
+        # is a session per call, which is the handshake this seam removes.
+        return run_on_mcp_loop(inner(**kwargs))
 
     return StructuredTool(
         name=tool.name,
