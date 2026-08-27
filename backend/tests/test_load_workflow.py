@@ -38,6 +38,11 @@ class EchoTool(BaseTool):
     name = "echo"
     description = "Returns a fixed string."
     node_type = "tool.demo-echo"
+    # An echo reads nothing and changes nothing, and says so —
+    # `launch-readiness` 121. Declared here because these fixtures stand in
+    # for an adopter's `tools/*.py`, and this is the one line an adopter
+    # writes to keep a correct graph quiet.
+    side_effecting = False
     Args = NoArgs
 
     def _execute(self, args) -> ToolResult:

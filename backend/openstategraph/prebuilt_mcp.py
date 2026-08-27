@@ -802,6 +802,13 @@ class McpTool(BaseTool):
         "not called directly."
     )
     node_type = "tool.mcp"
+    #: **Deliberately not declared read-only, and it never can be**
+    #: (`launch-readiness` 121). One card is a whole MCP server, whose
+    #: tools are a stranger's and are discovered at bind time — a filesystem
+    #: writer and a search index look identical from here. This is the case
+    #: that decides the default: guessing 'read-only' about somebody else's
+    #: server is the silent, unsafe direction.
+    side_effecting = True
     Args = NoArgs
 
     def __init__(

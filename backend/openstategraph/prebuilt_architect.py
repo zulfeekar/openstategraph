@@ -98,6 +98,8 @@ class ValidateWorkflowTool(BaseTool):
     """Compile-checks a composed document; the verdict is revise evidence."""
 
     name = "validate_workflow"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.validate-workflow"
     description = (
         "Compile-check a workflow document you have composed. Returns the "

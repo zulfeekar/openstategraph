@@ -165,6 +165,29 @@ class BaseTool(ABC):
     #: Pydantic model describing the arguments. The source of truth for the
     #: generated TypeScript, and for the schema the LLM is shown.
     Args: ClassVar[type[BaseModel]]
+    #: Whether calling this tool changes something outside the run — sends a
+    #: message, writes a record, moves money — that running it again would do
+    #: a second time (`launch-readiness` 121).
+    #:
+    #: **The default is `True` because an undeclared tool must land on the
+    #: safe side.** The compiler reads this to decide whether a node holding
+    #: the tool is worth a sentence when the graph can run that node more than
+    #: once: retry (`RetryPolicy(max_attempts=3)`, graph-wide) and a drawn
+    #: cycle both re-enter a node with no memory of what it already did, and
+    #: until this flag existed nothing could tell a mail sender from a SELECT.
+    #:
+    #: Declaring `side_effecting = False` is a claim about *your* tool that
+    #: silences that sentence, and it is the only way to silence it that does
+    #: not change the graph. Every read-only tool in this repository declares
+    #: it; `McpTool` does not, and must not — its tools are a stranger's
+    #: server's, discovered at bind time, and nothing here can know.
+    #:
+    #: **Additive, on `async-first/04`'s rule for this ladder.** `BaseTool` is
+    #: Tier-1 semver-public with 26 in-tree implementations and one in every
+    #: adopter's `tools/*.py`; a class attribute with a default touches none
+    #: of them, and the value an adopter gets by saying nothing is the value
+    #: that cannot hurt them.
+    side_effecting: ClassVar[bool] = True
     #: Controls the editor puts on this tool's card, declared by the tool
     #: (register PK-06). Empty is the common case — a stateless tool needs no
     #: configuration — and a *bundled* tool declares its card in TypeScript

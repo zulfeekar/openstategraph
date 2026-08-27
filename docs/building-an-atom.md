@@ -607,6 +607,32 @@ dropping the field, so a plugin built against a newer editor stays usable in an
 older one. A field with no `key` has nowhere to store its value and is reported
 rather than shown.
 
+**Say whether your tool acts outside the run.** `side_effecting` is one class
+attribute, and its default is `True`:
+
+```python
+class Ping(BaseTool):
+    ...
+    side_effecting = False        # this tool only reads
+```
+
+It is not a permission and it changes nothing about how your tool runs. The
+compiler reads it to answer one question about the *graph*: can a node holding
+this tool be run more than once? Two things say yes and neither is visible on
+the canvas — every node is retried up to three times, and a grader's `revise`
+edge draws a cycle the node sits inside — so a tool that sends a message or
+writes a record does it again, with nothing remembering that it already did.
+When both are true you get a sentence at compile time naming the node, the
+capability and which mechanism applies.
+
+**The default is `True` because an undeclared tool has to land on the safe
+side.** A tool that only reads gets the sentence too until it says so, and one
+line is what it costs to say so. A tool that genuinely acts keeps the default
+and answers the sentence on the canvas instead: set that node's **Max retries**
+to 1, keep it out of the loop, or make the action safe to repeat. Neither
+finding can fail a build — the condition is a conservative default about a tool
+nobody declared, and a guess may be loud but may not exit 1.
+
 **The wire contract** is `GET /api/workflows/{slug}/capabilities`, whose
 `plugin_tools` array carries `node_type`, `name`, `description`, `args_schema`,
 `fields`, the `distribution` that shipped each tool (always displayed on the

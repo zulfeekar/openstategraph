@@ -44,6 +44,8 @@ class SessionIdentityTool(BaseTool):
     """The identity of the person and conversation this run belongs to."""
 
     name = "session_identity"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.session-identity"
     description = (
         "Who you are talking to and which conversation this is: the user's "

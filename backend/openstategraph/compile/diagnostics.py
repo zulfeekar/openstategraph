@@ -237,6 +237,46 @@ class Finding(str, Enum):
     #: choose, which is worth a sentence at authoring time and at run time,
     #: never worth failing a build over.
     MODEL_SELECTION_DEGRADED = "model_selection_degraded"
+    #: A node holding a capability that acts outside the run, in a graph that
+    #: can run that node more than once, as `(node id, capability types, the
+    #: mechanism)` — `launch-readiness` 121.
+    #:
+    #: Two mechanisms, and the subject carries **both** when both apply
+    #: because they have different fixes. `set_node_defaults` gives every node
+    #: `RetryPolicy(max_attempts=3)`, and LangGraph re-runs the *whole node
+    #: body* on a retry; a drawn cycle re-enters the node from a grader's
+    #: `revise`. Neither carries any memory of what already happened, so a
+    #: mail sent on attempt one is sent again on attempt two, and a revision
+    #: after the send is a second mail. `workflows/support-triage` is both at
+    #: once: three `tool.email-send` on `a-account`, inside
+    #: `router1 -> a-account -> grader1 -> router1`.
+    #:
+    #: **Narrow on purpose.** A read-only capability inside a cycle is the
+    #: evaluator-optimizer pattern this product exists to draw, and a warning
+    #: on it is a warning nobody reads. What separates the two is
+    #: `BaseTool.side_effecting`, whose default is `True` so that an
+    #: undeclared tool lands on the safe side.
+    #:
+    #: A **report**, not a failure — see `REPORT_ONLY`.
+    REPEATED_SIDE_EFFECT = "repeated_side_effect"
+    #: An approval gate with a capability that acts outside the run
+    #: **upstream** of it, as `(gate node id, acting node id, capability
+    #: types)` — the second half of `launch-readiness` 121.
+    #:
+    #: `support-triage`'s `gate1` reads *"Approve to send it"* and sits below
+    #: the only send capability in the document. The mail is already gone when
+    #: the person is asked, so what they authorise is a status change — two
+    #: states with one indistinguishable output, at an operator's expense.
+    #:
+    #: It is LangGraph's own documented hazard read at graph scale rather than
+    #: node scale: *"Place side effects after `interrupt` calls"*, *"Separate
+    #: side effects into separate nodes when possible"* (Interrupts; installed
+    #: `langgraph 1.2.10`). The library says it about one node's body; here
+    #: the body is a whole upstream region of the drawing, which is why the
+    #: compiler is the only thing that can see it.
+    #:
+    #: A **report**, not a failure — see `REPORT_ONLY`.
+    APPROVAL_COMES_TOO_LATE = "approval_comes_too_late"
 
 
 #: What each finding says, and how many subjects it takes.
@@ -322,6 +362,19 @@ _SENTENCES: dict[Finding, str] = {
         'Node "{0}" selected model "{1}", which this installation could not '
         'resolve — it ran on "{2}" instead.'
     ),
+    Finding.REPEATED_SIDE_EFFECT: (
+        'Node "{0}" holds a capability that acts outside this run ({1}), and this graph '
+        "can run that node more than once — {2}. Nothing records what it already did, so "
+        "the action happens again in full. Set that node's Max retries to 1, keep it out "
+        "of the loop, or make the action safe to repeat. If the capability only reads, "
+        "declare side_effecting = False on its tool class and this stops being reported."
+    ),
+    Finding.APPROVAL_COMES_TOO_LATE: (
+        'Approval step "{0}" sits downstream of "{1}", which holds a capability that acts '
+        "outside this run ({2}) — so by the time a person is asked, the action has already "
+        "happened, and approving it changes only what the run records. Move the approval "
+        "above that step, or reword its message as a notice rather than a decision."
+    ),
 }
 
 
@@ -377,6 +430,24 @@ _SENTENCES: dict[Finding, str] = {
 #: disclosure) is what it turns on. It is also reachable only from an
 #: inconsistency the author had to draw twice — a policy, and then a path
 #: around it — which is the opposite of the deliberate-authoring case above.
+#: `REPEATED_SIDE_EFFECT` and `APPROVAL_COMES_TOO_LATE` joined it together in
+#: `launch-readiness` 121, on a reason neither of the others needed: **their
+#: condition is a conservative assumption, not an observation.**
+#: `BaseTool.side_effecting` defaults to `True` so an undeclared tool lands on
+#: the safe side, which means an adopter whose read-only tool predates the flag
+#: gets both sentences about a graph that is entirely correct. A guess may be
+#: loud; it may not exit 1. That is the whole bargain of conservative-by-default
+#: — it earns the right to be noisy by never being fatal — and it is the same
+#: line `8bda508` drew when it split `RunResult`.
+#:
+#: `APPROVAL_COMES_TOO_LATE` is the closer call of the two, because
+#: `UNGUARDED_EXIT` next door *is* a failure and the shapes rhyme: both are
+#: about a control the document draws and the run gets around. 61 settled that
+#: one with a run in which the unguarded door disclosed an address — an
+#: observed fact about a document whose author drew the policy **twice**, once
+#: as a rule and once as a path around it. Here nobody drew anything twice, and
+#: the fact is inferred from a default. Different evidence, different side.
+#:
 REPORT_ONLY: frozenset[Finding] = frozenset(
     {
         Finding.UNENFORCED_OUTCOME,
@@ -385,6 +456,8 @@ REPORT_ONLY: frozenset[Finding] = frozenset(
         Finding.STATELESS_MOUNT_REDOES,
         Finding.OVERRIDE_APPLIED,
         Finding.MODEL_SELECTION_DEGRADED,
+        Finding.REPEATED_SIDE_EFFECT,
+        Finding.APPROVAL_COMES_TOO_LATE,
     }
 )
 

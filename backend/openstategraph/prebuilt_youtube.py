@@ -181,6 +181,8 @@ class YouTubeTranscriptTool(BaseTool):
     """Read one YouTube video's captions as plain text."""
 
     name = "youtube_transcript"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.youtube-transcript"
     description = (
         "Fetch the spoken-word transcript of a YouTube video. Takes a video id or a "

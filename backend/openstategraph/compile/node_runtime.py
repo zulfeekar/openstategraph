@@ -67,6 +67,13 @@ from openstategraph.compile.diagnostics import (
     Finding,
     denies_holding_tools,
 )
+from openstategraph.compile.side_effects import (
+    acts_outside_the_run,
+    max_attempts,
+    reaches_itself,
+    repetition_clause,
+    upstream_of,
+)
 from openstategraph.compile.reducers import RESET as _RESET  # noqa: F401
 from openstategraph.validation import MOUNT_NODE_TYPES
 from openstategraph.compile.reducers import Reducer, reducer_for  # noqa: F401
@@ -1733,7 +1740,77 @@ class NodeRuntime:
                 )
         for message in warnings:
             self.diagnostics.record(Finding.CAPABILITY_FAILED, message)
+        self._report_repeated_side_effect(node_id, plan)
         return lc_tools
+
+    def _acting_capabilities(self, node_id: str, plan: CompiledPlan) -> list[str]:
+        """The distinct bound tool *types* on this node that act outside the run.
+
+        **`plan.tool_bindings`, never the finished tool list** — the same
+        distinction, for the same reason, as `_report_stale_tool_denial`'s
+        `wired`: the ambient rules append `save_memory` and a knowledge lookup
+        to nearly every agent alive, and the fix a developer would reach for
+        is on the canvas.
+
+        A type that resolved to nothing is skipped rather than assumed
+        dangerous. `UNRESOLVED_TOOL` already says the true thing about that
+        node, and nothing is bound, so nothing can act.
+
+        Deduplicated by type: `support-triage` wires three `tool.email-send`
+        nodes to one agent, and three identical sentences is the noise
+        `absorb`'s slug key was written to avoid.
+        """
+        found: list[str] = []
+        for tool_node_id in plan.tool_bindings.get(node_id, []):
+            tool_type = self._types.get(tool_node_id, "")
+            tool = self.services.tools.get(tool_type)
+            if tool is None or tool_type in found:
+                continue
+            if acts_outside_the_run(tool):
+                found.append(tool_type)
+        return found
+
+    def _report_repeated_side_effect(self, node_id: str, plan: CompiledPlan) -> None:
+        """Note a node that can act outside the run and can be run twice.
+
+        Here rather than in either agent factory, for the reason
+        `_report_stale_tool_denial` sits on the runtime: it is the identical
+        statement about an agent and about a worker, and a sentence that
+        exists in one factory and not the other is a defect waiting for the
+        second family (`launch-readiness` 121).
+
+        Both mechanisms are read, and both are named when both apply, because
+        their fixes differ: `maxRetries` does nothing about a drawn loop.
+        """
+        capabilities = self._acting_capabilities(node_id, plan)
+        if not capabilities:
+            return
+        data = self._nodes.get(node_id, {}).get("data") or {}
+        clause = repetition_clause(
+            max_attempts(data), cyclic=reaches_itself(node_id, plan)
+        )
+        if not clause:
+            return
+        self.diagnostics.record(
+            Finding.REPEATED_SIDE_EFFECT, node_id, ", ".join(capabilities), clause
+        )
+
+    def _report_late_approval(self, node_id: str, plan: CompiledPlan) -> None:
+        """Note an approval gate the action has already happened above.
+
+        Sorted so a document with two acting nodes above one gate reports them
+        in an order that does not depend on set iteration — a warning list
+        that reshuffles between runs is one nobody can diff.
+        """
+        for source in sorted(upstream_of(node_id, plan)):
+            capabilities = self._acting_capabilities(source, plan)
+            if capabilities:
+                self.diagnostics.record(
+                    Finding.APPROVAL_COMES_TOO_LATE,
+                    node_id,
+                    source,
+                    ", ".join(capabilities),
+                )
 
     def _report_stale_tool_denial(
         self, node_id: str, data: dict[str, Any], wired: list[str]
@@ -2614,6 +2691,9 @@ class NodeRuntime:
         # Recorded as the executor is built, so a caller one level up can ask
         # whether this document waits for anybody (`organisms-first-class` 65).
         self._holds_a_gate = True
+        # The gate is the only node that can ask whether it is *below* the
+        # thing it claims to authorise (`launch-readiness` 121).
+        self._report_late_approval(node_id, plan)
         data = node.get("data") or {}
         message = _text(data, "message") or "Approve this result?"
         upstream = [src for src, dst in plan.edges if dst == node_id]

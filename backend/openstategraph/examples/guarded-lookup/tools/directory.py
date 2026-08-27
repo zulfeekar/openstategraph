@@ -77,6 +77,8 @@ class CustomerLookupTool(BaseTool):
     """Finds one customer record by exact email address."""
 
     name = "customer_lookup"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.customer-lookup"
     description = (
         "Look up a customer by their exact email address. Returns their name, "

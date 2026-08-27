@@ -281,6 +281,13 @@ class TestEveryProducerHasASide:
     #: this extends to a *per-node* one. Blocking the exit code here would
     #: fail every shipped package naming a real paid provider in any
     #: environment, CI included, that does not carry that provider's key.
+    #: `REPEATED_SIDE_EFFECT` and `APPROVAL_COMES_TOO_LATE` are the sixth and
+    #: seventh (`launch-readiness` 121), and they join for a reason none of the
+    #: others needed: their condition is a **conservative assumption** rather
+    #: than an observation. `BaseTool.side_effecting` defaults to `True` so an
+    #: undeclared tool lands on the safe side, which means an adopter whose
+    #: read-only tool predates the flag gets both sentences about a graph that
+    #: is entirely correct. A guess may be loud; it may not exit 1.
     REPORTS = frozenset(
         {
             Finding.UNENFORCED_OUTCOME,
@@ -289,6 +296,8 @@ class TestEveryProducerHasASide:
             Finding.STATELESS_MOUNT_REDOES,
             Finding.OVERRIDE_APPLIED,
             Finding.MODEL_SELECTION_DEGRADED,
+            Finding.REPEATED_SIDE_EFFECT,
+            Finding.APPROVAL_COMES_TOO_LATE,
         }
     )
 

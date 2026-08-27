@@ -67,6 +67,10 @@ def _markdown(headers: list[str], rows: list[tuple[Any, ...]]) -> str:
 class _SqlExplorerBase(BaseTool):
     """Shared per-node configuration: which database file, declared once."""
 
+    #: The whole family reads — `launch-readiness` 121. `SqlQueryTool` too:
+    #: the driver enforces read-only, so a repeat is a repeat of a SELECT.
+    side_effecting = False
+
     def __init__(self, *, database: str = "") -> None:
         self.database = database
 

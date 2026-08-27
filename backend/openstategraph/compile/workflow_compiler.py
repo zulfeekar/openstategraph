@@ -51,6 +51,7 @@ from openstategraph.compile.run_context import (
 from openstategraph.compile.subagents import subagent_declaration_problems
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
 from openstategraph.compile.node_doors import with_both_doors
+from openstategraph.compile.side_effects import DEFAULT_MAX_ATTEMPTS
 from openstategraph.compile.state import STEP_BUDGET_FLOOR
 from openstategraph.step_budget import read_budget_stop
 from openstategraph.compile.state import NO_MODEL_MARKER  # noqa: F401  (re-exported)
@@ -1857,7 +1858,13 @@ class WorkflowCompiler:
         # library default) already excludes programming errors
         # (`ValueError`, `TypeError`, ...), so this does not mask a bug by
         # retrying it into a timeout.
-        default_retry = RetryPolicy(max_attempts=3, initial_interval=1.0, backoff_factor=2.0)
+        # The number lives in `compile/side_effects.py`, which is also what
+        # reads it to decide whether a node that acts outside the run can be
+        # run twice (`launch-readiness` 121). One spelling, or the finding
+        # and the policy drift into two different threes.
+        default_retry = RetryPolicy(
+            max_attempts=DEFAULT_MAX_ATTEMPTS, initial_interval=1.0, backoff_factor=2.0
+        )
         has_graph_defaults = hasattr(builder, "set_node_defaults")
         if has_graph_defaults:
             builder.set_node_defaults(

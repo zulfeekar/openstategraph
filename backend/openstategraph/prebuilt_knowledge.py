@@ -41,6 +41,8 @@ class KnowledgeLookupTool(BaseTool):
     """Reads one topic from the open workflow's second brain."""
 
     name = "knowledge_lookup"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.knowledge-lookup"
     description = (
         "Before querying a table, look up its knowledge: business meaning, "

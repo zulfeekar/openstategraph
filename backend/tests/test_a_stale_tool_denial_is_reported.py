@@ -187,9 +187,13 @@ class TestTheDeveloperIsTold:
         assert diagnostics.subjects(Finding.STALE_TOOL_DENIAL) == [
             ("agent-chat", "You hold no tools")
         ]
-        sentence = diagnostics.warnings()[-1]
+        # Not `warnings()[-1]`: the mail tool this document wires now also
+        # earns `REPEATED_SIDE_EFFECT` (`launch-readiness` 121), and reading
+        # one finding out of a list by position is what made that a surprise.
+        sentence = next(
+            line for line in diagnostics.warnings() if "You hold no tools" in line
+        )
         assert "agent-chat" in sentence
-        assert "You hold no tools" in sentence
 
     def test_a_worker_holding_a_tool_its_role_denies(self, tmp_path: Any) -> None:
         diagnostics = _build(tmp_path, _team_document(_STALE), "w1")

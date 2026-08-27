@@ -365,13 +365,13 @@ ENGINE_ADAPTERS = """A recorded exception: this is a data class the counting rul
     the counter would be writing code for the measurement rather than the
     design."""
 
-#: `BaseTool` is six; the leaves carry their own manifest.
+#: `BaseTool` is eight; the leaves carry their own manifest.
 PREBUILT_TOOLS = """A recorded exception, with the shape visible in the base they share:
-    `BaseTool` is **seven** members, and every tool here clears the ceiling only
+    `BaseTool` is **eight** members, and every tool here clears the ceiling only
     by its own configuration on top of that. `SqlListTablesTool` and
-    `SqlGetSchemaTool` are eleven, `SqlQueryTool` twelve — the tool contract,
+    `SqlGetSchemaTool` are twelve, `SqlQueryTool` thirteen — the tool contract,
     the four manifest constants (`name`, `description`, `node_type`, `Args`)
-    and, for the last, `row_cap`. `YouTubeTranscriptTool` is fourteen for the
+    and, for the last, `row_cap`. `YouTubeTranscriptTool` is fifteen for the
     same reason plus three settings (`language`, `allow_auto_captions`,
     `max_chars`) and one genuinely public method, `resolve`.
 
@@ -392,12 +392,30 @@ PREBUILT_TOOLS = """A recorded exception, with the shape visible in the base the
     are the atom's identity card, and the registry reads them off the class. A
     tool that hid them behind a collaborator would be a tool the node palette
     cannot describe. `resolve` is the one member worth a second look and it has
-    a real caller; the rest is declaration, not surface."""
+    a real caller; the rest is declaration, not surface.
 
-#: Twelve: the seven-member base, three manifest constants, a seam and a field.
+    **And every count moved by one again on 2026-08-27, for the same reason,
+    and this time it brought fifteen more classes with it**
+    (`launch-readiness` 121). `BaseTool.side_effecting` is the eighth member of
+    the base: whether calling this tool changes something outside the run, so
+    the compiler can tell a mail sender from a SELECT before deciding whether a
+    node it can run twice is worth a sentence. Declared once on the base, with
+    a safe default, so no adopter's tool has to say anything — which is the
+    anti-duplication rule and `async-first/04`'s additive rule at once, and
+    which is precisely why the census charges it to all sixteen tools.
+
+    Fifteen concrete tools were sitting at exactly ten and crossed on that one
+    commit. They are recorded rather than refactored because the alternative is
+    the one this paragraph already rejected twice: hiding a declaration behind
+    a collaborator makes an atom the palette cannot describe, and there is
+    nothing to split — a tool that reads has one reason to change whether it
+    declares seven constants or eight. What the ceiling is measuring here is
+    the base's declaration surface, counted sixteen times."""
+
+#: Thirteen: the eight-member base, three manifest constants, a seam and a field.
 MCP_TOOL = """A recorded exception, and one of the larger tools in the catalogue
-    for a structural reason rather than a sprawling one. Twelve is the
-    seven-member `BaseTool` contract, the three manifest constants every atom
+    for a structural reason rather than a sprawling one. Thirteen is the
+    eight-member `BaseTool` contract, the three manifest constants every atom
     declares (`name`, `description`, `Args`), `document_state()`, and exactly
     one field of its own: `bindings`, the server rows this node resolved to.
 
@@ -452,7 +470,7 @@ MULTI_MATCH_PROMPT = """**Twelve and thirteen, not eleven and twelve, and the ex
     when it was public, which is the census working."""
 
 
-FINDING_KINDS = """**An enum of fifteen, and the ceiling is asking the wrong question of it.**
+FINDING_KINDS = """**An enum of seventeen, and the ceiling is asking the wrong question of it.**
     `Finding` has no methods and no state — every member is one *value*, and the
     number of them is the number of ways a compiled graph has been observed to
     come out less capable than it was drawn. There is no "and" to split on: a
@@ -506,7 +524,20 @@ FINDING_KINDS = """**An enum of fifteen, and the ceiling is asking the wrong que
     choice — and blocking `validate`'s exit code on a missing credential
     would fail every shipped package naming a real provider in any
     environment that does not carry that provider's key, which is not what
-    this report is for. `REPORT_ONLY`, one more table entry, same enum."""
+    this report is for. `REPORT_ONLY`, one more table entry, same enum.
+
+    The sixteenth and seventeenth (`REPEATED_SIDE_EFFECT` and
+    `APPROVAL_COMES_TOO_LATE`, `launch-readiness` 121) arrive as a pair and are
+    two entries rather than one, because they are two defects with two fixes:
+    a node that acts outside the run and can be run twice is fixed by
+    `maxRetries` or by the drawing, and an approval below the action is fixed
+    by moving the approval. Collapsing them into one member would produce a
+    sentence that named neither fix — which is the failure mode `_SENTENCES`'
+    own rule ("name the consequence, not the condition") exists to prevent.
+    Both are `REPORT_ONLY`, and the reason there is a new one: their condition
+    is a conservative default about a tool nobody declared, and a guess may not
+    move an exit code. Still the same reason to change — the ways a graph can
+    come out other than it was drawn — so still a table entry, not a split."""
 
 #: Every class in the shipped package over the ceiling, with the reasoning that
 #: makes each number a decision rather than an oversight. Derived list, hand
@@ -532,7 +563,7 @@ ASYNC_CAPABLE_SAVER = """A recorded exception whose surface is not ours to choos
 
 
 RECORDED: dict[str, Recorded] = {
-    "compile.diagnostics.Finding": Recorded(15, FINDING_KINDS),
+    "compile.diagnostics.Finding": Recorded(17, FINDING_KINDS),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.DeepAgentNode": Recorded(13, NARRATE_TOGGLE),
@@ -547,11 +578,26 @@ RECORDED: dict[str, Recorded] = {
     "knowledge_explorer.CodebaseKnowledgeBuilder": Recorded(15, KNOWLEDGE_BUILDERS),
     "knowledge_engines.PostgresEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
     "knowledge_engines.MssqlEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
-    "prebuilt_sql.SqlGetSchemaTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_sql.SqlListTablesTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_sql.SqlQueryTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_youtube.YouTubeTranscriptTool": Recorded(14, PREBUILT_TOOLS),
-    "prebuilt_mcp.McpTool": Recorded(12, MCP_TOOL),
+    "prebuilt_sql.SqlGetSchemaTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_sql.SqlListTablesTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_sql.SqlQueryTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_youtube.YouTubeTranscriptTool": Recorded(15, PREBUILT_TOOLS),
+    "prebuilt_mcp.McpTool": Recorded(13, MCP_TOOL),
+    "knowledge_explorer.CodeGrepTool": Recorded(11, PREBUILT_TOOLS),
+    "knowledge_explorer.CodeLsTool": Recorded(11, PREBUILT_TOOLS),
+    "knowledge_explorer.CodeReadTool": Recorded(11, PREBUILT_TOOLS),
+    "knowledge_explorer.WriteTopicTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_architect.ValidateWorkflowTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_email.EmailSendTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_knowledge.KnowledgeLookupTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_platform.DescribeWorkflowTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_platform.ListWorkflowsTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_platform.PlatformGrepTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_platform.PlatformLsTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_platform.PlatformReadTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_session.SessionIdentityTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_web.WebFetchTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_web.WebSearchTool": Recorded(11, PREBUILT_TOOLS),
     "evaluation.scoring.Scorecard": Recorded(17, SCORECARD),
     "memory._AsyncCapableSaver": Recorded(12, ASYNC_CAPABLE_SAVER),
 }

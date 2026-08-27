@@ -168,6 +168,8 @@ class WriteTopicTool(BaseTool):
     """
 
     name = "write_topic"
+    #: Writes a topic file into the package's `knowledge/` — `launch-readiness` 121.
+    side_effecting = True
     node_type = ""  # never placeable on a canvas — build-time only
     description = (
         "Write one knowledge topic document for this workflow. The first "
@@ -610,6 +612,8 @@ class _JailedCodeTool(BaseTool):
     the resolved read roots, no way to name a file outside them."""
 
     node_type = ""  # build-time only, never placeable
+    #: Three read tools, jailed to the resolved roots — `launch-readiness` 121.
+    side_effecting = False
 
     def __init__(self, roots: list[Path], files_read: set[str]) -> None:
         self._roots = [r.resolve() for r in roots]

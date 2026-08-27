@@ -65,6 +65,8 @@ class ListTablesTool(BaseTool):
     """Every table, with row counts — the orientation an agent needs first."""
 
     name = "chinook_list_tables"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.chinook-get-all-tables"
     description = (
         "List all tables in the Chinook music-store database with their row counts. "
@@ -106,6 +108,8 @@ class GetTableSchemaTool(BaseTool):
     """
 
     name = "chinook_get_table_schema"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.chinook-get-schema"
     description = (
         "Get the columns, types, primary key and foreign keys of one Chinook table. "
@@ -167,6 +171,8 @@ class ExecuteSqlTool(BaseTool):
     """Runs one read-only SELECT and returns a Markdown table."""
 
     name = "chinook_execute_sql"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.chinook-execute-sql"
     description = (
         "Execute a single read-only SQL SELECT against the Chinook database and "

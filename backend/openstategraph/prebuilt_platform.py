@@ -66,6 +66,8 @@ class ListWorkflowsTool(BaseTool):
     """What exists — the same list the workflow picker shows (hidden ones stay hidden)."""
 
     name = "platform_list_workflows"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.platform-list-workflows"
     # Says whose list this is, because the filter below is narrower than the
     # obvious reading of "what exists". `visible_to_platform_tools` withholds
@@ -136,6 +138,8 @@ class DescribeWorkflowTool(BaseTool):
     """One workflow's own story: its AGENTS.md plus a structural summary."""
 
     name = "platform_describe_workflow"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.platform-describe-workflow"
     description = (
         "Describe one workflow: what it is for (its own documentation) and "
@@ -220,6 +224,8 @@ class PlatformLsTool(BaseTool):
     """`ls`, jailed to the repository, read-only by construction."""
 
     name = "platform_ls"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.platform-ls"
     description = (
         "List a directory inside this platform's repository (read-only). "
@@ -252,6 +258,8 @@ class PlatformReadTool(BaseTool):
     """`cat`, jailed and size-capped. There is no write counterpart on purpose."""
 
     name = "platform_read_file"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.platform-read-file"
     description = (
         "Read one text file inside this platform's repository (read-only, "
@@ -286,6 +294,8 @@ class PlatformGrepTool(BaseTool):
     """`grep -ri`, jailed, match-capped — exploration, not exfiltration."""
 
     name = "platform_grep"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
     node_type = "tool.platform-grep"
     description = (
         "Search text files inside this platform's repository for a "

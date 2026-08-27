@@ -69,6 +69,9 @@ class EmailSendTool(BaseTool):
     """Send (or dry-run) one email to the address wired into the node."""
 
     name = "send_email"
+    #: The atom this whole finding was written about (`launch-readiness` 121):
+    #: a sent mail cannot be un-sent, and a dry run still writes an `.eml`.
+    side_effecting = True
     node_type = "tool.email-send"
     description = (
         "Send an email report to the recipient configured on this node. "
