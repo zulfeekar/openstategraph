@@ -27,9 +27,9 @@ actually means by "try again twice", and uses `RemainingSteps` to bail out
 gracefully instead of raising `GraphRecursionError`.
 
 **Retry and timeout are graph-assembly parameters.** They are `add_node`
-arguments, never declared on a node or agent base. (`set_node_defaults` would
-declare them graph-wide in one call, but it does not exist in the installed
-langgraph 1.0.3 — the docs describe a later version.)
+arguments, never declared on a node or agent base. `StateGraph.set_node_defaults`
+declares the same four graph-wide in one call, with per-node override, and this
+graph applies them per node simply because there are four nodes.
 """
 
 from __future__ import annotations
@@ -294,11 +294,13 @@ def build_graph(sql_node: AgentNode, synthesis_node: AgentNode, *, compile_graph
     # Retry belongs to **graph assembly**, not to any node or agent base — it is
     # an `add_node` parameter available to every family.
     #
-    # Applied per node because `StateGraph.set_node_defaults(...)`, which declares
-    # it graph-wide once, does not exist in the installed langgraph (1.0.3); the
-    # docs describe a later version. Checked against the installed package rather
-    # than trusted from the documentation. Collapse this into one call when the
-    # dependency moves to >= 1.2.
+    # Applied per node rather than through `StateGraph.set_node_defaults(...)`,
+    # which would declare it graph-wide once. That is a preference here and not
+    # a constraint: this comment claimed the method did not exist in the
+    # installed langgraph, and it does — with exactly the four parameters
+    # `add_node` takes (`docs-and-gaps/17`, register entry RC-15). Four
+    # arguments are cheaper to read than an action at a distance when the graph
+    # has four nodes; collapse it if a fifth arrives.
     retry = RetryPolicy(max_attempts=2)
     builder.add_node("orient", orient, retry_policy=retry)
     builder.add_node("write_sql", sql_node, retry_policy=retry)

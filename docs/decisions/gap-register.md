@@ -175,14 +175,26 @@ best-specified ticket in this register, and it gets cheaper the sooner it runs.
 
 **RC-08 — No checkpoint-preserving stop (`RunControl.request_drain`).** Stop
 means "nothing further is scheduled"; work already dispatched finishes and is
-discarded. Evidence: `backend/openstategraph/api/streaming.py:456-470` —
-*"There is no cancellation seam inside a superstep at this version:
-`RunControl.request_drain()` (langgraph 1.2) stops at exactly the same boundary
-— 'after the current superstep completes' — and buys a resumable checkpoint
-rather than a faster stop."* Measured residuals: ~15s early, ~75s mid-fan-out
-(`.scratch/launch-readiness/tickets/10-stop-button.md`). **Size S** once the
-dependency moves to ≥1.2. **Risk:** none — the current behaviour is honest and
-the tooltip says so. **Verdict: fine to carry.**
+discarded. Evidence: the stop-boundary comment in
+`backend/openstategraph/api/streaming.py`'s `GeneratorExit` handler, which
+probed all three candidates against the installed langgraph rather than
+reading them off a page — `request_drain()` stops at the same superstep
+boundary, `GraphRunStream.abort()` is a silent no-op from another thread, and a
+node `timeout` is refused for a synchronous node. Measured residuals: ~15s
+early, ~75s mid-fan-out (`.scratch/launch-readiness/tickets/10-stop-button.md`).
+
+**Cited by name, not by line.** This entry read `streaming.py:456-470` and
+quoted text that had been rewritten and moved several hundred lines away
+(`docs-and-gaps/17`) — a line number in a register is a citation with a
+half-life.
+
+**Superseded in substance by `async-first/`**, which is the answer this entry
+was waiting for and did not expect: nothing in the library stops a superstep,
+so the seam is the *node*. Cancelling the task driving `astream` reaches an
+`async def` body directly, and the families that hold a model call have been
+migrated one at a time. **Verdict: fine to carry** as a record of why the
+library route is closed — the current behaviour is honest and the tooltip says
+so.
 
 **RC-09 — Repeated approval rejection replans forever.** Evidence:
 `.scratch/launch-readiness/tickets/11-persona-sweep-both-flows.md`, "NOT
@@ -228,10 +240,20 @@ instead of a tool."* **Size S** (the honest fix is to stop shipping a
 repo-relative default). **Risk:** small and warned. **Verdict: fine to carry.**
 
 **RC-15 — Chinook's `graph.py` sets `retry_policy` per node instead of once.**
-Evidence: `workflows/chinook-assistant/graph.py:300` — *"Collapse this into one
-call when the dependency moves to >= 1.2."* (`set_node_defaults` is absent in
-langgraph 1.0.3.) **Size S.** **Verdict: fine to carry** — pairs with RC-08 as
-"things that unlock on the 1.2 bump".
+Evidence: the `retry` block in `workflows/chinook-assistant/graph.py`'s builder.
+
+**The blocker is gone and this entry said otherwise for as long as it was
+false** (`docs-and-gaps/17`). `set_node_defaults` is **present** on the
+installed langgraph, with exactly the four-parameter signature this entry asks
+for — `retry_policy`, `cache_policy`, `error_handler`, `timeout` — derived and
+pinned in `backend/tests/test_a_library_default_is_never_literalised.py`. The
+same false sentence had been copied into `graph.py`'s own module docstring, so
+it shipped to every reader of the example.
+
+**Size S**, and now actually actionable rather than parked behind a bump.
+**Verdict: fine to carry** — four `retry_policy=` arguments are not a defect,
+and collapsing them is a tidy-up whose only argument was the one that turned
+out to be wrong.
 
 **RC-16 — Three connection-rule classes named but unbuilt.** Evidence:
 `src/core/validation/ConnectionValidator.ts:54-55` — *"and later: tool-only
