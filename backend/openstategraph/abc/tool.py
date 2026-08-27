@@ -36,6 +36,13 @@ from typing import Any, Callable, ClassVar, Protocol, runtime_checkable
 from pydantic import BaseModel, Field
 
 from openstategraph.abc.async_doors import to_completion
+from openstategraph.abc.tool_notes import (
+    Correction,
+    Substitution,
+    ToolNote,
+    notes_for_model,
+    record_notes,
+)
 
 
 class ToolResult(BaseModel):
@@ -49,6 +56,18 @@ class ToolResult(BaseModel):
     ok: bool = True
     content: str = ""
     error: str | None = None
+    #: What this tool has to say about the call it just made, beyond the
+    #: result itself: a corrective (`launch-readiness/117`), a substitution it
+    #: made on the user's behalf (`launch-readiness/127`). **Additive and
+    #: empty by default** — `BaseTool` is Tier-1 semver-public with 26 in-tree
+    #: implementations and one in every adopter's `tools/*.py`, so a tool that
+    #: says nothing must behave exactly as it did before this field existed,
+    #: down to the bytes the model receives.
+    #:
+    #: One field rather than one per concern, and the argument for that — plus
+    #: why `launch-readiness/112` is deliberately *not* carried here — is in
+    #: `openstategraph.abc.tool_notes`.
+    notes: tuple[ToolNote, ...] = ()
 
     @classmethod
     def failure(cls, message: str) -> ToolResult:
@@ -300,7 +319,7 @@ class BaseTool(ABC):
             return ToolResult.failure(f"Invalid arguments: {exc}")
 
         try:
-            return self._execute(args)
+            return _recorded(self._execute(args))
         except Exception as exc:
             return ToolResult.failure(f"{type(exc).__name__}: {exc}")
 
@@ -331,7 +350,7 @@ class BaseTool(ABC):
             return ToolResult.failure(f"Invalid arguments: {exc}")
 
         try:
-            return await self._aexecute(args)
+            return _recorded(await self._aexecute(args))
         except Exception as exc:
             return ToolResult.failure(f"{type(exc).__name__}: {exc}")
 
@@ -371,14 +390,12 @@ class BaseTool(ABC):
         def _call(**kwargs: Any) -> str:
             if on_call is not None:
                 on_call(self.name)
-            result = self.run(**kwargs)
-            return result.content if result.ok else f"Error: {result.error}"
+            return _with_notes(self.run(**kwargs))
 
         async def _acall(**kwargs: Any) -> str:
             if on_call is not None:
                 on_call(self.name)
-            result = await self.arun(**kwargs)
-            return result.content if result.ok else f"Error: {result.error}"
+            return _with_notes(await self.arun(**kwargs))
 
         return StructuredTool.from_function(
             func=_call,
@@ -444,6 +461,38 @@ class BaseTool(ABC):
 # plugin path and through their own `tools/` folder should not have to
 # recognise two different descriptions of one mistake.
 # --------------------------------------------------------------------------
+
+
+def _recorded(result: ToolResult) -> ToolResult:
+    """Put a result's notes on the run, on the way past.
+
+    Here rather than in each tool, and *inside* the base's own doorway rather
+    than at the binding seam, for the reason `launch-readiness/127` is filed:
+    a disclosure a caller has to remember to collect is a disclosure that gets
+    forgotten. Every tool in this repository and every adopter's reaches the
+    model through `run`/`arun`, so this is the one place that cannot be
+    bypassed by writing a tool.
+
+    Total by construction — `record_notes` is a no-op outside a run and
+    swallows its own failure — so a tool called from a script or a package's
+    `tests/` behaves exactly as it did.
+    """
+    if getattr(result, "notes", ()):
+        record_notes(result.notes)
+    return result
+
+
+def _with_notes(result: ToolResult) -> str:
+    """What the `ToolMessage` carries: the content, then anything the tool
+    said about the call (`launch-readiness/117`).
+
+    Byte-for-byte the previous behaviour when there are no notes, which is
+    every tool in this repository today and every adopter's until they write
+    one.
+    """
+    body = result.content if result.ok else f"Error: {result.error}"
+    addendum = notes_for_model(result.notes)
+    return f"{body}\n\n{addendum}" if addendum else body
 
 
 def _execute_through_a_private_loop(self: "BaseTool", args: BaseModel) -> ToolResult:
@@ -551,4 +600,13 @@ class NoArgs(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-__all__ = ["BaseTool", "ITool", "NoArgs", "ToolField", "ToolResult", "Field"]
+__all__ = [
+    "BaseTool",
+    "Correction",
+    "Field",
+    "ITool",
+    "NoArgs",
+    "Substitution",
+    "ToolField",
+    "ToolResult",
+]

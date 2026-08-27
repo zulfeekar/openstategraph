@@ -23,6 +23,7 @@ openstategraph.abc.BaseOrchestrator = class(ABC)(*, max_subtasks: 'int' = 8, rul
 openstategraph.abc.BaseRouter = class(ABC)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None, match_mode: 'str' = 'best', context: 'str' = '') -> 'None'
 openstategraph.abc.BaseTool = class(ABC)()
 openstategraph.abc.Classification = class(BaseModel)(*, branch: str, branches: list[str] = <factory>, fell_back: bool = False, reason: str = '') -> None
+openstategraph.abc.Correction = class(BaseModel)(*, kind: Literal['next_step'] = 'next_step', text: str) -> None
 openstategraph.abc.CustomGraphNode = class(AbstractAgentNode)(*, name: 'str', runnable: 'Any') -> 'None'
 openstategraph.abc.DeepAgentNode = class(BaseAgentNode)(*, subagents: 'list[dict[str, Any]] | None' = None, backend: 'Any' = None, **kwargs: 'Any') -> 'None'
 openstategraph.abc.Field = re-export of pydantic.fields.Field
@@ -46,10 +47,11 @@ openstategraph.abc.ReactAgentNode = class(BaseAgentNode)(*, default_rules: 'str'
 openstategraph.abc.Redaction = dataclass(object) fields(entity,strategy,count)
 openstategraph.abc.Router = class(BaseRouter)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None, match_mode: 'str' = 'best', context: 'str' = '', destinations: 'dict[str, str] | None' = None) -> 'None'
 openstategraph.abc.Screening = dataclass(object) fields(text,blocked,blocked_entity,redactions)
+openstategraph.abc.Substitution = class(BaseModel)(*, kind: Literal['substitution'] = 'substitution', user_term: str, axis: str, canonical_value: str, how_matched: Literal['exact', 'declared_synonym', 'model_inference'], confidence: Annotated[float | None, Ge(ge=0.0), Le(le=1.0)] = None) -> None
 openstategraph.abc.Subtask = class(BaseModel)(*, id: str, instruction: str, archetype: str = '') -> None
 openstategraph.abc.SystemPrompt = dataclass(object) fields(preamble,output_contract,context,default_rules,rules,replace_defaults,skill)
 openstategraph.abc.ToolField = dataclass(object) fields(key,label,kind,default_value,placeholder,hint,options)
-openstategraph.abc.ToolResult = class(BaseModel)(*, ok: bool = True, content: str = '', error: str | None = None) -> None
+openstategraph.abc.ToolResult = class(BaseModel)(*, ok: bool = True, content: str = '', error: str | None = None, notes: tuple[typing.Union[openstategraph.abc.tool_notes.Correction, openstategraph.abc.tool_notes.Substitution], ...] = ()) -> None
 openstategraph.abc.Verdict = class(BaseModel)(*, passed: bool, reason: str = '', feedback: str = '', failed_check: str = '') -> None
 openstategraph.abc.agent_node_for_tier = def(tier: 'str') -> 'type[BaseAgentNode]'
 openstategraph.abc.report_progress = def(message: 'str', *, current: 'int | None' = None, total: 'int | None' = None) -> 'bool'

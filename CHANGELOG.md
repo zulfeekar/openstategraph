@@ -3,6 +3,27 @@
 ## Unreleased
 
 ### Added
+- **A tool can say what to do next, and what it substituted for your word —
+  and the run records the second one rather than asking the model to remember
+  it.** `ToolResult` gains `notes`, an empty-by-default tuple carrying two new
+  Tier-1 records exported from `openstategraph.abc`: `Correction` (a
+  `next_step` sentence addressed to the model, `launch-readiness/117`) and
+  `Substitution` (`user_term`, `axis`, `canonical_value`, `how_matched`,
+  `confidence` — `launch-readiness/127`). One carrier rather than two,
+  because both are the tool stating a structured fact about *this call*, keyed
+  on the same identity; `launch-readiness/112`'s per-tool narration table is
+  deliberately not folded in, being keyed on the tool's *name* and authored in
+  advance. A `Correction` is appended to the string the `ToolMessage` carries,
+  so a corrective arrives **with** the data instead of as a rule issued
+  earlier. A `Substitution` is recorded against the run by `BaseTool.run` and
+  `arun`, and rendered by the output node wherever the user's word and the
+  canonical value differ — so a model that never mentions the substitution
+  cannot suppress it, and `how_matched="model_inference"` can never render
+  without saying that nothing in the data declared the mapping. Silence is the
+  default on both rails: a tool that attaches nothing is byte-for-byte
+  unchanged, and a substitution that changed only spelling or case renders
+  nothing. `BaseTool` itself gains no member, `ITool` is untouched, and no
+  in-tree tool or adopter's `tools/*.py` changed.
 - **The router, grader and orchestrator ladders have async doors too, and no
   subclass was asked to open one.** `BaseRouter` gains `aclassify(question)`,
   `BaseGrader` gains `agrade(candidate, question=...)`, and

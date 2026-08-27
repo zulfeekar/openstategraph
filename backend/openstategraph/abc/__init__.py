@@ -76,6 +76,12 @@ from openstategraph.abc.orchestrator import (
 from openstategraph.abc.prompt import SystemPrompt
 from openstategraph.abc.router import BaseRouter, Classification, IRouter, Router
 from openstategraph.abc.tool import BaseTool, Field, ITool, NoArgs, ToolField, ToolResult
+# What a tool says *about* the call it just made, beside the result itself:
+# a corrective (`launch-readiness/117`) or a substitution it made on the
+# user's behalf (`launch-readiness/127`). Same reasoning as `report_progress`
+# below — this is the import line a tool author is given, and a second path
+# for it would be a surface nobody finds.
+from openstategraph.abc.tool_notes import Correction, Substitution
 # Not a ladder — the one thing a tool does *while* it runs. It lives here
 # because this is the import line a tool author is given, and a second
 # path for it would be a surface nobody finds.
@@ -92,6 +98,7 @@ __all__ = [
     "BaseRouter",
     "BaseTool",
     "Classification",
+    "Correction",
     "CustomGraphNode",
     "DeepAgentNode",
     "Field",
@@ -115,6 +122,7 @@ __all__ = [
     "Redaction",
     "Router",
     "Screening",
+    "Substitution",
     "Subtask",
     "SystemPrompt",
     "ToolField",

@@ -266,6 +266,55 @@ as `No results for '…'` — and
 [`prebuilt_web.py`](../backend/openstategraph/prebuilt_web.py) carries that
 story in its module docstring.
 
+### A result can say what to do next, and what it swapped for the user's word
+
+`ToolResult.notes` carries what a tool has to say *about* the call, beside the
+result itself. Two kinds, both optional, both empty by default — a tool that
+attaches nothing behaves exactly as it did before the field existed.
+
+```python
+from openstategraph.abc import Correction, Substitution, ToolResult
+
+# The tool is the one thing holding the actual result, so it is the one thing
+# that can tell "there are none" apart from "your join could not have matched".
+return ToolResult(
+    content="0 rows",
+    notes=(Correction(text=(
+        "Zero matches on this join; the dark table keys on IMO and `imo = 0` "
+        "is a real value here, so confirm before reporting an absence."
+    )),),
+)
+
+# And when you resolved a word the data does not hold, say which word, on
+# which axis, and how you knew.
+return ToolResult(
+    content=rendered_rows,
+    notes=(Substitution(
+        user_term="persian gulf",
+        axis="load_shipping_region_v2",
+        canonical_value="Middle East Gulf (MEG)",
+        how_matched="declared_synonym",   # or "exact", or "model_inference"
+    ),),
+)
+```
+
+The two go different places, and that is the point:
+
+- a **`Correction`** is appended to the string the `ToolMessage` carries, so it
+  reaches the model **with the data**, in the same message. It is never shown
+  to a person.
+- a **`Substitution`** is recorded against the run and rendered by the output
+  node, whether or not the model mentions it. `how_matched` has no default,
+  and `model_inference` renders as *"a mapping the model worked out for
+  itself, which nothing in this data states"* — a guess that landed and a
+  guess that did not must not read alike.
+
+**Attach one only where the result is genuinely ambiguous** — zero rows, a
+truncated page, a rejected statement, a word you had to translate. A corrective
+that fires on every call becomes noise the model learns to skip, and a
+disclosure on every answer teaches a reader to skip disclosures. Silence is the
+default because silence is usually right.
+
 ### A bounded view of an unbounded result must say so in the text
 
 A model consumes the **text**, not the integers beside it. So an atom that

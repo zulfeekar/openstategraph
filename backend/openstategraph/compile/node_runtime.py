@@ -50,6 +50,7 @@ from openstategraph.step_budget import (
 )
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router
+from openstategraph.abc.tool_notes import notes_for_reader, take_notes
 from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCapabilities
 from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.node_families import discovered_node_families
@@ -4432,6 +4433,25 @@ class NodeRuntime:
             # worse than a plain one.
             if not answer.strip():
                 answer = NO_ANSWER_PRODUCED
+
+            # `launch-readiness/127`. A word the user typed that the data does
+            # not hold gets replaced by one it does, and until now nothing
+            # said so: three live runs of "list the ports in the persian gulf"
+            # returned 628, 68 and an invented set, and at the moment each was
+            # produced a reader could not tell them apart.
+            #
+            # Rendered **here** rather than asked of the model, because a
+            # model instructed to disclose discloses most of the time, and
+            # "most of the time" is the whole defect. The resolver records the
+            # fact (`abc/tool_notes.record_notes`, called by `BaseTool.run`
+            # for every tool there is); this node — the one place "the run's
+            # answer" is defined — renders it. Only where the user's word and
+            # the canonical value actually differ, and always carrying
+            # `how_matched`, so a substitution the model inferred for itself
+            # can never arrive labelled as one the data declared.
+            disclosure = notes_for_reader(take_notes())
+            if disclosure:
+                answer = f"{answer}\n\n{disclosure}"
 
             # `answer`, not `text`: this node's own output IS the run's answer,
             # and the card on the canvas is fed from `outputs[node]` while the
