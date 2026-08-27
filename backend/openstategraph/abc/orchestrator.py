@@ -14,6 +14,8 @@ zero) are not domain knowledge, so they are declared once on the base.
 
 from __future__ import annotations
 
+import asyncio
+
 from openstategraph.messages import content_text
 
 import logging
@@ -24,6 +26,7 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from openstategraph.abc.async_doors import ainvoke_model, install_doors
 from openstategraph.abc.prompt import SystemPrompt
 
 #: A runaway split (a numbered list with 500 items, say) must not fan out to 500
@@ -243,6 +246,31 @@ class BaseOrchestrator(ABC):
             rules, replace_defaults=replace_rules
         ).with_skill(skill).with_context(context)
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Give every subclass the half of each pair it did not write.
+
+        Three pairs rather than one, and that is this family's shape rather
+        than an excess: `plan` is built from `split` and `label`, so `aplan`
+        can only await a model if both of those are awaitable too. A door that
+        satisfied `asplit` and left `aplan` calling the synchronous one would
+        put a model call back on the event loop by the longest route available
+        — which is precisely the mistake `async-first/10` exists to avoid.
+
+        The timing matters more here than on the other two ladders. `split` is
+        `@abstractmethod`, and `__init_subclass__` runs inside `type.__new__`,
+        which `ABCMeta.__new__` calls **before** it computes
+        `__abstractmethods__`. So a subclass that writes only `asplit` comes
+        out concrete rather than abstract-and-half-finished, and `split` can
+        stay abstract for everybody else. `abc/tool.py` does the same thing for
+        the same reason.
+        """
+        super().__init_subclass__(**kwargs)
+        install_doors(
+            cls,
+            BaseOrchestrator,
+            [("split", "asplit"), ("label", "alabel"), ("plan", "aplan")],
+        )
+
     @abstractmethod
     def split(self, instruction: str, feedback: str = "") -> list[str]:
         """Turns one instruction into raw subtask strings. The extension point.
@@ -254,6 +282,24 @@ class BaseOrchestrator(ABC):
         which is what makes the supervisor's `feedback` port mean what its
         name says.
         """
+
+    async def asplit(self, instruction: str, feedback: str = "") -> list[str]:
+        """`split`, awaited. **Concrete — the default is a thread.**
+
+        The base has no split of its own to await, so the default is what
+        LangChain's own default is one rung down (`BaseTool._arun` ends in
+        `run_in_executor(None, self._run, ...)`, read off the installed
+        `langchain-core 1.5.3`): run the synchronous body somewhere that is not
+        the event loop. It is a safety net rather than the path anything in
+        this tree takes — `Orchestrator` writes a native `asplit` because a
+        regular expression has nothing to await, and `PlanningOrchestrator`
+        writes one because its planning call genuinely does.
+
+        A subclass that writes only `split` gets a door installed over it that
+        does exactly this; a subclass that writes only `asplit` gets a
+        synchronous door installed over *that*, and stays constructible.
+        """
+        return await asyncio.to_thread(self.split, instruction, feedback)
 
     def label(
         self,
@@ -275,16 +321,71 @@ class BaseOrchestrator(ABC):
         works — degraded but honest — with no model configured, the same
         stance the deterministic `split()` already takes.
         """
+        settled = self._labels_without_a_model(subtasks, archetypes)
+        if settled is not None:
+            return settled
+
+        try:
+            reply = self.model.invoke(self._labelling_messages(subtasks, archetypes))
+            # A repr is one line, so the label split below collapsed every
+            # subtask to the default worker — inside an `except Exception`,
+            # so silently. See `openstategraph.messages`.
+            raw = content_text(reply.content)
+        except Exception:
+            return self._labelling_failed(subtasks, notes)
+
+        return self._labels_from(raw, subtasks, archetypes, notes)
+
+    async def alabel(
+        self,
+        subtasks: list[Subtask],
+        archetypes: list[Archetype],
+        *,
+        notes: list[str] | None = None,
+    ) -> list[str]:
+        """`label`, awaited. The labelling call's async door (`async-first/05`).
+
+        Identical in every respect a caller can observe: the same
+        no-model fallback answers without touching a model, the same roster is
+        rendered, the same **strict** resolution against the wired keys
+        discards an invented archetype, and the same `notes` sink hears about
+        it. Only the model call is awaited.
+
+        **The `except Exception` below is the shape that would swallow a stop
+        if it could.** `asyncio.CancelledError` inherits from `BaseException`,
+        so it cannot, and a cancelled labelling call propagates instead of
+        collapsing the whole fan-out onto the default worker — which is
+        `every-workflow-green` 17's symptom exactly, and would be invisible.
+        Pinned by a test rather than left to a property of the language.
+        """
+        settled = self._labels_without_a_model(subtasks, archetypes)
+        if settled is not None:
+            return settled
+
+        try:
+            reply = await ainvoke_model(
+                self.model, self._labelling_messages(subtasks, archetypes)
+            )
+            raw = content_text(reply.content)
+        except Exception:
+            return self._labelling_failed(subtasks, notes)
+
+        return self._labels_from(raw, subtasks, archetypes, notes)
+
+    def _labels_without_a_model(
+        self, subtasks: list[Subtask], archetypes: list[Archetype]
+    ) -> list[str] | None:
+        """Every labelling answer a model is not needed for. One place, two doors.
+
+        `None` means a model call is required. Extracted rather than written
+        twice because the deterministic branch is the honest zero-token path
+        and an async body that reimplemented it could quietly start awaiting
+        something for a name match.
+        """
         if not archetypes:
             return ["" for _ in subtasks]
         if len(archetypes) == 1:
             return [archetypes[0].key for _ in subtasks]
-
-        valid = {a.key for a in archetypes}
-        # Names normalise to keys, so "Weather Worker" and `weather-worker`
-        # are the same answer — one string, two spellings.
-        by_name = {archetype_slug(a.name): a.key for a in archetypes}
-
         if self.model is None:
             labels = []
             for task in subtasks:
@@ -302,6 +403,13 @@ class BaseOrchestrator(ABC):
                 )
                 labels.append(match)
             return labels
+        return None
+
+    def _labelling_messages(
+        self, subtasks: list[Subtask], archetypes: list[Archetype]
+    ) -> list[Any]:
+        """The roster and the listing, rendered once for both doors."""
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         roster = "\n".join(
             f"- {a.key}: {a.name}" + (f" — {a.description}" if a.description else "")
@@ -311,29 +419,37 @@ class BaseOrchestrator(ABC):
         prompt = self.label_prompt.with_context(
             f"Worker archetypes:\n{roster}", f"Subtasks:\n{listing}"
         )
-        try:
-            from langchain_core.messages import HumanMessage, SystemMessage
+        return [
+            SystemMessage(content=prompt.render()),
+            HumanMessage(content="Label the subtasks."),
+        ]
 
-            reply = self.model.invoke(
-                [SystemMessage(content=prompt.render()), HumanMessage(content="Label the subtasks.")]
-            )
-            # A repr is one line, so the label split below collapsed every
-            # subtask to the default worker — inside an `except Exception`,
-            # so silently. See `openstategraph.messages`.
-            raw = content_text(reply.content)
-        except Exception:
-            # A labelling failure must not kill the plan — everything falls
-            # to the default worker, which is a working (single-archetype)
-            # run. It was also completely silent, which is the half of
-            # ticket 17 the run result cannot fix: a whole plan collapsing
-            # onto the default worker looked identical whether the model
-            # chose it or the call never happened.
-            note = "archetype labelling failed; every subtask falls to the default worker"
-            logger.warning("%s", note)
-            if notes is not None:
-                notes.append(note)
-            return ["" for _ in subtasks]
+    def _labelling_failed(
+        self, subtasks: list[Subtask], notes: list[str] | None
+    ) -> list[str]:
+        """A labelling failure must not kill the plan — everything falls to the
+        default worker, which is a working (single-archetype) run. It was also
+        completely silent, which is the half of ticket 17 the run result cannot
+        fix: a whole plan collapsing onto the default worker looked identical
+        whether the model chose it or the call never happened."""
+        note = "archetype labelling failed; every subtask falls to the default worker"
+        logger.warning("%s", note)
+        if notes is not None:
+            notes.append(note)
+        return ["" for _ in subtasks]
 
+    def _labels_from(
+        self,
+        raw: str,
+        subtasks: list[Subtask],
+        archetypes: list[Archetype],
+        notes: list[str] | None,
+    ) -> list[str]:
+        """Read the model's answer. Tolerant in reading, strict in trusting."""
+        valid = {a.key for a in archetypes}
+        # Names normalise to keys, so "Weather Worker" and `weather-worker`
+        # are the same answer — one string, two spellings.
+        by_name = {archetype_slug(a.name): a.key for a in archetypes}
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
         labels = []
         for line in lines[: len(subtasks)]:
@@ -386,7 +502,64 @@ class BaseOrchestrator(ABC):
         key. The caller (the orchestrator node) passes its own attempt count;
         this class has no notion of "which attempt" on its own.
         """
-        pieces = [p.strip() for p in self.split(instruction, feedback) if p.strip()]
+        subtasks = self._bounded(self.split(instruction, feedback), instruction, generation, notes)
+        if not subtasks or not archetypes:
+            return subtasks
+        return self._with_labels(subtasks, self.label(subtasks, archetypes, notes=notes))
+
+    async def aplan(
+        self,
+        instruction: str,
+        *,
+        generation: int = 0,
+        archetypes: list[Archetype] | None = None,
+        feedback: str = "",
+        notes: list[str] | None = None,
+    ) -> list[Subtask]:
+        """`plan`, awaited. The orchestrator's async door (`async-first/05`).
+
+        The verb `async-first/10` needs, and the reason this family grew three
+        doors instead of one: both model calls a plan can make live *below*
+        this method, so awaiting here is only worth something if `asplit` and
+        `alabel` are awaited too. Everything between them — the bounding, the
+        deduplication, the parent-context suffix, the generation-scoped ids —
+        is the same code, called from both doors rather than mirrored into two.
+
+        Nothing here catches, so a cancel propagates: see `alabel` for why that
+        matters more than it looks.
+        """
+        pieces = await self.asplit(instruction, feedback)
+        subtasks = self._bounded(pieces, instruction, generation, notes)
+        if not subtasks or not archetypes:
+            return subtasks
+        labels = await self.alabel(subtasks, archetypes, notes=notes)
+        return self._with_labels(subtasks, labels)
+
+    @staticmethod
+    def _with_labels(subtasks: list[Subtask], labels: list[str]) -> list[Subtask]:
+        return [
+            task.model_copy(update={"archetype": label})
+            for task, label in zip(subtasks, labels)
+        ]
+
+    def _bounded(
+        self,
+        raw_pieces: list[str],
+        instruction: str,
+        generation: int,
+        notes: list[str] | None,
+    ) -> list[Subtask]:
+        """Everything a plan does between splitting and labelling.
+
+        A private method rather than a repeated block, because it is the half
+        of `plan` that has nothing to do with a model and every rule in it was
+        found live — the `maxSubtasks` ceiling that used to drop a real item
+        silently, the conjunction fragment that loses its shared predicate, the
+        near-duplicate that dispatches the same work twice, and the generation
+        prefix that stops a replan aliasing onto a rejected attempt's results.
+        Two copies of that is two places for one of them to go missing.
+        """
+        pieces = [p.strip() for p in raw_pieces if p.strip()]
         # Never zero subtasks: an instruction that does not split is still one
         # unit of work, not a dead end.
         if not pieces:
@@ -429,16 +602,9 @@ class BaseOrchestrator(ABC):
             if notes is not None:
                 notes.append(note)
         prefix = f"task-{generation}-" if generation else "task-"
-        subtasks = [
+        return [
             Subtask(id=f"{prefix}{i + 1}", instruction=text) for i, text in enumerate(truncated)
         ]
-        if archetypes:
-            labels = self.label(subtasks, archetypes, notes=notes)
-            subtasks = [
-                task.model_copy(update={"archetype": label})
-                for task, label in zip(subtasks, labels)
-            ]
-        return subtasks
 
 
 #: Ordered so a numbered list is tried before falling back to conjunctions —
@@ -519,6 +685,18 @@ class Orchestrator(BaseOrchestrator):
         # text into its own dispatched subtask (see `_orchestrator`).
         return deterministic_split(instruction)
 
+    async def asplit(self, instruction: str, feedback: str = "") -> list[str]:
+        """Written out rather than left to the installed door, on purpose.
+
+        The default door runs the synchronous body in a worker thread, which
+        is right for anything that blocks and absurd for a regular expression:
+        the zero-token path would start paying a thread hop for a `re.split`.
+        This is the shape `abc/tool.py`'s `_aexecute` docstring warns about
+        read the other way round — a body with nothing to await gains nothing
+        from a thread either.
+        """
+        return deterministic_split(instruction)
+
 
 class PlanningOrchestrator(BaseOrchestrator):
     """One planning call, in the same shape every other model-driven node uses.
@@ -545,6 +723,44 @@ class PlanningOrchestrator(BaseOrchestrator):
         if self.model is None:
             return deterministic_split(instruction)
 
+        try:
+            reply = self.model.invoke(self._planning_messages(instruction, feedback))
+            raw = content_text(reply.content)
+        except Exception:
+            return self._planning_failed(instruction)
+
+        return self._planned_pieces(raw, instruction)
+
+    async def asplit(self, instruction: str, feedback: str = "") -> list[str]:
+        """`split`, awaited — the one genuinely async body on this ladder.
+
+        This is the model call `async-first/10` is waiting on. Everything else
+        is unchanged: no model still takes the deterministic path with nothing
+        awaited, and a call that raises still degrades to it rather than
+        killing the plan.
+
+        The `except Exception` here is the shape that would swallow a stop if
+        it could — a cancelled planning call silently becoming a regex split
+        would be a run that answered after the client asked it not to. It
+        cannot: `CancelledError` is a `BaseException`, pinned by a test.
+        """
+        if self.model is None:
+            return deterministic_split(instruction)
+
+        try:
+            reply = await ainvoke_model(
+                self.model, self._planning_messages(instruction, feedback)
+            )
+            raw = content_text(reply.content)
+        except Exception:
+            return self._planning_failed(instruction)
+
+        return self._planned_pieces(raw, instruction)
+
+    def _planning_messages(self, instruction: str, feedback: str) -> list[Any]:
+        """The planning prompt, rendered once for both doors."""
+        from langchain_core.messages import HumanMessage, SystemMessage
+
         context = [f"Plan at most {self.max_subtasks} subtasks."]
         if feedback:
             # Ticket 23: the rejection reaches the *plan*, not just each
@@ -555,21 +771,18 @@ class PlanningOrchestrator(BaseOrchestrator):
                 f"in light of it:\n{feedback}"
             )
         prompt = self.prompt.with_context(*context)
+        return [
+            SystemMessage(content=prompt.render()),
+            HumanMessage(content=instruction),
+        ]
 
-        try:
-            from langchain_core.messages import HumanMessage, SystemMessage
+    @staticmethod
+    def _planning_failed(instruction: str) -> list[str]:
+        logger.warning("planning call failed; falling back to the deterministic split")
+        return deterministic_split(instruction)
 
-            reply = self.model.invoke(
-                [
-                    SystemMessage(content=prompt.render()),
-                    HumanMessage(content=instruction),
-                ]
-            )
-            raw = content_text(reply.content)
-        except Exception:
-            logger.warning("planning call failed; falling back to the deterministic split")
-            return deterministic_split(instruction)
-
+    @staticmethod
+    def _planned_pieces(raw: str, instruction: str) -> list[str]:
         pieces = [_unlisted(line) for line in raw.splitlines()]
         pieces = [piece for piece in pieces if piece]
         return pieces or deterministic_split(instruction)

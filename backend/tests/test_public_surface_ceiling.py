@@ -632,7 +632,28 @@ ASYNC_DOORS = """**One added public member per model-driven verb, and the census
     the rubric, the verdict verb and the revise payload — and every leaf
     inherits them whole. `Grader` itself declares one method. There is no "and"
     to split: this class judges, and the awaitable half of judging is the same
-    reason to change as the synchronous half."""
+    reason to change as the synchronous half.
+
+    **The orchestrator, third family: `BaseOrchestrator`, `Orchestrator` and
+    `PlanningOrchestrator` 9 -> 12**, by `asplit`, `alabel` and `aplan`, and
+    all three arrive in this table on that commit. Three verbs rather than one
+    is this family's shape rather than an excess: `plan` is built from `split`
+    and `label`, so `aplan` can only await a model if both of those are
+    awaitable too — a door that satisfied `aplan` and left it calling the
+    synchronous `split` would put a model call back on the event loop by the
+    longest route available, which is exactly the mistake `async-first/10`
+    exists to avoid.
+
+    Nine of the twelve were under the ceiling before this and would be again if
+    the three were hidden — which is the move this whole file exists to refuse.
+    The candidate collaborator is real and named here so nobody has to
+    rediscover it: `split`/`asplit` and `label`/`alabel` are two *strategies*
+    that a plan composes, and lifting them into a `Decomposition` and a
+    `Labelling` would take the base to six. It is blocked the same way the
+    router's branch vocabulary is: `plan` is declared on `IOrchestrator`, which
+    is Tier 1, and the two strategies are what an adopter subclasses today —
+    `split` is the ladder's only `@abstractmethod`. Worth doing behind a
+    deprecation; not worth doing to flatter a count."""
 
 
 RECORDED: dict[str, Recorded] = {
@@ -640,6 +661,9 @@ RECORDED: dict[str, Recorded] = {
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.DeepAgentNode": Recorded(13, NARRATE_TOGGLE),
+    "abc.orchestrator.BaseOrchestrator": Recorded(12, ASYNC_DOORS),
+    "abc.orchestrator.Orchestrator": Recorded(12, ASYNC_DOORS),
+    "abc.orchestrator.PlanningOrchestrator": Recorded(12, ASYNC_DOORS),
     "abc.grader.BaseGrader": Recorded(11, ASYNC_DOORS),
     "abc.grader.Grader": Recorded(11, ASYNC_DOORS),
     "abc.router.BaseRouter": Recorded(13, MULTI_MATCH_PROMPT + "\n\n    " + ASYNC_DOORS),
