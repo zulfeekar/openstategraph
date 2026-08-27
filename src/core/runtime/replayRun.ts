@@ -116,8 +116,16 @@ function pickOutput(previous: ReplayWrite | undefined): { output?: string } {
  */
 export interface ReplayCandidate {
   readonly running: boolean;
-  /** Why this turn is not running, when it was cut short rather than finished. */
-  readonly stopped: 'streaming' | 'paused' | null;
+  /**
+   * Why this turn is not running, when it was cut short rather than finished.
+   *
+   * Structural, like the rest of this interface, and deliberately widened to
+   * the *shape* rather than the vocabulary: the words belong to
+   * `view/ask/stoppedLine.ts`, and `core/` owes nothing to the view. Only the
+   * null-ness is read below — a stopped turn of any kind is not replayed —
+   * so a fourth word there costs nothing here.
+   */
+  readonly stopped: string | null;
   readonly activity: readonly ReplayFrame[];
   /**
    * The document this turn ran — the class slug open when it was sent, or

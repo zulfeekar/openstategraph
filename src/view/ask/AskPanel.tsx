@@ -50,6 +50,7 @@ import { busKey, suggestionOutcome, unreadyFields, type CapabilitySuggestion } f
 import { acceptAction, type AcceptAction } from './acceptAction';
 import { ConversationStore } from './conversationStore';
 import { clearRunInFlight, markRunInFlight } from './interruptedRun';
+import { howAStopEnded, stoppedLine, type StoppedHow } from './stoppedLine';
 import { liveLineAfterStep, type LiveLine } from './liveLine';
 import { progressLine } from './progressLine';
 import './AskPanel.css';
@@ -197,14 +198,16 @@ interface ChatTurn {
   /** Set while this turn's run is paused waiting for a human decision. */
   readonly pendingApproval: PendingApproval | null;
   /**
-   * How this turn ended when the developer pressed Stop — and the two cases
-   * are genuinely different, so they are not collapsed into a boolean.
+   * How this turn ended when the developer pressed Stop — and the cases are
+   * genuinely different, so they are not collapsed into a boolean.
    *
-   * `'streaming'`: a live run was aborted. The client closed the connection,
-   * the server's stream generator exited, and nothing further is scheduled.
-   * Measured, not assumed: work already dispatched into the current step —
-   * for a fan-out crew, every worker in it — runs to completion in the
-   * background and its result is thrown away.
+   * There used to be two, and `'streaming'` was silently both of them
+   * (`async-first/07`). A live run that was aborted either had its step
+   * **cancelled** or merely **abandoned**, depending on the node in charge,
+   * and the panel said the second for both. Measured live on 2026-08-27 on
+   * the same fan-out: 0.41–1.08 s of work billed after the stop when
+   * cancelled, 12.65–24.16 s when abandoned. The sentences are in
+   * `stoppedLine`; which one applies comes from the server's `interruptible`.
    *
    * `'paused'`: the turn was sitting at a `human.approval` interrupt, where
    * nothing is running to stop. Pressing Stop only walks away from the
@@ -212,7 +215,7 @@ interface ChatTurn {
    * which is exactly what the line rendered for this case says. Calling that
    * "stopped" without the qualification would be a lie about the server.
    */
-  readonly stopped: 'streaming' | 'paused' | null;
+  readonly stopped: StoppedHow;
   /**
    * A capability gap the agent named, already validated against this editor
    * (`parseSuggestion`) — so its presence means the offer can actually be
@@ -690,7 +693,19 @@ export function AskPanel({
       /** The node most recently *queued* to glow — `activeNode` above is the
        * one currently glowing, which lags by the paced highlight chain. */
       let queuedActive: string | null = null;
+      /**
+       * Whether a Stop right now would *cancel* the step in charge, or only
+       * walk away from it (`async-first/07`). The last thing the server said,
+       * kept because that is the only place the answer exists — it is a
+       * property of the node, and the panel must not infer it from the
+       * document. `false` until a frame says otherwise, which is also what a
+       * backend that predates the field earns.
+       */
+      let cancellable = false;
       const onEvent = (event: RunStreamEvent) => {
+        if (event.type === 'update' || event.type === 'token' || event.type === 'progress') {
+          cancellable = event.interruptible;
+        }
         if (event.type === 'update') {
           const now = performance.now();
           const durationMs = Math.round(now - lastFrameAt);
@@ -890,7 +905,14 @@ export function AskPanel({
         // failed) — the node returns to rest, which is the same state a
         // canvas that never ran is in.
         if (activeNode) controller.model.setNodeRuntime(activeNode, { status: 'idle' });
-        updateTurn(id, { running: false, pendingApproval: null, stopped: 'streaming' });
+        updateTurn(id, {
+          running: false,
+          pendingApproval: null,
+          // Which of the two happened — see `stoppedLine`. Without this the
+          // panel printed the *abandoned* sentence for a cancelled run, and
+          // no reader could tell the difference.
+          stopped: howAStopEnded(cancellable),
+        });
         scrollToEnd();
         return;
       }
@@ -1853,13 +1875,7 @@ function Turn({
         />
       ) : null}
 
-      {turn.stopped ? (
-        <p className="ask__stopped">
-          {turn.stopped === 'paused'
-            ? 'Stopped by you — this run was waiting for approval, so nothing was interrupted. It stays checkpointed on the server and can still be resumed.'
-            : 'Stopped by you — nothing further is scheduled. Steps already dispatched finish in the background and their results are discarded.'}
-        </p>
-      ) : null}
+      {turn.stopped ? <p className="ask__stopped">{stoppedLine(turn.stopped)}</p> : null}
 
       {turn.error ? (
         <p className="ask__error">

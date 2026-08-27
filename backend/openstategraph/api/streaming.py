@@ -26,6 +26,7 @@ from openstategraph.api.audience import (  # noqa: E402
 from openstategraph.developer_channel import ProseGuard  # noqa: E402
 from openstategraph.progress import progress_report  # noqa: E402
 from openstategraph.api.registries import runtime_warnings  # noqa: E402
+from openstategraph.compile.node_doors import interruptible_nodes  # noqa: E402
 
 
 def customer_task_id(task_id: Any, audience: Any) -> Any:
@@ -636,6 +637,7 @@ def _token_frame(common: dict[str, Any], block: str, text: str, usage: Any) -> s
             # do nothing when it is unchanged, so a 135-token model turn is
             # one state write.
             "activeNode": common["activeNode"],
+            "interruptible": common["interruptible"],
             # Carried here too, and for the reason `activeNode` is: a `token`
             # frame is the only one that arrives while a node is STILL
             # WORKING, so a canvas fed by `update` frames alone can only ever
@@ -787,6 +789,12 @@ FRAME_FIELDS: dict[str, tuple[str, ...]] = {
     "update": (
         "node", "namespace", "taskId", "internal",
         "activeNode", "path", "pathSlugs", "output",
+        # Whether a stop *right now* cancels the node this frame names, or
+        # merely walks away from it (`async-first/07`). On the three frames
+        # that carry `activeNode` and on no others — see that ticket for why
+        # a run surface that cannot say which of the two happened makes the
+        # whole feature unfalsifiable from the outside.
+        "interruptible",
         # Optional, and a pair: a grader's own frame carries them when a
         # deterministic check rejected the candidate before any model was
         # invoked, and neither key at all otherwise (`production-ready` 92).
@@ -795,10 +803,11 @@ FRAME_FIELDS: dict[str, tuple[str, ...]] = {
     "token": (
         "node", "namespace", "content", "block", "usage",
         "activeNode", "path", "pathSlugs", "kind", "tool", "withheld",
+        "interruptible",
     ),
     "progress": (
         "node", "namespace", "message", "current", "total",
-        "activeNode", "path", "pathSlugs",
+        "activeNode", "path", "pathSlugs", "interruptible",
     ),
     "spawn": ("kind", "parent", "label", "instruction", "taskId", "namespace"),
     "interrupt": ("threadId", "node", "message", "candidate", "verdict", "reason", "check"),
@@ -808,6 +817,28 @@ FRAME_FIELDS: dict[str, tuple[str, ...]] = {
     ),
     "error": ("threadId", "detail"),
 }
+
+
+def _frame_interruptible(frame: str, previous: bool) -> bool:
+    """Whether a stop would cancel the node this frame names, else `previous`.
+
+    Only `update`, `token` and `progress` carry the field, and a frame without
+    it leaves the answer where it was — a `spawn` between two of an agent's
+    tokens must not read as "the agent stopped being cancellable".
+
+    Parsed rather than threaded out of `_run_frames` as a second return value:
+    the fold yields strings by design (`_sse` is the one place a frame is
+    built), and a parallel channel carrying a copy of a field the frame
+    already has is the duplication this repository keeps paying for.
+    """
+    if '"interruptible"' not in frame:
+        return previous
+    try:
+        payload = json.loads(frame.split("data: ", 1)[1])
+    except (IndexError, ValueError):  # pragma: no cover - `_sse` cannot emit this
+        return previous
+    value = payload.get("interruptible")
+    return previous if value is None else bool(value)
 
 
 def _is_terminal(frame: str) -> bool:
@@ -927,9 +958,15 @@ async def _stream_run(
         run_context,
     )
     ended = False
+    # What a stop would do to the step in flight, kept as the frames go past
+    # so the log line below can say which of the two happened. Read off the
+    # frames rather than recomputed here, so the sentence in the log and the
+    # sentence in the browser cannot disagree — they are the same field.
+    cancellable = False
     try:
         async for frame in frames:
             ended = ended or _is_terminal(frame)
+            cancellable = _frame_interruptible(frame, cancellable)
             yield frame
     except (GeneratorExit, asyncio.CancelledError):
         # Stop, pressed, or the client hung up. Nothing may be yielded from
@@ -945,51 +982,76 @@ async def _stream_run(
         # mean the same thing here and both must be re-raised, never converted
         # into a frame.
         #
-        # The honest boundary, measured live against the Store Analytics crew
-        # rather than assumed: `graph.stream` is a generator driven BY the
-        # fold, so nothing further is *scheduled*. But tasks LangGraph already
-        # dispatched for the current superstep run in its own executor, a
-        # blocking model call cannot be interrupted, and closing the fold
-        # drains them — an early stop trailed model calls for ~15s, a stop
-        # mid-fan-out for ~75s, in both cases ending far short of the run
-        # itself. Their results are discarded.
+        # **What this costs, now that Phase D has landed** — measured live on
+        # 2026-08-27 through this very path (`async-first/07`), never asserted
+        # by a test. `graph.astream` is a generator driven BY the fold, so
+        # nothing further is *scheduled* either way. What changed is the step
+        # already in flight:
         #
-        # There is no cancellation seam inside a superstep on this version,
-        # and **all three candidates were probed on the installed langgraph
-        # 1.2.10 rather than read off a page** (ticket 09), because this
-        # sentence has now been the thing a session came to re-check twice:
+        #   morning-brief, supervisor + three concurrent workers,
+        #   disconnected 12 s in, gpt-oss:120b-cloud, three runs each:
+        #
+        #     pre-Phase-D (`72eaaa9`, `def` worker bodies)
+        #        24.16 s / 12.65 s / 16.51 s of node work billed after the
+        #        stop; 3/3 workers ran to completion and were discarded.
+        #     this tree (`async def` worker bodies)
+        #        0.68 s / 0.41 s / 1.08 s; 3/3 workers cancelled.
+        #
+        # The ~15 s and ~75 s this comment used to quote were the same
+        # quantity on a larger crew and a later stop point, and they were
+        # never latency a user waited through — the client-visible stop has
+        # been 0.00 s in every run of every arm, before and after
+        # (`async-first/09`). They were a model call that kept being paid for.
+        #
+        # **The boundary that survives, because it is a different one.** A
+        # cancelled body unwinds at its *next await*, so the provider call
+        # already issued is still finished and still billed: 0.41–4.85 s
+        # across the nine runs above. And a node whose body is still `def` —
+        # a grader, a router, a function, anything reached through
+        # `node_doors`' sync door — is exactly as uninterruptible as
+        # everything was before. So "stop means stop" is a claim about a
+        # *node*, never about the graph, which is why the frames carry
+        # `interruptible` per node and this line says which of the two it was
+        # rather than describing one and hoping.
+        #
+        # There is still no cancellation seam inside a superstep on this
+        # version, and **all three candidates were probed on the installed
+        # langgraph 1.2.10 rather than read off a page** (ticket 09):
         #
         # - `RunControl.request_drain()` — its check is the first statement of
         #   `PregelLoop.tick()`, so it stops at exactly this boundary. With a
         #   node sleeping 20s and a drain at t=3s, control returned at 20.01s.
         #   LangChain's own fault-tolerance page says the same in words:
         #   drain "does not cancel running asyncio tasks or kill threads".
-        # - `GraphRunStream.abort()` — the member this comment used not to
-        #   name, and the reason it must. It is `graph_iter.close()` plus a
-        #   mux close: from the pumping thread it is *exactly* the
-        #   `GeneratorExit` we are already handling here, and from any other
-        #   thread it is a **silent no-op** — `close()` on a generator that is
-        #   mid-`next()` raises `ValueError: generator already executing`, and
-        #   `abort()` swallows it under a bare `except Exception: pass`.
-        #   Probed: abort at t=3s returned instantly and raised nothing, the
-        #   node still ran to completion at 20.01s, and the caller was left
-        #   with an empty final state because the mux had been closed under
-        #   it. It is strictly worse than this handler, which at least logs.
-        #   It also requires the v3 protocol (`GraphRunStream` carries
+        # - `GraphRunStream.abort()` — it is `graph_iter.close()` plus a mux
+        #   close: from the pumping thread it is *exactly* the `GeneratorExit`
+        #   we are already handling here, and from any other thread it is a
+        #   **silent no-op** — `close()` on a generator that is mid-`next()`
+        #   raises `ValueError: generator already executing`, and `abort()`
+        #   swallows it under a bare `except Exception: pass`. Probed: abort
+        #   at t=3s returned instantly and raised nothing, the node still ran
+        #   to completion at 20.01s, and the caller was left with an empty
+        #   final state because the mux had been closed under it. It is
+        #   strictly worse than this handler, which at least logs. It also
+        #   requires the v3 protocol (`GraphRunStream` carries
         #   `@beta("The v3 streaming protocol on Pregel is experimental")`).
-        # - Node `timeout` — the only construct in 1.2.10 that does interrupt
-        #   a node mid-flight, and `_internal/_timeout.py` rejects it at
-        #   compile time for sync nodes: "Node timeouts are only supported for
-        #   async nodes."
+        # - Node `timeout` — the only construct in 1.2.10 that interrupts a
+        #   node mid-flight, and `_internal/_timeout.py` rejects it at compile
+        #   time for sync nodes: "Node timeouts are only supported for async
+        #   nodes." Which is the same seam by another road: the node.
         #
-        # Which is the map's thesis, measured: under `astream`, cancelling the
-        # consuming task cancelled an `async def` node body outright (it never
-        # completed, at t=3.00s), while a sync node in the same async graph
-        # ran to its full 10s in a worker thread. The seam is the node, not
-        # the stream — see `.scratch/async-first/`.
+        # None of that is what stops a run today. Cancelling the task driving
+        # `astream` is, and it reaches an `async def` body directly — see
+        # `.scratch/async-first/`.
         logger.info(
-            "run stream stopped by the client (thread_id=%s) — no further supersteps",
+            "run stream stopped by the client (thread_id=%s) — no further "
+            "supersteps, and the step in flight was %s",
             thread_id,
+            (
+                "cancelled"
+                if cancellable
+                else "abandoned (it finishes in the background; its result is discarded)"
+            ),
         )
         raise
     except Exception as exc:  # noqa: BLE001 — reported to the client, not swallowed
@@ -1127,6 +1189,28 @@ async def _run_frames(
     answer = ""
     spawns = SpawnWatcher(node_ids_by_name)
     active = ActiveNodeResolver(node_ids_by_name)
+    # Which of this graph's nodes a stop actually cancels, in canvas ids,
+    # resolved once per run rather than per frame (`async-first/07`). Asked of
+    # the compiled graph rather than of the document, because the answer is a
+    # property of the door the compiler installed and of nothing a card
+    # declares. A graph that cannot be asked answers `set()`, so every node
+    # keeps the claim a stopped run has always made.
+    cancels = {
+        node_ids_by_name.get(name, name) for name in interruptible_nodes(graph)
+    }
+
+    def stop_cancels(active_node: str) -> bool:
+        """Whether a stop right now cancels the node the run is *inside*.
+
+        Keyed on `activeNode` and never on the frame's reporting node, which
+        is the fix rather than the detail. A long agent step reports as
+        `model`, `tools` or `NarrationMiddleware.before_model` — names that
+        are not canvas nodes and match nothing — so keying on `node` answered
+        `False` for every frame of exactly the steps this feature is about.
+        Found live on 2026-08-27: a stop mid-fan-out logged *abandoned* while
+        all three workers were in fact cancelled.
+        """
+        return active_node in cancels
     # Deliberately a **second, wider** map, never a replacement for the one
     # above. `ActiveNodeResolver` and the `internal` flag both mean "is this a
     # node of the document that was submitted", so widening their map with the
@@ -1494,6 +1578,7 @@ async def _run_frames(
                             )
                             or "",
                         }
+                    update_active = active.resolve(node_id, namespace)
                     yield _sse(
                         "update",
                         {
@@ -1507,7 +1592,9 @@ async def _run_frames(
                             # should show as running for this frame. Both
                             # surfaces read it instead of guessing; an older
                             # client that ignores it behaves exactly as before.
-                            "activeNode": active.resolve(node_id, namespace),
+                            "activeNode": update_active,
+                            # See `stop_cancels`.
+                            "interruptible": stop_cancels(update_active),
                             # Where this frame is on *every* canvas it touches,
                             # outermost document first — see `RunPathResolver`.
                             # `activeNode` is this list's first entry whenever
@@ -1556,6 +1643,7 @@ async def _run_frames(
                 # graph-step name.
                 progress_node = node_ids_by_name.get(report.node, report.node)
                 progress_path, progress_slugs = run_path.resolve(report.node, namespace)
+                progress_active = active.resolve(progress_node, namespace)
                 yield _sse(
                     "progress",
                     {
@@ -1570,7 +1658,8 @@ async def _run_frames(
                         "message": report.message,
                         "current": report.current,
                         "total": report.total,
-                        "activeNode": active.resolve(progress_node, namespace),
+                        "activeNode": progress_active,
+                        "interruptible": stop_cancels(progress_active),
                         "path": progress_path,
                         "pathSlugs": progress_slugs,
                     },
@@ -1633,6 +1722,7 @@ async def _run_frames(
                         "node": token_node,
                         "namespace": list(namespace),
                         "activeNode": active_node,
+                        "interruptible": stop_cancels(active_node),
                         "path": token_path,
                         "pathSlugs": token_slugs,
                         "kind": kind,

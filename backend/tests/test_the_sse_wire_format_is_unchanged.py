@@ -23,6 +23,17 @@ in a browser while they work.
 Regenerating the golden is **not** the fix for a failure here. It records a
 published contract (`docs/api.md`, `FRAME_FIELDS`); if a change genuinely
 means to move it, that is a deliberate edit with its own ticket.
+
+**One field has since been added on purpose, and the golden was still not
+regenerated** (`async-first/07`, 2026-08-27). `interruptible` says whether a
+stop right now cancels the node a frame names. Rewriting the golden would have
+thrown away the thing this file is *for* — a capture taken from the
+synchronous fold, before any of this — and replaced it with a snapshot of
+whatever the code does today, which proves nothing about either migration. So
+the golden stays byte-for-byte as captured, the comparison strips the one
+known addition, and `test_the_only_addition_since_the_golden_is_named` pins
+that it is the *only* one. A second field added without a line here fails
+there rather than passing quietly, which is the whole point.
 """
 
 from __future__ import annotations
@@ -143,12 +154,56 @@ def _golden() -> dict[str, list[str]]:
     return json.loads(GOLDEN.read_text(encoding="utf-8"))
 
 
+#: Fields added to the wire since the golden was captured, each with the
+#: ticket that added it. Named here rather than baked into the golden — see
+#: the module docstring.
+ADDED_SINCE_THE_GOLDEN = {"interruptible": "async-first/07"}
+
+
+def _without_additions(frames: list[str]) -> list[str]:
+    """`frames`, with the named additions removed and everything else intact.
+
+    Key order is preserved by rebuilding through `_sse`, so this still
+    compares the `event:` line, the `data:` line, the blank line, the order
+    `json.dumps` produced and every escape — for every field the golden knows.
+    """
+    from openstategraph.api.streaming import _sse
+
+    trimmed = []
+    for frame in frames:
+        head, _, body = frame.partition("\ndata: ")
+        if not body:
+            trimmed.append(frame)
+            continue
+        payload = json.loads(body.rstrip("\n"))
+        for field in ADDED_SINCE_THE_GOLDEN:
+            payload.pop(field, None)
+        trimmed.append(_sse(head[len("event: ") :], payload))
+    return trimmed
+
+
 def test_a_developers_stream_is_byte_for_byte_what_it_was() -> None:
-    assert _frames(Audience.DEVELOPER) == _golden()["developer"]
+    assert _without_additions(_frames(Audience.DEVELOPER)) == _golden()["developer"]
 
 
 def test_a_customers_stream_is_byte_for_byte_what_it_was() -> None:
-    assert _frames(Audience.CUSTOMER) == _golden()["customer"]
+    assert _without_additions(_frames(Audience.CUSTOMER)) == _golden()["customer"]
+
+
+def test_the_only_addition_since_the_golden_is_named() -> None:
+    """Nothing may join the wire without a line in `ADDED_SINCE_THE_GOLDEN`."""
+    golden_fields = {
+        field
+        for frame in _golden()["developer"] + _golden()["customer"]
+        for field in json.loads(frame.partition("\ndata: ")[2].rstrip("\n"))
+    }
+    live_fields = {
+        field
+        for frame in _frames(Audience.DEVELOPER) + _frames(Audience.CUSTOMER)
+        for field in json.loads(frame.partition("\ndata: ")[2].rstrip("\n"))
+    }
+
+    assert live_fields - golden_fields == set(ADDED_SINCE_THE_GOLDEN)
 
 
 def test_the_golden_covers_more_than_one_kind_of_frame() -> None:

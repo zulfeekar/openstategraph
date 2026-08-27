@@ -93,9 +93,9 @@ endpoints emit the identical vocabulary and one parser handles both.
 
 | Event | Meaning | Payload |
 | --- | --- | --- |
-| `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `path`, `pathSlugs`, `output`, and `check` with `reason` **only when a grader rejected the candidate without invoking a model** |
-| `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `block` (`text`/`reasoning`), `usage` (`{inputTokens, outputTokens, totalTokens}` or `null`), `activeNode`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply** |
-| `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `current`, `total` (both `int` or `null`), `activeNode`, `path`, `pathSlugs` |
+| `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `interruptible`, `path`, `pathSlugs`, `output`, and `check` with `reason` **only when a grader rejected the candidate without invoking a model** |
+| `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `block` (`text`/`reasoning`), `usage` (`{inputTokens, outputTokens, totalTokens}` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply** |
+| `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `current`, `total` (both `int` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs` |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate**, plus `check` when that verdict cost no model call |
 | `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run** |
@@ -213,6 +213,29 @@ frame is possible** — there is no socket left to write to. So a body that ends
 without one of the three means *the connection dropped*, and an aborted
 `fetch` means *you stopped it*. Never a silent success, and never a spinner
 that runs forever.
+
+#### `interruptible` — what Stop would actually do
+
+`true` if closing the connection **cancels** the node this frame names;
+`false` if it can only walk away from it, leaving the step to finish in the
+background with its result discarded. It is a property of the node, not of the
+run: in one workflow an agent can be cancellable while the grader after it is
+not.
+
+It exists because those two outcomes are otherwise indistinguishable from
+outside. The stop itself is instant either way — the connection closes and no
+further step is scheduled — so a client that only watches the clock cannot
+tell a run that stopped from a run that is still being paid for. Measured on
+2026-08-27 against a three-worker fan-out disconnected 12 s in: a cancellable
+step ended 0.41–1.08 s after the stop, an uncancellable one 12.65–24.16 s.
+
+Read the last value you saw and use it to word what you tell the person who
+pressed Stop. A cancelled step still finishes the provider call it had already
+issued, so the honest claim is *"the step was cancelled"*, never *"nothing is
+running"*.
+
+An older backend omits the field. Treat a missing value as `false` — that is
+the claim every run could always make.
 
 #### `internal` and `activeNode`
 

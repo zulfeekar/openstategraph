@@ -399,7 +399,17 @@ export type RunStreamEvent =
        *
        * Falls back to `node` when the backend predates the field.
        */
-      readonly activeNode: string;
+      readonly activeNode: string;      /**
+       * Whether Stop, right now, **cancels** the node this frame names —
+       * rather than merely walking away from it (`async-first/07`).
+       *
+       * A property of the node, not of the run: an agent can be cancellable
+       * while the grader after it is not. Read the last value seen and use it
+       * to word what a stopped turn says; `false` against a backend that
+       * predates the field, which is the claim every run could always make.
+       */
+      readonly interruptible: boolean;
+
       /**
        * Where this frame is on **every** canvas it touches — canvas node ids
        * from the outermost document inward, one per level of nesting
@@ -506,7 +516,17 @@ export type RunStreamEvent =
        * says nothing about where the run is", and a consumer leaves the
        * highlight alone.
        */
-      readonly activeNode: string;
+      readonly activeNode: string;      /**
+       * Whether Stop, right now, **cancels** the node this frame names —
+       * rather than merely walking away from it (`async-first/07`).
+       *
+       * A property of the node, not of the run: an agent can be cancellable
+       * while the grader after it is not. Read the last value seen and use it
+       * to word what a stopped turn says; `false` against a backend that
+       * predates the field, which is the claim every run could always make.
+       */
+      readonly interruptible: boolean;
+
       /**
        * The same path the `update` variant carries — see its comment.
        *
@@ -591,7 +611,17 @@ export type RunStreamEvent =
       readonly current: number | null;
       readonly total: number | null;
       /** The canvas node to show as running — same meaning as on `token`. */
-      readonly activeNode: string;
+      readonly activeNode: string;      /**
+       * Whether Stop, right now, **cancels** the node this frame names —
+       * rather than merely walking away from it (`async-first/07`).
+       *
+       * A property of the node, not of the run: an agent can be cancellable
+       * while the grader after it is not. Read the last value seen and use it
+       * to word what a stopped turn says; `false` against a backend that
+       * predates the field, which is the claim every run could always make.
+       */
+      readonly interruptible: boolean;
+
       /** The same path the other mid-node frames carry — see the `update`
        * variant, where the ambiguity it removes is spelled out. */
       readonly path: readonly string[];
@@ -1017,6 +1047,9 @@ export class RuntimeClient implements IRuntimeClient {
           internal: payload['internal'] === true,
           output: typeof payload['output'] === 'string' ? payload['output'] : null,
           activeNode: asString(payload['activeNode']) || asString(payload['node']),
+          // Emitted as a real boolean, so anything else — including a backend
+          // that predates the field — reads as "not cancellable".
+          interruptible: payload['interruptible'] === true,
           path: asPath(payload['path']),
           pathSlugs: asPath(payload['pathSlugs'], { keepBlanks: true }),
           check: asString(payload['check']),
@@ -1033,6 +1066,7 @@ export class RuntimeClient implements IRuntimeClient {
           current: typeof payload['current'] === 'number' ? payload['current'] : null,
           total: typeof payload['total'] === 'number' ? payload['total'] : null,
           activeNode: asString(payload['activeNode']),
+          interruptible: payload['interruptible'] === true,
           path: asPath(payload['path']),
           pathSlugs: asPath(payload['pathSlugs'], { keepBlanks: true }),
         });
@@ -1062,6 +1096,7 @@ export class RuntimeClient implements IRuntimeClient {
           // is the common case rather than a failure to parse.
           usage: usage && typeof usage === 'object' ? asTokenUsage(usage) : null,
           activeNode: asString(payload['activeNode']),
+          interruptible: payload['interruptible'] === true,
           path: asPath(payload['path']),
           pathSlugs: asPath(payload['pathSlugs'], { keepBlanks: true }),
           kind: payload['kind'] === 'tool' ? 'tool' : 'ai',

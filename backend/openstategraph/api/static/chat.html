@@ -1253,6 +1253,12 @@ async function stream(path, body, el, signal) {
    * turn that just stops. */
   let ended = null;
   const esc2 = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  // Whether Stop, right now, CANCELS the step in charge or merely walks away
+  // from it (`async-first/07`). The server says so per node on every frame
+  // that names an active one, because it is a property of the node and not of
+  // the run — an agent can be cancellable while the grader after it is not.
+  // `false` until told otherwise, which is also what an older backend earns.
+  let cancellable = false;
   try {
   for (;;) {
     const { done, value } = await reader.read();
@@ -1265,6 +1271,7 @@ async function stream(path, body, el, signal) {
         if (line.startsWith("event: ")) event = line.slice(7);
         else if (line.startsWith("data: ")) {
           const d = JSON.parse(line.slice(6));
+          if (d && typeof d.interruptible === "boolean") cancellable = d.interruptible;
           if (event === "update") {
             const now = performance.now();
             tlRows.push({ node: d.node, taskId: d.taskId ?? null, internal: !!d.internal, namespace: d.namespace || [], owner: frameOwner(d), ms: now - lastFrameAt });
@@ -1468,7 +1475,7 @@ async function stream(path, body, el, signal) {
       await reader.cancel().catch(() => {});
       finishFlow();
       thinking.textContent = ""; reasoning.textContent = ""; clearLive();
-      noteStopped(el);
+      noteStopped(el, cancellable);
       return "stopped";
     }
     // A server killed mid-stream usually arrives here rather than as a clean
@@ -1490,7 +1497,7 @@ async function stream(path, body, el, signal) {
   if (signal && signal.aborted) {
     finishFlow();
     thinking.textContent = ""; reasoning.textContent = ""; clearLive();
-    noteStopped(el);
+    noteStopped(el, cancellable);
     return "stopped";
   }
   // The body ended, nobody pressed Stop, and no frame said how it ended. By
@@ -1530,11 +1537,22 @@ function noteDropped(el, detail) {
  * "stopped" here — that stream has already ended, the button says Send again,
  * and the checkpointed thread is resumed by the Approve/Reject buttons. The
  * approval-pause case therefore needs no line of its own on this page. */
-function noteStopped(el) {
+/* Two sentences, because there are two outcomes and they used to share one
+ * (`async-first/07`). Nothing on the clock separates them — the stop is
+ * instant either way — so a page that only measured the wait would print the
+ * same line for a run that stopped and a run still being paid for. Measured
+ * live 2026-08-27 on a three-worker fan-out disconnected 12 s in: 0.41-1.08 s
+ * of work billed after a cancelled stop, 12.65-24.16 s after an abandoned
+ * one. The cancelled line stops short of "nothing is running" on purpose: a
+ * cancelled body unwinds at its next await, so the provider call already sent
+ * is still finished. Kept in step with the editor's `view/ask/stoppedLine.ts`
+ * by `tests/test_a_stop_says_what_it_stopped.py`. */
+function noteStopped(el, cancellable) {
   const note = document.createElement("p");
   note.className = "stopped";
-  note.textContent =
-    "Stopped by you — nothing further is scheduled. Steps already dispatched finish in the background and their results are discarded.";
+  note.textContent = cancellable
+    ? "Stopped by you — the step that was running was cancelled, and nothing further is scheduled. The model call it had already sent still finishes; its result is discarded."
+    : "Stopped by you — nothing further is scheduled. Steps already dispatched cannot be interrupted: they finish in the background and their results are discarded.";
   el.appendChild(note);
   el.scrollIntoView({ block: "end" });
 }

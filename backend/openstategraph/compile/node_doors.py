@@ -73,7 +73,23 @@ import asyncio
 import inspect
 from typing import Any, Callable
 
-__all__ = ["both_doors", "with_both_doors"]
+__all__ = [
+    "both_doors",
+    "interruptible_nodes",
+    "is_interruptible",
+    "with_both_doors",
+]
+
+#: Set on the two-door pair, and read back off the compiled graph.
+#:
+#: **The marker exists because the fact is not otherwise readable**
+#: (`async-first/07`). LangGraph gives *every* node an `afunc` — a plain `def`
+#: gets one that hops to an executor — so "has an async door" cannot tell a
+#: migrated body from a threaded one. Measured on the installed 1.2.10 against
+#: `morning-brief`: all seven nodes reported `afunc`, only four were
+#: cancellable. What distinguishes them is who installed the door, which is
+#: knowable exactly here and nowhere downstream.
+INTERRUPTIBLE = "__openstategraph_interruptible__"
 
 
 def both_doors(body: Callable[..., Any]) -> Any:
@@ -97,7 +113,53 @@ def both_doors(body: Callable[..., Any]) -> Any:
         # (`launch-readiness/110`).
         return asyncio.run(body(*args, **kwargs))
 
-    return RunnableCallable(through_a_private_loop, body, name=getattr(body, "__name__", None))
+    pair = RunnableCallable(
+        through_a_private_loop, body, name=getattr(body, "__name__", None)
+    )
+    # Said on the object rather than recorded in a table beside it: a table is
+    # a second place to keep in step, and this one would be keyed on node ids
+    # that only the compiler ever sees. See `INTERRUPTIBLE`.
+    setattr(pair, INTERRUPTIBLE, True)
+    return pair
+
+
+def is_interruptible(node: Any) -> bool:
+    """True if cancelling the task driving `astream` cancels this node's body.
+
+    False for everything else, including things that are not nodes at all —
+    `__start__`, LangGraph's error handler, `None`. **Never true by omission**:
+    a `False` earns the sentence this product has always shown a stopped run
+    ("steps already dispatched finish in the background"), so an unrecognised
+    node keeps the claim that was honest before any of this existed.
+
+    It is not the whole truth about a cancelled body and must not be read as
+    one. A cancelled body unwinds at its **next await**, so the model call
+    already in flight is still paid for — measured at 0.41–4.85 s across nine
+    live runs on 2026-08-27, against 12.65–24.16 s for the same fan-out
+    running to completion. The claim this supports is "the step was
+    cancelled", never "nothing is running".
+    """
+    return bool(getattr(node, INTERRUPTIBLE, False))
+
+
+def interruptible_nodes(graph: Any) -> set[str]:
+    """The LangGraph node names of `graph` whose bodies a stop cancels.
+
+    Empty for anything that cannot be asked — which is most of the test
+    suite's stub graphs, and would be a plugin-supplied graph object too. An
+    empty answer costs a reader the *better* of two true sentences; a raise
+    would cost them the run.
+    """
+    nodes = getattr(graph, "nodes", None) or {}
+    try:
+        items = nodes.items()
+    except AttributeError:  # pragma: no cover - a graph shaped like nothing
+        return set()
+    return {
+        name
+        for name, node in items
+        if is_interruptible(getattr(node, "bound", None))
+    }
 
 
 def with_both_doors(node: Any) -> Any:
