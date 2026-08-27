@@ -85,6 +85,14 @@ def test_the_census_reads_real_tickets() -> None:
     Deliberately asserts nothing about the count — that changes hourly and a
     number here would be a test that fails for being right.
     """
+    if not census_mod.SCRATCH.is_dir():
+        pytest.skip(
+            "`.scratch/` is gitignored, so a clean checkout has no tickets to "
+            "read. Skipping is right and asserting was not: this failed on CI "
+            "from the day it was written, saying the regex had drifted when "
+            "the directory simply was not there (async-first/15). A test that "
+            "cannot pass where it runs teaches a reader to ignore the summary."
+        )
     rows = census_mod.census()
     assert rows, "no open tickets found at all — the header regex has drifted"
     for row in rows:

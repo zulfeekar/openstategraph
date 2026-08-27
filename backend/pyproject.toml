@@ -167,6 +167,14 @@ all = [
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
+    # **Pinned, and the pin is the point.** Every `async def` test in this
+    # repository needs a plugin to run at all, and without one pytest does not
+    # error -- it reports "async def functions are not natively supported" and
+    # *fails the test*. That is indistinguishable from a real failure in a
+    # summary line, and it is invisible on any machine that happens to have the
+    # plugin installed. It was: 44 async tests passed locally and failed on CI
+    # on 2026-08-27, because this line did not exist (async-first/15).
+    "pytest-asyncio>=1.4,<2",
     # **Pinned exactly, and that is a decision.** `ci.yml` installed a bare
     # `ruff` alongside this extra, so the gate's strictness tracked PyPI: a
     # green run today and a red one tomorrow with no commit in between, and
