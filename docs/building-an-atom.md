@@ -266,6 +266,35 @@ as `No results for '…'` — and
 [`prebuilt_web.py`](../backend/openstategraph/prebuilt_web.py) carries that
 story in its module docstring.
 
+### A bounded view of an unbounded result must say so in the text
+
+A model consumes the **text**, not the integers beside it. So an atom that
+renders only part of a result has to make the bound visible inside what it
+renders — a sibling return value carrying the true count is not disclosure,
+because nothing the model reads mentions it.
+
+The worked example is `cpl-nl2sql`'s `execute_sql`
+(`launch-readiness/129`). It rendered the first 50 rows and returned
+`len(rows)` alongside, so **a complete result and a truncated one rendered
+identically** and the reader could not tell which they had. A live run wrote
+the exact right SQL — 121 rows over 68 distinct ports — and answered "29
+ports", the number of distinct ports in the first 50 rows.
+
+Two rules, and the second is the one with the correctness in it:
+
+1. **Never render a truncation without a marker** — and mark the complete case
+   too. A marker only carries information if its absence means something.
+2. **A truncated page must not be usable as an aggregate.** "Showing 50 of 121"
+   fixes disclosure and leaves the answer wrong: no honesty about a page of
+   rows makes a total readable off it. Either the marker states what may not be
+   concluded *and* carries the totals computed over the whole result, or the
+   atom refuses to render the page and pushes the aggregate to where the data
+   is. Silence is not an option, and neither is a plausible-looking page.
+
+`OffloadMiddleware` (`launch-readiness/102`) is the shape to copy: an
+over-threshold result is replaced by a **pointer saying where the rest is**,
+never by a quietly shortened version of itself.
+
 ### Configuration reaches the tool through `configure`
 
 A node's field values arrive via `configure(data)`, which returns **the
