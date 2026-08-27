@@ -262,6 +262,37 @@ untouched; `except OpenStateGraphError` is the new, narrower option. A new
 hierarchy that broke existing handlers would be a worse trade than the untyped
 errors it replaced.
 
+### The ladders grew async twins additively, and both doors always work
+
+`BaseTool` gained `_aexecute`/`arun`; `BaseRouter` gained `aclassify`,
+`BaseGrader` gained `agrade`, and `BaseOrchestrator` gained `asplit`, `alabel`
+and `aplan`. **Nothing you have written needs to change.** Every synchronous
+method is unchanged, `BaseTool._execute` and `BaseOrchestrator.split` are still
+the only abstract members of their ladders, and no subclass is asked to grow a
+method on our schedule.
+
+The guarantee that makes this additive rather than merely backwards-compatible
+is that **both doors work in both directions**. Override only the synchronous
+half and your class is still awaitable — the missing half is installed for you,
+and it runs your body in a worker thread rather than on the event loop.
+Override only the awaitable half and your class is still callable
+synchronously, from a script, from `CompiledWorkflow.run`, from the CLI, and
+from inside a coroutine. So which half you write never constrains who can use
+your class.
+
+Write the awaitable half **only** when there is something to `await`. The
+inherited default is a thread, which is what the runtime already did for a
+synchronous body; wrapping blocking work in `async def` is worse than not
+writing it, because it holds the event loop instead of a pool thread. What you
+get by writing a genuinely awaitable body is the one thing a thread cannot
+give: a call that actually stops when the run stops.
+
+The `I*` Protocols — `ITool`, `IRouter`, `IGrader`, `IOrchestrator`, `IAgent` —
+are **deliberately unchanged**. They are `runtime_checkable`, so a member added
+to one would make every object that satisfies it today stop satisfying it at
+the next `isinstance`, in your install, silently. That is a breaking change
+wearing an addition's clothes, and it is not one this contract permits.
+
 ### If you need something that is not Tier 1
 
 Open an issue rather than importing it anyway. Promoting a name is cheap —

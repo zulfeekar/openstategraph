@@ -230,6 +230,37 @@ class TestTheFormatHasExactlyOneImplementation:
         doc = SkillDocument(name="pdf", description="Extract text\nfrom PDFs.", body="Body.")
         assert SkillDocument.parse(doc.render()).description == "Extract text from PDFs."
 
+    def test_a_description_with_a_colon_survives_the_round_trip(self) -> None:
+        # launch-readiness/134: the recommended instruction-style opener
+        # ("MANDATORY: read this before...") puts a colon in the description
+        # itself. `key: value: rest` broke this project's own parser only in
+        # theory (it splits on the first colon) but choked a real YAML
+        # parser for real, live, once a shipped skill actually used the
+        # shape the ticket recommends.
+        doc = SkillDocument(
+            name="sql-analyst",
+            description="MANDATORY: read this before writing any SQL.",
+            body="Body.",
+        )
+        assert SkillDocument.parse(doc.render()) == doc
+
+    def test_a_description_with_a_colon_is_valid_yaml_to_a_real_parser(self) -> None:
+        import yaml
+
+        doc = SkillDocument(
+            name="sql-analyst",
+            description="MANDATORY: read this before writing any SQL.",
+            body="Body.",
+        )
+        rendered = doc.render()
+        front = rendered.split("---\n", 2)[1]
+        parsed = yaml.safe_load(front)
+        assert parsed["description"] == doc.description
+
+    def test_a_description_with_a_quote_survives_the_round_trip(self) -> None:
+        doc = SkillDocument(name="x", description='Say "hello" first.', body="Body.")
+        assert SkillDocument.parse(doc.render()) == doc
+
     def test_the_body_is_still_all_that_reaches_a_prompt(self) -> None:
         text = SkillDocument(name="x", description="d", body="Rules.").render()
         assert skill_text(text) == "Rules."

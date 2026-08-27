@@ -48,6 +48,32 @@ from pathlib import Path
 _FENCE = "---"
 
 
+def _dquote(value: str) -> str:
+    """A YAML double-quoted scalar for `value` — valid regardless of content,
+    including an embedded colon (see `SkillDocument.render`)."""
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _unquote(value: str) -> str:
+    """Inverse of `_dquote` for a double-quoted value; a single-quoted or
+    bare value is returned with only its outer quote characters stripped,
+    same as before this module double-quoted its own output."""
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        inner = value[1:-1]
+        out: list[str] = []
+        i = 0
+        while i < len(inner):
+            c = inner[i]
+            if c == "\\" and i + 1 < len(inner) and inner[i + 1] in ("\\", '"'):
+                out.append(inner[i + 1])
+                i += 2
+                continue
+            out.append(c)
+            i += 1
+        return "".join(out)
+    return value.strip("'\"")
+
+
 @dataclass(frozen=True)
 class SkillDocument:
     """One skill file, split into what a picker shows and what a model reads."""
@@ -88,11 +114,22 @@ class SkillDocument:
         into a single space-joined string, so anything else would not survive
         the round trip. An empty description is omitted rather than written
         blank, because a declared-but-empty field reads as authoritative.
+
+        Always double-quoted, never left as a bare plain scalar: a
+        description written as an instruction ("MANDATORY: read this
+        before...", the shape `launch-readiness/134` recommends) routinely
+        carries a colon, and `key: value: rest` is a scanner error to a real
+        YAML parser — found live when `deepagents.middleware.skills`
+        (`yaml.safe_load`) choked on exactly that shape, silently skipping
+        the skill (missing description) rather than raising, which is worse.
+        This project's own hand-rolled parser above never cared — it splits
+        on the *first* colon only — so the ambiguity was invisible until
+        something read the file with real YAML.
         """
         fields = [f"name: {self.name}"]
         description = " ".join(self.description.split())
         if description:
-            fields.append(f"description: {description}")
+            fields.append(f"description: {_dquote(description)}")
         header = "\n".join(fields)
         return f"{_FENCE}\n{header}\n{_FENCE}\n\n{self.body.strip()}\n"
 
@@ -173,7 +210,7 @@ def _parse_fields(lines: list[str]) -> dict[str, str]:
         if value in (">", ">-", "|", "|-"):
             fields[key] = ""
         else:
-            fields[key] = value.strip("'\"")
+            fields[key] = _unquote(value)
     flush()
     return fields
 

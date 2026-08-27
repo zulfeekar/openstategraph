@@ -3,6 +3,28 @@
 ## Unreleased
 
 ### Added
+- **The router, grader and orchestrator ladders have async doors too, and no
+  subclass was asked to open one.** `BaseRouter` gains `aclassify(question)`,
+  `BaseGrader` gains `agrade(candidate, question=...)`, and
+  `BaseOrchestrator` gains `asplit`, `alabel` and `aplan` — awaitable twins of
+  verbs those classes already had, awaiting the model call instead of holding
+  the event loop for it. Three verbs on the orchestrator because `plan` is
+  built from `split` and `label`: awaiting the outer one is worth nothing if
+  the inner two block. Every synchronous verb is unchanged and every subclass
+  in this repository is untouched. **Substitutability holds in both
+  directions**: a subclass that overrides only the synchronous half is
+  awaitable (in a worker thread, never on the loop), and one that overrides
+  only the awaitable half is still callable synchronously — including from
+  inside a running loop — because the missing half is installed per subclass
+  at class-definition time. `split` therefore stays the orchestrator ladder's
+  one abstract method even for a subclass that writes only `asplit`. A model
+  with no `ainvoke` is accepted and run in a thread rather than refused.
+  `IRouter`, `IGrader` and `IOrchestrator` are deliberately unchanged, for the
+  reason `ITool` was: they are `runtime_checkable` Protocols, and a member
+  added to one would un-satisfy every third-party object that satisfies it
+  today. The agent ladder gains nothing and needs nothing — `build()`
+  constructs a Runnable and the caller awaits `ainvoke` on it
+  (`async-first/05`).
 - **Every tool has an async door, and no tool was asked to open it.**
   `openstategraph.abc.BaseTool` gains `_aexecute(args)` — the awaitable twin
   of `_execute`, **concrete**, defaulting to running `_execute` in a worker

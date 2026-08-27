@@ -75,7 +75,9 @@ def test_export_puts_each_skill_in_its_own_directory_with_frontmatter(tmp_path: 
     assert skill.startswith("---\n")
     assert "name: refunds\n" in skill
     # Description is synthesized from the first meaningful line — a lossy edge.
-    assert "description: Refunds are never issued past 90 days." in skill
+    # Double-quoted (launch-readiness/134): a real YAML parser, not just this
+    # project's own hand-rolled one, has to be able to read it back.
+    assert 'description: "Refunds are never issued past 90 days."' in skill
     assert skill.rstrip().endswith("Escalate exceptions to finance.")
 
 
@@ -93,7 +95,7 @@ def test_export_keeps_a_description_the_skill_file_already_declares(tmp_path: Pa
     export = export_plugin(root)
     skill = export.files["skills/refunds/SKILL.md"]
     assert skill.count("---") == 2
-    assert "description: The refund policy." in skill
+    assert 'description: "The refund policy."' in skill
     assert skill.rstrip().endswith("Escalate to finance.")
 
 
