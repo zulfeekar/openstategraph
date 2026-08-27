@@ -36,6 +36,11 @@ import {
   formatReportExecutor,
 } from './orchestrate/FormatReportNode';
 import { subgraphExecutor, subgraphNode } from './compose/SubgraphNode';
+import {
+  RESOLVE_VOCABULARY_TYPE,
+  resolveVocabularyExecutor,
+  resolveVocabularyNode,
+} from './resolve/ResolveVocabularyNode';
 import { PLATFORM_TOOL_NODES } from './tools/PlatformToolsNode';
 import { MCP_SERVER_TYPE, mcpServerExecutor, mcpServerNode } from './tools/McpServerNode';
 
@@ -103,6 +108,11 @@ export function registerNodeCatalogue(
       // the same reason routing and policy are: it is grammar, not one
       // workflow's tooling.
       memorySegmentNode,
+      // What a word means here, resolved before the model rather than picked
+      // by it (`launch-readiness` 135). Grammar, like routing and memory: any
+      // document may need a term resolved, and which vocabulary it reads is
+      // the node's own configuration.
+      resolveVocabularyNode,
       // Loop/graph engineering: split -> fan-out -> dispatch -> join.
       orchestratorNode,
       workerNode,
@@ -131,6 +141,7 @@ export function registerNodeCatalogue(
     guardrailExecutor,
     guardCheckExecutor,
     memorySegmentExecutor,
+    resolveVocabularyExecutor,
     orchestratorExecutor,
     workerExecutor,
     formatReportExecutor,
@@ -162,6 +173,7 @@ export const NODE_TYPE = {
   guardrail: GUARDRAIL_TYPE,
   guardCheck: GUARD_CHECK_TYPE,
   memorySegment: MEMORY_SEGMENT_TYPE,
+  resolveVocabulary: RESOLVE_VOCABULARY_TYPE,
   mcpServer: MCP_SERVER_TYPE,
   orchestrator: ORCHESTRATOR_TYPE,
   worker: WORKER_TYPE,

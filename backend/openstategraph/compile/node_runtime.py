@@ -50,7 +50,7 @@ from openstategraph.step_budget import (
 )
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router
-from openstategraph.abc.tool_notes import notes_for_reader, take_notes
+from openstategraph.abc.tool_notes import notes_for_reader, record_notes, take_notes
 from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCapabilities
 from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.node_families import discovered_node_families
@@ -104,6 +104,12 @@ from openstategraph import injection
 from openstategraph.run_identity import run_identity
 from openstategraph.developer_channel import transcript_text
 from openstategraph.memory import MemorySettings
+from openstategraph.vocabulary import (
+    DEFAULT_MAX_ENTRIES,
+    DEFAULT_WHEN_UNCOVERED,
+    resolve_vocabulary,
+    unresolved_source,
+)
 from openstategraph.messages import content_text
 from openstategraph.reasoning import REASONING_EFFORT_KEY, apply_reasoning_effort
 
@@ -1214,6 +1220,9 @@ class NodeRuntime:
         registry.register("human.approval", self._human_approval)
         registry.register("guard.policy", self._guardrail)
         registry.register("guard.check", self._guard_check)
+        # What a word means here, resolved before the model rather than
+        # picked by it (`launch-readiness` 135).
+        registry.register("resolve.vocabulary", self._resolve_vocabulary)
         registry.register("memory.segment", self._memory_segment)
         registry.register("orchestrate.supervisor", self._orchestrator)
         registry.register("orchestrate.worker", self._worker)
@@ -3748,6 +3757,79 @@ class NodeRuntime:
                     }
                 },
             }
+
+        return run
+
+    def _resolve_vocabulary(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+        """*What is this word called here?* — answered before the model runs.
+
+        `launch-readiness/135`. The engine is `openstategraph.vocabulary`;
+        this builder is the seam between it and a drawn node — which source,
+        how many entries, and what the run carries downstream when nothing
+        was covered.
+
+        Three properties are the point of the node and are asserted by
+        `tests/test_a_resolver_that_covers_nothing_says_so.py`:
+
+        - **It is a step, not a tool.** Vocabulary must not be a choice: when
+          the model picked which source told it what a term meant, it picked
+          differently on every run.
+        - **Rank, then cap** (`launch-readiness/130`), with the searches still
+          concurrent — the ranking is what stopped thread scheduling choosing
+          the axis, not serialising.
+        - **It reports what it covered, not only what it found.** A resolver
+          that found nothing and said nothing is indistinguishable from a term
+          that was never ambiguous, which is the shape behind six defects on
+          this map. So there is no silent path out of here — an unresolved
+          source is *reported*, never passed through (`unresolved_source`).
+
+        `answer` is deliberately not written. This is an intermediate step,
+        and a resolution that landed in `answer` would let a run whose model
+        never spoke end with a metadata block presented as its answer.
+        """
+        data = node.get("data") or {}
+        source_name = _text(data, "source").strip()
+        key = f"function.{source_name}" if source_name else ""
+        source = self.services.functions.get(key) if key else None
+        try:
+            max_entries = int(data.get("maxEntries") or DEFAULT_MAX_ENTRIES)
+        except (TypeError, ValueError):
+            max_entries = DEFAULT_MAX_ENTRIES
+        when_uncovered = _text(data, "whenUncovered").strip() or DEFAULT_WHEN_UNCOVERED
+
+        upstream = [src for src, dst in plan.edges if dst == node_id]
+        # A resolver placed behind a routed edge reads its wired upstream, not
+        # the turn's original question — the same gap `launch-readiness` 66
+        # closed on `_discovered_function`.
+        conditional_upstream = [
+            src for src, dests in plan.conditional.items() if node_id in dests.values()
+        ]
+
+        def run(state: RunState) -> dict[str, Any]:
+            question = _upstream_text(state, upstream + conditional_upstream) or state.get(
+                "question", ""
+            )
+            if source is None:
+                self.diagnostics.record(
+                    Finding.UNRESOLVED_FUNCTION, f"resolve.vocabulary:{source_name}"
+                )
+                block = unresolved_source(key or source_name, when_uncovered)
+            else:
+                resolution = resolve_vocabulary(
+                    question,
+                    source,
+                    max_entries=max_entries,
+                    source_name=key,
+                    when_uncovered=when_uncovered,
+                )
+                # `launch-readiness/127`'s tuple, on the run's own rail: the
+                # output node discloses the substitution whether or not the
+                # model mentions it.
+                record_notes(resolution.substitutions)
+                block = resolution.render()
+
+            output = f"{question}\n\n---\n{block}" if question else block
+            return {"outputs": {node_id: output}}
 
         return run
 

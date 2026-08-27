@@ -1331,6 +1331,101 @@
       ]
     },
     {
+      "type": "resolve.vocabulary",
+      "kind": "standard",
+      "category": "resolve",
+      "scope": "app",
+      "label": "Resolve vocabulary",
+      "description": "Looks up what the question’s words mean in this domain before the model runs, and reports what it covered as well as what it found. No model call.",
+      "ports": [
+        {
+          "id": "question",
+          "direction": "in",
+          "type": "result",
+          "label": "question",
+          "required": true,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxEntries",
+        "maxRetries",
+        "source",
+        "timeoutSeconds",
+        "whenUncovered"
+      ],
+      "fields": [
+        {
+          "key": "source",
+          "kind": "text",
+          "label": "Source",
+          "hint": "The package function this node searches, named the way `function.<name>` names it. It is called once per derived phrase, concurrently, and returns the entries it holds for that phrase. Give it a `coverage` attribute and this node can say a term is genuinely uncovered instead of merely unmatched.",
+          "required": true,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxEntries",
+          "kind": "slider",
+          "label": "Entries kept",
+          "hint": "How many entries survive to the model after ranking. The ranking always runs first — the cap never decides which axis the model sees.",
+          "required": false,
+          "defaultValue": 12
+        },
+        {
+          "key": "whenUncovered",
+          "kind": "textarea",
+          "label": "When nothing is covered",
+          "hint": "Carried downstream when the lookup covered nothing. The coverage report itself is not optional: silence would read exactly like a term that is not ambiguous, which is the defect this node exists to close.",
+          "required": false,
+          "defaultValue": "Nothing in this vocabulary names the term. Say which axis you chose and that nothing declared it, rather than treating the term as unambiguous."
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
       "type": "route.classifier",
       "kind": "standard",
       "category": "agent",

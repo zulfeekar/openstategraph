@@ -17,6 +17,7 @@ export const CATEGORY = {
   output: 'output',
   agent: 'agent',
   memory: 'memory',
+  resolve: 'resolve',
   compose: 'compose',
   annotate: 'annotate',
 } as const;
@@ -101,6 +102,20 @@ export const CATEGORIES: readonly INodeCategory[] = [
     order: 45,
     description:
       'What a workflow keeps between runs, at the position you draw it. Deterministic and free — nothing here calls a model.',
+  },
+  {
+    id: CATEGORY.resolve,
+    label: 'Resolution · molecules',
+    order: 47,
+    // Its own section for exactly the reason Memory has one: a resolver is
+    // *not* reasoning or control — it decides nothing, it looks a word up —
+    // and filing it under "Reasoning & control" to avoid adding a heading
+    // would make that heading false, which is the defect this ordering was
+    // written to fix. A molecule by the same argument `memory.segment` is
+    // one: deterministic, model-free, and it composes.
+    description:
+      'What a word means here, looked up before the model runs. Deterministic and free — ' +
+      'nothing here calls a model, and every lookup reports what it covered.',
   },
   {
     id: CATEGORY.compose,

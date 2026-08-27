@@ -43,6 +43,20 @@ dragging one card. A revision loop is an organism too, and you can get it
 Organisms are the only tier with two routes. Atoms and molecules you drag;
 assemblies you draw *or* mount.
 
+**One molecule is not a reasoning step, and it says so by sitting in its own
+section.** `Resolution` holds the **Resolve vocabulary** node: it looks up
+what the words in a question mean in your domain — *"persian gulf" is called
+`Middle East Gulf (MEG)` on `load_shipping_region_v2`* — before the model
+runs, and costs no model call. It is a **step**, not a tool on the agent's
+bus, and the difference is the point: a step runs every time, and a tool is
+chosen. When the model chose which source told it what a word meant, it chose
+differently on different runs.
+
+It also reports what it **covered**. A lookup that finds nothing looks exactly
+like a word that was never ambiguous, so the node says which is which: a
+source that declares what it holds gives a conclusive *not covered*, one that
+does not says so plainly, and a failed search is neither.
+
 ---
 
 ## 3. A revision loop is two edges
@@ -404,6 +418,7 @@ The words this product uses, and what each one must not be mistaken for.
 | **template** | a starting document; produces a workflow and stops existing | a node type; a live link |
 | **example** | a finished package shipped in the install; you take a **copy** | one of your workflows; something you mount |
 | **organism** | a whole assembly — drawn or mounted | only the things you can drag |
+| **resolver** | a step that looks up what a word means here, before the model runs, and reports what it **covered** as well as what it found | a tool the agent may choose to call; a table or column lookup |
 
 ---
 
