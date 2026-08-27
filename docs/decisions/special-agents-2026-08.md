@@ -1688,3 +1688,62 @@ shortens it; what would is a `cache_policy` on the mount node — a
 graph-assembly parameter, which is where `CLAUDE.md` already says retry,
 timeout and caching live. That is `organisms-first-class/34`'s ground, not
 this ticket's, and it is left there rather than smuggled in here.
+
+---
+
+## Watch — 2026-08-27
+
+First run of the weekly watcher. All 31 `"pinned": true` paths in
+`langchain-doc-pins.json` refetched via the docs-langchain MCP
+(`wc -c` + `head -1`); all 3 `version_pins` re-checked against current doc text.
+
+- `/oss/python/deepagents/data-analysis.mdx` — unchanged (37830 bytes).
+- `/oss/python/deepagents/deep-research.mdx` — unchanged (21020 bytes).
+- `/oss/python/deepagents/content-builder.mdx` — unchanged (31989 bytes).
+- `/oss/python/deepagents/rag.mdx` — unchanged (60176 bytes).
+- `/oss/python/deepagents/async-subagents.mdx` — unchanged (15595 bytes).
+- `/oss/python/deepagents/event-streaming.mdx` — unchanged (9041 bytes).
+- `/oss/python/langchain/deep-agent-from-scratch.mdx` — unchanged (38269 bytes).
+- `/oss/python/langchain/sql-agent.mdx` — **changed**: 40486 → 40476 bytes (-10). Heading unchanged.
+- `/oss/python/langchain/voice-agent.mdx` — unchanged (20794 bytes).
+- `/oss/python/langchain/multi-agent/index.mdx` — unchanged (35958 bytes).
+- `/oss/python/langchain/multi-agent/subagents.mdx` — unchanged (24777 bytes).
+- `/oss/python/langchain/multi-agent/handoffs.mdx` — unchanged (18848 bytes).
+- `/oss/python/langchain/multi-agent/handoffs-customer-support.mdx` — **changed**: 36960 → 36950 bytes (-10). Heading unchanged.
+- `/oss/python/langchain/multi-agent/router.mdx` — unchanged (6955 bytes).
+- `/oss/python/langchain/multi-agent/router-knowledge-base.mdx` — **changed**: 38633 → 38623 bytes (-10). Heading unchanged.
+- `/oss/python/langchain/multi-agent/skills.mdx` — unchanged (5250 bytes).
+- `/oss/python/langchain/multi-agent/skills-sql-assistant.mdx` — **changed**: 47245 → 47235 bytes (-10). Heading unchanged.
+- `/oss/python/langgraph/graph-api.mdx` — unchanged (52181 bytes).
+- `/oss/python/langgraph/functional-api.mdx` — unchanged (30916 bytes).
+- `/oss/python/langgraph/use-subgraphs.mdx` — unchanged (41300 bytes).
+- `/oss/python/langgraph/workflows-agents.mdx` — unchanged (49081 bytes).
+- `/oss/python/langgraph/agentic-rag.mdx` — unchanged (26436 bytes).
+- `/oss/python/langgraph/sql-agent.mdx` — **changed**: 35329 → 35319 bytes (-10). Heading unchanged.
+- `/oss/python/langgraph/thinking-in-langgraph.mdx` — unchanged (31961 bytes).
+- `/oss/python/langgraph/event-streaming.mdx` — unchanged (26296 bytes).
+- `/oss/python/langgraph/streaming.mdx` — unchanged (47115 bytes).
+- `/oss/python/concepts/products.mdx` — unchanged (8748 bytes).
+- `/oss/python/concepts/providers-and-models.mdx` — unchanged (9861 bytes).
+- `/oss/python/concepts/memory.mdx` — unchanged (27143 bytes).
+- `/oss/python/concepts/context.mdx` — unchanged (9204 bytes).
+- `/oss/python/langchain/component-architecture.mdx` — unchanged (6508 bytes).
+- `version_pins.stream_events_version` ("v3") — still current; every sampled `stream_events(...)` call in the SQL-agent docs still passes `version="v3"`.
+- `version_pins.deepagents_async_subagents` ("0.5.0 (preview)") — still current; `async-subagents.mdx` still reads "Async subagents are a preview feature available in `deepagents` 0.5.0."
+- `version_pins.deepagents_rag_rubric` (">=0.6.5 (beta)") — still current; `rag.mdx` still reads "Grading rubrics require `deepagents>=0.6.5` and are currently in beta."
+
+**The five changed docs.** All five carry the same -10-byte drift and belong to
+one family — the "SQL agent" pages (`langchain/sql-agent.mdx`,
+`langgraph/sql-agent.mdx`) plus the three multi-agent walkthroughs that reuse
+its provider-setup boilerplate (`handoffs-customer-support.mdx`,
+`router-knowledge-base.mdx`, `skills-sql-assistant.mdx`). Sampled content in
+all five still shows the same model names the verdicts were written against
+(`gpt-5.5`, `claude-sonnet-4-6`) and the same `version="v3"` streaming calls;
+files that do *not* share that provider-setup snippet (e.g.
+`deep-agent-from-scratch.mdx`, `agentic-rag.mdx`) show zero drift. This reads
+as a small edit to the shared snippet (wording/whitespace), not a version bump,
+a new tool, or a new mechanism — nothing in the sampled text touches ports,
+edges, middleware order, or the runtime/framework/harness taxonomy this map's
+verdicts rest on. **No verdict is judged to be altered; no ticket filed.** If a
+future watch finds a *second* change stacked on these same five files, that
+stops being a coincidence worth re-checking by hand.

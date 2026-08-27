@@ -118,11 +118,12 @@
     },
     "/oss/python/langchain/sql-agent.mdx": {
       "sweep_group": 2,
-      "bytes": 40486,
+      "bytes": 40476,
       "first_heading": "# Build a SQL agent",
-      "read": "2026-08-14",
+      "read": "2026-08-27",
       "verdict_section": "### `/oss/python/langchain/sql-agent.mdx`",
-      "pinned": true
+      "pinned": true,
+      "note": "watch 2026-08-27: -10 bytes vs the verdicted 40486; see special-agents-2026-08.md ## Watch — 2026-08-27"
     },
     "/oss/python/langchain/voice-agent.mdx": {
       "sweep_group": 2,
@@ -171,11 +172,12 @@
     },
     "/oss/python/langchain/multi-agent/handoffs-customer-support.mdx": {
       "sweep_group": 3,
-      "bytes": 36960,
+      "bytes": 36950,
       "first_heading": "# Build customer support with handoffs",
-      "read": "2026-08-14",
+      "read": "2026-08-27",
       "verdict_section": "### `/oss/python/langchain/multi-agent/handoffs-customer-support.mdx`",
-      "pinned": true
+      "pinned": true,
+      "note": "watch 2026-08-27: -10 bytes vs the verdicted 36960; see special-agents-2026-08.md ## Watch — 2026-08-27"
     },
     "/oss/python/langchain/multi-agent/router.mdx": {
       "sweep_group": 3,
@@ -187,11 +189,12 @@
     },
     "/oss/python/langchain/multi-agent/router-knowledge-base.mdx": {
       "sweep_group": 3,
-      "bytes": 38633,
+      "bytes": 38623,
       "first_heading": "# Build a multi-source knowledge base with routing",
-      "read": "2026-08-14",
+      "read": "2026-08-27",
       "verdict_section": "### `/oss/python/langchain/multi-agent/router-knowledge-base.mdx`",
-      "pinned": true
+      "pinned": true,
+      "note": "watch 2026-08-27: -10 bytes vs the verdicted 38633; see special-agents-2026-08.md ## Watch — 2026-08-27"
     },
     "/oss/python/langchain/multi-agent/skills.mdx": {
       "sweep_group": 3,
@@ -204,11 +207,12 @@
     },
     "/oss/python/langchain/multi-agent/skills-sql-assistant.mdx": {
       "sweep_group": 3,
-      "bytes": 47245,
+      "bytes": 47235,
       "first_heading": "# Build a SQL assistant with on-demand skills",
-      "read": "2026-08-14",
+      "read": "2026-08-27",
       "verdict_section": "### `/oss/python/langchain/multi-agent/skills-sql-assistant.mdx`",
-      "pinned": true
+      "pinned": true,
+      "note": "watch 2026-08-27: -10 bytes vs the verdicted 47245; see special-agents-2026-08.md ## Watch — 2026-08-27"
     },
 
     "/oss/python/langgraph/graph-api.mdx": {
@@ -255,11 +259,12 @@
     },
     "/oss/python/langgraph/sql-agent.mdx": {
       "sweep_group": 4,
-      "bytes": 35329,
+      "bytes": 35319,
       "first_heading": "# Build a custom SQL agent",
-      "read": "2026-08-14",
+      "read": "2026-08-27",
       "verdict_section": "### `/oss/python/langgraph/sql-agent.mdx`",
-      "pinned": true
+      "pinned": true,
+      "note": "watch 2026-08-27: -10 bytes vs the verdicted 35329; see special-agents-2026-08.md ## Watch — 2026-08-27"
     },
     "/oss/python/langgraph/thinking-in-langgraph.mdx": {
       "sweep_group": 4,
