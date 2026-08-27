@@ -47,6 +47,7 @@ from typing import Any, Callable
 
 import pytest
 
+from conftest import drive_node
 from openstategraph.compile import node_runtime
 from openstategraph.compile.node_catalogue import load_catalogue
 from openstategraph.compile.node_runtime import NodeRuntime
@@ -318,7 +319,8 @@ class TestTheSupervisorsRulesAreWritable:
         captured: list[str] = []
 
         class _Spy:
-            def plan(self, *_args: Any, **_kwargs: Any) -> list[Any]:
+            # `aplan`: the supervisor awaits its planner (`async-first/10`).
+            async def aplan(self, *_args: Any, **_kwargs: Any) -> list[Any]:
                 return []
 
         def _spy_for(**kwargs: Any) -> Any:
@@ -332,7 +334,7 @@ class TestTheSupervisorsRulesAreWritable:
         node_runtime.orchestrator_for = _spy_for  # type: ignore[misc]
         try:
             step = runtime.builder_for("orchestrate.supervisor")("sup", node, CompiledPlan())
-            step({"question": "anything"})
+            drive_node(step, {"question": "anything"})
         finally:
             node_runtime.orchestrator_for = monkey  # type: ignore[misc]
 

@@ -29,6 +29,7 @@ from openstategraph.abc.orchestrator import Archetype, Orchestrator, Subtask, ar
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
+from conftest import drive_node
 from test_orchestrator_graph import RespondingModel, edge, node
 
 
@@ -342,7 +343,10 @@ class TestArchetypeDescriptionsAreNeverBlind:
         real = runtime_module.orchestrator_for
 
         class SpyOrchestrator:
-            def plan(self, instruction, **kwargs):  # type: ignore[no-untyped-def]
+            # `aplan`, because the supervisor's body is `async def` and awaits
+            # its planner (`async-first/10`). A spy that offered only `plan`
+            # would no longer be reached at all.
+            async def aplan(self, instruction, **kwargs):  # type: ignore[no-untyped-def]
                 captured.extend(kwargs.get("archetypes") or [])
                 return []
 
@@ -357,7 +361,7 @@ class TestArchetypeDescriptionsAreNeverBlind:
             plan = WorkflowCompiler().plan(document)
             supervisor = next(n for n in document["nodes"] if n["id"] == "orch1")
             step = runtime.factory(document)("orch1", supervisor, plan)
-            step(RunState(question="anything"))  # type: ignore[typeddict-item]
+            drive_node(step, RunState(question="anything"))  # type: ignore[typeddict-item]
         finally:
             runtime_module.orchestrator_for = real
 

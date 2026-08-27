@@ -83,6 +83,8 @@ def test_a_run_records_which_archetype_took_each_subtask(document: dict) -> None
     model's judgement. An unlabelled subtask still names the archetype it
     actually reached, and says it got there by default.
     """
+    import asyncio
+
     from openstategraph.compile.node_runtime import NodeRuntime
     from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
@@ -90,8 +92,13 @@ def test_a_run_records_which_archetype_took_each_subtask(document: dict) -> None
     plan = WorkflowCompiler().plan(document)
     step = runtime.factory(document)("lead1", node_of(document, "lead1"), plan)
 
-    update = step(
-        {"question": "Research what a new engineer needs; write the onboarding agenda."}
+    # The supervisor's body is `async def` (`async-first/10`): it awaits its
+    # planner, because both model calls a plan can make are on the published
+    # ladder rather than in this closure. A package's own tests reach a
+    # compiled graph through a synchronous door, but a node body called
+    # directly like this one is the body itself, and has only the async one.
+    update = asyncio.run(
+        step({"question": "Research what a new engineer needs; write the onboarding agenda."})
     )
 
     assert set(update["decisions"]) == {"lead1#task-1", "lead1#task-2"}

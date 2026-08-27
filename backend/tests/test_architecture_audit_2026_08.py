@@ -69,7 +69,7 @@ class TestOrchestratorFeedbackTrust:
 
     def _subtasks(self, state: RunState) -> list[dict[str, Any]]:
         run = _build(NodeRuntime(model=None), dict(self.ORCH), self._plan())
-        tasks: list[dict[str, Any]] = run(state)["subtasks"]["orch-1"]
+        tasks: list[dict[str, Any]] = drive_node(run, state)["subtasks"]["orch-1"]
         # Every assertion below is `all(... for t in tasks)`, which an empty
         # plan satisfies. A supervisor that planned nothing would then prove
         # that it ignores stale feedback (reviews-2026-08-14 ticket 09).
@@ -102,12 +102,13 @@ class TestOrchestratorFeedbackTrust:
         plan = CompiledPlan()
         plan.conditional = {"approval-9": {"approved": "x", "rejected": "y"}}
         run = _build(NodeRuntime(model=None), dict(self.ORCH), plan)
-        tasks = run(
+        tasks = drive_node(
+            run,
             RunState(  # type: ignore[typeddict-item]
                 question="who is the best artist?",
                 feedback="No, do not send that email.",
                 decisions={"approval-9": "rejected"},
-            )
+            ),
         )["subtasks"]["orch-1"]
         assert tasks, "the supervisor planned no subtasks, so nothing was tested"
         assert all("rejected" not in t["instruction"] for t in tasks)
