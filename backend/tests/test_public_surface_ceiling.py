@@ -584,13 +584,53 @@ ASYNC_CAPABLE_SAVER = """A recorded exception whose surface is not ours to choos
     `graph.astream()`."""
 
 
+ASYNC_DOORS = """**One added public member per model-driven verb, and the census is right to
+    charge it to every rung** (`async-first/05`). The router, grader and
+    orchestrator ladders each grew the awaitable twin of a verb they already
+    had — `aclassify`, `agrade`, and `asplit`/`alabel`/`aplan` — so that an
+    `async def` node body can await a model call instead of holding the event
+    loop for it. That is the whole of this map's one user-visible promise at
+    this seam: a thread cannot be interrupted, so only a natively awaited model
+    call stops when the run stops.
+
+    **Why it is a method on the base and not a collaborator.** It is the same
+    seam as its synchronous twin — build the prompt, call the model, hand the
+    answer to the same tolerant `normalise` — reached with `await` instead of a
+    call. A second class holding it would be two spellings of one router,
+    drifting, with one of them under test; a free function taking a router
+    would be a method with the receiver written out longhand. What *is* a
+    collaborator is the machinery underneath — `abc/async_doors.py`, module
+    functions the three bases call — because that part is shared **across**
+    families and CLAUDE.md's boundary rule says a cross-family concern is
+    composed, never inherited. A common `AbstractAsyncCapableNode` above the
+    three would be the god base class the same rule forbids.
+
+    The private halves cost nothing here: the per-subclass doors
+    `install_doors` writes take the *existing* names, and the message builders
+    the two doors share are underscore-prefixed.
+
+    The private halves are not the only thing that costs nothing: the agent
+    ladder gained no member at all, and its absence from this paragraph is a
+    finding rather than an omission. `AbstractAgentNode` makes no model call of
+    its own — `build()` returns a Runnable and the caller awaits `ainvoke` on
+    it — so there was no door to add, and an `abuild()` would have been surface
+    with nothing behind it.
+
+    **The router, first family: `BaseRouter` 12 -> 13, `Router` 13 -> 14.**
+    Both by `aclassify`. Collecting the four branch-vocabulary members into a
+    collaborator would take the base to nine and is still the obvious next
+    move — see the paragraph above this one — and it is still blocked the same
+    way: `branches` and `fallback` are declared on `IRouter`, which is Tier
+    1."""
+
+
 RECORDED: dict[str, Recorded] = {
     "compile.diagnostics.Finding": Recorded(17, FINDING_KINDS),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.DeepAgentNode": Recorded(13, NARRATE_TOGGLE),
-    "abc.router.BaseRouter": Recorded(12, MULTI_MATCH_PROMPT),
-    "abc.router.Router": Recorded(13, MULTI_MATCH_PROMPT),
+    "abc.router.BaseRouter": Recorded(13, MULTI_MATCH_PROMPT + "\n\n    " + ASYNC_DOORS),
+    "abc.router.Router": Recorded(14, MULTI_MATCH_PROMPT + "\n\n    " + ASYNC_DOORS),
     "knowledge_builders.SqlKnowledgeBuilder": Recorded(11, KNOWLEDGE_BUILDERS),
     "knowledge_builders.AbstractWorkflowPointerBuilder": Recorded(11, KNOWLEDGE_BUILDERS),
     "knowledge_builders.RootKnowledgeBuilder": Recorded(13, KNOWLEDGE_BUILDERS),

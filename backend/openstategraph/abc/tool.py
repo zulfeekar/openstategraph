@@ -29,13 +29,13 @@ every adopter's ``tools/*.py``. See ``_aexecute`` for what each door is worth.
 from __future__ import annotations
 
 import asyncio
-import contextvars
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Callable, ClassVar, Coroutine, Protocol, runtime_checkable
+from typing import Any, Callable, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
+
+from openstategraph.abc.async_doors import to_completion
 
 
 class ToolResult(BaseModel):
@@ -462,31 +462,7 @@ def _execute_through_a_private_loop(self: "BaseTool", args: BaseModel) -> ToolRe
     any other. This preserves today's behaviour for those callers rather than
     smuggling in an improvement; *stop means stop* belongs to `arun`.
     """
-    return _to_completion(lambda: self._aexecute(args))
-
-
-def _to_completion(make_coroutine: Callable[[], Coroutine[Any, Any, ToolResult]]) -> ToolResult:
-    """Run a coroutine from synchronous code, whether or not a loop is running.
-
-    `asyncio.run` is the answer on a thread with no loop — a FastAPI
-    threadpool worker, the CLI, a pytest process — and it *refuses to nest*,
-    which is the case a bare `asyncio.run` would have shipped as a
-    `RuntimeError` in whichever adopter reached a tool from inside a
-    coroutine first. So when a loop is already running here, the coroutine
-    gets a thread of its own with a loop of its own.
-
-    The context is copied into that thread rather than left behind, for the
-    same reason `_aexecute`'s default uses `asyncio.to_thread`: a tool that
-    stops seeing `report_progress()` is a blank panel with a green suite.
-    """
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(make_coroutine())
-
-    context = contextvars.copy_context()
-    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="osg-tool-sync") as pool:
-        return pool.submit(context.run, lambda: asyncio.run(make_coroutine())).result()
+    return to_completion(lambda: self._aexecute(args))
 
 
 def _run_override_message(class_name: str) -> str:

@@ -30,6 +30,7 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from openstategraph.abc.async_doors import ainvoke_model, install_doors
 from openstategraph.abc.prompt import UNTRUSTED_INPUT_IS_DATA, SystemPrompt
 
 
@@ -267,6 +268,19 @@ class BaseRouter(ABC):
             .with_skill(skill)
         )
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Give every subclass the half of `classify`/`aclassify` it did not write.
+
+        `async-first/05`'s substitutability set, answered rather than waived: a
+        router that writes only the synchronous body is still awaitable (in a
+        thread, not on the loop), and one that writes only the awaitable body
+        is still callable from the four synchronous doors this map does not
+        migrate. See `abc/async_doors.py` for why the installation happens here
+        and not by a `try: await` at the call site.
+        """
+        super().__init_subclass__(**kwargs)
+        install_doors(cls, BaseRouter, [("classify", "aclassify")])
+
     def route_key(self, name: str) -> str:
         """The graph-side key for a classified branch name.
 
@@ -364,24 +378,62 @@ class BaseRouter(ABC):
             ),
         )
 
+    def _unclassifiable(self) -> Classification:
+        """What a router with no model answers. One place, two doors."""
+        return Classification(
+            branch=self.fallback, fell_back=True, reason="No model configured"
+        )
+
+    def _classification_messages(self, question: str) -> list[Any]:
+        """The two messages a classification is, built once for both doors."""
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        return [
+            SystemMessage(content=self.resolve_system_prompt()),
+            HumanMessage(content=question),
+        ]
+
     def classify(self, question: str) -> Classification:
         """Runs the classification. Subclasses rarely need to touch this."""
         if self.model is None:
-            return Classification(
-                branch=self.fallback, fell_back=True, reason="No model configured"
-            )
+            return self._unclassifiable()
 
-        from langchain_core.messages import HumanMessage, SystemMessage
-
-        response = self.model.invoke(
-            [
-                SystemMessage(content=self.resolve_system_prompt()),
-                HumanMessage(content=question),
-            ]
-        )
+        response = self.model.invoke(self._classification_messages(question))
         # See `openstategraph.messages`: a stringified block list is a repr,
         # which matches no branch name and falls back to the default branch
         # without saying so.
+        return self.normalise(content_text(response.content))
+
+    async def aclassify(self, question: str) -> Classification:
+        """`classify`, awaited. The router's async door (`async-first/05`).
+
+        Identical in every respect a caller can observe except that the model
+        call is awaited — same prompt, same tolerant `normalise`, same
+        fallback. A method on the base and never a second class, for the reason
+        `arun` gives one rung down: two spellings of one router is the
+        duplication rule failing where it is most expensive, and one of the two
+        would be the one under test.
+
+        **A cancellation is not a misroute and is not converted into one.**
+        Nothing here catches, and `normalise` is only reached with an answer;
+        `asyncio.CancelledError` inherits from `BaseException` and propagates,
+        so a stopped run never delivers "the model said nothing, take the
+        fallback" to a conditional edge. Pinned by a test rather than left to a
+        property of the language.
+
+        Not on `IRouter`. That Protocol is `runtime_checkable` and exists so a
+        hand-written classifier can satisfy the contract without inheriting
+        from us; a member added to it would make every third-party satisfier
+        stop being one at the next `isinstance`, silently, in their install —
+        a breaking change to Tier 1 wearing an addition's clothes.
+
+        A subclass that overrides `classify` and not this method still gets
+        its own body honoured here: `__init_subclass__` installs the door.
+        """
+        if self.model is None:
+            return self._unclassifiable()
+
+        response = await ainvoke_model(self.model, self._classification_messages(question))
         return self.normalise(content_text(response.content))
 
     @abstractmethod
