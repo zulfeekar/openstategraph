@@ -93,3 +93,69 @@ A durable cross-session pattern store ("cache the approach, never the
 answer") was requested but explicitly deferred to protect the working
 MCP+grader wiring under a near-exhausted budget — filed as
 `launch-readiness/99`.
+
+## The dark-fleet table, measured — 2026-08-27
+
+`launch-readiness/116` reported three runs of one question giving three
+dark-vessel answers. The three answers were re-derived from the data rather
+than from the prose, and the divergence is fully explained by two facts about
+`sm.area_counts_dark_v1r0` that **no lens on this deployment declares**.
+
+Measured directly through `mcp_execute_sql` on 2026-08-27:
+
+| Measure | Value |
+| --- | --- |
+| rows | 2,208,572 |
+| distinct `imo` | 10,096 |
+| rows per IMO | **~219** — the grain is geofence × day × IMO |
+| rows with `dark = 1` | 1,454,449 |
+| distinct IMO ever `dark = 1` | 6,119 |
+| `MIN(day)` / `MAX(day)` | **2026-01-01 / 2026-05-12** |
+
+The last row is the expensive one. Its sibling `sm.area_counts_latest`, the
+same shape without the dark flag, runs to **2026-08-26** — yesterday. So the
+dark table is 3½ months stale in a warehouse whose neighbouring tables are
+current, and nothing on the deployment says so: `dark_fleet/SKILL.md` states
+its grain as "daily" and declares no coverage window, and `cargoflow/SKILL.md`
+line 93 declares the join as `acd.imo = cf.vessel_imo; always filter dark = 1`
+— a key and a predicate, with no grain, no cardinality and no dedup.
+
+### Why one question gives two answers
+
+The question asks about **last month** (July 2026), which is outside the dark
+table's data entirely. Both joins an agent can reasonably write are then
+*correct SQL for different questions*, and neither answers the one asked:
+
+```sql
+-- 58 distinct vessels loaded at Mongstad in July 2026
+dark ever      (no day predicate)          -> 1 vessel   -- LYRIC CAMELLIA, IMO 9730933
+dark in window (day within the question's) -> 0 vessels  -- necessarily: no rows exist after 2026-05-12
+```
+
+LYRIC CAMELLIA's only two dark days are **2026-01-05 and 2026-02-21** — five
+and seven months before the voyages it is reported against. So the "1 dark
+vessel" answer is a vessel that was dark at some point in the table's window,
+not last month; and the "0 dark vessels" answer is an absence the filter
+guaranteed, reported as a finding.
+
+Re-run live three times on 2026-08-27 against `cpl-mcp` (wheel `0.3.0rc7`,
+`openai/gpt-5-mini`): **2 dark / 0 dark / 0 dark** — the same one-in-three
+split the ticket recorded, with the same 55 rows and 22,765,104 barrels
+underneath the two zeros.
+
+The `dark ever` run also inflated the population it reported: **48,557,027
+barrels against the same 55 rows' 22,765,104**, a 2.13× fan-out, because a
+per-IMO/day table joined without a `SELECT DISTINCT imo` dedup multiplies the
+cargo rows it decorates. That is `launch-readiness/98`'s defect exactly, one
+table over, and the same fix applies — the join is only safe through a
+deduplicated subquery. The deployment's own
+`_cross_cutting/JOINS.yaml` already carries that canonical shape
+(`WITH dark_vessels AS (SELECT DISTINCT imo ... WHERE dark = 1 AND day >= ...)`,
+`INNER JOIN`); the lens the agent actually reads does not repeat it.
+
+**Neither join is the right one, and the correct answer is a refusal**: for a
+window after 2026-05-12 this warehouse cannot establish whether a vessel was
+dark. Nothing in this repository can enforce that — the lens layer for this
+deployment lives in the CPL intelligence service, not here — so the finding is
+filed for that lens's owner as `launch-readiness/118`, and the general form
+(coverage as a declared, checkable fact) as `launch-readiness/119`.
