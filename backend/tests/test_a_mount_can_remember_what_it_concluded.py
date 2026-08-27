@@ -114,9 +114,12 @@ def _parent(mode: str | None) -> dict[str, Any]:
 class _Turns:
     """What the mount closure handed the child, and what the child ended with.
 
-    Asked of the child's own `invoke`, which is the only place the answer
+    Asked of the child's own `ainvoke`, which is the only place the answer
     exists: the mount is a **closure**, so nothing LangGraph exposes can say
-    what state crossed it.
+    what state crossed it. (`ainvoke` and not `invoke` since `async-first/06`
+    made the mount's body `async def` — the parent is still driven through its
+    synchronous door here, and the bridge in `compile/node_doors.py` is what
+    turns that into an awaited child call.)
     """
 
     def __init__(self, mode: str | None) -> None:
@@ -129,20 +132,20 @@ class _Turns:
             document, RunState, runtime.factory(document), checkpointer=InMemorySaver()
         )
         self.child = runtime.mounted_graphs[safe_name("mount1")].graph
-        real = self.child.invoke
+        real = self.child.ainvoke
         self.received: list[int] = []
         self.ended_with: list[int] = []
 
         self.finals: list[dict[str, Any]] = []
 
-        def spy(state: dict[str, Any], config: Any = None, **kwargs: Any) -> Any:
-            final = real(state, config, **kwargs)
+        async def spy(state: dict[str, Any], config: Any = None, **kwargs: Any) -> Any:
+            final = await real(state, config, **kwargs)
             self.received.append(len(state.get("messages") or []))
             self.ended_with.append(len(final.get("messages") or []))
             self.finals.append(dict(final))
             return final
 
-        self.child.invoke = spy  # type: ignore[method-assign]
+        self.child.ainvoke = spy  # type: ignore[method-assign]
         config = {"configurable": {"thread_id": "one-thread", "workflow_slug": "parent-flow"}}
         for question in ("What did we conclude?", "And now?"):
             graph.invoke(

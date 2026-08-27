@@ -58,6 +58,9 @@ from langgraph.func import task
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, RetryPolicy
 
+from openstategraph.compile.node_doors import with_both_doors
+
+from conftest import drive_node
 from openstategraph.compile.node_runtime import NodeRuntime, RunState, RuntimeServices
 from openstategraph.compile.workflow_compiler import CompiledPlan, WorkflowCompiler
 
@@ -149,8 +152,17 @@ def _graph_whose_mount_fails_once(runner: Any, *, wrap_in_task: bool, retries: i
     tasked = task(runner)
     remaining = {"failures": 1}
 
-    def mount(state: RunState) -> dict[str, Any]:
-        out = tasked(state).result() if wrap_in_task else runner(state)
+    # `async def`, because `_subgraph` is (`async-first/06`) — and `await` on
+    # the task rather than `.result()`, which is how a `@task` is consumed on
+    # the async path. `_start` drives the harness with `ainvoke` for the same
+    # reason: an async `@task` cannot be created from a synchronous Pregel
+    # loop ("In an sync context async tasks cannot be called"), so the arm
+    # this file exists to price is only expressible on the async door. The
+    # `with_both_doors` wrap is kept anyway, because that is what the compiler
+    # puts in front of every migrated family and the harness should not be a
+    # different shape from the thing it measures.
+    async def mount(state: RunState) -> dict[str, Any]:
+        out = await tasked(state) if wrap_in_task else await runner(state)
         if remaining["failures"]:
             remaining["failures"] -= 1
             raise RuntimeError("the parent's node fails after the child returned")
@@ -159,7 +171,7 @@ def _graph_whose_mount_fails_once(runner: Any, *, wrap_in_task: bool, retries: i
     builder: Any = StateGraph(RunState)
     builder.add_node(
         "mount",
-        mount,
+        with_both_doors(mount),
         retry_policy=RetryPolicy(
             max_attempts=retries, initial_interval=0.001, retry_on=Exception
         ),
@@ -170,9 +182,13 @@ def _graph_whose_mount_fails_once(runner: Any, *, wrap_in_task: bool, retries: i
 
 
 def _start(graph: Any, thread: str) -> Any:
-    return graph.invoke(
-        {"question": "q", "attempts": 0, "decisions": {}, "outputs": {}},
-        {"configurable": {"thread_id": thread}},
+    import asyncio
+
+    return asyncio.run(
+        graph.ainvoke(
+            {"question": "q", "attempts": 0, "decisions": {}, "outputs": {}},
+            {"configurable": {"thread_id": thread}},
+        )
     )
 
 
@@ -214,7 +230,7 @@ class TestWhatARetryActuallyCosts:
         model = _CountingModel(messages=iter(["A"] * 8))
         runner = _mount_runner(model)
 
-        assert runner({"question": "q", "outputs": {}})["answer"] == "A"
+        assert drive_node(runner, {"question": "q", "outputs": {}})["answer"] == "A"
         assert model.calls == 1
 
 

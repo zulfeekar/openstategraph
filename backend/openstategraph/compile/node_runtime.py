@@ -3892,7 +3892,19 @@ class NodeRuntime:
         else:
             captured = child_graph
 
-        def run(state: RunState) -> dict[str, Any]:
+        # **`async def`, third of Phase D** (`async-first/06`). A mount is the
+        # longest step this compiler can schedule — a whole other workflow run
+        # as one node — so the work abandoned when a run is stopped inside one
+        # is everything the child had left to do.
+        #
+        # The three things that ride on this closure are each pinned in
+        # `tests/test_a_mount_awaits_its_child.py`, because a mount is a
+        # closure over the child's invoke rather than a LangGraph subgraph and
+        # none of them is obviously safe across an `await`: the child's
+        # inherited checkpointer, the `interrupt()` a gated child raises for
+        # the PARENT's checkpointer to hold, and the `GraphRecursionError`
+        # translated at this boundary into our own sentence.
+        async def run(state: RunState) -> dict[str, Any]:
             if captured is None:
                 return {"outputs": {node_id: ""}}
             plain = _upstream_text(state, upstream)
@@ -3991,7 +4003,7 @@ class NodeRuntime:
             # thing 61's rule costs a developer: the number they saved and the
             # smaller one the run could actually give.
             try:
-                final = captured.invoke(
+                final = await captured.ainvoke(
                     {
                         "question": question,
                         # The conversation crosses the boundary (found live: the

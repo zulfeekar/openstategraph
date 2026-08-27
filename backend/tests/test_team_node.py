@@ -22,6 +22,8 @@ from openstategraph.compile.diagnostics import Finding
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
+from conftest import drive_node
+
 REPO = Path(__file__).resolve().parent.parent.parent
 
 
@@ -55,7 +57,7 @@ class TestTeamCompilesAsSubgraph:
         factory = runtime.factory(doc)
         run = factory("team1", {"id": "team1", "type": "workflow.subgraph", "data": {"workflow": "nope"}},
                       WorkflowCompiler().plan(doc))
-        update = run(RunState(question="q"))  # type: ignore[typeddict-item]
+        update = drive_node(run, RunState(question="q"))  # type: ignore[typeddict-item]
         assert update["outputs"]["team1"] == ""
         # The miss is recorded loudly — the API surfaces this as a warning.
         assert runtime.diagnostics.subjects(Finding.UNRESOLVED_SUBGRAPH) == [("nope",)]
@@ -166,7 +168,7 @@ class TestChildPackageAssets:
             "edges": []}
         from openstategraph.compile.workflow_compiler import CompiledPlan
         run = parent.factory(doc)("sub1", doc["nodes"][0], CompiledPlan())
-        run(RunState(question="q"))  # type: ignore[typeddict-item]
+        drive_node(run, RunState(question="q"))  # type: ignore[typeddict-item]
         assert captured["slug"] == "child-flow"
 
     def test_the_parent_conversation_crosses_into_the_child(self) -> None:
@@ -182,7 +184,7 @@ class TestChildPackageAssets:
             # `context` because the mount passes one since
             # `organisms-first-class/76`, and a stand-in for a compiled graph
             # has to accept what the real one does.
-            def invoke(self, payload, config=None, *, context=None):
+            async def ainvoke(self, payload, config=None, *, context=None):
                 captured.update(payload)
                 return {"answer": "ok"}
 
@@ -195,7 +197,7 @@ class TestChildPackageAssets:
             run = parent.factory(doc)("sub1", doc["nodes"][0], CompiledPlan())
             history = [HumanMessage(content="create a workflow"),
                        AIMessage(content="Before I build: what should it produce?")]
-            run(RunState(question="a movie review flow", messages=history))  # type: ignore[typeddict-item]
+            drive_node(run, RunState(question="a movie review flow", messages=history))  # type: ignore[typeddict-item]
         finally:
             WorkflowCompiler.build = original  # type: ignore[method-assign]
         assert [m.content for m in captured["messages"]][:2] == [
