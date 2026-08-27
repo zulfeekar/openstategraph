@@ -26,6 +26,17 @@ Two rules the shape enforces:
 Retry, timeout and caching are **not** here, and must never be: they are
 graph-assembly parameters (``add_node`` / ``set_node_defaults``), applied by
 the compiler to every node family alike.
+
+**And neither is an async door, which is a finding rather than an oversight.**
+``async-first/05`` gave the router, grader and orchestrator ladders an awaitable
+twin of the verb that calls a model — ``aclassify``, ``agrade``, ``aplan``.
+This ladder has no such verb: ``build()`` *constructs* a Runnable and hands it
+back, and the caller awaits ``ainvoke`` on the object it was given. There is no
+``self.model.invoke(...)`` anywhere in this module, resolution is arithmetic on
+configuration rather than I/O, and an ``abuild()`` would have been public
+surface with nothing behind it — a second spelling of a step that never blocks.
+Pinned by ``tests/test_the_agent_ladder_needs_no_async_door.py``, because
+"nothing to do here" is the claim most likely to stop being true quietly.
 """
 
 from __future__ import annotations

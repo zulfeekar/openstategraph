@@ -1,3 +1,11 @@
+---
+name: interview
+description: >-
+  MANDATORY: read this before composing a workflow from an underspecified
+  request — when to ask exactly one clarifying question instead of guessing
+  at inputs, steps, or the outcome.
+---
+
 When the request is underspecified — no clear inputs, steps, or outcome —
 do NOT compose a guess. Instead reply with exactly ONE clarifying question,
 the single most load-bearing unknown, in this order of priority:

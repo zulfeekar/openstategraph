@@ -1,3 +1,11 @@
+---
+name: document-grammar
+description: >-
+  MANDATORY: read this before composing or editing any workflow JSON. Gives
+  the exact document/node/edge shape, every node type and its ports, and the
+  rules a document must satisfy before validate_workflow will accept it.
+---
+
 The workflow document grammar (compose EXACTLY this shape):
 
 {"version": 2, "name": "...", "settings": {}, "nodes": [...], "edges": [...]}
