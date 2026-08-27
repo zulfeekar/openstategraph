@@ -376,7 +376,13 @@ class DeepAgentNode(BaseAgentNode):
     library's ``middleware`` parameter.
     """
 
-    def __init__(self, *, subagents: list[dict[str, Any]] | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        subagents: list[dict[str, Any]] | None = None,
+        backend: Any = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         from openstategraph._extras import require_extra
 
@@ -384,6 +390,19 @@ class DeepAgentNode(BaseAgentNode):
 
         self._constructor = deepagents.create_deep_agent
         self.subagents = list(subagents or [])
+        #: The store this tier's own `read_file`/`grep`/`glob` read, when a
+        #: compiler has one to give (`launch-readiness/111`). **Private on
+        #: purpose**: `subagents` is a declaration a document makes and is
+        #: read back, while this is a construction detail nothing reads back,
+        #: and the public-surface census on this ladder is argued member by
+        #: member (`tests/test_public_surface_ceiling.py`) rather than grown
+        #: by habit.
+        #:
+        #: It is the pass-through that makes progressive disclosure and
+        #: tool-result offload dereferenceable at all: both hand the model a
+        #: path, and without this the harness reads a different store and
+        #: finds nothing there — which is a silent wrong answer, not an error.
+        self._backend = backend
 
     def build_agent(
         self, *, model: Any, tools: list[Any], system_prompt: str | None, middleware: list[Any]
@@ -395,6 +414,8 @@ class DeepAgentNode(BaseAgentNode):
             kwargs["middleware"] = middleware
         if self.subagents:
             kwargs["subagents"] = self.subagents
+        if self._backend is not None:
+            kwargs["backend"] = self._backend
         return self._constructor(**kwargs)
 
 

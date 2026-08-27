@@ -36,6 +36,7 @@ import importlib.util
 import inspect
 import logging
 from dataclasses import dataclass
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
@@ -516,7 +517,7 @@ def discover_function_callables(workflow_dir: Path, slug: str) -> dict[str, Any]
 # the promises.
 
 
-def discover_skills(workflow_dir: Path) -> str:
+def discover_skills(workflow_dir: Path, *, exclude: "Collection[str]" = ()) -> str:
     """Procedural memory, file-first (tickets 65+66): `skills/*.md` under a
     workflow package, concatenated as prompt context for its agents.
 
@@ -532,15 +533,25 @@ def discover_skills(workflow_dir: Path) -> str:
 
     Frontmatter is parsed rather than pasted (`SkillDocument`): a file that
     declares a `name` is headed by it, and no YAML block reaches the model.
+
+    `exclude` names the skills a caller has already put in the prompt some
+    other way — today, the ones a deep-tier agent discloses progressively
+    (`launch-readiness/111`). It is a *subtraction from this concatenation*
+    and never a second rendering of a skill: whichever route a skill takes, it
+    takes exactly one, and this function stays the only place the flat form is
+    composed.
     """
     skills_dir = workflow_dir / "skills"
     if not skills_dir.is_dir():
         return ""
     from openstategraph.skills import SkillDocument
 
+    withheld = set(exclude)
     parts: list[str] = []
     for path in sorted(skills_dir.glob("*.md")):
         skill = SkillDocument.load(path)
+        if skill.name in withheld:
+            continue
         if skill.body:
             heading = f"## Skill: {skill.name}"
             if skill.description:

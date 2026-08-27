@@ -843,6 +843,15 @@ def _summarize_trigger(model: Any) -> list[Any]:
 SUMMARIZE_KEEP: tuple[Literal["messages"], int] = ("messages", 20)
 
 
+#: What a node that discloses nothing gets: no slots filled, no store to
+#: point a tier at, and `discover_skills`' flat concatenation kept. Spelled
+#: here rather than imported as `DeepTierDisclosure()` because that class
+#: lives beside `deepagents`, which is an optional extra — a react-tier agent
+#: on an install without it must still compile, and an import for the *empty*
+#: answer would take that away.
+_NO_DISCLOSURE = SimpleNamespace(contributions={}, backend=None, disclosed=())
+
+
 def _summarizes(data: dict[str, Any]) -> bool:
     """Whether this agent manages its own context. **Default: yes.**
 
@@ -880,6 +889,10 @@ class PackageAssets:
     #: OWN package's knowledge, never the parent's — the same isolation as
     #: skills after the ticket-67 lesson.
     knowledge_dir: Any = None
+    #: The package directory whose `skills/*.md` a child's agents disclose
+    #: progressively. Same isolation, same reason: a routed child discloses
+    #: its own package's skills or none at all.
+    skills_dir: Any = None
 
 
 @dataclass(frozen=True)
@@ -926,6 +939,14 @@ class RuntimeServices:
     #: The open workflow's package directory, for ambient knowledge seeking
     #: (a non-empty `knowledge/` under it auto-binds the lookup tool).
     knowledge_package_dir: Any = None
+    #: The open workflow's package directory, for **progressive skill
+    #: disclosure** (`launch-readiness/111`). The same value as
+    #: `knowledge_package_dir` today and deliberately a separate field: that
+    #: one is the second brain and carries an override
+    #: (`knowledge_dir_override`) that must never redirect where skills are
+    #: read from, and two capabilities sharing one field is how an override
+    #: aimed at one silently moves the other.
+    skills_package_dir: Any = None
     #: `load_workflow(knowledge_dir=...)`'s explicit override — the directory
     #: of topic files itself, replacing the `<package>/knowledge` convention.
     #: Deliberately NOT inherited by a child subgraph: a routed child seeks
@@ -961,6 +982,7 @@ class NodeRuntime:
         skills_context: str = "",
         workflow_middleware: dict[str, Any] | None = None,
         knowledge_package_dir: Any = None,
+        skills_package_dir: Any = None,
         knowledge_dir_override: Any = None,
         max_attempts: int = 3,
         advisor_catalog: str = "",
@@ -977,6 +999,7 @@ class NodeRuntime:
             skills_context = services.skills_context
             workflow_middleware = services.workflow_middleware
             knowledge_package_dir = services.knowledge_package_dir
+            skills_package_dir = services.skills_package_dir
             knowledge_dir_override = services.knowledge_dir_override
             max_attempts = services.max_attempts
             advisor_catalog = services.advisor_catalog
@@ -1005,6 +1028,7 @@ class NodeRuntime:
             skills_context=skills_context,
             workflow_middleware=dict(workflow_middleware or {}),
             knowledge_package_dir=knowledge_package_dir,
+            skills_package_dir=skills_package_dir,
             knowledge_dir_override=knowledge_dir_override,
             max_attempts=max_attempts,
             advisor_catalog=advisor_catalog,
@@ -2122,6 +2146,70 @@ class NodeRuntime:
                     specs = subagent_specs(data)
                     if specs:
                         tier_kwargs["subagents"] = specs
+                # Progressive skill disclosure and tool-result offload
+                # (`launch-readiness/111`, carrying `101` and `102`). **One
+                # decision, not two**, and its default is the node's tool
+                # surface rather than a setting somebody has to find: both
+                # middlewares hand the model a *path*, so both are worthless —
+                # worse than worthless, because the failure is a plausible
+                # answer rather than an error — on an agent that cannot read a
+                # file from the store this seam writes to.
+                #
+                # `shares_backend` is the half a name check would miss. Only
+                # the deep tier's constructor takes `backend=`, so only there
+                # can the harness' own `read_file`/`grep` be pointed at what
+                # was written; a workflow's own tool called `read_file` reads
+                # its own store and a pointer into ours means nothing to it.
+                #
+                # Built HERE, like `rubric` and `summarization` above and for
+                # the same reason: this is the one place this node's config
+                # becomes middleware. The base declares the slots and owns
+                # their order; it never fills them.
+                #
+                # Imported inside the branch that can use it: `deepagents` is
+                # an optional extra, and a react-tier agent on an install
+                # without it must still compile.
+                tier_is_deep = tier_cls is agent_family.DeepAgentNode
+                wired_names = tuple(sorted({t.name for t in lc_tools}))
+                disclosure: Any = _NO_DISCLOSURE
+                if tier_is_deep:
+                    from openstategraph.abc import deep_tier_offload
+
+                    disclosure = deep_tier_offload.plan_disclosure(
+                        package_dir=self.services.skills_package_dir,
+                        tool_surface=(
+                            wired_names + deep_tier_offload.DEEP_TIER_FILE_TOOLS
+                        ),
+                        shares_backend=True,
+                        # Prefix-filtered, never blanket (`102`): the tools
+                        # this canvas wired, and never the harness' own file
+                        # tools — offloading a `read_file` result to a file
+                        # and pointing at it is a loop, not a saving.
+                        offload_prefixes=wired_names,
+                    )
+                for slot, middleware in disclosure.contributions.items():
+                    # A workflow that named the slot itself keeps it, exactly
+                    # as `narration` above: `middlewares/<slot>.py` is the
+                    # declared way to replace a tier's slot, and a compiler
+                    # that overwrote it would make that door decorative.
+                    contributions.setdefault(slot, middleware)
+                if disclosure.backend is not None and tier_is_deep:
+                    tier_kwargs["backend"] = disclosure.backend
+                # What is left to inject flat: everything the disclosure did
+                # not take. Per skill, not per package — a skill the library
+                # will not list (no `description` in its frontmatter, which is
+                # two of the three this repository ships) must keep its body in
+                # the prompt rather than disappear from it.
+                skills_context = self.services.skills_context
+                if disclosure.disclosed:
+                    from openstategraph.api.capability_discovery import discover_skills
+
+                    from pathlib import Path as _Path
+
+                    skills_context = discover_skills(
+                        _Path(self.services.skills_package_dir),
+                        exclude=disclosure.disclosed,
+                    )
                 node_instance = tier_cls(
                     name=f"agent_{node_id}",
                     model=model,
@@ -2142,7 +2230,14 @@ class NodeRuntime:
                             # Ambient, package-wide `skills/*.md`: house style
                             # for every agent here, not a choice about this
                             # node. Context, and it stays context.
-                            self.services.skills_context,
+                            #
+                            # Minus whatever was disclosed above — otherwise
+                            # a disclosed skill would arrive twice and the
+                            # whole saving this seam exists for would be paid
+                            # anyway (`launch-readiness/111`). With nothing
+                            # disclosed this is exactly what it always was, so
+                            # the state that needs no decision loses nothing.
+                            skills_context,
                             # The branches this agent's own classifier can
                             # reach (ticket 11) — generated context, so an
                             # agent's suggestions are grounded in the graph
@@ -3858,6 +3953,10 @@ class NodeRuntime:
                         # The child's OWN knowledge, never the parent's —
                         # the same isolation as skills (ticket 67's lesson).
                         knowledge_package_dir=child_assets.knowledge_dir,
+                        # ...and the child's OWN skills to disclose. Inheriting
+                        # the parent's directory here would hand a routed child
+                        # a skill list naming files it does not carry.
+                        skills_package_dir=child_assets.skills_dir,
                         max_attempts=self.services.max_attempts,
                         # Deliberately NOT inherited. A child subgraph's node
                         # ids do not exist in the document open on the canvas,
