@@ -512,6 +512,25 @@ FINDING_KINDS = """**An enum of fifteen, and the ceiling is asking the wrong que
 #: makes each number a decision rather than an oversight. Derived list, hand
 #: written arguments — `test_the_census_matches_the_record` holds the two
 #: together.
+ASYNC_CAPABLE_SAVER = """A recorded exception whose surface is not ours to choose. Every one of the
+    twelve members is `BaseCheckpointSaver`'s own contract, implemented in
+    full because `StateGraph.compile` `isinstance`-checks what it is handed
+    and LangGraph's async loop calls the four `a*` methods while every
+    synchronous caller in this process still calls the four sync ones: the
+    sync four, their four async twins, `delete_thread` and `adelete_thread`,
+    `get_next_version`, and `config_specs`.
+
+    It has exactly one reason to change — *the wrapped saver has no async
+    methods* (`SqliteSaver` raises `NotImplementedError` on all four, measured
+    on the installed `langgraph-checkpoint-sqlite 3.1.1`) — and it adds no
+    member of its own beyond the private `_inner`. Taking it under the ceiling
+    would mean implementing part of an interface, which is not a smaller
+    design but a broken one.
+
+    Added by `async-first/02`, when the run fold began driving
+    `graph.astream()`."""
+
+
 RECORDED: dict[str, Recorded] = {
     "compile.diagnostics.Finding": Recorded(15, FINDING_KINDS),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
@@ -534,6 +553,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_youtube.YouTubeTranscriptTool": Recorded(14, PREBUILT_TOOLS),
     "prebuilt_mcp.McpTool": Recorded(12, MCP_TOOL),
     "evaluation.scoring.Scorecard": Recorded(17, SCORECARD),
+    "memory._AsyncCapableSaver": Recorded(12, ASYNC_CAPABLE_SAVER),
 }
 
 

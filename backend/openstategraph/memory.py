@@ -1044,3 +1044,148 @@ def checkpointer_for(
         "settings.checkpointer='sqlite'",
     )
     return saver if saver is not None else fallback
+
+
+# Runtime, not `TYPE_CHECKING`, and the only langgraph import in this module
+# that is: `_AsyncCapableSaver` below has to *subclass* it, because
+# `StateGraph.compile` `isinstance`-checks the checkpointer it is handed. It
+# costs nothing a consumer was not already paying — `langgraph-checkpoint` is
+# a hard dependency of `langgraph`, which is one of the core four.
+from langgraph.checkpoint.base import BaseCheckpointSaver as _BaseSaver
+
+
+class _AsyncCapableSaver(_BaseSaver[Any]):  # type: ignore[misc,valid-type]
+    """A checkpointer's four async methods, run in a thread over its sync ones.
+
+    **Why this exists at all.** `async-first/02` turned the run fold into an
+    async generator driving `graph.astream()`, and LangGraph's async loop calls
+    `aget_tuple`/`aput`/`aput_writes`/`alist` — never the sync four. The
+    docs are explicit that an async run needs `InMemorySaver` or one of the
+    `Async*` savers, and the installed `langgraph-checkpoint-sqlite 3.1.1`
+    means it literally: `SqliteSaver.aget_tuple` raises
+    ``NotImplementedError: The SqliteSaver does not support async methods``.
+    Measured against the installed version, not read off a page — a first
+    superstep never happened.
+
+    That is a **hard dependency the charter had backwards**
+    (`docs/decisions/async-seam.md` sizes the async saver as phase B, *after*
+    this one). It is recorded on the ticket rather than papered over here.
+
+    **Why a bridge rather than `AsyncSqliteSaver`.** One saver is shared by
+    every transport: the HTTP streaming path is now asyncio, while
+    `/api/runs`, the MCP server and `load_workflow` are synchronous and call
+    the sync four. `AsyncSqliteSaver` answers the sync four through
+    `asyncio.run_coroutine_threadsafe` against **a loop captured at
+    construction**, so it needs a running loop to be built at all — which
+    `load_workflow` in a plain script does not have. Swapping the shared saver
+    would trade a broken async path for a broken sync one.
+
+    So the async half is bridged in a worker thread instead. This is the same
+    shape LangChain itself uses for sync tools — the charter quotes its
+    production page saying so — and it is a bridge, not the destination:
+    adopting the native async savers is still worth doing, and is still phase
+    B. What changes is that phase B is now an optimisation rather than the
+    thing that unblocks phase A.
+
+    **It has to be a real `BaseCheckpointSaver`.** `StateGraph.compile` calls
+    `ensure_valid_checkpointer`, which `isinstance`-checks and refuses a bare
+    adapter by name — so this subclasses rather than duck-types, and the sync
+    four are delegated explicitly because the base class defines them as
+    raising. `__getattr__` still passes `setup`, `conn`, `stop_ttl_sweeper`
+    and everything else through, so `close_resource` keeps working on a
+    wrapped saver exactly as on a bare one.
+    """
+
+    def __init__(self, inner: Any) -> None:
+        super().__init__(serde=getattr(inner, "serde", None))
+        self._inner = inner
+
+    # --- the synchronous four, unchanged and unwrapped ----------------------
+    #
+    # Delegated one by one rather than left to `__getattr__`: the base class
+    # *defines* them (raising `NotImplementedError`), so an attribute lookup
+    # finds the base's version and never reaches the wrapped saver. A sync
+    # caller must be unable to tell it is holding a wrapper.
+
+    def get_tuple(self, config: Any) -> Any:
+        return self._inner.get_tuple(config)
+
+    def put(self, config: Any, checkpoint: Any, metadata: Any, new_versions: Any) -> Any:
+        return self._inner.put(config, checkpoint, metadata, new_versions)
+
+    def put_writes(self, config: Any, writes: Any, task_id: str, task_path: str = "") -> Any:
+        return self._inner.put_writes(config, writes, task_id, task_path)
+
+    def list(self, config: Any, **kwargs: Any) -> Any:
+        return self._inner.list(config, **kwargs)
+
+    def delete_thread(self, thread_id: str) -> Any:
+        return self._inner.delete_thread(thread_id)
+
+    def get_next_version(self, current: Any, channel: Any = None) -> Any:
+        """Version stamping stays the wrapped saver's, never the base's.
+
+        The default is a plain integer counter; `SqliteSaver` and the Postgres
+        savers stamp their own. A wrapper that silently supplied the base's
+        would renumber channels for one door and not the other.
+        """
+        try:
+            return self._inner.get_next_version(current, channel)
+        except TypeError:
+            return self._inner.get_next_version(current)
+
+    @property
+    def config_specs(self) -> Any:
+        return self._inner.config_specs
+
+    async def aget_tuple(self, config: Any) -> Any:
+        import asyncio
+
+        return await asyncio.to_thread(self._inner.get_tuple, config)
+
+    async def aput(self, config: Any, checkpoint: Any, metadata: Any, new_versions: Any) -> Any:
+        import asyncio
+
+        return await asyncio.to_thread(
+            self._inner.put, config, checkpoint, metadata, new_versions
+        )
+
+    async def aput_writes(self, config: Any, writes: Any, task_id: str, task_path: str = "") -> Any:
+        import asyncio
+
+        return await asyncio.to_thread(
+            self._inner.put_writes, config, writes, task_id, task_path
+        )
+
+    async def alist(self, config: Any, **kwargs: Any) -> Any:
+        """The sync listing, drained in one hop rather than one hop per row.
+
+        `list` is a generator, and a per-row `to_thread` would hand each
+        `next()` to a different worker thread — legal for the sqlite
+        connection we open (`check_same_thread=False`) but a cursor walked
+        across an arbitrary number of threads for no reason. The caller of
+        `alist` is state history, which is bounded.
+        """
+        import asyncio
+
+        for item in await asyncio.to_thread(lambda: list(self._inner.list(config, **kwargs))):
+            yield item
+
+    async def adelete_thread(self, thread_id: str) -> Any:
+        import asyncio
+
+        return await asyncio.to_thread(self._inner.delete_thread, thread_id)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+def async_capable(saver: BaseCheckpointSaver[Any]) -> BaseCheckpointSaver[Any]:
+    """`saver`, safe to hand to `graph.astream()`. See `_AsyncCapableSaver`.
+
+    Applied at the two streaming run handlers rather than inside
+    `build_checkpointer`, and that is the point: the process-wide saver stays
+    exactly what every synchronous caller already holds, and only the async
+    door wraps it.
+    """
+    return cast("BaseCheckpointSaver[Any]", _AsyncCapableSaver(saver))
