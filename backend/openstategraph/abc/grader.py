@@ -34,6 +34,7 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from openstategraph.abc.async_doors import ainvoke_model, install_doors
 from openstategraph.abc.prompt import UNTRUSTED_INPUT_IS_DATA, SystemPrompt
 
 
@@ -170,6 +171,16 @@ class BaseGrader(ABC):
         # so a grader with neither composes exactly the prompt it always did.
         self.prompt = prompt.with_context(rubric_text, context)
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Give every subclass the half of `grade`/`agrade` it did not write.
+
+        `async-first/05`'s substitutability set, answered rather than waived.
+        See `abc/async_doors.py` for why the installation happens here and not
+        by a `try: await` at the call site.
+        """
+        super().__init_subclass__(**kwargs)
+        install_doors(cls, BaseGrader, [("grade", "agrade")])
+
     def _describe_rubric(self) -> str:
         """The rubric as a numbered checklist, or "" when none is set.
 
@@ -298,29 +309,78 @@ class BaseGrader(ABC):
 
         return Verdict(passed=True, reason="Verdict unclear; passing by default")
 
-    def grade(self, candidate: str, *, question: str = "") -> Verdict:
-        """Deterministic checks first, then the model only if needed."""
+    def _verdict_without_a_model(self, candidate: str) -> Verdict | None:
+        """The prelude both doors share: facts first, then a model or not.
+
+        Returns a finished verdict when no model call is needed, and `None`
+        when one is. Factored out rather than written twice, because the two
+        cheap answers here are the family's own subtlety: the deterministic
+        checks must run *before* either door reaches a model — a check that
+        started costing a thread hop or a coroutine would be a regression — and
+        a missing model is a pass rather than a failure, which is a decision an
+        async body reimplementing the prelude could quietly invert.
+        """
         cheap = self.deterministic_checks(candidate)
         if cheap is not None:
             return cheap
-
         if self.model is None:
             # No model is not a failure: the deterministic checks passed, and
             # rejecting here would block a workflow for a missing dependency.
             return Verdict(passed=True, reason="No grading model configured")
+        return None
 
+    def _judgement_messages(self, candidate: str, question: str) -> list[Any]:
+        """The two messages a judgement is, built once for both doors."""
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        response = self.model.invoke(
-            [
-                SystemMessage(content=self.resolve_system_prompt(question)),
-                HumanMessage(content=candidate),
-            ]
-        )
+        return [
+            SystemMessage(content=self.resolve_system_prompt(question)),
+            HumanMessage(content=candidate),
+        ]
+
+    def grade(self, candidate: str, *, question: str = "") -> Verdict:
+        """Deterministic checks first, then the model only if needed."""
+        settled = self._verdict_without_a_model(candidate)
+        if settled is not None:
+            return settled
+
+        response = self.model.invoke(self._judgement_messages(candidate, question))
         # `content_text`, never `str(content)`: a block list stringified to a
         # Python repr starts with neither `pass` nor `fail`, so a PASS fell
         # through to "verdict unclear; passing by default" and a FAIL handed
         # the raw repr to the customer as the reason it was rejected.
+        return self.normalise(content_text(response.content))
+
+    async def agrade(self, candidate: str, *, question: str = "") -> Verdict:
+        """`grade`, awaited. The grader's async door (`async-first/05`).
+
+        Identical in every respect a caller can observe except that the model
+        call is awaited: the same deterministic checks run first and still
+        answer without touching a model, the same prompt is rendered, and the
+        same tolerant `normalise` reads the reply.
+
+        **A cancellation is not a verdict, and this is the family where that
+        matters most.** `normalise` passes whatever it cannot read — on purpose,
+        so a grader that cannot decide does not discard work an agent did — so
+        a cancel laundered into an error string would come back as an
+        *approval* and the candidate would ship. Nothing here catches, and
+        `asyncio.CancelledError` is a `BaseException`, so a stopped run
+        propagates as a stop. Pinned by a test rather than trusted.
+
+        Not on `IGrader`, which is `runtime_checkable`: a member added there
+        would un-satisfy every third-party grader at the next `isinstance`, in
+        their install, silently.
+
+        A subclass that overrides `grade` and not this method still gets its
+        own body honoured here — `__init_subclass__` installs the door.
+        """
+        settled = self._verdict_without_a_model(candidate)
+        if settled is not None:
+            return settled
+
+        response = await ainvoke_model(
+            self.model, self._judgement_messages(candidate, question)
+        )
         return self.normalise(content_text(response.content))
 
     @abstractmethod

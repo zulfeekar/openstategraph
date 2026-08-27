@@ -621,7 +621,18 @@ ASYNC_DOORS = """**One added public member per model-driven verb, and the census
     collaborator would take the base to nine and is still the obvious next
     move — see the paragraph above this one — and it is still blocked the same
     way: `branches` and `fallback` are declared on `IRouter`, which is Tier
-    1."""
+    1.
+
+    **The grader, second family: `BaseGrader` and `Grader` 10 -> 11**, by
+    `agrade`, and they arrive in this table on that commit. Both were sitting
+    at exactly the ceiling, which is the case this file exists to catch and not
+    a reason to refuse the member: the ten are the family vocabulary declared
+    once on the base — two locked prompt ClassVars, the composed prompt and its
+    renderer, the model, the tolerant `normalise`, the deterministic prelude,
+    the rubric, the verdict verb and the revise payload — and every leaf
+    inherits them whole. `Grader` itself declares one method. There is no "and"
+    to split: this class judges, and the awaitable half of judging is the same
+    reason to change as the synchronous half."""
 
 
 RECORDED: dict[str, Recorded] = {
@@ -629,6 +640,8 @@ RECORDED: dict[str, Recorded] = {
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.DeepAgentNode": Recorded(13, NARRATE_TOGGLE),
+    "abc.grader.BaseGrader": Recorded(11, ASYNC_DOORS),
+    "abc.grader.Grader": Recorded(11, ASYNC_DOORS),
     "abc.router.BaseRouter": Recorded(13, MULTI_MATCH_PROMPT + "\n\n    " + ASYNC_DOORS),
     "abc.router.Router": Recorded(14, MULTI_MATCH_PROMPT + "\n\n    " + ASYNC_DOORS),
     "knowledge_builders.SqlKnowledgeBuilder": Recorded(11, KNOWLEDGE_BUILDERS),
