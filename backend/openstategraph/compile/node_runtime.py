@@ -2995,6 +2995,22 @@ class NodeRuntime:
         Does **not** dispatch. Dispatch is the compiler's `_fan_out_router`,
         reading exactly what this writes — the same node-decides /
         edge-dispatches split as the router and the grader.
+
+        **The body is `async def`, and it was the last of Phase D's four
+        families to become one** (`async-first/10`, closing `async-first/06`).
+        It is the only one whose I/O does not belong to it: the closure below
+        makes no model call, it calls the planner, and both calls a plan can
+        make live two rungs down the published ladder. So it waited for
+        `async-first/05` — and for `aplan` specifically, which awaits `asplit`
+        and `alabel` rather than only itself. A `def` body ran in a worker
+        thread that a stopped run cannot interrupt; an `async def` body that
+        then called the synchronous `plan()` would have been worse still,
+        holding the event loop for the same uninterruptible call.
+
+        The synchronous callers are unaffected and carry nothing for it:
+        `compile/node_doors.py` puts a sync door over this same body at the
+        compiler's own `add_node`. That door is **not** cancellable and cannot
+        be — it preserves today's behaviour rather than improving it.
         """
         from openstategraph.abc.orchestrator import (
             Archetype,
@@ -3076,7 +3092,7 @@ class NodeRuntime:
         feedback_sources = self._feedback_sources(node_id, plan)
         skills = plan.skill_bindings.get(node_id, [])
 
-        def run(state: RunState) -> dict[str, Any]:
+        async def run(state: RunState) -> dict[str, Any]:
             instruction = _upstream_text(state, upstream) or state.get("question", "")
             if instruction == state.get("question", ""):
                 instruction = _thread_question(state)
@@ -3093,7 +3109,16 @@ class NodeRuntime:
             # must not be shared between two concurrent runs of one graph.
             planner = planner_for(skill, self._run_context_section())
             notes: list[str] = []
-            subtasks = planner.plan(
+            # `aplan`, and not `plan` inside an `async def` — the distinction
+            # `async-first/10` exists for. This closure makes no model call of
+            # its own; both of the calls a plan can make are two rungs down the
+            # published ladder (`PlanningOrchestrator.asplit`'s planning call,
+            # `BaseOrchestrator.alabel`'s archetype labelling), which is why
+            # the ladder grew **three** async verbs rather than one. Awaiting
+            # only the outer verb would have moved a model call from a pool
+            # thread onto the event loop — strictly worse than the `def` body
+            # this replaced, and cancellable by nothing.
+            subtasks = await planner.aplan(
                 instruction,
                 generation=generation,
                 archetypes=archetypes,
