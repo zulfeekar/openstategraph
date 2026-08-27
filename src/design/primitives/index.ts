@@ -26,4 +26,11 @@ export {
 } from './Indicators';
 export { Panel, PanelHeader, PanelBody, PanelFooter, PanelSection, PanelEmpty } from './Panel';
 export { Tabs, type TabDefinition } from './Tabs';
+export {
+  ThinkingStack,
+  ThinkingLine,
+  THINKING_MAX_HEIGHT,
+  type ThinkingStackProps,
+  type ThinkingLineProps,
+} from './Thinking';
 export { useFloating, type Placement, type Alignment, type FloatingPosition } from './useFloating';

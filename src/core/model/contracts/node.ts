@@ -61,6 +61,23 @@ export interface NodeRuntimeState {
   readonly durationMs: number | null;
   /** Human-readable trace lines for the run log. */
   readonly log: readonly string[];
+  /**
+   * What this node has said about itself, in order, during the current run.
+   *
+   * `launch-readiness/140`. Separate from `log`, which is the local preview
+   * run's trace and is written by `ExecutionEngine`; this is the stream of
+   * `progress` frames a *backend* run attributed to this card. Two fields
+   * because they have two reasons to change and two writers — folding them
+   * together would put a preview's tool-output line and a live narration
+   * sentence in one list with no way to tell them apart.
+   *
+   * Kept after the node finishes, deliberately (the ticket's own open
+   * question): a stack that empties at completion loses the account of what
+   * happened, which is the only record a reader who cannot open a trace ever
+   * gets. It is cleared by `IDLE_RUNTIME` at the *start* of the next run,
+   * where "this is not this run's" first becomes true.
+   */
+  readonly narration: readonly string[];
 }
 
 export const IDLE_RUNTIME: NodeRuntimeState = {
@@ -70,6 +87,7 @@ export const IDLE_RUNTIME: NodeRuntimeState = {
   tokens: 0,
   durationMs: null,
   log: [],
+  narration: [],
 };
 
 /**

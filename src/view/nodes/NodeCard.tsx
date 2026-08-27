@@ -7,6 +7,7 @@ import {
   IconTile,
   Menu,
   StatusDot,
+  ThinkingStack,
   useMenu,
   type MenuEntry,
   type StatusTone,
@@ -340,6 +341,22 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
           />
         ))}
       </div>
+
+      {/* `launch-readiness/140`: the work is happening in this box, so the
+          account of it belongs in this box. Rendered here rather than as a
+          registered card body because narration is not a property of one node
+          *type* — every agent-family node produces it and no node type opts
+          in — and a body is keyed on the type. It is still `view/`: nothing
+          in the canvas engine knows this exists.
+
+          The stack survives the node finishing, and only stops pulsing. It is
+          cleared by `IDLE_RUNTIME` when the next run starts, which is the one
+          moment "this is not this run's account" becomes true. */}
+      <ThinkingStack
+        lines={node.runtime.narration}
+        live={status === 'running'}
+        label={node.title}
+      />
 
       {node.runtime.error ? (
         <div className="node__error" role="alert">

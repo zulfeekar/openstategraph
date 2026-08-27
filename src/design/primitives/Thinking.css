@@ -1,0 +1,116 @@
+/* ---------- Thinking — the presentation of work in progress ----------
+ *
+ * `launch-readiness/140`. Deliberately not a box with a border and a
+ * scrollbar: what made the screenshot read as a textarea was the frame around
+ * it. What is left is a rail, a mark per line, and the newest line brighter
+ * than the ones behind it — so a glance answers "is it moving" without
+ * reading a word, and a read answers "what is it doing".
+ */
+
+.thinking {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  /* `max-height` is set inline from `THINKING_MAX_HEIGHT`, so the number
+     lives in one place and a test can assert it. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* The left padding must exceed the mark's negative offset below, or
+     the dot lands outside the padding box and a non-visible `overflow-y`
+     clips it — which is how the rail shipped with no marks on it at all in
+     the first live run. */
+  padding: var(--space-2) var(--space-1) var(--space-2) var(--space-4);
+  /* The rail: one hairline the marks sit on, which is what turns a list of
+     sentences into a sequence. */
+  border-left: 1px solid var(--color-border-subtle);
+  scrollbar-width: thin;
+}
+
+.thinking__line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  /* A line that arrived while you were reading should not simply appear. */
+  animation: thinking-arrive var(--duration-normal) var(--ease-out) both;
+}
+
+/* The present tense: the only line that is brighter, and the only mark that
+   moves. Everything above it has already happened. */
+.thinking--live .thinking__line--now {
+  color: var(--color-text-secondary);
+}
+
+.thinking__mark {
+  flex: none;
+  align-self: center;
+  width: 5px;
+  height: 5px;
+  margin-left: -14px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-quaternary);
+}
+
+.thinking--live .thinking__line--now .thinking__mark,
+.thinking-line .thinking__mark {
+  background: var(--color-status-running);
+  animation: thinking-pulse 1.1s var(--ease-in-out) infinite;
+}
+
+.thinking__text {
+  min-width: 0;
+  /* A sentence longer than the card wraps rather than clipping: a narration
+     line cut mid-word is the "truncate into something misleading" failure. */
+  overflow-wrap: anywhere;
+}
+
+/* ---------- the one-line shape, for a chat ---------- */
+
+.thinking-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: var(--space-1);
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+}
+
+.thinking-line .thinking__mark {
+  margin-left: 0;
+}
+
+@keyframes thinking-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-status-running) 45%, transparent);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-status-running) 0%, transparent);
+  }
+}
+
+/* Somebody who has asked for less motion still needs to be able to tell
+   working from finished, so the pulse becomes a steady colour rather than
+   nothing at all. */
+@media (prefers-reduced-motion: reduce) {
+  .thinking__line,
+  .thinking__mark {
+    animation: none;
+  }
+}

@@ -254,10 +254,53 @@
   }
   .steps:empty { display: none; }
   .steps div { font-variant-numeric: tabular-nums; }
-  /* A step talking about itself while it works. One live line, replaced in
-     place and removed the moment the step it belongs to completes — it is the
-     opposite of a step row, which is a fact that stays true. */
-  .steps div.live { color: var(--faint); font-style: italic; }
+  /* A step talking about itself while it works (`launch-readiness/140`).
+     The owner's words for what was wrong here were "not a text area but a
+     beautiful thinking": the narration frames were arriving and landing in
+     something that read as a plain box. What made it read that way was the
+     frame around it, so what is left is a rail, a mark per line, and the
+     newest line brighter than the ones behind it — the same presentation the
+     editor's `Thinking` primitive draws, deliberately, so a customer and a
+     developer are looking at one thing.
+
+     It stacks rather than replacing in place, and it stays once the step
+     finishes — it only stops pulsing. A stack that vanished at completion
+     would lose the account of what happened, which for this audience (the one
+     that cannot open a trace) is the only account there is. */
+  .steps div.thinking {
+    display: flex; flex-direction: column; gap: var(--space-1);
+    /* A maximum, and the scroll is the point: an unbounded stack would push
+       the answer off the screen on a long run. Matches the editor's
+       `THINKING_MAX_HEIGHT`. */
+    max-height: 420px; overflow-y: auto; overscroll-behavior: contain;
+    margin: var(--space-1) 0; padding: var(--space-1) 0 var(--space-1) var(--space-4);
+    border-inline-start: 1px solid var(--line-soft);
+  }
+  .steps div.thinking p {
+    display: flex; align-items: baseline; gap: var(--space-2);
+    margin: 0; color: var(--faint); font-style: italic;
+    overflow-wrap: anywhere;
+  }
+  .steps div.thinking p::before {
+    content: ""; flex: none; align-self: center;
+    width: 5px; height: 5px; border-radius: 999px;
+    /* Inside the padding box: a non-visible `overflow-y` clips anything
+       that is not, which is how the first live run drew a rail with no
+       marks on it. */
+    margin-inline-start: -14px; background: var(--faint);
+  }
+  /* The present tense: the only line that is brighter and the only mark that
+     moves. Everything above it has already happened, and a settled stack has
+     no `.live` at all — a surface that keeps pulsing after the work is over is
+     claiming work that is not happening. */
+  .steps div.thinking.live > p:last-child { color: var(--muted); }
+  .steps div.thinking.live > p:last-child::before {
+    background: var(--accent); animation: thinking-pulse 1.1s ease-in-out infinite;
+  }
+  @keyframes thinking-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+  @media (prefers-reduced-motion: reduce) {
+    .steps div.thinking.live > p:last-child::before { animation: none; }
+  }
   /* A spawn is an event in the run, not a step of it — indented under the
      node that spawned, and clipped to one line however long the task is. */
   .steps div.spawn {
@@ -1199,18 +1242,49 @@ async function stream(path, body, el, signal) {
   const steps = el.querySelector(".steps"), thinking = el.querySelector(".thinking"), answer = el.querySelector(".answer");
   const rejectedBanner = el.querySelector(".rejected-banner");
   const reasoning = el.querySelector(".reasoning");
-  /* The one live line in the strip — what a step says about itself while it is
-   * still working (`progress`). It is never a step row: a step row records
-   * that something finished and stays, this says "still going" and is replaced
-   * or removed. `clearLive` runs at every ending, terminal or not, so a run
-   * that stops mid-tool does not leave "page 3 of 12" on the screen forever. */
+  /* What a step says about itself while it is still working (`progress`).
+   *
+   * `launch-readiness/140` turned this from one replaced-in-place line into a
+   * stack, for the reason the ticket gives: one line replaced ten times shows
+   * a reader the tenth thing and no account of the other nine. It is still
+   * never a step row — a step row records that something finished — but it is
+   * no longer thrown away when the step ends. `settleThinking` stops the
+   * pulse and leaves the account, so "page 3 of 12" can no longer read as
+   * *still* paging while nothing is happening, and the record of it survives.
+   *
+   * The three rules are the editor's `pushNarration`, deliberately the same:
+   * a blank frame is dropped, a line repeated back to back collapses (a tool
+   * loop emits "Thinking about the next step." every lap, and a panel reading
+   * *Thinking… Thinking… Thinking…* looks like progress and carries none), and
+   * the stack is capped so a runaway loop cannot grow the DOM without limit. */
+  const THINKING_LIMIT = 200;
   const liveLine = (text) => {
-    let row = steps.querySelector(":scope > div.live");
-    if (!row) { row = document.createElement("div"); row.className = "live"; }
-    row.textContent = text;
-    steps.appendChild(row); // re-appended: the live line always sits last
+    const line = (text || "").trim();
+    if (!line) return;
+    let box = steps.querySelector(":scope > div.thinking.live");
+    if (!box) {
+      box = document.createElement("div");
+      box.className = "thinking live";
+      steps.appendChild(box);
+    } else {
+      steps.appendChild(box); // the live stack always sits last
+    }
+    const last = box.lastElementChild;
+    if (last && last.textContent === line) return;
+    const row = document.createElement("p");
+    row.textContent = line;
+    box.appendChild(row);
+    while (box.children.length > THINKING_LIMIT) box.removeChild(box.firstElementChild);
+    // Only while it is the live stack, and only if the reader has not scrolled
+    // back through it — being yanked to the bottom mid-read is the reason a
+    // scrolling panel is worth having at all.
+    if (box.scrollHeight - box.scrollTop - box.clientHeight < 24) box.scrollTop = box.scrollHeight;
   };
-  const clearLive = () => { const row = steps.querySelector(":scope > div.live"); if (row) row.remove(); };
+  const settleThinking = () => {
+    for (const box of steps.querySelectorAll(":scope > div.thinking.live")) {
+      box.classList.remove("live");
+    }
+  };
   const resp = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
   if (!resp.ok) {
     finishFlow();
@@ -1310,7 +1384,7 @@ async function stream(path, body, el, signal) {
               // showed nothing at all.
               let last = openRow(owner);
               if (!last && owner) {
-                clearLive();
+                settleThinking();
                 last = document.createElement("div");
                 last.dataset.base = "▸ " + displayName(owner);
                 last.dataset.owner = owner;
@@ -1333,10 +1407,11 @@ async function stream(path, body, el, signal) {
                 last.textContent = last.dataset.base + "  ·  " + n + " steps";
               }
             } else {
-              // A step completed, so whatever it was last saying about itself
-              // is no longer true — the live line goes before the row that
-              // records the finish.
-              clearLive();
+              // A step completed, so whatever it was last saying about
+              // itself is no longer the present tense. The account of it
+              // stays — it stops pulsing and the row recording the finish
+              // goes below it (`launch-readiness/140`).
+              settleThinking();
               const existing = openRow(owner);
               const row = existing || document.createElement("div");
               const base = "▸ " + displayName(owner || d.node) + (d.taskId ? " (" + d.taskId + ")" : "");
@@ -1368,7 +1443,10 @@ async function stream(path, body, el, signal) {
             const count = typeof d.current === "number"
               ? (typeof d.total === "number" ? ` (${d.current}/${d.total})` : ` (${d.current})`)
               : "";
-            liveLine("⋯ " + (d.message || displayName(d.node)) + count);
+            // No "⋯ " prefix any more (`launch-readiness/140`): the stack
+            // draws its own mark per line, and the two together rendered as
+            // a double marker — caught on a live `cpl-mcp` run.
+            liveLine((d.message || displayName(d.node)) + count);
             el.scrollIntoView({ block: "end" });
           } else if (event === "spawn") {
             // The moment the run created a child worker or subagent. A row of
@@ -1431,7 +1509,7 @@ async function stream(path, body, el, signal) {
             // running — the same omission the `interrupt` branch had.
             ended = "error";
             finishFlow();
-            thinking.textContent = ""; reasoning.textContent = ""; clearLive();
+            thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
             answer.hidden = false; answer.innerHTML = `<span class="error">${esc2(d.detail || JSON.stringify(d))}</span>`;
           } else if (event === "interrupt") {
             // Terminal too: this stream really is finished, and the run
@@ -1439,12 +1517,12 @@ async function stream(path, body, el, signal) {
             // the diagram must stop saying "running" here — see `pauseFlow`.
             ended = "interrupt";
             pauseFlow(d.node);
-            thinking.textContent = ""; reasoning.textContent = ""; clearLive();
+            thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
             renderInterrupt(el, d);
           } else if (event === "done") {
             ended = "done";
             finishFlow();
-            thinking.textContent = ""; reasoning.textContent = ""; clearLive();
+            thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
             // `launch-readiness` 25 — visible on this customer surface even
             // though the frame carries no `developer` channel: the fact that
             // a rejected candidate was published must not require asking for
@@ -1474,7 +1552,7 @@ async function stream(path, body, el, signal) {
       // implying the whole run vanished mid-thought.
       await reader.cancel().catch(() => {});
       finishFlow();
-      thinking.textContent = ""; reasoning.textContent = ""; clearLive();
+      thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
       noteStopped(el, cancellable);
       return "stopped";
     }
@@ -1485,7 +1563,7 @@ async function stream(path, body, el, signal) {
     // frame handling above is still visible rather than dressed up as a
     // network failure.
     finishFlow();
-    thinking.textContent = ""; reasoning.textContent = ""; clearLive();
+    thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
     noteDropped(el, String((err && err.message) || err));
     return "dropped";
   }
@@ -1496,7 +1574,7 @@ async function stream(path, body, el, signal) {
   // only thing that separates "the user stopped it" from "the server hung up".
   if (signal && signal.aborted) {
     finishFlow();
-    thinking.textContent = ""; reasoning.textContent = ""; clearLive();
+    thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
     noteStopped(el, cancellable);
     return "stopped";
   }
@@ -1508,7 +1586,7 @@ async function stream(path, body, el, signal) {
   // half-drawn diagram still glowing.
   if (!ended) {
     finishFlow();
-    thinking.textContent = ""; reasoning.textContent = ""; clearLive();
+    thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
     noteDropped(el);
     return "dropped";
   }

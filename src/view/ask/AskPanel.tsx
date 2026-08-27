@@ -15,7 +15,16 @@ import {
   Square,
   TriangleAlert,
 } from 'lucide-react';
-import { Button, Icon, Panel, PanelBody, PanelHeader, TextArea, Tooltip } from '@design/primitives';
+import {
+  Button,
+  Icon,
+  Panel,
+  PanelBody,
+  PanelHeader,
+  TextArea,
+  ThinkingLine,
+  Tooltip,
+} from '@design/primitives';
 import {
   RuntimeClient,
   isCancelled,
@@ -28,6 +37,7 @@ import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchConte
 import { entryQuestion } from '@nodes/inputs/entryQuestion';
 import { composerPlaceholder } from './composerPlaceholder';
 import { IDLE_RUNTIME } from '@core/model/contracts/node';
+import { pushNarration } from '@core/runtime/narrationStack';
 import { defaultsFrom } from '@core/model/contracts/fields';
 import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
 import { frameOwnsOutput, frameTarget } from '@core/runtime/frameTarget';
@@ -867,7 +877,32 @@ export function AskPanel({
             activate(progressTarget, null);
             queuedActive = progressTarget;
           }
-          const line: LiveLine = { node: event.node, text: progressLine(event) };
+          const text = progressLine(event);
+          // `launch-readiness/140`, surface 1: the same sentence, stacked in
+          // the card that is doing the work.
+          //
+          // Two things about this are the whole ticket. It keys on
+          // `progressTarget` — `frameTarget`'s answer — and never on
+          // `event.node`, which is whatever LangGraph called the step
+          // (`model`, `tools`, or a middleware's own hook name); `async-first/07`
+          // shipped a per-node status field keyed on the reporting node and it
+          // reported the wrong answer for exactly that reason. Two nodes in
+          // flight therefore stack in two cards rather than in whichever one
+          // spoke last.
+          //
+          // And it is written here rather than inside `activate`, which is
+          // paced by `highlightChain`'s `MIN_HIGHLIGHT_MS` sleep. A narration
+          // line queued behind that sleep arrives batched, which is the
+          // "three lines in one paint" failure `RuntimeClient` already had to
+          // fix once at the transport.
+          if (progressTarget) {
+            const current = controller.model.node(progressTarget)?.runtime.narration ?? [];
+            const next = pushNarration(current, text);
+            if (next !== current) {
+              controller.model.setNodeRuntime(progressTarget, { narration: next });
+            }
+          }
+          const line: LiveLine = { node: event.node, text };
           setTurns((all) =>
             all.map((turn) => (turn.id === id ? { ...turn, progress: line } : turn)),
           );
@@ -1813,9 +1848,7 @@ function Turn({
               to. `aria-live` because for a screen reader this line is the only
               evidence the run has not died. */}
           {turn.running && turn.progress ? (
-            <p className="ask__live" aria-live="polite">
-              {turn.progress.text}
-            </p>
+            <ThinkingLine text={turn.progress.text} className="ask__live" />
           ) : null}
         </div>
       ) : null}

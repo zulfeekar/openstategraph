@@ -171,37 +171,21 @@
   border-radius: var(--radius-md);
 }
 
-/* The one live line: what the working step is saying about itself. Muted and
-   italic like `.ask__stopped`, because it is a status about the run rather
-   than a result of it — and the leading ellipsis is the same mark the chat
-   page uses, so the two surfaces read the same. */
+/* The one live line: what the working step is saying about itself.
+   `launch-readiness/140` moved the presentation into the `ThinkingLine`
+   primitive, so what is left here is only what is local to this panel — the
+   italic that marks it as a status about the run rather than a result of it.
+   The pulsing mark in front of it is the primitive's, and is the same mark
+   the card's stack and the customer page use; that is the point of it being
+   a primitive rather than three implementations.
+
+   The `::before '⋯ '` and its `ask-live-pulse` keyframes that used to live
+   here are gone rather than kept: they would have drawn a second marker
+   beside the primitive's dot. */
 .ask__live {
-  margin: 0;
-  color: var(--color-text-tertiary);
-  font: var(--type-body-sm);
   font-style: italic;
 }
 
-.ask__live::before {
-  content: '⋯ ';
-  animation: ask-live-pulse 1.6s ease-in-out infinite;
-}
-
-/* `launch-readiness/105`: a line that sits unchanged for the whole of a slow
-   model call read as frozen — the owner's own words were "stale". The text
-   itself still only changes when the run has something new to say (that is
-   the honesty rule: never invent progress), but the marker in front of it
-   now visibly breathes the whole time, so "no new line yet" reads as "still
-   working" instead of "stopped". */
-@keyframes ask-live-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 1;
-  }
-}
 
 .ask__views {
   display: inline-flex;
