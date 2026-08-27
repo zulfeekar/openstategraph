@@ -50,6 +50,7 @@ import { busKey, suggestionOutcome, unreadyFields, type CapabilitySuggestion } f
 import { acceptAction, type AcceptAction } from './acceptAction';
 import { ConversationStore } from './conversationStore';
 import { clearRunInFlight, markRunInFlight } from './interruptedRun';
+import { liveLineAfterStep, type LiveLine } from './liveLine';
 import { progressLine } from './progressLine';
 import './AskPanel.css';
 
@@ -175,8 +176,11 @@ interface ChatTurn {
    * Rendered only while `running`, so every ending clears it without any
    * ending having to remember to — a run stopped mid-tool must not leave
    * "page 3 of 12" on screen forever.
+   *
+   * Carries **who said it** as well as the words, because that is what
+   * decides when it goes — see `liveLineAfterStep`.
    */
-  readonly progress: string | null;
+  readonly progress: LiveLine | null;
   /**
    * Streamed *model* text, concatenated live — "how the agent thinks".
    *
@@ -725,11 +729,17 @@ export function AskPanel({
                 ? {
                     ...turn,
                     // A step completed, so whatever it was last saying about
-                    // itself is no longer true. Cleared on every `update`,
-                    // internal ones included: an agent's inner `tools` step
-                    // finishing is exactly the end of the tool call whose
-                    // "Calling search_docs on langchain-docs" is on screen.
-                    progress: null,
+                    // itself is usually no longer true — an agent's inner
+                    // `tools` step finishing is exactly the end of the tool
+                    // call whose "Calling search_docs on langchain-docs" is on
+                    // screen. The one exception, and the reason this is not
+                    // `null` here any more, is the step clearing *its own*
+                    // announcement: narration is written from a `before_*`
+                    // hook about work that has not started, and the hook's own
+                    // `update` lands microseconds later
+                    // (`launch-readiness/110`). The rule, and the captured
+                    // frame order that forced it, live in `liveLineAfterStep`.
+                    progress: liveLineAfterStep(turn.progress, event.node),
                     activity: [
                       ...turn.activity,
                       {
@@ -842,7 +852,7 @@ export function AskPanel({
             activate(progressTarget, null);
             queuedActive = progressTarget;
           }
-          const line = progressLine(event);
+          const line: LiveLine = { node: event.node, text: progressLine(event) };
           setTurns((all) =>
             all.map((turn) => (turn.id === id ? { ...turn, progress: line } : turn)),
           );
@@ -1782,7 +1792,7 @@ function Turn({
               evidence the run has not died. */}
           {turn.running && turn.progress ? (
             <p className="ask__live" aria-live="polite">
-              {turn.progress}
+              {turn.progress.text}
             </p>
           ) : null}
         </div>
