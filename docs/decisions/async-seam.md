@@ -199,3 +199,58 @@ Both were written assuming an answer here and now point at this file:
   is a *new map*, so 20 is parked behind that map rather than behind this one.
 - **24 (adopt the projection or keep deriving)** must be argued **before** the
   async map is scheduled, per reason 1 above — not after, and not in parallel.
+  **Superseded — see the amendment below.**
+
+---
+
+## Amendment, 2026-08-27: reason 1 does not hold, and was measured
+
+Recorded here rather than only on a map because this document is the standing
+answer, and its recommendation was acted on: the owner chartered the async map
+anyway, and its first ticket (`async-first/01`) was spent testing exactly the
+claim reason 1 rests on.
+
+Reason 1 says adopting `stream_events(version="v3")` "would replace the
+~500-line fold that phase A is about to rewrite". Two things in that sentence
+are wrong, and they are wrong in opposite directions:
+
+- **Phase A does not rewrite the fold.** It rewrites the fold's *drive* — the
+  `async def` on two generators, the `graph.stream` call site, the `for` at
+  `streaming.py:1210`, `get_state`, `iterate_in_threadpool`, and the two route
+  handlers.
+- **The projection does not replace the fold.** It replaces the fold's *front
+  end*: `_stream_parts` (`streaming.py:651`) plus the pure helper classes
+  `SpawnWatcher`, `ActiveNodeResolver` and `RunPathResolver`, none of which any
+  async migration touches, because none of them perform I/O.
+
+The two diffs intersect at one call site and one thirty-line decoder.
+
+Measured against the installed `langgraph 1.2.10` rather than read off the
+page, since that is where the surprise was:
+
+- `stream_events(..., version="v3")` emits **only `values` events by default**.
+  "Modes that no transformer requests are never emitted" is literal, so an
+  adoption is not "consume the typed projections" — every accumulator in
+  `_run_frames` is fed from `updates`, and there is no `updates` projection. It
+  is "register a `StreamTransformer` declaring `required_stream_modes` and keep
+  reading `updates`".
+- With one registered, the raw `ProtocolEvent` (`{"seq", "method", "params":
+  {"namespace", "timestamp", "data"}}`) carries the same channel names, the
+  same `name:runtime_id` namespaces and, for `updates`, the same
+  `{node_name: delta}` payload as the v2 `StreamPart` that `_stream_parts`
+  decodes today. The `messages` channel is the one branch whose *payload* also
+  moves (to content blocks), and it too is a pure decode.
+- `version="v3"` raises `LangChainBetaWarning: The v3 streaming protocol on
+  Pregel is experimental.` at `pregel/main.py:3708` and `:3558`. Pinning a
+  published SSE contract to it is an owner decision, so "keep deriving" stays a
+  live outcome of ticket 24.
+
+The test cost that made reason 1 feel expensive is symmetric: the scripted-fold
+tests — **21** of them now, not the nine counted on 2026-08-16 — need an async
+driver *and* a chunk restamp in either order, and the async half is not thrown
+away by an adoption, because an adopting fold calls `astream_events`.
+
+**So the sequencing recommendation is withdrawn, and only that.** Phases A–D
+and the phase C stability argument stand exactly as written. The correction is
+that ticket 24 need not precede them; if it lands later it inherits an async
+fold, which is strictly easier for it than a sync one.
