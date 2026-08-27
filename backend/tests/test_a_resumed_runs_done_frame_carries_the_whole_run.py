@@ -34,6 +34,8 @@ from typing import Any
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
+from conftest import drive_fold  # noqa: E402
+
 from openstategraph.api.streaming import _stream_run
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler, safe_name
@@ -63,7 +65,7 @@ def _pausing_graph(thread_id: str) -> tuple[Any, Any, dict[str, str], Any, dict[
 
 def _frames(graph, graph_input, config, plan, node_ids_by_name, runtime, thread_id):
     return list(
-        _stream_run(graph, graph_input, config, plan, node_ids_by_name, runtime, thread_id)
+        drive_fold(_stream_run(graph, graph_input, config, plan, node_ids_by_name, runtime, thread_id))
     )
 
 

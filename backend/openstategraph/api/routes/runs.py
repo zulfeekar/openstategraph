@@ -49,6 +49,7 @@ from openstategraph.api.streaming import (
 )
 from openstategraph.compile.run_context import validate_run_context
 from openstategraph.errors import RunContextError
+from openstategraph.memory import async_capable
 from openstategraph.schema import normalize_document
 from openstategraph.step_budget import resolve_step_budget
 
@@ -396,7 +397,7 @@ def run_workflow(
     responses=sse_responses(RUN_EVENTS, "The run, frame by frame."),
     tags=["Runs"],
 )
-def run_workflow_stream(
+async def run_workflow_stream(
     request: RunRequest,
     http: Request,
     services: Services,
@@ -473,7 +474,15 @@ def run_workflow_stream(
             document,
             RunState,
             runtime.factory(document),
-            checkpointer=services.checkpointer_for(document.get("settings"), slug),
+            # `async_capable`, on the two async doors only: this handler
+            # drives `graph.astream()`, whose loop calls the saver's *async*
+            # four, and `SqliteSaver` — the server's default — raises
+            # `NotImplementedError` on every one of them. See
+            # `memory._AsyncCapableSaver` for why the shared saver is bridged
+            # here rather than replaced (`async-first/02`).
+            checkpointer=async_capable(
+                services.checkpointer_for(document.get("settings"), slug)
+            ),
             store=services.memory_store,
         )
     except Exception as exc:
@@ -530,7 +539,7 @@ def run_workflow_stream(
     responses=sse_responses(RUN_EVENTS, "The resumed run, frame by frame."),
     tags=["Runs"],
 )
-def resume_workflow_stream(
+async def resume_workflow_stream(
     request: ResumeRequest,
     http: Request,
     services: Services,
@@ -580,7 +589,15 @@ def resume_workflow_stream(
             document,
             RunState,
             runtime.factory(document),
-            checkpointer=services.checkpointer_for(document.get("settings"), slug),
+            # `async_capable`, on the two async doors only: this handler
+            # drives `graph.astream()`, whose loop calls the saver's *async*
+            # four, and `SqliteSaver` — the server's default — raises
+            # `NotImplementedError` on every one of them. See
+            # `memory._AsyncCapableSaver` for why the shared saver is bridged
+            # here rather than replaced (`async-first/02`).
+            checkpointer=async_capable(
+                services.checkpointer_for(document.get("settings"), slug)
+            ),
             store=services.memory_store,
         )
     except Exception as exc:

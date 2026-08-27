@@ -24,6 +24,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from conftest import ScriptedGraph, drive_fold  # noqa: E402
+
 from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.audience import Audience  # noqa: E402
 from openstategraph.api.streaming import _is_tool_message, _stream_run  # noqa: E402
@@ -46,9 +48,9 @@ def _frames(chunks, audience: Audience = Audience.DEVELOPER):
         diagnostics=CompileDiagnostics()
     )
     out = []
-    for frame in _stream_run(
-        _Graph(), {}, {}, SimpleNamespace(warnings=[]), KNOWN, runtime, "t1", audience
-    ):
+    for frame in drive_fold(_stream_run(
+        ScriptedGraph(_Graph()), {}, {}, SimpleNamespace(warnings=[]), KNOWN, runtime, "t1", audience
+    )):
         name = frame.split("\n")[0][len("event: ") :]
         out.append((name, json.loads(frame.split("\n")[1][len("data: ") :])))
     return out

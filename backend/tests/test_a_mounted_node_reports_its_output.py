@@ -35,6 +35,8 @@ from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
 
+from conftest import drive_fold  # noqa: E402
+
 from openstategraph.api.audience import Audience
 from openstategraph.api.streaming import _run_frames
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
@@ -99,7 +101,7 @@ def _update_frames() -> list[dict[str, Any]]:
         PARENT, RunState, runtime.factory(PARENT), checkpointer=InMemorySaver()
     )
     frames: list[dict[str, Any]] = []
-    for raw in _run_frames(
+    for raw in drive_fold(_run_frames(
         graph,
         {"question": QUESTION, "attempts": 0, "decisions": {}, "outputs": {}},
         {"configurable": {"thread_id": "t1", "workflow_slug": "parent-flow"}},
@@ -108,7 +110,7 @@ def _update_frames() -> list[dict[str, Any]]:
         runtime,
         "t1",
         Audience.DEVELOPER,
-    ):
+    )):
         head, _, body = raw.partition("\n")
         if head == "event: update":
             frames.append(json.loads(body.partition("data: ")[2]))

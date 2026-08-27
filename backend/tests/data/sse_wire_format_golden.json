@@ -1,0 +1,24 @@
+{
+  "developer": [
+    "event: update\ndata: {\"node\": \"in1\", \"namespace\": [], \"taskId\": null, \"internal\": false, \"activeNode\": \"in1\", \"path\": [\"in1\"], \"pathSlugs\": [\"\"], \"output\": \"hello\"}\n\n",
+    "event: update\ndata: {\"node\": \"node:router.1\", \"namespace\": [], \"taskId\": null, \"internal\": false, \"activeNode\": \"node:router.1\", \"path\": [\"node:router.1\"], \"pathSlugs\": [\"\"], \"output\": null}\n\n",
+    "event: progress\ndata: {\"node\": \"agent-sql\", \"namespace\": [], \"message\": \"Read 40 of 100\", \"current\": null, \"total\": null, \"activeNode\": \"agent-sql\", \"path\": [\"agent-sql\"], \"pathSlugs\": [\"\"]}\n\n",
+    "event: token\ndata: {\"node\": \"agent-sql\", \"namespace\": [\"agent_sql:task-1\"], \"content\": \"Let me \", \"block\": \"text\", \"usage\": null, \"activeNode\": \"agent-sql\", \"path\": [\"agent-sql\"], \"pathSlugs\": [\"\"], \"kind\": \"ai\", \"tool\": {\"name\": \"\", \"callId\": \"\"}}\n\n",
+    "event: token\ndata: {\"node\": \"agent-sql\", \"namespace\": [\"agent_sql:task-1\"], \"content\": \"check.\\n\", \"block\": \"text\", \"usage\": null, \"activeNode\": \"agent-sql\", \"path\": [\"agent-sql\"], \"pathSlugs\": [\"\"], \"kind\": \"ai\", \"tool\": {\"name\": \"\", \"callId\": \"\"}}\n\n",
+    "event: token\ndata: {\"node\": \"agent-sql\", \"namespace\": [\"agent_sql:task-1\"], \"content\": \"| Table | Rows |\\n| Album | 347 |\", \"block\": \"text\", \"usage\": null, \"activeNode\": \"agent-sql\", \"path\": [\"agent-sql\"], \"pathSlugs\": [\"\"], \"kind\": \"tool\", \"tool\": {\"name\": \"list_tables\", \"callId\": \"call_1\"}}\n\n",
+    "event: update\ndata: {\"node\": \"agent-sql\", \"namespace\": [], \"taskId\": null, \"internal\": false, \"activeNode\": \"agent-sql\", \"path\": [\"agent-sql\"], \"pathSlugs\": [\"\"], \"output\": null}\n\n",
+    "event: update\ndata: {\"node\": \"out1\", \"namespace\": [], \"taskId\": null, \"internal\": false, \"activeNode\": \"out1\", \"path\": [\"out1\"], \"pathSlugs\": [\"\"], \"output\": null}\n\n",
+    "event: done\ndata: {\"threadId\": \"t1\", \"answer\": \"There are 347 albums.\", \"decisions\": {\"router1\": \"music\"}, \"outputs\": {\"in1\": \"hello\", \"agent_sql\": \"347 albums\"}, \"nested\": {\"outputs\": {}, \"decisions\": {}}, \"attempts\": 0, \"mermaid\": \"graph TD;\", \"publishedRejected\": false, \"developer\": {\"warnings\": [], \"suggestion\": null, \"capabilityGap\": null, \"redactions\": []}}\n\n"
+  ],
+  "customer": [
+    "event: update\ndata: {\"node\": \"in1\", \"namespace\": [], \"taskId\": null, \"internal\": false, \"activeNode\": \"in1\", \"path\": [\"in1\"], \"pathSlugs\": [\"\"], \"output\": \"hello\"}\n\n",
+    "event: update\ndata: {\"node\": \"node:router.1\", \"namespace\": [], \"taskId\": null, \"internal\": false, \"activeNode\": \"node:router.1\", \"path\": [\"node:router.1\"], \"pathSlugs\": [\"\"], \"output\": null}\n\n",
+    "event: progress\ndata: {\"node\": \"agent-sql\", \"namespace\": [], \"message\": \"Read 40 of 100\", \"current\": null, \"total\": null, \"activeNode\": \"agent-sql\", \"path\": [\"agent-sql\"], \"pathSlugs\": [\"\"]}\n\n",
+    "event: token\ndata: {\"node\": \"agent-sql\", \"namespace\": [\"agent_sql:task-1\"], \"content\": \"Let me \", \"block\": \"text\", \"usage\": null, \"activeNode\": \"agent-sql\", \"path\": [\"agent-sql\"], \"pathSlugs\": [\"\"], \"kind\": \"ai\", \"tool\": {\"name\": \"\", \"callId\": \"\"}}\n\n",
+    "event: token\ndata: {\"node\": \"agent-sql\", \"namespace\": [\"agent_sql:task-1\"], \"content\": \"check.\\n\", \"block\": \"text\", \"usage\": null, \"activeNode\": \"agent-sql\", \"path\": [\"agent-sql\"], \"pathSlugs\": [\"\"], \"kind\": \"ai\", \"tool\": {\"name\": \"\", \"callId\": \"\"}}\n\n",
+    "event: token\ndata: {\"node\": \"agent-sql\", \"namespace\": [\"agent_sql:task-1\"], \"content\": \"\", \"block\": \"text\", \"usage\": null, \"withheld\": true, \"activeNode\": \"agent-sql\", \"path\": [\"agent-sql\"], \"pathSlugs\": [\"\"], \"kind\": \"tool\", \"tool\": {\"name\": \"\", \"callId\": \"\"}}\n\n",
+    "event: update\ndata: {\"node\": \"agent-sql\", \"namespace\": [], \"taskId\": null, \"internal\": false, \"activeNode\": \"agent-sql\", \"path\": [\"agent-sql\"], \"pathSlugs\": [\"\"], \"output\": null}\n\n",
+    "event: update\ndata: {\"node\": \"out1\", \"namespace\": [], \"taskId\": null, \"internal\": false, \"activeNode\": \"out1\", \"path\": [\"out1\"], \"pathSlugs\": [\"\"], \"output\": null}\n\n",
+    "event: done\ndata: {\"threadId\": \"t1\", \"answer\": \"There are 347 albums.\", \"decisions\": {\"router1\": \"music\"}, \"outputs\": {\"in1\": \"hello\", \"agent_sql\": \"347 albums\"}, \"nested\": {\"outputs\": {}, \"decisions\": {}}, \"attempts\": 0, \"mermaid\": \"graph TD;\", \"publishedRejected\": false}\n\n"
+  ]
+}

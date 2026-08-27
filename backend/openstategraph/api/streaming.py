@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from openstategraph.messages import content_text, reasoning_text, usage_of
 
+import asyncio
 import json
 import logging
 from contextlib import suppress
@@ -449,10 +450,17 @@ async def _client_left(receive: Any) -> None:
 def _abandon(task: Any) -> None:
     """Drops a task we are no longer waiting on, without a warning storm.
 
-    A cancelled `__anext__` whose thread is still inside `graph.stream` does
-    not finish immediately (a blocking call cannot be interrupted), so the
-    task outlives us. Retrieving its outcome here is what stops asyncio
+    A cancelled `__anext__` whose worker thread is still inside a synchronous
+    node does not finish immediately (a blocking call cannot be interrupted),
+    so the task outlives us. Retrieving its outcome here is what stops asyncio
     logging "exception was never retrieved" for work nobody wanted.
+
+    Unchanged by `async-first/02`, deliberately. The fold is an async
+    generator now, but the reason this cancels *without awaiting* is the same
+    one it always had, and it is measured (`async-first/09`): the pending step
+    may be a blocking model call, and awaiting it would turn today's instant
+    stop into a stop the client sits through. Only an `async def` node body is
+    genuinely cancelled here, and that is Phase D.
     """
     task.cancel()
     task.add_done_callback(lambda done: done.cancelled() or done.exception())
@@ -481,18 +489,37 @@ async def stop_when_client_leaves(frames: Any, receive: Any) -> Any:
     consumer we would send it to is the one that left. The client's own
     fallback is authoritative there — an aborted signal reads as "you stopped
     it", a body that ended with no terminal frame as "the connection dropped".
+
+    **`iterate_in_threadpool` is gone** (`async-first/02`). `_stream_run` is
+    an async generator driving `graph.astream()`, so there is no longer a sync
+    generator to bridge and no worker thread held for the life of the run.
+    What survives untouched is the abandon: cancelled, never awaited — see
+    `_abandon`.
+
+    It stays a separate function from `stop_when_client_leaves_async` for that
+    one reason, and the two docstrings are where the difference is written
+    down: this path abandons work that cannot be interrupted, `/api/events`
+    closes a source that can only be waiting. Merging them would have to pick
+    one of those behaviours for both.
     """
-    import asyncio
-
-    from starlette.concurrency import iterate_in_threadpool
-
-    stream = iterate_in_threadpool(frames)
+    stream = frames.__aiter__()
     gone = asyncio.ensure_future(_client_left(receive))
     try:
         while True:
             step = asyncio.ensure_future(stream.__anext__())
-            done, _ = await asyncio.wait({step, gone}, return_when=asyncio.FIRST_COMPLETED)
-            if step not in done:
+            await asyncio.wait({step, gone}, return_when=asyncio.FIRST_COMPLETED)
+            # **The disconnect is asked about first, not "did the step lose the
+            # race".** Both can be ready in the same pass — an async fold that
+            # has a frame buffered resolves its `__anext__` without ever
+            # suspending, so a client that left is only *also* ready, never
+            # ahead. Reading the race as "the step did not win" then let the
+            # whole run drain to a consumer that had gone, which is precisely
+            # the fake cancel this function exists to prevent. Found by
+            # `test_a_disconnect_stops_the_run_instead_of_letting_it_finish`
+            # when the fold went async (`async-first/02`); under the old
+            # threadpool bridge every step cost a thread hop, so the ordering
+            # was correct by accident.
+            if gone.done():
                 _abandon(step)
                 return
             try:
@@ -669,20 +696,38 @@ def _stream_parts(stream: Any) -> Any:
     A chunk this version cannot produce is **skipped, not raised on**. The fold
     is the one place a run can die without a terminal frame reaching the
     client, so an unreadable chunk costs one frame rather than the stream.
+
+    The decode itself is `_stream_part`, one chunk at a time, because since
+    `async-first/02` the fold drives `graph.astream()` and iterates the chunks
+    with `async for`. Two loops over one decode would be two spellings of the
+    chunk vocabulary, and the second one is the one that goes stale.
     """
     for chunk in stream:
-        if isinstance(chunk, dict):
-            mode = chunk.get("type")
-            if isinstance(mode, str):
-                yield tuple(chunk.get("ns") or ()), mode, chunk.get("data")
-            else:
-                logger.warning("skipping an unreadable stream chunk: %r", sorted(chunk))
-            continue
-        if isinstance(chunk, tuple) and len(chunk) == 3:
-            namespace, mode, payload = chunk
-            yield namespace, mode, payload
-            continue
-        logger.warning("skipping an unreadable stream chunk of type %s", type(chunk).__name__)
+        decoded = _stream_part(chunk)
+        if decoded is not None:
+            yield decoded
+
+
+def _stream_part(chunk: Any) -> tuple[Any, str, Any] | None:
+    """One chunk as `(namespace, mode, payload)`, or `None` if it is unreadable.
+
+    The whole chunk vocabulary, in one place — see `_stream_parts` for which
+    shapes arrive and why the v1 tuple is still accepted. `None` rather than a
+    raise: the fold is the one place a run can die without a terminal frame
+    reaching the client, so an unreadable chunk costs one frame, never the
+    stream.
+    """
+    if isinstance(chunk, dict):
+        mode = chunk.get("type")
+        if isinstance(mode, str):
+            return tuple(chunk.get("ns") or ()), mode, chunk.get("data")
+        logger.warning("skipping an unreadable stream chunk: %r", sorted(chunk))
+        return None
+    if isinstance(chunk, tuple) and len(chunk) == 3:
+        namespace, mode, payload = chunk
+        return namespace, mode, payload
+    logger.warning("skipping an unreadable stream chunk of type %s", type(chunk).__name__)
+    return None
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:
@@ -813,7 +858,7 @@ def _resumes_a_paused_run(graph_input: Any) -> bool:
     return getattr(graph_input, "resume", None) is not None
 
 
-def _stream_run(
+async def _stream_run(
     graph: Any,
     graph_input: Any,
     config: dict[str, Any],
@@ -883,14 +928,22 @@ def _stream_run(
     )
     ended = False
     try:
-        for frame in frames:
+        async for frame in frames:
             ended = ended or _is_terminal(frame)
             yield frame
-    except GeneratorExit:
+    except (GeneratorExit, asyncio.CancelledError):
         # Stop, pressed, or the client hung up. Nothing may be yielded from
         # here — see the docstring. Logged rather than silent because "did the
         # run actually stop?" is otherwise unanswerable from outside, and a
         # Stop button whose effect cannot be observed is a fake cancel.
+        #
+        # **Two spellings of one event since `async-first/02`.** This is an
+        # async generator now, so a consumer that stops pulling arrives as
+        # `GeneratorExit` (an explicit `aclose()`) *or* as `CancelledError`
+        # (the pending `__anext__` task cancelled, which is what
+        # `stop_when_client_leaves` does and therefore the live path). Both
+        # mean the same thing here and both must be re-raised, never converted
+        # into a frame.
         #
         # The honest boundary, measured live against the Store Analytics crew
         # rather than assumed: `graph.stream` is a generator driven BY the
@@ -986,9 +1039,17 @@ def _stream_run(
     finally:
         # Not left to refcounting: under a stop the checkpointer/DB handles
         # the LangGraph stream holds should be released at a defined moment
-        # rather than at the collector's convenience. `close()` is idempotent,
+        # rather than at the collector's convenience. `aclose()` is idempotent,
         # so the normal path pays nothing for it.
-        frames.close()
+        #
+        # `CancelledError` is suppressed alongside `Exception` because this
+        # runs while a *cancelled* task unwinds, where the first `await`
+        # re-raises it: without the suppression the close would be skipped
+        # exactly on the path it exists for. It is not a swallowed
+        # cancellation — the frame is already unwinding and the caller has
+        # already stopped waiting.
+        with suppress(Exception, asyncio.CancelledError):
+            await frames.aclose()
 
     if not ended:
         # Unreachable by design — the fold's every path ends in `done`,
@@ -1007,7 +1068,7 @@ def _stream_run(
         )
 
 
-def _run_frames(
+async def _run_frames(
     graph: Any,
     graph_input: Any,
     config: dict[str, Any],
@@ -1020,7 +1081,14 @@ def _run_frames(
     store: Any = None,
     run_context: Mapping[str, Any] | None = None,
 ) -> Any:
-    """Drives one `graph.stream()` call and yields SSE frames.
+    """Drives one `graph.astream()` call and yields SSE frames.
+
+    An **async generator** since `async-first/02`, driving `astream` directly
+    rather than a sync `stream` pushed through `iterate_in_threadpool`. That
+    buys no cancellation on its own and the phase's ticket is explicit about
+    it: a sync node under `astream` still runs in a worker thread and still
+    cannot be interrupted. This is the seam the per-node migration needs, not
+    the win itself.
 
     `audience` decides only what the **terminal** `done` frame carries beyond
     the answer — see `api/audience.py`. It deliberately does not branch the
@@ -1159,7 +1227,7 @@ def _run_frames(
         "budget_stops": budget_stops,
     }
     if _resumes_a_paused_run(graph_input):
-        prior = getattr(graph.get_state(config), "values", None) or {}
+        prior = getattr(await graph.aget_state(config), "values", None) or {}
         if hasattr(prior, "get"):
             for state_key, target in folded.items():
                 held = prior.get(state_key)
@@ -1214,7 +1282,7 @@ def _run_frames(
         # `None` and absent are not guaranteed to be the same thing to a
         # library we do not own (`organisms-first-class` 70).
         supplied = {"context": run_context} if run_context is not None else {}
-        stream = graph.stream(
+        stream = graph.astream(
             graph_input,
             config,
             **supplied,
@@ -1239,7 +1307,11 @@ def _run_frames(
             # `messages` payload does not.
             version="v2",
         )
-        for namespace, mode, payload in _stream_parts(stream):
+        async for chunk in stream:
+            decoded = _stream_part(chunk)
+            if decoded is None:
+                continue
+            namespace, mode, payload = decoded
             if mode == "updates":
                 for raw_name, raw_update in payload.items():
                     update = _coerce_update(raw_update)
@@ -1633,12 +1705,17 @@ def _run_frames(
         # not a contract, and under a stop the checkpointer/DB handles the
         # LangGraph stream holds should be released at a defined moment
         # rather than at the collector's convenience.
-        closer = getattr(stream, "close", None)
+        # `aclose()` since the drive went async, and `CancelledError`
+        # suppressed beside `Exception` for the reason `_stream_run`'s own
+        # close gives: this runs while a cancelled task unwinds, where the
+        # first `await` re-raises, and the close would then be skipped on
+        # exactly the path it exists for.
+        closer = getattr(stream, "aclose", None)
         if callable(closer):
-            with suppress(Exception):
-                closer()
+            with suppress(Exception, asyncio.CancelledError):
+                await closer()
 
-    snapshot = graph.get_state(config)
+    snapshot = await graph.aget_state(config)
     if snapshot.next:
         interrupts = snapshot.tasks[0].interrupts if snapshot.tasks else ()
         payload_value = interrupts[0].value if interrupts else {}

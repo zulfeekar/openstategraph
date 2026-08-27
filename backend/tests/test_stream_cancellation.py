@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from conftest import FoldPump, ScriptedGraph, drive_fold  # noqa: E402
+
 from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.streaming import _stream_run
 
@@ -63,15 +65,24 @@ _RUNTIME = SimpleNamespace(
 
 
 def _run(graph):
-    return _stream_run(graph, {}, {}, SimpleNamespace(warnings=[]), KNOWN, _RUNTIME, "t1")
+    """The fold, undriven — an async generator since `async-first/02`.
+
+    Returned rather than drained because half this module is about what
+    happens when a consumer stops part way, which a list cannot express. The
+    tests that want the whole run say `drive_fold(_run(graph))`; the ones that
+    want to stop say `FoldPump(_run(graph))`.
+    """
+    return _stream_run(
+        ScriptedGraph(graph), {}, {}, SimpleNamespace(warnings=[]), KNOWN, _RUNTIME, "t1"
+    )
 
 
 def test_closing_the_consumer_exits_the_generator_and_closes_the_graph_stream() -> None:
     """The disconnect path, end to end on our side of it."""
     graph = _RecordingGraph(CHUNKS)
-    frames = _run(graph)
+    frames = FoldPump(_run(graph))
 
-    assert next(frames).startswith("event: update")
+    assert frames.next().startswith("event: update")
     assert graph.closed is False
 
     # What Starlette does when the client goes away: it stops iterating, and
@@ -90,8 +101,8 @@ def test_the_superstep_already_in_flight_is_not_interrupted() -> None:
     into a model call that the current superstep has already issued.
     """
     graph = _RecordingGraph(CHUNKS)
-    frames = _run(graph)
-    next(frames)
+    frames = FoldPump(_run(graph))
+    frames.next()
     frames.close()
 
     assert graph.produced == ["step_one"]
@@ -100,8 +111,8 @@ def test_the_superstep_already_in_flight_is_not_interrupted() -> None:
 def test_a_stopped_run_reports_no_result() -> None:
     """No `done` frame, no `error` frame — a stop is neither."""
     graph = _RecordingGraph(CHUNKS)
-    frames = _run(graph)
-    emitted = [next(frames)]
+    frames = FoldPump(_run(graph))
+    emitted = [frames.next()]
     frames.close()
 
     assert all("event: done" not in frame for frame in emitted)
@@ -117,8 +128,8 @@ def test_the_stop_is_logged_so_it_can_be_observed_from_outside(caplog) -> None:
     import logging
 
     graph = _RecordingGraph(CHUNKS)
-    frames = _run(graph)
-    next(frames)
+    frames = FoldPump(_run(graph))
+    frames.next()
 
     with caplog.at_level(logging.INFO, logger="openstategraph.api.streaming"):
         frames.close()
@@ -130,7 +141,7 @@ def test_the_stop_is_logged_so_it_can_be_observed_from_outside(caplog) -> None:
 def test_a_run_nobody_stops_still_closes_its_graph_stream() -> None:
     """The `finally` is not a disconnect-only path; normal completion uses it too."""
     graph = _RecordingGraph(CHUNKS)
-    frames = list(_run(graph))
+    frames = drive_fold(_run(graph))
 
     assert graph.closed is True
     assert frames[-1].startswith("event: done")

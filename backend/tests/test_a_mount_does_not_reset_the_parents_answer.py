@@ -26,6 +26,8 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
+from conftest import ScriptedGraph, drive_fold  # noqa: E402
+
 from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.audience import Audience
 from openstategraph.api.streaming import _run_frames
@@ -50,8 +52,8 @@ def _frames(chunks: list[Any]) -> list[tuple[str, dict[str, Any]]]:
         diagnostics=CompileDiagnostics()
     )
     out: list[tuple[str, dict[str, Any]]] = []
-    for raw in _run_frames(
-        _Graph(),
+    for raw in drive_fold(_run_frames(
+        ScriptedGraph(_Graph()),
         {},
         {"configurable": {"thread_id": "t1", "workflow_slug": "parent-flow"}},
         SimpleNamespace(warnings=[]),
@@ -59,7 +61,7 @@ def _frames(chunks: list[Any]) -> list[tuple[str, dict[str, Any]]]:
         runtime,
         "t1",
         Audience.DEVELOPER,
-    ):
+    )):
         head, _, body = raw.partition("\n")
         out.append((head[len("event: ") :], json.loads(body.partition("data: ")[2])))
     return out

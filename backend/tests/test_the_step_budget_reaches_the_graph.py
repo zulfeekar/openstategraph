@@ -100,6 +100,12 @@ class _Recorder:
             graph = real_build(self_, *args, **kwargs)
             real_invoke = graph.invoke
             real_stream = graph.stream
+            # `astream`, because the streaming door drives it since
+            # `async-first/02`. `stream` stays recorded too: `/api/runs` and
+            # the MCP server are still synchronous, and a recorder that
+            # watched only one of the two doors would go quiet on the other
+            # without failing.
+            real_astream = graph.astream
 
             def invoke(state: Any, config: Any = None, **kw: Any) -> Any:
                 recorder.configs.append(dict(config or {}))
@@ -109,8 +115,13 @@ class _Recorder:
                 recorder.configs.append(dict(config or {}))
                 return real_stream(state, config, **kw)
 
+            def astream(state: Any, config: Any = None, **kw: Any) -> Any:
+                recorder.configs.append(dict(config or {}))
+                return real_astream(state, config, **kw)
+
             graph.invoke = invoke  # type: ignore[method-assign]
             graph.stream = stream  # type: ignore[method-assign]
+            graph.astream = astream  # type: ignore[method-assign]
             return graph
 
         monkeypatch.setattr(WorkflowCompiler, "build", build)

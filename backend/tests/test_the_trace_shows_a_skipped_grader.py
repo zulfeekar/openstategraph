@@ -31,6 +31,8 @@ from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
 
+from conftest import drive_fold  # noqa: E402
+
 from openstategraph.api.streaming import FRAME_FIELDS, _stream_run
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler, safe_name
@@ -68,7 +70,7 @@ def grader_frame(document: dict[str, Any], *answers: str, thread_id: str) -> dic
     )
     names = {safe_name(n): n for n in plan.nodes}
     frames = list(
-        _stream_run(
+        drive_fold(_stream_run(
             graph,
             {"question": "q", "attempts": 0, "decisions": {}, "outputs": {}},
             {"configurable": {"thread_id": thread_id}},
@@ -76,7 +78,7 @@ def grader_frame(document: dict[str, Any], *answers: str, thread_id: str) -> dic
             names,
             runtime,
             thread_id,
-        )
+        ))
     )
     for frame in frames:
         if not frame.startswith("event: update\n"):

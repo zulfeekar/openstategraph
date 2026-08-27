@@ -30,6 +30,8 @@ from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
 
+from conftest import drive_fold  # noqa: E402
+
 from openstategraph.api.streaming import FRAME_FIELDS, _stream_run
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler, safe_name
@@ -102,7 +104,7 @@ def interrupt_frame(
     names = {safe_name(n): n for n in plan.nodes}
     config = {"configurable": {"thread_id": thread_id}}
     frames = list(
-        _stream_run(
+        drive_fold(_stream_run(
             graph,
             {"question": "the invoice is wrong", "attempts": attempts, "decisions": {}, "outputs": {}},
             config,
@@ -110,7 +112,7 @@ def interrupt_frame(
             names,
             runtime,
             thread_id,
-        )
+        ))
     )
     last = frames[-1]
     assert last.startswith("event: interrupt\n"), last
@@ -213,7 +215,7 @@ class TestItSurvivesAResume:
         config = {"configurable": {"thread_id": thread_id}}
 
         first = list(
-            _stream_run(
+            drive_fold(_stream_run(
                 graph,
                 {"question": "the invoice is wrong", "attempts": 0, "decisions": {}, "outputs": {}},
                 config,
@@ -221,7 +223,7 @@ class TestItSurvivesAResume:
                 names,
                 runtime,
                 thread_id,
-            )
+            ))
         )
         opening = json.loads(first[-1].split("data: ", 1)[1])
         assert opening["node"] == "gate0"
@@ -229,7 +231,7 @@ class TestItSurvivesAResume:
         assert "verdict" not in opening
 
         second = list(
-            _stream_run(
+            drive_fold(_stream_run(
                 graph,
                 Command(resume={"decision": "approve"}),
                 config,
@@ -237,7 +239,7 @@ class TestItSurvivesAResume:
                 names,
                 runtime,
                 thread_id,
-            )
+            ))
         )
         paused = json.loads(second[-1].split("data: ", 1)[1])
         assert paused["node"] == "gate1"

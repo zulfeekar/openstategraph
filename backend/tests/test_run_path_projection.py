@@ -33,6 +33,8 @@ from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
 
+from conftest import drive_fold  # noqa: E402
+
 from openstategraph.api.audience import Audience
 from openstategraph.api.streaming import _run_frames
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
@@ -106,7 +108,7 @@ def _update_frames() -> list[dict[str, Any]]:
     )
     node_ids_by_name = {safe_name(n): n for n in plan.nodes}
     frames: list[dict[str, Any]] = []
-    for raw in _run_frames(
+    for raw in drive_fold(_run_frames(
         graph,
         {"question": "q", "attempts": 0, "decisions": {}, "outputs": {}},
         # `workflow_slug` is what names level 0 of every path — the document
@@ -117,7 +119,7 @@ def _update_frames() -> list[dict[str, Any]]:
         runtime,
         "t1",
         Audience.DEVELOPER,
-    ):
+    )):
         head, _, body = raw.partition("\n")
         if head != "event: update":
             continue

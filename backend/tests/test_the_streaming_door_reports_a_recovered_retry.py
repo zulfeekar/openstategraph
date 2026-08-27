@@ -37,7 +37,7 @@ from openstategraph.compile.workflow_compiler import (
     safe_name,
 )
 
-from conftest import RespondingModel
+from conftest import RespondingModel, drive_fold
 
 FIRST_INPUT: dict[str, Any] = {
     "question": "hello",
@@ -98,7 +98,7 @@ def _built(model: Any) -> tuple[Any, Any, dict[str, str], Any]:
 def _done_frame(model: Any, thread_id: str) -> dict[str, Any]:
     graph, plan, node_ids, runtime = _built(model)
     frames = list(
-        _stream_run(
+        drive_fold(_stream_run(
             graph,
             dict(FIRST_INPUT),
             {"configurable": {"thread_id": thread_id}},
@@ -107,7 +107,7 @@ def _done_frame(model: Any, thread_id: str) -> dict[str, Any]:
             runtime,
             thread_id,
             Audience.DEVELOPER,
-        )
+        ))
     )
     last = frames[-1]
     assert last.split("event: ", 1)[1].split("\n", 1)[0] == "done"
@@ -230,7 +230,7 @@ class TestARetryBeforeThePauseSurvivesTheResume:
         graph.update_state(config, {"retries": {"draft1": 2}})
 
         resumed = list(
-            _stream_run(
+            drive_fold(_stream_run(
                 graph,
                 Command(resume={"decision": "approve"}),
                 config,
@@ -239,7 +239,7 @@ class TestARetryBeforeThePauseSurvivesTheResume:
                 runtime,
                 thread_id,
                 Audience.DEVELOPER,
-            )
+            ))
         )
         event, done = _terminal(resumed)
 

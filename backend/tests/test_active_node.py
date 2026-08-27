@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from conftest import ScriptedGraph, drive_fold  # noqa: E402
+
 from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.streaming import ActiveNodeResolver
 
@@ -93,9 +95,9 @@ def _frames(chunks: list[tuple[tuple[str, ...], str, dict]], known: dict[str, st
         diagnostics=CompileDiagnostics()
     )
     out = []
-    for frame in _stream_run(
-        _Graph(), {}, {}, SimpleNamespace(warnings=[]), known, runtime, "t1"
-    ):
+    for frame in drive_fold(_stream_run(
+        ScriptedGraph(_Graph()), {}, {}, SimpleNamespace(warnings=[]), known, runtime, "t1"
+    )):
         name = frame.split("\n")[0][len("event: ") :]
         data = json.loads(frame.split("\n")[1][len("data: ") :])
         out.append((name, data))

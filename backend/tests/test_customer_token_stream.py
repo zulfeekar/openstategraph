@@ -41,6 +41,8 @@ from typing import Any
 
 import pytest
 
+from conftest import ScriptedGraph, drive_fold  # noqa: E402
+
 from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.audience import AnswerChannel, Audience
 from openstategraph.api.streaming import _stream_run
@@ -103,8 +105,8 @@ def _replay(audience: Audience) -> list[tuple[str, dict[str, Any]]]:
         machinery_nodes=set(MACHINERY),
     )
     events: list[tuple[str, dict[str, Any]]] = []
-    for frame in _stream_run(
-        _Graph(),
+    for frame in drive_fold(_stream_run(
+        ScriptedGraph(_Graph()),
         {},
         {},
         SimpleNamespace(warnings=[]),
@@ -112,7 +114,7 @@ def _replay(audience: Audience) -> list[tuple[str, dict[str, Any]]]:
         runtime,
         "t1",
         audience,
-    ):
+    )):
         name = frame.split("\n")[0][len("event: ") :]
         events.append((name, json.loads(frame.split("\n")[1][len("data: ") :])))
     return events

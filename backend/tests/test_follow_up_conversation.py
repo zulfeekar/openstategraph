@@ -23,6 +23,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from conftest import ScriptedGraph, drive_fold  # noqa: E402
+
 from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.streaming import _stream_run
 from openstategraph.compile.node_runtime import _thread_question
@@ -140,9 +142,9 @@ _RUNTIME = SimpleNamespace(
 
 def _frames(graph):
     return list(
-        _stream_run(
-            graph, {}, {}, SimpleNamespace(warnings=[]), {"step_one": "node:a"}, _RUNTIME, "t1"
-        )
+        drive_fold(_stream_run(
+            ScriptedGraph(graph), {}, {}, SimpleNamespace(warnings=[]), {"step_one": "node:a"}, _RUNTIME, "t1"
+        ))
     )
 
 

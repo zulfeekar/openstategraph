@@ -43,6 +43,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest  # noqa: E402
 
+from conftest import ScriptedGraph, drive_fold  # noqa: E402
+
 from openstategraph.api.audience import Audience  # noqa: E402
 from openstategraph.api.streaming import _stream_run  # noqa: E402
 from openstategraph.compile.diagnostics import CompileDiagnostics  # noqa: E402
@@ -262,8 +264,8 @@ class TestItReachesTheStreamDoor:
             }
         ]
         frames = list(
-            _stream_run(
-                self._Graph(chunks),
+            drive_fold(_stream_run(
+                ScriptedGraph(self._Graph(chunks)),
                 {},
                 {},
                 SimpleNamespace(warnings=[]),
@@ -271,7 +273,7 @@ class TestItReachesTheStreamDoor:
                 SimpleNamespace(diagnostics=CompileDiagnostics()),
                 "t1",
                 Audience.CUSTOMER,
-            )
+            ))
         )
         progress = [
             json.loads(frame.split("\n")[1][len("data: ") :])

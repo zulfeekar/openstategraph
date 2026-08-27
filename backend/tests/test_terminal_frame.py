@@ -29,6 +29,8 @@ from typing import Any
 
 import pytest
 
+from conftest import FoldPump, ScriptedGraph, drive_fold  # noqa: E402
+
 from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.streaming import TERMINAL_EVENTS, _is_terminal, _stream_run
 
@@ -106,10 +108,19 @@ def _run(graph: Any, audience: Any = None) -> Any:
     about the terminal-frame guarantee, so they watch the developer feed —
     `test_a_customer_error_frame_says_nothing_internal` covers the other side.
     """
+    return drive_fold(_undriven(graph, audience))
+
+
+def _undriven(graph: Any, audience: Any = None) -> Any:
+    """The same stream, not yet pulled — an async generator since `async-first/02`.
+
+    The two disconnect tests below stop part way, which a drained list cannot
+    express; everything else wants the whole run and goes through `_run`.
+    """
     from openstategraph.api.audience import Audience
 
     return _stream_run(
-        graph,
+        ScriptedGraph(graph),
         {},
         {},
         SimpleNamespace(warnings=[]),
@@ -269,8 +280,8 @@ def test_a_client_that_walks_away_gets_no_frame_and_that_is_documented() -> None
     ended with no terminal frame means "the connection dropped".
     """
     graph = _Graph()
-    frames = _run(graph)
-    first = next(frames)
+    frames = FoldPump(_undriven(graph))
+    first = frames.next()
 
     frames.close()  # what Starlette does when the client hangs up
 
@@ -281,8 +292,8 @@ def test_a_client_that_walks_away_gets_no_frame_and_that_is_documented() -> None
 def test_the_disconnect_is_logged_because_no_frame_can_report_it(caplog: Any) -> None:
     """The log line is the only record that path leaves; it is part of the contract."""
     graph = _Graph()
-    frames = _run(graph)
-    next(frames)
+    frames = FoldPump(_undriven(graph))
+    frames.next()
 
     with caplog.at_level(logging.INFO, logger="openstategraph.api.streaming"):
         frames.close()
@@ -304,13 +315,13 @@ def test_a_fold_that_ends_without_saying_how_is_reported_as_an_error(
     """
     from openstategraph.api import streaming
 
-    def _silent(*_args: Any, **_kwargs: Any) -> Any:
+    async def _silent(*_args: Any, **_kwargs: Any) -> Any:
         yield streaming._sse("update", {"node": "node:a"})
 
     monkeypatch.setattr(streaming, "_run_frames", _silent)
 
     with caplog.at_level(logging.ERROR, logger="openstategraph.api.streaming"):
-        frames = list(_run(_Graph()))
+        frames = _run(_Graph())
 
     assert _events(frames) == ["update", "error"]
     assert "without a terminal frame" in caplog.text

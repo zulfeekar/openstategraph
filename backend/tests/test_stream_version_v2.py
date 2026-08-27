@@ -33,6 +33,8 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from conftest import ScriptedGraph, drive_fold  # noqa: E402
+
 from openstategraph.api.audience import Audience  # noqa: E402
 from openstategraph.api.streaming import _stream_parts, _stream_run  # noqa: E402
 from openstategraph.compile.diagnostics import CompileDiagnostics  # noqa: E402
@@ -66,8 +68,8 @@ def _frames(chunks: list[Any]) -> tuple[list[tuple[str, Any]], _Graph]:
     graph = _Graph(chunks)
     runtime = SimpleNamespace(diagnostics=CompileDiagnostics())
     out: list[tuple[str, Any]] = []
-    for frame in _stream_run(
-        graph,
+    for frame in drive_fold(_stream_run(
+        ScriptedGraph(graph),
         {},
         {},
         SimpleNamespace(warnings=[]),
@@ -75,7 +77,7 @@ def _frames(chunks: list[Any]) -> tuple[list[tuple[str, Any]], _Graph]:
         runtime,
         "t1",
         Audience.DEVELOPER,
-    ):
+    )):
         name = frame.split("\n")[0][len("event: ") :]
         out.append((name, json.loads(frame.split("\n")[1][len("data: ") :])))
     return out, graph

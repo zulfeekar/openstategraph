@@ -306,3 +306,58 @@ construct in 1.2.10 that interrupts a node mid-flight, and
 timeouts are only supported for async nodes."* Two seams, one conclusion, and
 it is the charter's: **the node is the only place cancellation can happen, and
 only an `async def` one.**
+
+---
+
+## Amendment, 2026-08-27 — phase B is *upstream* of phase A, and phase A shipped anyway (async-first/02)
+
+The phase table above is headed "Ordered by dependency". On one pair it is
+ordered backwards, and phase A found out by running.
+
+`graph.astream()` does not merely prefer an async checkpointer; LangGraph's
+async loop calls **only** the async four, and the server's default saver
+answers none of them. Measured on the installed `langgraph-checkpoint-sqlite
+3.1.1`, first superstep, no model involved:
+
+```
+NotImplementedError: The SqliteSaver does not support async methods.
+Consider using AsyncSqliteSaver instead.
+```
+
+The docs say the same in words — an async run needs `InMemorySaver` or one of
+the `Async*` savers — which is why the whole suite went green on the async fold
+before anything real did: `conftest.py` opts the tests out of the durable
+default, so every fold test holds an `InMemorySaver`, which *does* implement
+the async four.
+
+Two of phase B's three sentences also turn out to be wrong, in our favour:
+
+- **`aiosqlite` already ships.** It is a hard dependency of
+  `langgraph-checkpoint-sqlite>=3.1`, which is the `[sqlite]` extra that
+  `[server]` requires — `pyproject.toml`'s own comment about the extra says so
+  two paragraphs above the line that made it sound optional. There is no new
+  dependency to add.
+- **`AsyncSqliteSaver` is not a drop-in, for a reason the phase table could not
+  see.** One saver is shared by every transport, and three of them are still
+  synchronous (`/api/runs`, the MCP server, `load_workflow`).
+  `AsyncSqliteSaver` answers the *sync* four through
+  `run_coroutine_threadsafe` against a loop captured at construction, so it
+  cannot be built at all in a plain script. Swapping the shared saver trades a
+  broken async path for a broken sync one.
+
+**What phase A did instead**: `memory.async_capable` wraps the shared saver at
+the two async doors, supplying the async four over the sync ones in a worker
+thread — the same shape LangChain uses for sync tools, which this document
+already quotes its production page saying. Additive, applied nowhere else, and
+pinned by `backend/tests/test_the_async_run_path_can_use_the_servers_saver.py`,
+whose first test **fails on the day the library grows async sqlite support**,
+so the bridge cannot quietly outlive its reason.
+
+So phase B is not deleted and not blocking: it becomes an optimisation (drop a
+thread hop) rather than the thing that unblocks phase A, and it still owes an
+answer to the shared-saver problem above. Its size ("S, plus a dependency")
+should be re-taken before it is scheduled.
+
+Nothing else in the phase table moved. Phase A's own claim is unchanged and
+was re-confirmed rather than re-derived: it buys no cancellation, per
+`async-first/09`'s measurements and the amendment above.

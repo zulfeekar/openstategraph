@@ -32,6 +32,8 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
+from conftest import ScriptedGraph, drive_fold  # noqa: E402
+
 from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.diagnostics import CompileDiagnostics
 from openstategraph.api.audience import Audience
@@ -76,8 +78,8 @@ def _done(chunks: list[Any]) -> dict[str, Any]:
         diagnostics=CompileDiagnostics(),
         names=_names(WIDE),
     )
-    for raw in _run_frames(
-        _Graph(),
+    for raw in drive_fold(_run_frames(
+        ScriptedGraph(_Graph()),
         {},
         {"configurable": {"thread_id": "t1", "workflow_slug": "concierge"}},
         SimpleNamespace(warnings=[]),
@@ -85,7 +87,7 @@ def _done(chunks: list[Any]) -> dict[str, Any]:
         runtime,
         "t1",
         Audience.DEVELOPER,
-    ):
+    )):
         head, _, body = raw.partition("\n")
         if head == "event: done":
             return json.loads(body.partition("data: ")[2])

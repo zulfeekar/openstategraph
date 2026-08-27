@@ -335,3 +335,95 @@ def _release_services_this_test_opened() -> Iterator[None]:
             services = reference()
             if services is not None:
                 services.close()
+
+
+# --- driving the run fold ---------------------------------------------------
+#
+# `_run_frames` and `_stream_run` are **async generators** since
+# `async-first/02`, and the suite scripts them by hand: eighteen modules build
+# a stub graph whose `stream()` returns a hand-written list of chunks and pull
+# the frames through a `for` loop. Both halves of that fold move here rather
+# than into eighteen copies, for the reason the docstring at the top of this
+# file already gives — a test double with five copies is a test double with
+# one wrong copy.
+
+
+class ScriptedGraph:
+    """A sync-scripted stub graph, presented to the async fold.
+
+    The stubs the suite writes are the honest shape for what they assert: a
+    list of chunks and a `get_state`. Nothing about them is asynchronous, and
+    making eighteen modules `async def` their `stream` would be eighteen
+    copies of this adapter with no assertion behind any of them.
+
+    So the adapter lives once. `astream` replays the wrapped stub's `stream()`,
+    `aget_state` its `get_state()`, and everything else — `get_graph`, the
+    recorded `stream_kwargs` a few modules assert on — passes through
+    untouched, which is what keeps those assertions about the fold rather than
+    about this class.
+    """
+
+    def __init__(self, inner: object) -> None:
+        self._inner = inner
+
+    def astream(self, *args: object, **kwargs: object) -> object:
+        inner = self._inner
+
+        async def replay() -> object:
+            for chunk in inner.stream(*args, **kwargs):  # type: ignore[attr-defined]
+                yield chunk
+
+        return replay()
+
+    async def aget_state(self, config: object) -> object:
+        return self._inner.get_state(config)  # type: ignore[attr-defined]
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+def drive_fold(frames: object) -> list[str]:
+    """Every frame an async fold yields, as a list, from synchronous test code.
+
+    One `asyncio.run` per drive, so nothing leaks between tests. Pytest is not
+    configured with an async plugin here and this deliberately does not add
+    one: the assertions are about the frames, not about the loop, and a driver
+    is cheaper than a plugin the whole suite would then depend on.
+    """
+    import asyncio
+
+    async def collect() -> list[str]:
+        return [frame async for frame in frames]  # type: ignore[union-attr]
+
+    return asyncio.run(collect())
+
+
+class FoldPump:
+    """An async fold, pulled one frame at a time from synchronous test code.
+
+    `drive_fold` drains; this is for the tests that must stop **part way** —
+    the Stop tests, which assert on what the fold did and did not do after the
+    consumer walked away. One event loop for the life of the pump, because the
+    generator is suspended between calls and resuming it on a second loop is
+    undefined.
+
+    `close()` is the explicit-`aclose()` half of a stop, which reaches the fold
+    as `GeneratorExit`. The live half is a cancelled `__anext__`, which reaches
+    it as `CancelledError`; `stop_when_client_leaves` is what does that, and it
+    has its own tests.
+    """
+
+    def __init__(self, frames: object) -> None:
+        import asyncio
+
+        self._loop = asyncio.new_event_loop()
+        self._frames = frames.__aiter__()  # type: ignore[union-attr]
+
+    def next(self) -> str:
+        return self._loop.run_until_complete(self._frames.__anext__())
+
+    def close(self) -> None:
+        try:
+            self._loop.run_until_complete(self._frames.aclose())
+        finally:
+            self._loop.close()
