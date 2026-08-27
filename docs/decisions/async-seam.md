@@ -361,3 +361,28 @@ should be re-taken before it is scheduled.
 Nothing else in the phase table moved. Phase A's own claim is unchanged and
 was re-confirmed rather than re-derived: it buys no cancellation, per
 `async-first/09`'s measurements and the amendment above.
+
+## Amendment (2026-08-27): the blocking doors got a loop of their own
+
+`async-first/12`. This charter's coexistence fact is about **nodes in a
+graph**, and phase D's `compile/node_doors.py` answered the other half — the
+*caller* — by giving each migrated body a sync door that runs it on a private
+`asyncio.run` loop. That is right for one node and wrong for two: a node body
+leaves things bound to its loop (a model client's pooled sockets), so the
+second node call in the same synchronous run finds the first one's loop
+closed. `POST /api/runs` on `morning-brief` returned `502 RuntimeError: Event
+loop is closed`; a green suite of 5305 said nothing, because no test drove two
+model-calling nodes through a blocking door.
+
+**A loop's owner is the run, and the run is owned by the door.** So the four
+blocking doors — `POST /api/runs`, the MCP server's `run_workflow`,
+`CompiledWorkflow.ask`/`resume`, and the CLI through the library one — now
+drive `graph.ainvoke` through `openstategraph/run_doors.invoke_run` instead of
+`graph.invoke`. A blocking run therefore executes exactly as the streaming
+door's `astream` already does: one loop, migrated bodies on it, un-migrated
+`def` bodies dispatched to a thread by LangGraph itself. **One execution
+model instead of two** is worth more here than the bug it fixes.
+
+It buys no cancellation and must not be read as doing so — the caller still
+blocks. `node_doors.py` is unchanged and still needed; what still reaches it
+is a caller driving `.graph.invoke()` itself, which is `async-first/13`.

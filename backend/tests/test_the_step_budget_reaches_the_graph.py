@@ -98,18 +98,19 @@ class _Recorder:
 
         def build(self_: Any, *args: Any, **kwargs: Any) -> Any:
             graph = real_build(self_, *args, **kwargs)
-            real_invoke = graph.invoke
+            real_ainvoke = graph.ainvoke
             real_stream = graph.stream
             # `astream`, because the streaming door drives it since
-            # `async-first/02`. `stream` stays recorded too: `/api/runs` and
-            # the MCP server are still synchronous, and a recorder that
-            # watched only one of the two doors would go quiet on the other
-            # without failing.
+            # `async-first/02`, and `ainvoke`, because the blocking doors
+            # drive *that* since `async-first/12` — a run gets one loop, and
+            # the loop's owner is the door. `stream` stays recorded too: a
+            # recorder that watched only some of the doors would go quiet on
+            # the others without failing.
             real_astream = graph.astream
 
-            def invoke(state: Any, config: Any = None, **kw: Any) -> Any:
+            async def ainvoke(state: Any, config: Any = None, **kw: Any) -> Any:
                 recorder.configs.append(dict(config or {}))
-                return real_invoke(state, config, **kw)
+                return await real_ainvoke(state, config, **kw)
 
             def stream(state: Any, config: Any = None, **kw: Any) -> Any:
                 recorder.configs.append(dict(config or {}))
@@ -119,7 +120,7 @@ class _Recorder:
                 recorder.configs.append(dict(config or {}))
                 return real_astream(state, config, **kw)
 
-            graph.invoke = invoke  # type: ignore[method-assign]
+            graph.ainvoke = ainvoke  # type: ignore[method-assign]
             graph.stream = stream  # type: ignore[method-assign]
             graph.astream = astream  # type: ignore[method-assign]
             return graph
@@ -221,11 +222,13 @@ class TestTheCli:
 
         seen: list[Any] = []
         compiled = load_workflow(package)
-        real_invoke = compiled.graph.invoke
-        compiled.graph.invoke = lambda state, config=None, **kw: (  # type: ignore[method-assign]
-            seen.append(config),
-            real_invoke(state, config, **kw),
-        )[1]
+        real_ainvoke = compiled.graph.ainvoke
+
+        async def recording(state, config=None, **kw):  # noqa: ANN001, ANN202
+            seen.append(config)
+            return await real_ainvoke(state, config, **kw)
+
+        compiled.graph.ainvoke = recording  # type: ignore[method-assign]
         compiled.ask("hello")
         assert seen[-1]["recursion_limit"] == 150
 
@@ -240,11 +243,13 @@ class TestTheCli:
 
         seen: list[Any] = []
         compiled = load_workflow(package)
-        real_invoke = compiled.graph.invoke
-        compiled.graph.invoke = lambda state, config=None, **kw: (  # type: ignore[method-assign]
-            seen.append(config),
-            real_invoke(state, config, **kw),
-        )[1]
+        real_ainvoke = compiled.graph.ainvoke
+
+        async def recording(state, config=None, **kw):  # noqa: ANN001, ANN202
+            seen.append(config)
+            return await real_ainvoke(state, config, **kw)
+
+        compiled.graph.ainvoke = recording  # type: ignore[method-assign]
         compiled.ask("hello", recursion_limit=99)
         assert seen[-1]["recursion_limit"] == 99
 

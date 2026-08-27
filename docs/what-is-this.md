@@ -237,6 +237,15 @@ graph = workflow.graph      # a plain compiled LangGraph StateGraph
   interrupt and resume, your own checkpointer. Nothing is wrapped, because
   wrapping it would be the beginning of the execution engine we refuse to
   write.
+
+  One caveat, said here rather than discovered: a workflow with **more than
+  one model-calling node** wants `.ainvoke()` / `.astream()` rather than
+  `.invoke()` / `.stream()`. Those nodes are `async def`, and LangGraph's
+  synchronous driver gives each one its own event loop — which a shared HTTP
+  client does not survive (`RuntimeError: Event loop is closed`). Every door
+  this project ships — `openstategraph run`, `POST /api/runs`, the MCP
+  server, `workflow.ask()` — already drives the async side for you, so this
+  is only about driving `.graph` yourself.
 - **`workflow.json` is documented, versioned and migrated**, and it is yours —
   it lives in your repository, not in a database we control.
 - **`.warnings` tells you what did not wire**, so a degraded workflow is a

@@ -101,6 +101,19 @@ def both_doors(body: Callable[..., Any]) -> Any:
     from langgraph.utils.runnable import RunnableCallable
 
     def through_a_private_loop(*args: Any, **kwargs: Any) -> Any:
+        # **This loop is per node call, and that is a real limit** — read
+        # `openstategraph/run_doors.py` before changing anything here.
+        # `async-first/12`: a node body does not only use a loop, it leaves
+        # things bound to it (a model client's pooled sockets), so a second
+        # node call driven this way finds the first one's loop closed —
+        # `RuntimeError: Event loop is closed`, measured live against
+        # `morning-brief`. The four blocking doors no longer come this way:
+        # they drive `ainvoke` on a loop that lives as long as the *run*,
+        # which is the scope that actually has an owner. What still comes
+        # here is a caller holding the escape hatch and calling
+        # `compiled.invoke(...)` itself, and a graph LangGraph drives
+        # synchronously for its own reasons.
+        #
         # `asyncio.run` and not a shared loop, deliberately. A sync door is
         # reached from a thread with no loop running — a FastAPI threadpool
         # worker, a pytest process, the CLI — so there is nothing to reuse,

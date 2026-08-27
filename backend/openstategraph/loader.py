@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 from openstategraph.compile.run_context import validate_run_context
 from openstategraph.errors import InvalidPackageName, PackageNotFound, ThreadNotResumable
 from openstategraph.results import RunResult
+from openstategraph.run_doors import invoke_run
 from openstategraph.schema import normalize_document
 from openstategraph.step_budget import DEFAULT_STEP_BUDGET, resolve_step_budget
 
@@ -334,7 +335,8 @@ class CompiledWorkflow:
             # `None` means *pass no argument at all*, which is what every run
             # against a workflow declaring no context has always done.
             extra = {"context": run_context} if run_context is not None else {}
-            final = self.graph.invoke(
+            final = invoke_run(
+                self.graph,
                 {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
                 config,
                 **extra,
@@ -453,7 +455,7 @@ class CompiledWorkflow:
             resume_value["feedback"] = feedback
         config = self._config(thread_id, user_email, session_id, recursion_limit)
         with get_usage_metadata_callback() as usage:
-            final = self.graph.invoke(Command(resume=resume_value), config)
+            final = invoke_run(self.graph, Command(resume=resume_value), config)
             spent = dict(usage.usage_metadata)
         result = self._result(final, spent, thread_id)
         self._append_trace(f"resume:{decision}", result, time.monotonic() - started)

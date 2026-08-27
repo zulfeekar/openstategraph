@@ -536,13 +536,13 @@ class TestAWorkflowDeclaringNothingIsUnchanged:
         library we do not own — 69's instrument note, held here."""
         workflow = load_workflow(str(_package(tmp_path)))
         seen: dict[str, Any] = {}
-        original = workflow.graph.invoke
+        original = workflow.graph.ainvoke
 
-        def recording(*args: Any, **kwargs: Any) -> Any:
+        async def recording(*args: Any, **kwargs: Any) -> Any:
             seen.update(kwargs)
-            return original(*args, **kwargs)
+            return await original(*args, **kwargs)
 
-        workflow.graph.invoke = recording  # type: ignore[method-assign]
+        workflow.graph.ainvoke = recording  # type: ignore[method-assign]
         workflow.ask("hello")
 
         assert "context" not in seen
@@ -555,13 +555,13 @@ class TestACorrectContextPassesThroughUnchanged:
         pass a test of itself."""
         workflow = load_workflow(str(_package(tmp_path, DECLARATION)))
         seen: dict[str, Any] = {}
-        original = workflow.graph.invoke
+        original = workflow.graph.ainvoke
 
-        def recording(*args: Any, **kwargs: Any) -> Any:
+        async def recording(*args: Any, **kwargs: Any) -> Any:
             seen.update(kwargs)
-            return original(*args, **kwargs)
+            return await original(*args, **kwargs)
 
-        workflow.graph.invoke = recording  # type: ignore[method-assign]
+        workflow.graph.ainvoke = recording  # type: ignore[method-assign]
         workflow.ask("hello", context={"tenant": TENANT, "maxRefunds": 5, "dryRun": True})
 
         assert seen["context"] == {"tenant": TENANT, "maxRefunds": 5, "dryRun": True}
@@ -588,14 +588,14 @@ class TestTheIdentityKeysAreUntouched:
         either boundary."""
         workflow = load_workflow(str(_package(tmp_path, DECLARATION)))
         seen: dict[str, Any] = {}
-        original = workflow.graph.invoke
+        original = workflow.graph.ainvoke
 
-        def recording(state: Any, config: Any, **kwargs: Any) -> Any:
+        async def recording(state: Any, config: Any, **kwargs: Any) -> Any:
             seen["config"] = config
             seen.update(kwargs)
-            return original(state, config, **kwargs)
+            return await original(state, config, **kwargs)
 
-        workflow.graph.invoke = recording  # type: ignore[method-assign]
+        workflow.graph.ainvoke = recording  # type: ignore[method-assign]
         workflow.ask("hello", context={"tenant": TENANT}, session_id="s", user_email="u")
 
         configurable = seen["config"]["configurable"]

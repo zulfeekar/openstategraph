@@ -183,13 +183,13 @@ class TestTheDeclaredFieldsReachTheRun:
 
         def spy(self: Any, *args: Any, **kwargs: Any) -> Any:
             graph = original(self, *args, **kwargs)
-            invoke = graph.invoke
+            ainvoke = graph.ainvoke
 
-            def capture(state: Any, config: Any = None, **rest: Any) -> Any:
+            async def capture(state: Any, config: Any = None, **rest: Any) -> Any:
                 seen["config"] = config
-                return invoke(state, config, **rest)
+                return await ainvoke(state, config, **rest)
 
-            graph.invoke = capture  # type: ignore[method-assign]
+            graph.ainvoke = capture  # type: ignore[method-assign]
             return graph
 
         monkeypatch.setattr(workflow_compiler.WorkflowCompiler, "build", spy)

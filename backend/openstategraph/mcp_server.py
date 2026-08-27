@@ -52,6 +52,7 @@ from typing import Any
 from openstategraph.api.diagram import workflow_mermaid
 from openstategraph.api.services import WorkflowServices
 from openstategraph.errors import DocumentError as _DocumentError
+from openstategraph.run_doors import invoke_run
 from openstategraph.schema import normalize_document as _normalize_document
 from openstategraph.step_budget import resolve_step_budget
 
@@ -843,7 +844,8 @@ class WorkflowRuns:
                 ),
                 store=self._services.memory_store,
             )
-            final = graph.invoke(
+            final = invoke_run(
+                graph,
                 {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
                 {
                     "recursion_limit": limit,

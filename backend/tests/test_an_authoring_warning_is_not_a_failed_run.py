@@ -81,7 +81,7 @@ class _EmptyAnswerGraph:
     with nothing".
     """
 
-    def invoke(self, _state: Any, _config: Any) -> dict[str, Any]:
+    async def ainvoke(self, _state: Any, _config: Any = None, **_kw: Any) -> dict[str, Any]:
         return {"answer": "", "attempts": 0, "decisions": {}, "outputs": {}}
 
 

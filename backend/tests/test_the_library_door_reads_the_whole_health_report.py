@@ -56,7 +56,7 @@ class _StubGraph:
     def __init__(self, final: Any) -> None:
         self.final = final
 
-    def invoke(self, _state: Any, _config: Any) -> Any:
+    async def ainvoke(self, _state: Any, _config: Any = None, **_kw: Any) -> Any:
         return self.final
 
 

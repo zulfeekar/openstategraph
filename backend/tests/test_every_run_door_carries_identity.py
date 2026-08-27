@@ -145,13 +145,13 @@ class TestARunStartedOverMCPKnowsWhichWorkflowItIs:
 
         def spy(self: Any, *args: Any, **kwargs: Any) -> Any:
             graph = original(self, *args, **kwargs)
-            inner = graph.invoke
+            inner = graph.ainvoke
 
-            def invoke(state: Any, config: Any = None, **kw: Any) -> Any:
+            async def ainvoke(state: Any, config: Any = None, **kw: Any) -> Any:
                 seen["configurable"] = dict((config or {}).get("configurable") or {})
-                return inner(state, config, **kw)
+                return await inner(state, config, **kw)
 
-            graph.invoke = invoke  # type: ignore[method-assign]
+            graph.ainvoke = ainvoke  # type: ignore[method-assign]
             return graph
 
         WorkflowCompiler.build = spy  # type: ignore[method-assign]

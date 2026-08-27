@@ -665,7 +665,7 @@ class TestRuns:
         def _fake_build(self: Any, *args: Any, **kwargs: Any) -> Any:
             graph = real_build(self, *args, **kwargs)
 
-            def _invoke(*_a: Any, **_k: Any) -> dict[str, Any]:
+            async def _invoke(*_a: Any, **_k: Any) -> dict[str, Any]:
                 # What a real run produces when a grader's `revise` verdict
                 # reaches no wired edge: the fallback still ships `pass`, and
                 # `unrouted` is the record that it did (workflow-gallery 31).
@@ -676,7 +676,7 @@ class TestRuns:
                     "unrouted": {"grader1": "revise"},
                 }
 
-            graph.invoke = _invoke  # type: ignore[method-assign]
+            graph.ainvoke = _invoke  # type: ignore[method-assign]
             return graph
 
         monkeypatch.setattr(wc.WorkflowCompiler, "build", _fake_build)

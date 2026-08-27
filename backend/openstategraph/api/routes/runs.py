@@ -50,6 +50,7 @@ from openstategraph.api.streaming import (
 from openstategraph.compile.run_context import validate_run_context
 from openstategraph.errors import RunContextError
 from openstategraph.memory import async_capable
+from openstategraph.run_doors import invoke_run
 from openstategraph.schema import normalize_document
 from openstategraph.step_budget import resolve_step_budget
 
@@ -232,7 +233,8 @@ def run_workflow(
         )
         # `None` means *pass no argument at all* — see `validate_run_context`.
         supplied = {"context": run_context} if run_context is not None else {}
-        final = graph.invoke(
+        final = invoke_run(
+            graph,
             {"question": request.question, "attempts": 0, "decisions": {}, "outputs": {}},
             {
                 "recursion_limit": resolve_step_budget(request.recursion_limit, document),
