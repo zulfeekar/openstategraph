@@ -2465,7 +2465,24 @@ class NodeRuntime:
 
         prebuilt = router_for("")
 
-        def run(state: RunState) -> dict[str, Any]:
+        async def run(state: RunState) -> dict[str, Any]:
+            """`async def` since `async-first/14`, and the reason is the model
+            call two levels down `aclassify`.
+
+            Phase D (`async-first/06`) migrated the four *longest* families and
+            left this one out as short. Measured rather than reasoned about,
+            "short" turned out to be the wrong axis: under `astream` plus
+            `task.cancel()` the stream stopped in under a millisecond and this
+            node's five-second classification **ran to completion anyway** —
+            `stop_when_client_leaves`' own "abandons rather than cancels",
+            billed. The property that decides the win is whether the closure
+            holds a model call at all, not how long that call takes; the seam
+            document's node measurable in nothing is `_static_text`, which
+            makes none.
+
+            The replay below still asks no model, which is a call not made
+            rather than a call awaited.
+            """
             turn = _upstream_text(state, upstream) or state.get("question", "")
             # The conversation is what the classification needs (ticket 11) —
             # and *only* the classification. What this node produced is a
@@ -2508,7 +2525,7 @@ class NodeRuntime:
             # block does vary, so either one forces a rebuild.
             run_ctx = self._run_context_section()
             router = router_for(skill, run_ctx) if (skill or run_ctx) else prebuilt
-            decision = router.classify(classified)
+            decision = await router.aclassify(classified)
             return {
                 # The conditional edge dispatches on the *stable id* — the
                 # `branch:<id>` port the canvas edge actually leaves from —
@@ -2595,7 +2612,20 @@ class NodeRuntime:
                 context=run_ctx,
             )
 
-        def run(state: RunState) -> dict[str, Any]:
+        async def run(state: RunState) -> dict[str, Any]:
+            """`async def` since `async-first/14`, awaiting `agrade`.
+
+            The same measurement as `_router` above, and this is the family it
+            matters most for: **a grader runs every lap of a revision loop**,
+            so "short" describes one call and never a run. Before this, a
+            cancelled run left the judgement's model call in flight and paid
+            for it.
+
+            The deterministic prelude is untouched and still answers first —
+            `BaseGrader._verdict_without_a_model` is shared by both doors on
+            purpose, so an empty candidate is rejected here with no model
+            consulted through either.
+            """
             # The best candidate *this* grader has already seen, when the
             # producer has just gone quiet (`one-chinook-honest` 25).
             #
@@ -2636,11 +2666,16 @@ class NodeRuntime:
             # teach the grader ladder about `tool_use`, and a grader is a
             # judgement over a text.
             unrun = unrun_query_claim(candidate, state.get("tool_use"), upstream)
-            verdict = (
-                Verdict.reject(unrun, check="unrun_query")
-                if unrun
-                else grader.grade(candidate, question=state.get("question", ""))
-            )
+            # Spelled as a statement rather than the conditional expression it
+            # was: `await` is legal in a ternary and reads as though both arms
+            # might be awaited, and the whole point of the `unrun` arm is that
+            # no model is asked.
+            if unrun:
+                verdict = Verdict.reject(unrun, check="unrun_query")
+            else:
+                verdict = await grader.agrade(
+                    candidate, question=state.get("question", "")
+                )
 
             # Budget check before routing: a grader that keeps rejecting must
             # still let the run finish with an honest answer rather than spin.

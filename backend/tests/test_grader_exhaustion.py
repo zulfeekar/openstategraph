@@ -25,6 +25,8 @@ from typing import Any
 from openstategraph.compile.node_runtime import NodeRuntime
 from openstategraph.compile.workflow_compiler import CompiledPlan
 
+from conftest import drive_node
+
 
 class _StubGrader:
     """Always rejects — the only interesting case for a ceiling."""
@@ -48,6 +50,16 @@ class _StubGrader:
         verdict = _Verdict()
         verdict.feedback = self.feedback  # type: ignore[attr-defined]
         return verdict
+
+    async def agrade(self, candidate: str, *, question: str = "") -> Any:
+        """The async door, since `async-first/14` made `_grader`'s body await.
+
+        A double is not on the ladder, so `install_doors` fills nothing in for
+        it — the same finding `async-first/10` recorded about two orchestrator
+        spies. A stub offering half a pair is a Liskov failure in the test, not
+        a reason to make the runtime defensive.
+        """
+        return self.grade(candidate, question=question)
 
 
 def _grader_run(monkeypatch: Any, *, max_attempts: int = 3) -> Any:
@@ -85,7 +97,7 @@ class TestTheCeiling:
             "revisions": {"grader1": 2},
             "outputs": {"agent1": "Rock, $826.65."},
         }
-        result = run(state)  # type: ignore[arg-type]
+        result = drive_node(run, state)  # type: ignore[arg-type]
         assert result["decisions"]["grader1"] == "pass"
         assert result["outputs"]["grader1"] == "Rock, $826.65."
 
@@ -99,7 +111,7 @@ class TestTheCeiling:
             "revisions": {"grader1": 2},
             "outputs": {},
         }
-        result = run(state)  # type: ignore[arg-type]
+        result = drive_node(run, state)  # type: ignore[arg-type]
 
         assert result["decisions"]["grader1"] == "pass"
         answer = result["outputs"]["grader1"]
@@ -115,6 +127,6 @@ class TestTheCeiling:
         """Under the cap an empty candidate means revise, not report."""
         run = _grader_run(monkeypatch)
         state = {"question": "q", "revisions": {"grader1": 0}, "outputs": {}}
-        result = run(state)  # type: ignore[arg-type]
+        result = drive_node(run, state)  # type: ignore[arg-type]
         assert result["decisions"]["grader1"] == "revise"
         assert result["outputs"]["grader1"] == ""

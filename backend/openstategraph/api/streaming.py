@@ -1007,7 +1007,7 @@ async def _stream_run(
         # cancelled body unwinds at its *next await*, so the provider call
         # already issued is still finished and still billed: 0.41–4.85 s
         # across the nine runs above. And a node whose body is still `def` —
-        # a grader, a router, a function, anything reached through
+        # a function, an output formatter, anything reached through
         # `node_doors`' sync door — is exactly as uninterruptible as
         # everything was before. So "stop means stop" is a claim about a
         # *node*, never about the graph, which is why the frames carry

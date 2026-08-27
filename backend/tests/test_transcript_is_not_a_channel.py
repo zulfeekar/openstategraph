@@ -33,6 +33,8 @@ from openstategraph.compile.node_runtime import NodeRuntime, _thread_question
 from openstategraph.compile.workflow_compiler import CompiledPlan, WorkflowCompiler
 from openstategraph.evaluation.recovery import recover_from_run
 
+from conftest import drive_node
+
 FENCE = (
     "```suggestion\n"
     '{"nodeType": "tool.sql-query", "attachTo": "agent-sql", "port": "tools",\n'
@@ -154,7 +156,7 @@ def _router_run(model: Any, state: dict[str, Any]) -> dict[str, Any]:
     plan = WorkflowCompiler().plan(ROUTED)
     node = next(n for n in ROUTED["nodes"] if n["id"] == "router1")  # type: ignore[union-attr]
     run = runtime.factory(ROUTED)("router1", node, plan)
-    return run(state)
+    return drive_node(run, state)
 
 
 def _conversation() -> dict[str, Any]:

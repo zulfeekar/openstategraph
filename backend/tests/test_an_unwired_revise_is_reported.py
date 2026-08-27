@@ -58,6 +58,8 @@ from openstategraph.compile.workflow_compiler import (
     unrouted_decision_warnings,
 )
 
+from conftest import drive_node
+
 EXAMPLES = Path(__file__).resolve().parents[1] / "openstategraph" / "examples"
 
 
@@ -78,6 +80,16 @@ class _StubGrader:
         # double stands in for a judgement, not a deterministic rejection.
         verdict.failed_check = ""
         return verdict
+
+    async def agrade(self, candidate: str, *, question: str = "") -> Any:
+        """The async door, since `async-first/14` made `_grader`'s body await.
+
+        A double is not on the ladder, so `install_doors` fills nothing in for
+        it — the same finding `async-first/10` recorded about two orchestrator
+        spies. A stub offering half a pair is a Liskov failure in the test, not
+        a reason to make the runtime defensive.
+        """
+        return self.grade(candidate, question=question)
 
 
 def _grader(monkeypatch: Any, conditional: dict[str, str], *, passes: bool = False) -> Any:
@@ -144,7 +156,7 @@ class TestTheCompilerSaysItBeforeAnythingRuns:
         land there.
         """
         _runtime, run = _grader(monkeypatch, {"pass": "out1"})
-        result = run({"question": "q", "attempts": 0, "outputs": {"agent1": "draft"}})
+        result = drive_node(run, {"question": "q", "attempts": 0, "outputs": {"agent1": "draft"}})
         assert result["decisions"]["grader1"] == "revise"
 
 
@@ -153,18 +165,18 @@ class TestTheRunSaysItToo:
 
     def test_a_revise_that_reaches_nothing_is_recorded(self, monkeypatch: Any) -> None:
         _runtime, run = _grader(monkeypatch, {"pass": "out1"})
-        result = run({"question": "q", "attempts": 0, "outputs": {"agent1": "draft"}})
+        result = drive_node(run, {"question": "q", "attempts": 0, "outputs": {"agent1": "draft"}})
         assert result["unrouted"] == {"grader1": "revise"}
 
     def test_a_wired_revise_records_nothing(self, monkeypatch: Any) -> None:
         _runtime, run = _grader(monkeypatch, {"pass": "out1", "revise": "draft1"})
-        result = run({"question": "q", "attempts": 0, "outputs": {"agent1": "draft"}})
+        result = drive_node(run, {"question": "q", "attempts": 0, "outputs": {"agent1": "draft"}})
         assert "unrouted" not in result
 
     def test_a_pass_records_nothing_even_with_revise_unwired(self, monkeypatch: Any) -> None:
         """The common shape. A grader that approved lost nothing."""
         _runtime, run = _grader(monkeypatch, {"pass": "out1"}, passes=True)
-        result = run({"question": "q", "attempts": 0, "outputs": {"agent1": "draft"}})
+        result = drive_node(run, {"question": "q", "attempts": 0, "outputs": {"agent1": "draft"}})
         assert result["decisions"]["grader1"] == "pass"
         assert "unrouted" not in result
 
@@ -173,8 +185,9 @@ class TestTheRunSaysItToo:
         `pass`, the answer really was published, and `forced` already says so —
         nothing was unrouted."""
         _runtime, run = _grader(monkeypatch, {"pass": "out1"})
-        result = run(
-            {"question": "q", "revisions": {"grader1": 2}, "outputs": {"agent1": "draft"}}
+        result = drive_node(
+            run,
+            {"question": "q", "revisions": {"grader1": 2}, "outputs": {"agent1": "draft"}},
         )
         assert result["decisions"]["grader1"] == "pass"
         assert "forced" in result
@@ -185,7 +198,7 @@ class TestTheRunSaysItToo:
         route nowhere and would be a breaking change to what every trace row,
         warning and test reads."""
         _runtime, run = _grader(monkeypatch, {"pass": "out1"})
-        result = run({"question": "q", "attempts": 0, "outputs": {"agent1": "draft"}})
+        result = drive_node(run, {"question": "q", "attempts": 0, "outputs": {"agent1": "draft"}})
         assert result["decisions"]["grader1"] == "revise"
 
 

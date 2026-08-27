@@ -25,6 +25,8 @@ from openstategraph.abc.router import Branch, Classification, Router
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import CompiledPlan
 
+from conftest import drive_node
+
 
 class ScriptedModel:
     """Answers with whatever it was told to, once per call."""
@@ -120,7 +122,7 @@ class TestRouterNodeFactory:
         node = {"id": "router1", "type": "route.classifier", "data": {"branches": branches, **data}}
         plan = CompiledPlan()
         run = runtime._router("router1", node, plan)
-        update = run(RunState(question="anything"))  # type: ignore[typeddict-item]
+        update = drive_node(run, RunState(question="anything"))  # type: ignore[typeddict-item]
         return update["decisions"]["router1"]
 
     def test_v2_array_branches_decide_by_id(self) -> None:
