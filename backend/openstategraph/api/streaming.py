@@ -899,9 +899,41 @@ def _stream_run(
         # blocking model call cannot be interrupted, and closing the fold
         # drains them — an early stop trailed model calls for ~15s, a stop
         # mid-fan-out for ~75s, in both cases ending far short of the run
-        # itself. Their results are discarded. There is no cancellation seam
-        # inside a superstep at this version: `RunControl.request_drain()`
-        # (langgraph 1.2) stops at exactly the same boundary.
+        # itself. Their results are discarded.
+        #
+        # There is no cancellation seam inside a superstep on this version,
+        # and **all three candidates were probed on the installed langgraph
+        # 1.2.10 rather than read off a page** (ticket 09), because this
+        # sentence has now been the thing a session came to re-check twice:
+        #
+        # - `RunControl.request_drain()` — its check is the first statement of
+        #   `PregelLoop.tick()`, so it stops at exactly this boundary. With a
+        #   node sleeping 20s and a drain at t=3s, control returned at 20.01s.
+        #   LangChain's own fault-tolerance page says the same in words:
+        #   drain "does not cancel running asyncio tasks or kill threads".
+        # - `GraphRunStream.abort()` — the member this comment used not to
+        #   name, and the reason it must. It is `graph_iter.close()` plus a
+        #   mux close: from the pumping thread it is *exactly* the
+        #   `GeneratorExit` we are already handling here, and from any other
+        #   thread it is a **silent no-op** — `close()` on a generator that is
+        #   mid-`next()` raises `ValueError: generator already executing`, and
+        #   `abort()` swallows it under a bare `except Exception: pass`.
+        #   Probed: abort at t=3s returned instantly and raised nothing, the
+        #   node still ran to completion at 20.01s, and the caller was left
+        #   with an empty final state because the mux had been closed under
+        #   it. It is strictly worse than this handler, which at least logs.
+        #   It also requires the v3 protocol (`GraphRunStream` carries
+        #   `@beta("The v3 streaming protocol on Pregel is experimental")`).
+        # - Node `timeout` — the only construct in 1.2.10 that does interrupt
+        #   a node mid-flight, and `_internal/_timeout.py` rejects it at
+        #   compile time for sync nodes: "Node timeouts are only supported for
+        #   async nodes."
+        #
+        # Which is the map's thesis, measured: under `astream`, cancelling the
+        # consuming task cancelled an `async def` node body outright (it never
+        # completed, at t=3.00s), while a sync node in the same async graph
+        # ran to its full 10s in a worker thread. The seam is the node, not
+        # the stream — see `.scratch/async-first/`.
         logger.info(
             "run stream stopped by the client (thread_id=%s) — no further supersteps",
             thread_id,

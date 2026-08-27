@@ -254,3 +254,55 @@ away by an adoption, because an adopting fold calls `astream_events`.
 and the phase C stability argument stand exactly as written. The correction is
 that ticket 24 need not precede them; if it lands later it inherits an async
 fold, which is strictly easier for it than a sync one.
+
+---
+
+## Amendment, 2026-08-27 — the cancellation ceiling, measured (async-first/09)
+
+The charter's headline is *stop means stop*, and `_stream_run`'s
+`GeneratorExit` handler stated its ceiling as a fact about the library:
+"there is no cancellation seam inside a superstep at this version". Ticket 01
+turned up a member that sentence did not mention — `GraphRunStream.abort()`,
+alongside `stream_events`' `control: RunControl | None`. Ticket 09 probed both
+on the installed `langgraph 1.2.10`, because a claim about a library that
+nobody re-checks is exactly the defect class this project keeps paying for.
+
+**The ceiling stands.** `abort()`
+(`langgraph/stream/run_stream.py:148`) is `graph_iter.close()` plus a mux
+close, wrapped in `except Exception: pass`. From the pumping thread that is
+the identical `GeneratorExit` the fold already handles. From any other thread
+it is a **silent no-op**: `close()` on a generator inside `next()` raises
+`ValueError: generator already executing`, which `abort()` swallows — probed,
+the call returned at t=3.00 s raising nothing while the node ran to completion
+at 20.01 s, and the caller was handed an empty final state because the mux had
+been closed under it. It also requires the experimental v3 protocol
+(`GraphRunStream` carries the `@beta` marker on the class), so it costs
+something and buys nothing. `RunControl.request_drain()` stops where the
+source says it does — its check is the first statement of `PregelLoop.tick()`,
+before dispatch — measured at +17.01 s with a 20 s node. LangChain's own
+fault-tolerance page agrees in words: drain "does not cancel running asyncio
+tasks or kill threads".
+
+**But the number the charter quotes needed relabelling.** Probing the
+production shape rather than a bare generator shows `stop_when_client_leaves`
+already races the disconnect and abandons the pending step without awaiting
+it, so **the client-visible stop is already instant** — 0.00 s, today, with
+sync nodes:
+
+| Arm (10 s node, stop at t=3 s) | Client-visible stop | Node body |
+| --- | --- | --- |
+| today: sync fold + race/abandon | +0.00 s | ran to completion — 9.00 s billed after the stop |
+| `astream` + **sync** node, `task.cancel()` | +0.00 s | ran to completion in its worker thread |
+| `astream` + **async** node, `task.cancel()` | +0.00 s | **never completed** — genuinely cancelled |
+
+So the ~15 s and ~75 s in the handler are **seconds of model work billed after
+the stop**, never latency a user waits through. They remain the right targets;
+only their label changes. Phase A moves neither column, which is what the
+phase's own ticket already said — it now says it with a measurement.
+
+Corroboration from an independent seam: `add_node(timeout=...)` is the one
+construct in 1.2.10 that interrupts a node mid-flight, and
+`_internal/_timeout.py` rejects it at compile time for sync nodes — *"Node
+timeouts are only supported for async nodes."* Two seams, one conclusion, and
+it is the charter's: **the node is the only place cancellation can happen, and
+only an `async def` one.**
