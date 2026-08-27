@@ -3095,7 +3095,15 @@ class NodeRuntime:
             else ""
         )
 
-        def run(state: RunState) -> dict[str, Any]:
+        # **`async def`, second of Phase D** (`async-first/06`), and the family
+        # where the abandoned-work bill is largest: a `Send` fan-out dispatches
+        # N copies of this one node, so a stop mid-fan-out abandons N model
+        # calls rather than one. That is the ~75 s in `_stream_run`'s
+        # `GeneratorExit` handler — seconds of model work billed after the run
+        # was stopped, per `async-first/09`'s relabelling, never latency a user
+        # waits through. The same reasoning as `_agent`'s: on this version of
+        # LangGraph only an `async def` body can be cancelled at all.
+        async def run(state: RunState) -> dict[str, Any]:
             task_id = state.get("task_id", "")
             instruction = state.get("task_instruction", "")
 
@@ -3184,7 +3192,7 @@ class NodeRuntime:
                     if part
                 ),
             ).build()
-            result = agent.invoke({"messages": [HumanMessage(content=instruction)]})
+            result = await agent.ainvoke({"messages": [HumanMessage(content=instruction)]})
             out = result.get("messages") or []
             text = _final_text(out)
             return {

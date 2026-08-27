@@ -32,7 +32,7 @@ from openstategraph.compile import node_runtime as node_runtime_module
 from openstategraph.compile.node_runtime import NodeRuntime, RunState, RuntimeServices
 from openstategraph.compile.workflow_compiler import CompiledPlan, suggestion_from_rejection
 
-from conftest import any_chat_model
+from conftest import any_chat_model, drive_node
 
 REFUSAL = "Error: web_fetch is not a valid tool, try one of [web_search, knowledge_lookup]."
 
@@ -45,7 +45,7 @@ class _StubAgent:
     messages rather than from the answer.
     """
 
-    def invoke(self, _payload):
+    async def ainvoke(self, _payload):
         from langchain_core.messages import AIMessage, ToolMessage
 
         return {
@@ -74,7 +74,7 @@ def _run_worker(monkeypatch) -> dict:
         "data": {"role": "Searches the open web."},
     }
     run = runtime._worker("worker-web", node, CompiledPlan())
-    return run(RunState(task_id="task-1", task_instruction="get me checklists"))  # type: ignore[typeddict-item]
+    return drive_node(run, RunState(task_id="task-1", task_instruction="get me checklists"))  # type: ignore[typeddict-item]
 
 
 class TestTheWorkerWritesTheRefusalToState:
@@ -91,7 +91,7 @@ class TestTheWorkerWritesTheRefusalToState:
         """An empty map would be indistinguishable from a refusal nobody made."""
 
         class _CleanAgent:
-            def invoke(self, _payload):
+            async def ainvoke(self, _payload):
                 from langchain_core.messages import AIMessage
 
                 return {"messages": [AIMessage(content="done")]}
@@ -103,7 +103,7 @@ class TestTheWorkerWritesTheRefusalToState:
         monkeypatch.setattr(agent_module, "ReactAgentNode", _CleanNode)
         runtime = NodeRuntime(services=RuntimeServices(model=any_chat_model()))  # type: ignore[arg-type]
         run = runtime._worker("worker-web", {"id": "worker-web", "data": {}}, CompiledPlan())
-        assert "unmet_tools" not in run(RunState(task_id="t", task_instruction="hi"))  # type: ignore[typeddict-item]
+        assert "unmet_tools" not in drive_node(run, RunState(task_id="t", task_instruction="hi"))  # type: ignore[typeddict-item]
 
 
 class TestTheDoorItOpens:

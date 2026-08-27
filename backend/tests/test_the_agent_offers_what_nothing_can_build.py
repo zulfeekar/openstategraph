@@ -69,7 +69,7 @@ class _RecordingWorker:
 
 
 class _StubAgent:
-    def invoke(self, _payload):
+    async def ainvoke(self, _payload):
         from langchain_core.messages import AIMessage
 
         return {"messages": [AIMessage(content="done")]}

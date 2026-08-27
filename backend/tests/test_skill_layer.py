@@ -363,11 +363,14 @@ class TestTheWorkerComposesLikeEveryOtherPromptedNode:
         plan = CompiledPlan()
         plan.skill_bindings = {"w1": ["md1"]}
         runtime = NodeRuntime(model=any_chat_model(), skills_context="House style.")
+        from conftest import drive_node
+
         run = runtime.factory({"nodes": [node], "edges": []})("w1", node, plan)
-        run(
+        drive_node(
+            run,
             RunState(  # type: ignore[typeddict-item]
                 task_id="t1", task_instruction="do it", outputs={"md1": skill}
-            )
+            ),
         )
         return captured
 

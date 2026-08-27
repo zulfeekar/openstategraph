@@ -44,7 +44,7 @@ import pytest
 from openstategraph.compile.node_runtime import NodeRuntime
 from openstategraph.compile.workflow_compiler import CompiledPlan, silent_node_warnings
 
-from conftest import any_chat_model
+from conftest import any_chat_model, drive_node
 
 WORKER_ID = "worker-research"
 TASK_ID = "task-1"
@@ -58,11 +58,10 @@ def _worker_result(monkeypatch: pytest.MonkeyPatch, *, model: Any, said: str) ->
         def __init__(self, **_: Any) -> None: ...
 
         def build(self) -> Any:
-            return SimpleNamespace(
-                invoke=lambda _invocation: {
-                    "messages": [SimpleNamespace(content=said, tool_calls=[], type="ai")]
-                }
-            )
+            async def ainvoke(_invocation: Any) -> Any:
+                return {"messages": [SimpleNamespace(content=said, tool_calls=[], type="ai")]}
+
+            return SimpleNamespace(ainvoke=ainvoke)
 
     monkeypatch.setattr(agent_family, "ReactAgentNode", StubTier)
 
@@ -71,7 +70,8 @@ def _worker_result(monkeypatch: pytest.MonkeyPatch, *, model: Any, said: str) ->
     plan = CompiledPlan(nodes=[WORKER_ID], edges=[], conditional={})
     runtime = NodeRuntime(model=model)
     run = runtime.factory(document)(WORKER_ID, node, plan)
-    return run(
+    return drive_node(
+        run,
         {
             "task_id": TASK_ID,
             "task_instruction": "List day-one access for a new engineer.",

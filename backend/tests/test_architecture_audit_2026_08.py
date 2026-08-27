@@ -27,6 +27,8 @@ from openstategraph.compile.node_runtime import (
 )
 from openstategraph.compile.workflow_compiler import CompiledPlan
 
+from conftest import drive_node
+
 
 def _build(runtime: NodeRuntime, node: dict[str, Any], plan: CompiledPlan | None = None):
     plan = plan or CompiledPlan()
@@ -129,7 +131,7 @@ class TestWorkerIsAnAgentToo:
 
             def build(self) -> Any:
                 class A:
-                    def invoke(self, _payload: Any) -> dict[str, Any]:
+                    async def ainvoke(self, _payload: Any) -> dict[str, Any]:
                         return {"messages": []}
 
                 return A()
@@ -138,7 +140,7 @@ class TestWorkerIsAnAgentToo:
 
         monkeypatch.setattr(agent_family, "ReactAgentNode", FakeNode)
         run = _build(runtime, dict(self.WORKER))
-        run(RunState(task_id="t1", task_instruction="do it"))  # type: ignore[typeddict-item]
+        drive_node(run, RunState(task_id="t1", task_instruction="do it"))  # type: ignore[typeddict-item]
         return captured
 
     def test_the_workers_own_model_selection_is_honoured(self, monkeypatch) -> None:
