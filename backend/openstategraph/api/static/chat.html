@@ -301,6 +301,33 @@
   @media (prefers-reduced-motion: reduce) {
     .steps div.thinking.live > p:last-child::before { animation: none; }
   }
+  /* What the panel says while the wire is honestly quiet
+     (`launch-readiness/141`). Measured on `cpl-nl2sql`: the first narration
+     frame does not leave the server until 4.99 s, because three nodes run
+     before anything with a voice does. The frames that do arrive are prompt,
+     so this is a silence to account for rather than a paint to fix — and the
+     sentence names the wait, never the work, because nothing on the stream
+     says what the next step is.
+
+     It borrows the live narration line's presentation deliberately: it stands
+     in the same place, in the same voice, and is removed the instant a real
+     line can take over. It is NOT a `div.thinking.live` — `liveLine` claims
+     that selector and would append narration into this box. */
+  .steps p.waiting {
+    display: flex; align-items: baseline; gap: var(--space-2);
+    margin: var(--space-1) 0; padding-inline-start: var(--space-4);
+    border-inline-start: 1px solid var(--line-soft);
+    color: var(--muted); font-style: italic; overflow-wrap: anywhere;
+  }
+  .steps p.waiting::before {
+    content: ""; flex: none; align-self: center;
+    width: 5px; height: 5px; border-radius: 999px;
+    margin-inline-start: -14px; background: var(--accent);
+    animation: thinking-pulse 1.1s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .steps p.waiting::before { animation: none; }
+  }
   /* A spawn is an event in the run, not a step of it — indented under the
      node that spawned, and clipped to one line however long the task is. */
   .steps div.spawn {
@@ -1285,9 +1312,35 @@ async function stream(path, body, el, signal) {
       box.classList.remove("live");
     }
   };
+
+  /* The wait, named — `launch-readiness/141`.
+   *
+   * Two sentences and no more, because only one thing is honestly known: has
+   * anything come back at all. An `update` frame fires when a node COMPLETES
+   * and carries that same node as its `activeNode`, so after a step lands the
+   * identity of whatever is now in charge is genuinely unknown until it
+   * narrates itself. A line naming a step would be an invention.
+   *
+   * Removed by the first frame that carries a voice of its own, and by every
+   * ending — a placeholder that outlives the thing it stood in for is
+   * `launch-readiness/110` wearing the other hat. */
+  const WAITING_TO_START = "Sent your question — waiting for the workflow to start.";
+  const WAITING_FOR_THE_NEXT_STEP = "Working — waiting for the next step to say what it is doing.";
+  const showWaiting = (text) => {
+    let row = steps.querySelector(":scope > p.waiting");
+    if (!row) { row = document.createElement("p"); row.className = "waiting"; row.setAttribute("role", "status"); row.setAttribute("aria-live", "polite"); }
+    if (row.textContent !== text) row.textContent = text;
+    steps.appendChild(row); // always last: it is the present tense
+  };
+  const clearWaiting = () => {
+    const row = steps.querySelector(":scope > p.waiting");
+    if (row) row.remove();
+  };
+  showWaiting(WAITING_TO_START);
   const resp = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
   if (!resp.ok) {
     finishFlow();
+    clearWaiting();
     // A door refused before any stream started — no provider installed, a
     // bad slug, a malformed request. FastAPI's own error shape is
     // `{"detail": "..."}`, and `detail` is written in the product's own
@@ -1422,8 +1475,23 @@ async function stream(path, body, el, signal) {
               delete row.dataset.open;
               if (!existing) steps.appendChild(row);
             }
+            // A step finished; nothing has said what the next one is doing.
+            // The wait changes, and it is still a wait — but only while this
+            // turn has never had a voice. Once a step has narrated itself the
+            // stack is on screen and stays there, and re-showing the
+            // placeholder in the gap between two narration lines made it
+            // flash on for a millisecond and off again (measured live, three
+            // times between 7.9 s and 12.3 s of one run). A placeholder that
+            // blinks is worse than the gap it fills, so this is the OPENING
+            // silence only.
+            //
+            // Last in this branch, not first: `showWaiting` appends, and the
+            // step row this frame is about has only just been added. Called
+            // at the top, the wait sat ABOVE the step it was waiting after.
+            if (!steps.querySelector(":scope > div.thinking")) showWaiting(WAITING_FOR_THE_NEXT_STEP);
             el.scrollIntoView({ block: "end" });
           } else if (event === "progress") {
+            clearWaiting(); // a real line takes over
             // The frame this page was the reason for, and the one it used to
             // drop (architecture review 2026-08-16, F2). `update` fires when a
             // node COMPLETES and `token` exists only while a model types, so a
@@ -1465,6 +1533,7 @@ async function stream(path, body, el, signal) {
             if (d.namespace && d.namespace[0]) tlNames["ns:" + d.namespace[0]] = d.label;
             el.scrollIntoView({ block: "end" });
           } else if (event === "token") {
+            clearWaiting(); // the answer is typing itself out
             // A token frame moves the marker too (ticket 02) — and it is the
             // only frame that can move it *early*. `update` frames are emitted
             // when a node finishes, so a diagram driven by updates alone shows
@@ -1505,6 +1574,7 @@ async function stream(path, body, el, signal) {
             if (d.block === "reasoning") { thoughts += d.content; reasoning.textContent = thoughts.slice(-400); }
             else { tokens += d.content; thinking.textContent = tokens.slice(-600); }
           } else if (event === "error") {
+            clearWaiting();
             // Terminal. The run is over, so the diagram stops claiming to be
             // running — the same omission the `interrupt` branch had.
             ended = "error";
@@ -1512,6 +1582,7 @@ async function stream(path, body, el, signal) {
             thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
             answer.hidden = false; answer.innerHTML = `<span class="error">${esc2(d.detail || JSON.stringify(d))}</span>`;
           } else if (event === "interrupt") {
+            clearWaiting();
             // Terminal too: this stream really is finished, and the run
             // continues only if the customer presses Approve or Reject. So
             // the diagram must stop saying "running" here — see `pauseFlow`.
@@ -1520,6 +1591,7 @@ async function stream(path, body, el, signal) {
             thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
             renderInterrupt(el, d);
           } else if (event === "done") {
+            clearWaiting();
             ended = "done";
             finishFlow();
             thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
@@ -1552,6 +1624,7 @@ async function stream(path, body, el, signal) {
       // implying the whole run vanished mid-thought.
       await reader.cancel().catch(() => {});
       finishFlow();
+      clearWaiting();
       thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
       noteStopped(el, cancellable);
       return "stopped";
@@ -1563,6 +1636,7 @@ async function stream(path, body, el, signal) {
     // frame handling above is still visible rather than dressed up as a
     // network failure.
     finishFlow();
+    clearWaiting();
     thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
     noteDropped(el, String((err && err.message) || err));
     return "dropped";
@@ -1574,6 +1648,7 @@ async function stream(path, body, el, signal) {
   // only thing that separates "the user stopped it" from "the server hung up".
   if (signal && signal.aborted) {
     finishFlow();
+    clearWaiting();
     thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
     noteStopped(el, cancellable);
     return "stopped";
@@ -1586,6 +1661,7 @@ async function stream(path, body, el, signal) {
   // half-drawn diagram still glowing.
   if (!ended) {
     finishFlow();
+    clearWaiting();
     thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
     noteDropped(el);
     return "dropped";

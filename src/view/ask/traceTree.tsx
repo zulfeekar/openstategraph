@@ -276,7 +276,14 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
   const trace = useMemo(() => buildTrace(rows), [rows]);
   return (
     <div className="ask__activity">
-      {rows.length === 0 ? <p className="ask__meta">Waiting for the first node to run…</p> : null}
+      {/* No empty state of its own any more (`launch-readiness/141`). The
+          panel now always carries a line naming the wait while a turn is
+          running and nothing has spoken — in the product's shared voice, with
+          the same pulse the narration lines use — so a second, static
+          "Waiting for the first node to run…" inside the record said the same
+          thing worse and sat directly above it. A trace with no rows is a
+          record of nothing having finished yet, which is exactly what it now
+          shows. See `waitingLine`. */}
       {trace.map((step, index) =>
         step.spawn ? (
           <div

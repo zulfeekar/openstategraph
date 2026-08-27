@@ -63,6 +63,7 @@ import { clearRunInFlight, markRunInFlight } from './interruptedRun';
 import { howAStopEnded, stoppedLine, type StoppedHow } from './stoppedLine';
 import { liveLineAfterStep, type LiveLine } from './liveLine';
 import { progressLine } from './progressLine';
+import { waitingLine } from './waitingLine';
 import './AskPanel.css';
 
 /**
@@ -192,6 +193,19 @@ interface ChatTurn {
    * decides when it goes — see `liveLineAfterStep`.
    */
   readonly progress: LiveLine | null;
+  /**
+   * Whether any step has narrated itself at all this turn.
+   *
+   * `launch-readiness/141`. Distinct from `progress` because `progress` is
+   * cleared by the step's own completion (`liveLineAfterStep`) and this is
+   * not: it is the answer to "has this surface got a voice yet", and it is
+   * what confines the waiting placeholder to the **opening** silence. Without
+   * it, the placeholder flashed on for a millisecond in every gap between two
+   * narration lines — measured live on `/chat`, three times between 7.9 s and
+   * 12.3 s of one run. A placeholder that blinks is worse than the gap it
+   * fills.
+   */
+  readonly spoke: boolean;
   /**
    * Streamed *model* text, concatenated live — "how the agent thinks".
    *
@@ -904,7 +918,7 @@ export function AskPanel({
           }
           const line: LiveLine = { node: event.node, text };
           setTurns((all) =>
-            all.map((turn) => (turn.id === id ? { ...turn, progress: line } : turn)),
+            all.map((turn) => (turn.id === id ? { ...turn, progress: line, spoke: true } : turn)),
           );
           scrollToEnd();
         } else if (event.type === 'error') {
@@ -1153,6 +1167,7 @@ export function AskPanel({
           running: true,
           activity: [],
           progress: null,
+          spoke: false,
           thinking: '',
           toolResults: [],
           result: null,
@@ -1849,7 +1864,28 @@ function Turn({
               evidence the run has not died. */}
           {turn.running && turn.progress ? (
             <ThinkingLine text={turn.progress.text} className="ask__live" />
-          ) : null}
+          ) : (
+            // And when nothing is saying anything, what it is waiting for.
+            //
+            // `launch-readiness/141`: measured on `cpl-nl2sql`, the first
+            // narration frame does not leave the server until 4.99 s — three
+            // nodes run before anything with a voice does. The frames that do
+            // arrive are prompt (received 15.9 ms, in the DOM 62.9 ms), so
+            // this is not a rendering delay to fix; it is a silence to
+            // account for. The sentence names the wait and never the work,
+            // because the stream does not say what the next step is — see
+            // `waitingLine`.
+            <ThinkingLine
+              text={waitingLine({
+                running: turn.running,
+                saidSomething: turn.progress !== null || turn.spoke,
+                streaming: turn.thinking !== '',
+                awaitingApproval: turn.pendingApproval !== null,
+                stepsSoFar: turn.activity.length,
+              })}
+              className="ask__live"
+            />
+          )}
         </div>
       ) : null}
 
