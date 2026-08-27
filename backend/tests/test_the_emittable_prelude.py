@@ -258,6 +258,15 @@ class TestTheRosterActuallySurvivesBeingEmitted:
         import subprocess
         import sys
 
+        from openstategraph.compile.state import RunState as _installed_RunState
+
+        # The count this run is checked against, not a copy of it: whatever
+        # `RunState` holds in the package actually installed here is what the
+        # emitted, package-absent copy must match too. A literal here is the
+        # exact trap `mcp-connect/09` names — a later key lands in the class
+        # and nobody remembers to walk back to this file and bump a digit.
+        expected_key_count = len(_installed_RunState.__annotations__)
+
         for relative in PRELUDE:
             target = tmp_path / "openstategraph" / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -287,6 +296,5 @@ class TestTheRosterActuallySurvivesBeingEmitted:
             cwd="/",
         )
         assert result.returncode == 0, result.stderr
-        # 23 since `organisms-first-class` 56 added `budget_stops` and the
-        # managed `remaining_steps`.
-        assert result.stdout.split() == ["23", "v"]
+        # Derived above, not literalised here — see `expected_key_count`.
+        assert result.stdout.split() == [str(expected_key_count), "v"]
