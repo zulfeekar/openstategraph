@@ -3,6 +3,23 @@
 ## Unreleased
 
 ### Added
+- **Every tool has an async door, and no tool was asked to open it.**
+  `openstategraph.abc.BaseTool` gains `_aexecute(args)` — the awaitable twin
+  of `_execute`, **concrete**, defaulting to running `_execute` in a worker
+  thread — and `arun(**kwargs)`, the awaitable twin of `run`. `_execute` is
+  unchanged and still the one abstract method, so none of the 26
+  implementations in this repository moved and no adopter's `tools/*.py` has
+  to. Override `_aexecute` only when the work is genuinely awaitable: that is
+  the body a cancelled run actually stops, where the thread default cannot be
+  interrupted. `as_langchain_tool()` now hands `StructuredTool` a `coroutine`
+  as well as a `func`, so `ainvoke` reaches the tool's own async body instead
+  of LangChain's thread fallback, and the `on_call` provenance hook fires on
+  both paths. A tool that writes only `_aexecute` is still callable through
+  `run()` — the bridge is installed per subclass at class-definition time —
+  so the ladder stays substitutable in both directions. `ITool` is
+  deliberately unchanged: it is a `runtime_checkable` Protocol, and a member
+  added to it would un-satisfy every third-party object that satisfies it
+  today (`async-first/04`).
 - **Every agent narrates before and after each model call, by default.** A
   40-second model call inside a real run produced no visible output — the
   owner watched a glowing border with no way to tell working from stuck.

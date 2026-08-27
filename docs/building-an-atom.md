@@ -662,6 +662,32 @@ to 1, keep it out of the loop, or make the action safe to repeat. Neither
 finding can fail a build — the condition is a conservative default about a tool
 nobody declared, and a guess may be loud but may not exit 1.
 
+**If your tool's work is genuinely awaitable, write `_aexecute` instead.**
+`_execute` stays the one required method — it is what all 26 bundled tools
+implement, and nothing about it changed — and every tool also has an awaitable
+door it inherits for free:
+
+```python
+class Ping(BaseTool):
+    ...
+    async def _aexecute(self, args) -> ToolResult:      # optional
+        async with httpx.AsyncClient() as http:
+            return ToolResult(content=(await http.get(self.endpoint)).text)
+```
+
+Write it **only** when there is something to `await`. The inherited default
+runs your `_execute` in a worker thread, which is what LangChain already did
+for a synchronous tool, and wrapping blocking work in `async def` is worse than
+not writing it at all: it holds the event loop instead of a pool thread.
+
+What you get by writing it is the one thing a thread cannot give: **a call that
+actually stops.** When a run is cancelled — the person closed the tab — a
+thread-bound tool keeps going and keeps billing until it finishes, while an
+awaited one stops where it is. Both doors always work in both directions: a
+tool with only `_execute` can be awaited, and a tool with only `_aexecute` can
+be called synchronously, so nothing about your choice constrains who can use
+your tool.
+
 **The wire contract** is `GET /api/workflows/{slug}/capabilities`, whose
 `plugin_tools` array carries `node_type`, `name`, `description`, `args_schema`,
 `fields`, the `distribution` that shipped each tool (always displayed on the

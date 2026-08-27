@@ -410,12 +410,34 @@ PREBUILT_TOOLS = """A recorded exception, with the shape visible in the base the
     a collaborator makes an atom the palette cannot describe, and there is
     nothing to split — a tool that reads has one reason to change whether it
     declares seven constants or eight. What the ceiling is measuring here is
-    the base's declaration surface, counted sixteen times."""
+    the base's declaration surface, counted sixteen times.
 
-#: Thirteen: the eight-member base, three manifest constants, a seam and a field.
+    **And once more on 2026-08-27, same day, same base, different member**
+    (`async-first/04`). `BaseTool.arun` is the ninth: the async twin of `run`,
+    the caller's verb on the door `_aexecute` opens. This one is not a
+    declaration but a *method*, so it is worth saying why it is on the base and
+    not a collaborator. It is the same seam as `run` — validate the `Args`,
+    call the body, turn an exception into a `ToolResult` — reached with `await`
+    instead of a call. A second class holding it would be two spellings of one
+    tool, drifting, with one of them under test; a free function taking a tool
+    would be a method with the receiver written out longhand. `_aexecute`
+    itself costs nothing here, being underscore-prefixed, and `ITool` was
+    deliberately left alone: it is a `runtime_checkable` Protocol, and a member
+    added to it un-satisfies every third-party object that satisfies it today.
+
+    Nineteen tools plus `McpTool` moved by one, and this time **none of them
+    crossed** — 121 had already taken every tool that was sitting at ten over
+    the line, so the census gained no rows. That is the same +1 charged for the
+    third time to the same sixteen classes, and the third time the answer is
+    the one this paragraph has given twice: the alternative is a shared concern
+    re-declared per tool, which is the rule this project does not break to
+    flatter a count."""
+
+#: Fourteen: the nine-member base, three manifest constants, a seam and a field.
 MCP_TOOL = """A recorded exception, and one of the larger tools in the catalogue
-    for a structural reason rather than a sprawling one. Thirteen is the
-    eight-member `BaseTool` contract, the three manifest constants every atom
+    for a structural reason rather than a sprawling one. Fourteen is the
+    nine-member `BaseTool` contract (`side_effecting` on `launch-readiness`
+    121, `arun` on `async-first/04`), the three manifest constants every atom
     declares (`name`, `description`, `Args`), `document_state()`, and exactly
     one field of its own: `bindings`, the server rows this node resolved to.
 
@@ -578,26 +600,26 @@ RECORDED: dict[str, Recorded] = {
     "knowledge_explorer.CodebaseKnowledgeBuilder": Recorded(15, KNOWLEDGE_BUILDERS),
     "knowledge_engines.PostgresEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
     "knowledge_engines.MssqlEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
-    "prebuilt_sql.SqlGetSchemaTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_sql.SqlListTablesTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_sql.SqlQueryTool": Recorded(13, PREBUILT_TOOLS),
-    "prebuilt_youtube.YouTubeTranscriptTool": Recorded(15, PREBUILT_TOOLS),
-    "prebuilt_mcp.McpTool": Recorded(13, MCP_TOOL),
-    "knowledge_explorer.CodeGrepTool": Recorded(11, PREBUILT_TOOLS),
-    "knowledge_explorer.CodeLsTool": Recorded(11, PREBUILT_TOOLS),
-    "knowledge_explorer.CodeReadTool": Recorded(11, PREBUILT_TOOLS),
-    "knowledge_explorer.WriteTopicTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_architect.ValidateWorkflowTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_email.EmailSendTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_knowledge.KnowledgeLookupTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_platform.DescribeWorkflowTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_platform.ListWorkflowsTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_platform.PlatformGrepTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_platform.PlatformLsTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_platform.PlatformReadTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_session.SessionIdentityTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_web.WebFetchTool": Recorded(11, PREBUILT_TOOLS),
-    "prebuilt_web.WebSearchTool": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_sql.SqlGetSchemaTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_sql.SqlListTablesTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_sql.SqlQueryTool": Recorded(14, PREBUILT_TOOLS),
+    "prebuilt_youtube.YouTubeTranscriptTool": Recorded(16, PREBUILT_TOOLS),
+    "prebuilt_mcp.McpTool": Recorded(14, MCP_TOOL),
+    "knowledge_explorer.CodeGrepTool": Recorded(12, PREBUILT_TOOLS),
+    "knowledge_explorer.CodeLsTool": Recorded(12, PREBUILT_TOOLS),
+    "knowledge_explorer.CodeReadTool": Recorded(12, PREBUILT_TOOLS),
+    "knowledge_explorer.WriteTopicTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_architect.ValidateWorkflowTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_email.EmailSendTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_knowledge.KnowledgeLookupTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_platform.DescribeWorkflowTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_platform.ListWorkflowsTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_platform.PlatformGrepTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_platform.PlatformLsTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_platform.PlatformReadTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_session.SessionIdentityTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_web.WebFetchTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_web.WebSearchTool": Recorded(12, PREBUILT_TOOLS),
     "evaluation.scoring.Scorecard": Recorded(17, SCORECARD),
     "memory._AsyncCapableSaver": Recorded(12, ASYNC_CAPABLE_SAVER),
 }

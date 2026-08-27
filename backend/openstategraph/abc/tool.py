@@ -14,13 +14,26 @@ argument schema across the boundary.
 subclassed ``langchain_core.tools.BaseTool`` instead, every upstream change to
 its internals would reach into our whole tool catalogue, and the compile seam
 would stop being one-directional.
+
+**There are two doors onto every tool, and only one of them is required.**
+``_execute``/``run`` is synchronous and is what a tool implements;
+``_aexecute``/``arun`` is the async twin, added by ``async-first/04``, whose
+default runs ``_execute`` in a thread. That is LangChain's own pairing read off
+the installed ``langchain-core`` rather than off a page — ``BaseTool._run`` is
+the abstract one and ``BaseTool._arun`` is concrete and ends in
+``run_in_executor(None, self._run, ...)`` — and it is the only shape available
+here, because this ladder is Tier 1 with 26 implementations in tree and one in
+every adopter's ``tools/*.py``. See ``_aexecute`` for what each door is worth.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Callable, ClassVar, Protocol, runtime_checkable
+from typing import Any, Callable, ClassVar, Coroutine, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -207,15 +220,61 @@ class BaseTool(ABC):
         registry) to a loud one, at the line that caused it.
         """
         super().__init_subclass__(**kwargs)
+        declares_execute = any(
+            "_execute" in klass.__dict__ for klass in cls.__mro__ if klass is not BaseTool
+        )
+        declares_aexecute = any(
+            "_aexecute" in klass.__dict__ for klass in cls.__mro__ if klass is not BaseTool
+        )
+        if declares_aexecute and not declares_execute:
+            # Statement 2 of `async-first/04`'s substitutability set, answered
+            # rather than waived: a tool that writes only the async body is
+            # still callable through the synchronous door. See
+            # `_execute_through_a_private_loop`.
+            #
+            # Installed here because `__init_subclass__` runs inside
+            # `type.__new__`, which `ABCMeta.__new__` calls *before* it
+            # computes `__abstractmethods__` — so the class comes out concrete
+            # rather than abstract-and-needing-completion, and `_execute` can
+            # stay `@abstractmethod` for everybody else.
+            cls._execute = _execute_through_a_private_loop  # type: ignore[method-assign]
         if "run" not in cls.__dict__:
             return
-        if any("_execute" in klass.__dict__ for klass in cls.__mro__ if klass is not BaseTool):
+        if declares_execute or declares_aexecute:
             return
         raise TypeError(_run_override_message(cls.__qualname__))
 
     @abstractmethod
     def _execute(self, args: BaseModel) -> ToolResult:
         """Do the work. Arguments are already validated."""
+
+    async def _aexecute(self, args: BaseModel) -> ToolResult:
+        """Do the work, awaitably. **Optional — the default is a thread.**
+
+        Override this only when the work is *genuinely* async: an HTTP call
+        you can `await`, an MCP session, a database driver with a coroutine
+        API. A tool that has nothing to await gains nothing by writing it, and
+        a tool that writes it *around* blocking work is strictly worse than
+        one that does not — it holds the event loop for the duration instead
+        of a pool thread. `async-first/10` records that same mistake being
+        refused one rung up, on the orchestrator's planner.
+
+        **What each door is worth, stated so the default is not mistaken for
+        the feature.** The default runs `_execute` in a worker thread, which is
+        exactly what LangChain already did for a sync tool and what
+        `docs/decisions/async-seam.md` says is *not* on the benefit list: it
+        buys no cancellation, because a thread cannot be interrupted. Only a
+        genuinely async body stops when the run stops — which is this map's
+        one user-visible promise, and it is available here rather than
+        delivered here.
+
+        `asyncio.to_thread` and not a bare executor, deliberately: it copies
+        the ambient context, so `report_progress()` and `get_config()` still
+        answer from inside a tool the same way they do today
+        (`launch-readiness/110` — a lost writer is a blank panel with a green
+        suite).
+        """
+        return await asyncio.to_thread(self._execute, args)
 
     def configure(self, data: dict[str, Any]) -> "BaseTool":
         """One bound node's own field values, delivered to its tool.
@@ -245,6 +304,37 @@ class BaseTool(ABC):
         except Exception as exc:
             return ToolResult.failure(f"{type(exc).__name__}: {exc}")
 
+    async def arun(self, **kwargs: Any) -> ToolResult:
+        """`run`, awaitable. The caller's verb on the async door.
+
+        Identical in every respect a caller can observe except that it is
+        awaited — same validation, same "errors are data", same `ToolResult`.
+        `run`/`arun` is `invoke`/`ainvoke` one rung down, and it is a *method
+        on the base*, never a second class: two spellings of one tool is the
+        duplication rule failing where it is most expensive.
+
+        **A cancellation is not an error and is not converted into one.**
+        `asyncio.CancelledError` inherits from `BaseException`, so the handler
+        below cannot see it and a cancelled tool call propagates as a cancel
+        rather than arriving at the model as a `ToolResult` saying the tool
+        failed. That is the whole of *stop means stop* at this seam, and it is
+        pinned by a test rather than left to a property of the language.
+
+        Not on `ITool`. That Protocol is `runtime_checkable` and exists so a
+        plain object can satisfy the tool contract without inheriting from us;
+        adding a member to it would make every third-party satisfier stop
+        being one at the next `isinstance`, silently, in their install.
+        """
+        try:
+            args = self.Args(**kwargs)
+        except Exception as exc:  # pydantic.ValidationError and friends
+            return ToolResult.failure(f"Invalid arguments: {exc}")
+
+        try:
+            return await self._aexecute(args)
+        except Exception as exc:
+            return ToolResult.failure(f"{type(exc).__name__}: {exc}")
+
     def as_langchain_tool(self, on_call: Callable[[str], None] | None = None) -> Any:
         """Adapt to a LangChain ``StructuredTool`` at the boundary.
 
@@ -263,6 +353,18 @@ class BaseTool(ABC):
 
         Optional, and the default is exactly the previous behaviour, so no
         existing caller changed.
+
+        **Both doors are handed over, never one.** `StructuredTool` takes
+        `func` *and* `coroutine`, and its own `_arun` says what happens when
+        the second is missing: it "will delegate to the default implementation
+        which is expected to delegate to _run on a separate thread". For a
+        tool that only wrote `_execute` that fallback is harmless and
+        identical to ours; for one that wrote `_aexecute` it would put a
+        native async body back in a thread and take the cancellation with it.
+        `prebuilt_mcp.py` already builds its `StructuredTool` as a `func` /
+        `coroutine` pair for the same reason — this is that shape made
+        available to every tool by the base rather than by the one atom that
+        noticed.
         """
         from langchain_core.tools import StructuredTool
 
@@ -272,8 +374,15 @@ class BaseTool(ABC):
             result = self.run(**kwargs)
             return result.content if result.ok else f"Error: {result.error}"
 
+        async def _acall(**kwargs: Any) -> str:
+            if on_call is not None:
+                on_call(self.name)
+            result = await self.arun(**kwargs)
+            return result.content if result.ok else f"Error: {result.error}"
+
         return StructuredTool.from_function(
             func=_call,
+            coroutine=_acall,
             name=self.name,
             description=self.description,
             args_schema=self.Args,
@@ -335,6 +444,49 @@ class BaseTool(ABC):
 # plugin path and through their own `tools/` folder should not have to
 # recognise two different descriptions of one mistake.
 # --------------------------------------------------------------------------
+
+
+def _execute_through_a_private_loop(self: "BaseTool", args: BaseModel) -> ToolResult:
+    """The sync door over an async-only tool's body (`async-first/04`).
+
+    Installed by `__init_subclass__` on a subclass that wrote `_aexecute` and
+    no `_execute`. It is the mirror of what `compile/node_doors.py` does one
+    layer up for an `async def` node body, and it is here for the same reason:
+    a tool is reached from four synchronous doors this map does not migrate —
+    the blocking `/api/runs`, the MCP server, `CompiledWorkflow.run` (the path
+    a package's own `tests/` uses) and the CLI — so an async-native tool that
+    only worked under `astream` would not be substitutable for its base.
+
+    **Not cancellable, and cannot be**, exactly as `node_doors.py` says of its
+    own sync door: driving a coroutine to completion is a blocking call like
+    any other. This preserves today's behaviour for those callers rather than
+    smuggling in an improvement; *stop means stop* belongs to `arun`.
+    """
+    return _to_completion(lambda: self._aexecute(args))
+
+
+def _to_completion(make_coroutine: Callable[[], Coroutine[Any, Any, ToolResult]]) -> ToolResult:
+    """Run a coroutine from synchronous code, whether or not a loop is running.
+
+    `asyncio.run` is the answer on a thread with no loop — a FastAPI
+    threadpool worker, the CLI, a pytest process — and it *refuses to nest*,
+    which is the case a bare `asyncio.run` would have shipped as a
+    `RuntimeError` in whichever adopter reached a tool from inside a
+    coroutine first. So when a loop is already running here, the coroutine
+    gets a thread of its own with a loop of its own.
+
+    The context is copied into that thread rather than left behind, for the
+    same reason `_aexecute`'s default uses `asyncio.to_thread`: a tool that
+    stops seeing `report_progress()` is a blank panel with a green suite.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(make_coroutine())
+
+    context = contextvars.copy_context()
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="osg-tool-sync") as pool:
+        return pool.submit(context.run, lambda: asyncio.run(make_coroutine())).result()
 
 
 def _run_override_message(class_name: str) -> str:
