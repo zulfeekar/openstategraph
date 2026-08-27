@@ -29,23 +29,33 @@ because a narrating model previously leaked its scratchpad into the
 customer-facing answer). A middleware describing the call it is wrapping is
 cheaper and cannot lie about whether it ran.
 
-**Content stays generic on purpose.** This class has no domain knowledge — it
-wraps `before_model`/`after_model` for *any* agent, so it never has a tool id,
-a lens name, or a token count to report honestly. CLAUDE.md's instruction is
-"free of internals" and "a wall of debug text is a worse answer than
-silence" — a generic line is the honest one here. A node type that wants a
-sharper line contributes its own middleware into the same `"narration"` slot;
-this default is the floor every agent gets, not a ceiling.
+**Content stays generic on purpose *in this class*.** It has no domain
+knowledge — it wraps `before_model`/`after_model` for *any* agent, so it never
+has a tool id, a lens name, or a token count to report honestly. CLAUDE.md's
+instruction is "free of internals" and "a wall of debug text is a worse answer
+than silence" — a generic line is the honest one to author here.
+
+**The sharper line is a contribution into this slot, and it now exists**
+(`launch-readiness/112`). `abc/tool_sentences.py` holds a pure
+`(name, args) -> sentence` table over this project's own tool surface, and
+`build_narration_middleware` injects it as `describe=`. So the class still
+knows no tool names — the table is passed in, not imported by the class — and
+the keyword phrases below stay exactly what they always were: the floor a tool
+nobody has authored a sentence for still gets. Until 2026-08-27 this paragraph
+ended "a node type that wants a sharper line contributes its own middleware",
+and nobody ever had, which is what the ticket was filed about.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from langchain.agents.middleware.types import AgentMiddleware, AgentState, ToolCallRequest
 from langgraph.runtime import Runtime
 
+from openstategraph.abc.tool_sentences import describe_tool_call
 from openstategraph.progress import report_progress
 from openstategraph.run_identity import run_identity
 
@@ -138,11 +148,19 @@ class NarrationMiddleware(AgentMiddleware):
         quiet: bool = False,
         before_text: str = "Thinking about the next step.",
         after_text: str = "Finished thinking.",
+        describe: Callable[[str, dict[str, Any]], str | None] | None = None,
     ) -> None:
         super().__init__()
         self._quiet = quiet
         self._before_text = before_text
         self._after_text = after_text
+        # `launch-readiness/112`: what this call *is doing*, when somebody
+        # knows. Injected rather than imported here, so this class keeps the
+        # property its own header claims — no domain knowledge — and a
+        # workflow contributing its own sentences into the `"narration"` slot
+        # replaces a table rather than subclassing a middleware. `None` is
+        # the keyword floor below and nothing else.
+        self._describe = describe
         # Per-thread only (`launch-readiness/105`): the durable cross-session
         # store is `launch-readiness/99` and is deliberately unbuilt. Keyed
         # `thread_id -> {(tool_name, exact_args_json): result}` — never by
@@ -318,9 +336,24 @@ class NarrationMiddleware(AgentMiddleware):
         thread_id = run_identity(config).get("thread_id", "")
         return thread_id or None
 
-    @staticmethod
-    def _before_tool_text(request: ToolCallRequest) -> str:
-        name = (request.tool_call.get("name") or "").lower()
+    def _before_tool_text(self, request: ToolCallRequest) -> str:
+        """The sharpest honest line available for this call.
+
+        Three tiers, narrowest first (`launch-readiness/112`): a sentence
+        authored for *this* tool, then the keyword phrase derived from its
+        name, then the generic line. The floor never went away — it is what a
+        tool nobody has authored a sentence for still says — and no tier ever
+        names the tool.
+        """
+        raw_name = request.tool_call.get("name") or ""
+        if self._describe is not None:
+            try:
+                sentence = self._describe(raw_name, request.tool_call.get("args") or {})
+            except Exception:  # noqa: BLE001 — narration must never fail a run
+                sentence = None
+            if sentence:
+                return sentence
+        name = raw_name.lower()
         for keyword, phrase in _TOOL_NAME_PHRASES:
             if keyword in name:
                 return phrase
@@ -351,5 +384,12 @@ def build_narration_middleware(*, quiet: bool = False) -> NarrationMiddleware:
     contributes the *capability* to compose (call this, or contribute
     something else under the same name) and never a hardcoded instance —
     "inherit the capability, not the composition."
+
+    This is also the one place `launch-readiness/112`'s sentence table is
+    wired in, and there is exactly one of these functions, so every agent gets
+    the sharper line without any node type opting in. The table is a
+    *contribution into the slot* rather than a change to the middleware: the
+    class above still knows no tool names, and passing `describe=` something
+    else is how a workflow overrides it.
     """
-    return NarrationMiddleware(quiet=quiet)
+    return NarrationMiddleware(quiet=quiet, describe=describe_tool_call)

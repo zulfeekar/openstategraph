@@ -82,6 +82,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.abc.tool_sentences import describe_tool_call
 from openstategraph.progress import report_progress
 
 logger = logging.getLogger(__name__)
@@ -602,7 +603,13 @@ def _discover_all(
     return run_on_mcp_loop(gather())
 
 
-def _wrap_async_tool(tool: Any, server: str) -> Any:
+#: The floor for a remote tool the sentence table has never met
+#: (`launch-readiness/112`). It says the one true thing that needs no
+#: internals: the work is not happening here.
+_UNKNOWN_REMOTE_CALL = "Asking a connected service."
+
+
+def _wrap_async_tool(tool: Any, server: str) -> Any:  # noqa: ARG001 — see below
     """The sync shim: the original `coroutine`, plus a `func` that runs it.
 
     `response_format` is carried across deliberately. Every MCP tool arrives
@@ -621,18 +628,44 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:
     `func` and a `coroutine` and the caller picks; instrumenting only the
     sync one would make the feature disappear under an async agent, which is
     the runtime most likely to be doing several of these at once.
+
+    **What it says changed** (`launch-readiness/112`). It used to say
+    `"Calling mcp_list_lenses on http://localhost:8080/mcp/"`, composed once
+    per tool, and that line is the ticket's own title: it reports *that*
+    something is happening and names two internals — a tool id and a server
+    address — to a panel a customer can be looking at. Both `abc/narration.py`
+    ("a tool is never named aloud") and CLAUDE.md ("free of internals") forbid
+    it; the earlier decision to name both halves predates the sentence table
+    that makes a better line possible.
+
+    It now asks `describe_tool_call` what this call *is doing*, per call,
+    because the answer can depend on the arguments. Two consequences worth
+    knowing:
+
+    - It is the **same** sentence `NarrationMiddleware` emits around the same
+      call, deliberately. Both surfaces collapse a line repeated back to back,
+      so one call reads as one line instead of two — which is what folding a
+      second vocabulary in here would have cost.
+    - A tool the table has never met falls back to a line that still names
+      nothing. `server` is dropped rather than softened: there is no phrasing
+      of a URL that is not an internal. The parameter is **kept** rather than
+      removed — it is what a future developer-channel line would be composed
+      from (`developer_channel.py` is the seam that already separates the two
+      audiences), and deleting it would make restoring that a signature
+      change at the one call site.
     """
     from langchain_core.tools import StructuredTool
 
     from openstategraph.mcp_sessions import run_on_mcp_loop, run_on_mcp_loop_async
 
     inner = tool.coroutine
-    # Composed once, here, rather than per call: the two entry points must
-    # not be able to say different things about the same call.
-    line = f"Calling {tool.name} on {server}"
+    name = getattr(tool, "name", "") or ""
+
+    def _line(kwargs: dict[str, Any]) -> str:
+        return describe_tool_call(name, kwargs) or _UNKNOWN_REMOTE_CALL
 
     async def _coroutine(**kwargs: Any) -> Any:
-        report_progress(line)
+        report_progress(_line(kwargs))
         # The session belongs to the MCP loop, and anyio streams cannot be
         # awaited from a foreign one. `run_on_mcp_loop_async` suspends this
         # loop on an ordinary future while the work happens over there — no
@@ -641,7 +674,7 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:
         return await run_on_mcp_loop_async(inner(**kwargs))
 
     def _call(**kwargs: Any) -> Any:
-        report_progress(line)
+        report_progress(_line(kwargs))
         # Not `asyncio.run`: that opened a loop per call, and a loop per call
         # is a session per call, which is the handshake this seam removes.
         return run_on_mcp_loop(inner(**kwargs))

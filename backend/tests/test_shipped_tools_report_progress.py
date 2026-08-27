@@ -193,15 +193,35 @@ class TestMcp:
             metadata=None,
         )
 
-    def test_a_bound_tool_names_the_call_and_the_server(self) -> None:
+    def test_a_bound_tool_names_neither_itself_nor_its_server(self) -> None:
         from openstategraph.prebuilt_mcp import _wrap_async_tool
 
         wrapped = _wrap_async_tool(self._fake_tool(), "langchain-docs")
         messages = [r.message for r in _inside_a_run(lambda: wrapped.func(q="agents"))]
 
-        # Both halves matter: the server is what is being reconnected to, and
-        # the tool name is what the agent chose to do.
-        assert messages == ["Calling search_docs on langchain-docs"]
+        # This assertion was the opposite until `launch-readiness/112`: it
+        # required `"Calling search_docs on langchain-docs"`, on the argument
+        # that "both halves matter — the server is what is being reconnected
+        # to, and the tool name is what the agent chose to do". Both halves
+        # are internals, and this line is streamed to a customer chat that
+        # cannot open a trace to interpret them. `abc/narration.py`'s rule
+        # ("a tool is never named aloud") always covered it; nothing had
+        # applied the rule here.
+        assert messages == ["Asking a connected service."]
+        assert "search_docs" not in messages[0]
+        assert "langchain-docs" not in messages[0]
+
+    def test_a_tool_the_table_knows_says_what_it_is_doing(self) -> None:
+        from openstategraph.prebuilt_mcp import _wrap_async_tool
+
+        wrapped = _wrap_async_tool(self._fake_tool("mcp_search_tables"), "cpl")
+        messages = [r.message for r in _inside_a_run(lambda: wrapped.func(q="vessel"))]
+
+        # The whole point of `112`: not *that* something is happening, but
+        # what. Sourced from `abc/tool_sentences.py`, so this line and the one
+        # `NarrationMiddleware` emits around the same call are identical and
+        # collapse to one on every surface that shows them.
+        assert messages == ['Searching the catalogue for tables about "vessel".']
 
     def test_the_async_path_reports_too(self) -> None:
         # `StructuredTool` carries both a `func` and a `coroutine`, and an
@@ -217,7 +237,7 @@ class TestMcp:
             r.message for r in _inside_a_run(lambda: asyncio.run(wrapped.coroutine(q="x")))
         ]
 
-        assert messages == ["Calling read_page on docs"]
+        assert messages == ["Asking a connected service."]
 
     def test_the_result_shape_is_untouched(self) -> None:
         from openstategraph.prebuilt_mcp import _wrap_async_tool
