@@ -2020,7 +2020,7 @@
           "label": "What the machinery already does",
           "hint": "",
           "required": false,
-          "defaultValue": "The tools this server offers are discovered fresh every time the workflow compiles, so a server that grows a tool needs no edit here. Leave the tool filter empty to bind all of them, now and later; naming even one freezes this node to that list. The credential is read at bind time from the environment variable you name — the name is saved in this workflow, the value never is. A server that is unreachable, that rejects the credential, or that does not speak MCP costs this agent its tools and says so in the run’s warnings; it never fails the compile. Each call reconnects, which costs roughly 0.8 seconds on top of whatever the server itself takes."
+          "defaultValue": "The tools this server offers are discovered fresh every time the workflow compiles, so a server that grows a tool needs no edit here. Leave the tool filter empty to bind all of them, now and later; naming even one freezes this node to that list. The credential is read at bind time from the environment variable you name — the name is saved in this workflow, the value never is. A server that is unreachable, that rejects the credential, or that does not speak MCP costs this agent its tools and says so in the run’s warnings; it never fails the compile. The connection is opened once and held open, so a call costs what the server takes and no handshake."
         },
         {
           "key": "maxRetries",
