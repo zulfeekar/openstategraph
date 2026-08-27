@@ -343,6 +343,8 @@ class WorkflowServices:
                     # A routed child seeks ITS OWN second brain, never the
                     # parent's — the same isolation as skills (ticket 67).
                     knowledge_dir=packages.directory_for(child_slug),
+                    # ...and discloses ITS OWN skills, for the same reason.
+                    skills_dir=packages.directory_for(child_slug),
                 ),
                 memory_store=self.memory_store,
                 memory=declared,
@@ -351,6 +353,11 @@ class WorkflowServices:
                 # Ambient knowledge seeking: a non-empty knowledge/ under the
                 # open package auto-binds the lookup tool to every agent.
                 knowledge_package_dir=(packages.directory_for(slug) if slug else None),
+                # Where `skills/*.md` is read from for progressive disclosure
+                # (`launch-readiness/111`). Separate from the knowledge dir
+                # above on purpose: `knowledge_dir` is an override a caller may
+                # aim at the second brain, and it must not move the skills.
+                skills_package_dir=(packages.directory_for(slug) if slug else None),
                 knowledge_dir_override=knowledge_dir,
                 advisor_catalog=(
                     suggestible_tool_catalog(tools)

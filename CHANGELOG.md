@@ -42,6 +42,30 @@
   deliberately unchanged: it is a `runtime_checkable` Protocol, and a member
   added to it would un-satisfy every third-party object that satisfies it
   today (`async-first/04`).
+- **A deep-tier agent discloses its package's skills progressively and
+  offloads large tool results — gated on one tool-surface condition, by
+  default.** `build_skills_middleware` (`launch-readiness/101`) and
+  `OffloadMiddleware` (`102`) were built and tested and never contributed by
+  the compiler. `compile/node_runtime.py`'s `contributions[...]` now fills the
+  `"skills"` and `"filesystem"` slots from a single decision,
+  `openstategraph.abc.deep_tier_offload.plan_disclosure()`, because both hand
+  the model a **path**: an agent whose tool surface cannot read a file from the
+  store this seam writes to would be holding a reference it could not follow,
+  and the failure would be a plausible answer rather than an error. Only the
+  deep tier qualifies today, so `DeepAgentNode` gains a keyword-only
+  `backend: Any = None` pass-through (additive; existing calls are unaffected)
+  that points `create_deep_agent`'s own `read_file`/`grep` at the store the
+  middlewares use. `discover_skills()` gains a keyword-only `exclude` so the
+  skills that *were* disclosed are subtracted from the flat concatenation
+  rather than sent twice. Disclosure is decided per skill and only when it
+  pays: a skill with no `description` is never disclosed (the library silently
+  skips it, which would delete it from the prompt), and a package whose bodies
+  are smaller than the library's own 1,857-byte skills instructions stays
+  inline. Measured, no model: a five-skill package of the shape
+  `launch-readiness/111` reported sheds **8,624 bytes (~2,156 tokens) from
+  every model call**, 71.4% of its system prompt; both packages shipped in
+  this repository are correctly left unchanged
+  (`launch-readiness/111`).
 - **Every agent narrates before and after each model call, by default.** A
   40-second model call inside a real run produced no visible output — the
   owner watched a glowing border with no way to tell working from stuck.

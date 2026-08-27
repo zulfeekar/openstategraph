@@ -24,7 +24,7 @@ openstategraph.abc.BaseRouter = class(ABC)(branches: "'list[str | dict[str, Any]
 openstategraph.abc.BaseTool = class(ABC)()
 openstategraph.abc.Classification = class(BaseModel)(*, branch: str, branches: list[str] = <factory>, fell_back: bool = False, reason: str = '') -> None
 openstategraph.abc.CustomGraphNode = class(AbstractAgentNode)(*, name: 'str', runnable: 'Any') -> 'None'
-openstategraph.abc.DeepAgentNode = class(BaseAgentNode)(*, subagents: 'list[dict[str, Any]] | None' = None, **kwargs: 'Any') -> 'None'
+openstategraph.abc.DeepAgentNode = class(BaseAgentNode)(*, subagents: 'list[dict[str, Any]] | None' = None, backend: 'Any' = None, **kwargs: 'Any') -> 'None'
 openstategraph.abc.Field = re-export of pydantic.fields.Field
 openstategraph.abc.Grader = class(BaseGrader)(*, criteria: 'str' = '', rubric: 'list[dict[str, Any]] | None' = None, skill: 'str' = '', replace_defaults: 'bool' = False, model: 'Any' = None, context: 'str' = '') -> 'None'
 openstategraph.abc.Guardrail = class(BaseGuardrail)(*, rules: 'Sequence[GuardrailRule | Mapping[str, Any]]' = (), refusal: 'str' = '') -> 'None'

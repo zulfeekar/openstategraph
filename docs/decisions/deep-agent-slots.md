@@ -407,3 +407,80 @@ names a slot; the compiler owns the order.
 - **The third-party sandboxes.** Named in ticket 32 from the docs; only
   `LangSmithSandbox` and `LocalShellBackend` are importable here. Pinning an
   absence would pin this laptop's install list, not a fact about the library.
+
+---
+
+## The backend seam, built (2026-08-27, `launch-readiness/111`)
+
+Ticket 82's "a backend seam" above is no longer only recommended. It is what
+made `101`'s skills disclosure and `102`'s tool-result offload wireable at all,
+and it is worth recording *why* the seam is the precondition rather than a
+convenience.
+
+**Both middlewares hand the model a path.** A disclosed skill is a line in the
+prompt naming `/skills/<name>/SKILL.md`; an offloaded result is a pointer
+naming `/offload/<tool>/<call>.txt`. Neither is worth anything unless the
+agent's own `read_file`/`grep` read *the store that path is in*. Without
+`create_deep_agent(backend=...)` the harness reads a `StateBackend` while the
+middlewares write a `FilesystemBackend`, and every dereference comes back
+empty — silently, as a plausible answer. That is the same silent-nothing §
+above measured `skills=` producing.
+
+So the condition that gates both is two facts, not one
+(`abc/deep_tier_offload.surface_can_dereference`):
+
+1. the tool surface contains a file-read tool, and
+2. that tool reads the store this seam writes to.
+
+Fact 2 is the half a name check misses. A workflow may wire a tool of its own
+called `read_file`; it reads its own store. Only the deep tier can satisfy
+both today, because it is the only constructor in the ladder that takes a
+backend — which is why the flat `discover_skills` concatenation stays the
+correct default everywhere else rather than being a fallback anybody switches
+on.
+
+### Three things the wiring found by measuring rather than assuming
+
+- **`SkillsMiddleware` reads `<source>/<name>/SKILL.md` directories; this
+  project's packages carry flat `skills/*.md`.** Pointing the library at
+  `<package>/skills` finds nothing and logs a line nobody reads. The compiler
+  therefore *projects* the package's own layout into a scratch root.
+  `skills/*.md` stays the only authoritative copy.
+- **A skill with no `description` cannot be disclosed.** The library requires
+  `name` and `description` and skips a file with neither — and two of the
+  three skills this repository ships (`workflows/workflow-architect/skills/`)
+  have no frontmatter at all. Disclosing a package wholesale would have
+  deleted them from the prompt entirely. Disclosure is decided **per skill**;
+  the rest stay flat.
+- **Disclosure has a break-even.** The library's own skills instructions cost
+  1,857 bytes before a single skill is listed. `workflows/concierge` carries
+  one 1,970-byte skill, and disclosing it made the system prompt **134 bytes
+  larger**. A change filed to shrink the prompt must not enlarge it for the
+  smallest package we ship, so the compiler discloses only when the bodies
+  exceed what the listing costs.
+
+### The token delta (`launch-readiness/109`, item 4)
+
+Measured with no model and no spend, as system-prompt bytes on the first model
+call of a compiled deep-tier agent:
+
+| Package | Flat | Disclosed | Delta |
+| --- | --- | --- | --- |
+| five-skill package of the shape `111` reports | 12,070 B | 3,446 B | **−8,624 B (−71.4 %), ~2,156 tokens per call** |
+| `workflows/workflow-architect` (2 skills, no descriptions) | 5,646 B | 5,646 B | 0 — correctly not disclosed |
+| `workflows/concierge` (1 skill, 1,970 B) | 2,932 B | 2,932 B | 0 — below break-even |
+
+The saving is per **model call**, not per run, so a ten-call agent loop pays it
+ten times. Neither shipped package benefits today, and the reason is the first
+bullet above rather than anything about the mechanism: writing a `description`
+is how a skill's author opts it in.
+
+### The other direction, worth knowing
+
+A comparative read of a neighbouring system found the same lever pointed the
+opposite way: it defaults its deep tier **off** for data questions, because a
+virtual-filesystem toolset makes even a strong model wander into `grep`/`glob`
+instead of the data tools — they call it the "grep storm" — and a prompt
+cannot reliably stop it; removing the tools does. Whichever way it is aimed,
+the evidence agrees that the **tool surface is the control, and the prompt is
+not**.
