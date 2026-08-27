@@ -16,7 +16,7 @@ about the library, and five copies is how one of them ends up wrong.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Any, Callable, Iterator
 
 import os
 
@@ -427,3 +427,25 @@ class FoldPump:
             self._loop.run_until_complete(self._frames.aclose())
         finally:
             self._loop.close()
+
+
+def drive_node(run: Any, state: Any) -> Any:
+    """The update an `async def` node body returns, from synchronous test code.
+
+    `async-first/06` made the long-running node families (`_agent`, `_worker`,
+    ...) `async def`, and the suite calls those builders directly — a factory
+    returns a closure and the test runs it. One `asyncio.run` per drive, for
+    the reason `drive_fold` above gives: the assertions are about the update,
+    not about the loop, and a driver is cheaper than an async plugin the whole
+    suite would then depend on.
+
+    Total, so a test that does not care which kind it holds does not have to:
+    a synchronous body is simply called.
+    """
+    import asyncio
+    import inspect
+
+    result = run(state)
+    if inspect.isawaitable(result):
+        return asyncio.run(result)
+    return result

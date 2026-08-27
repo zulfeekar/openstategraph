@@ -2095,7 +2095,26 @@ class NodeRuntime:
                 narration_by_key[key] = narration_mw
             return built[key]
 
-        def run(state: RunState) -> dict[str, Any]:
+        # **`async def`, and the first family to be** (`async-first/06`).
+        # Not a style choice and not throughput: on the installed
+        # `langgraph 1.2.10` an `async def` node body is the *only* place a
+        # run can be cancelled. Measured twice by two independent routes
+        # (`async-first/09`) — under `astream`, cancelling the driving task
+        # leaves a `def` body running to completion in its worker thread and
+        # stops an `async def` one outright; and `add_node(timeout=...)`, the
+        # one construct that interrupts a node mid-flight, is rejected at
+        # compile time for sync nodes. So the order of Phase D is by how long
+        # a node *runs*, never by how simple it is, and this is the longest.
+        #
+        # Sync and async node bodies coexist — LangGraph wraps a `def` node in
+        # `RunnableLambda` — so the half-migrated graph this leaves behind is
+        # not a broken graph. Proven rather than assumed, in
+        # `tests/test_a_half_migrated_graph_still_runs.py`, which also pins
+        # that narration still reaches the wire from in here: it travels on
+        # `get_stream_writer()`, which is context-local, and a migration that
+        # dropped it would look exactly like `launch-readiness/110` did — a
+        # blank panel, nothing in the logs, both suites green.
+        async def run(state: RunState) -> dict[str, Any]:
             prompt = _upstream_text(state, upstream + conditional_upstream) or state.get(
                 "question", ""
             )
@@ -2189,7 +2208,11 @@ class NodeRuntime:
             prior_files = (state.get("agent_files") or {}).get(node_id) or {}
             if prior_files:
                 invocation["files"] = dict(prior_files)
-            result = agent.invoke(invocation)
+            # `ainvoke`, and the `await` is the whole point of the migration:
+            # an `async def` body that then blocked on `invoke()` would be
+            # *worse* than the `def` body it replaced — it would hold the
+            # event loop instead of a pool thread, and still be uncancellable.
+            result = await agent.ainvoke(invocation)
             # `_final_text`, not `messages[-1]`: a loop can legitimately end on
             # a message with no content — a dangling tool call, or a provider
             # blip the retry swallowed — and the last message is then "" while

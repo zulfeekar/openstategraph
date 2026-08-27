@@ -1,0 +1,114 @@
+"""One node body, both doors — the bridge Phase D needed and had not sized.
+
+`async-first/06`. `docs/decisions/async-seam.md` establishes that sync and
+async node bodies **coexist** inside one graph, because LangGraph converts a
+node function to a `RunnableLambda`, "which add batch and async support to your
+function". That is true, and it is what makes Phase D a per-family migration
+rather than a big bang.
+
+It is also only half the question, and the other half is about the *caller*
+rather than about the graph. Measured on the installed `langgraph 1.2.10`:
+
+    >>> compiled.invoke({...})
+    TypeError: No synchronous function provided to "n".
+    Either initialize with a synchronous function or invoke via the async API
+    (ainvoke, astream, etc.)
+
+A `RunnableLambda` built from a coroutine function has an async door and no
+sync one, so **one** `async def` node makes the whole compiled graph
+async-only. This backend has four synchronous doors onto the same compiled
+object — the blocking `/api/runs`, the MCP server, `CompiledWorkflow.run` (the
+library path a package's own `tests/` uses) and the CLI — and none of them is
+in this map's scope. Migrating `_agent` alone, without this module, took 203
+tests red.
+
+**So the body stays single and the adapter is the pair.** LangGraph's own
+`RunnableCallable` takes a sync function *and* an async one; the async door is
+the migrated body itself, and the sync door runs that same body on a private
+loop. Nothing is written twice: two spellings of one node body is the
+duplication rule failing in the place it is most expensive, since the two would
+drift and only one of them would be under test.
+
+**`RunnableCallable` and not `RunnableLambda`, and that was measured rather
+than preferred.** `RunnableLambda` works — both doors answer, narration
+survives, cancellation still reaches the async body — but LangGraph asks a
+`Runnable` node for its `deps`, which calls `langchain_core`'s
+`get_function_nonlocals`, an `lru_cache(maxsize=256)` **keyed on the sync
+function**. A node closure holds this workflow's tools and model, so 256 stale
+compiles' worth of them are pinned in a process-wide cache that nothing here
+can clear: caught by `tests/test_production_audit_2026_08_15.py`, which fails
+on object growth across repeated compiles and read 265 objects per cycle.
+`RunnableCallable` is the type LangGraph already wraps a plain `def` node in,
+so a migrated node is the same shape as an un-migrated one rather than a
+foreign one, and it is not asked for `deps` at all — measured at zero drift
+over the same 25 cycles.
+
+This is the mirror of what Phase A did at the other end of the same seam
+(`async-first/02`): one checkpointer shared by transports that are not all
+async, bridged rather than swapped, applied at the doors and nowhere else.
+
+**What each door is worth, stated plainly so nobody mistakes the bridge for
+the feature.** The async door is genuinely cancellable — cancelling the task
+driving `astream` stops the body outright, which is the whole of this map's
+promise. The sync door is not, and cannot be: `asyncio.run` on a private loop
+is a blocking call like any other, and this is precisely today's behaviour
+preserved rather than an improvement smuggled in. A caller who wants *stop
+means stop* has to come through the async door, which the streaming run path
+already does.
+
+**Applied once, at the compiler's own `add_node` call**, which is the last
+thing between a node body and LangGraph and the seam every node of every family
+passes through — including families contributed by an installed distribution,
+which therefore gain the sync door without knowing this module exists. Outside
+`recording_attempts` rather than inside it, so that wrapper keeps seeing the
+raw body it already knows how to handle in either kind. Never on a base class: a sync door is needed by node families
+that share no ancestor, so it is a collaborator (CLAUDE.md's boundary rule),
+and never per builder: a builder that had to remember is a builder that
+eventually will not.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import inspect
+from typing import Any, Callable
+
+__all__ = ["both_doors", "with_both_doors"]
+
+
+def both_doors(body: Callable[..., Any]) -> Any:
+    """`body`, presented to LangGraph with a sync door as well as an async one.
+
+    `body` must be a coroutine function; callers that may hold either kind
+    want `with_both_doors`, which is total.
+    """
+    from langgraph.utils.runnable import RunnableCallable
+
+    def through_a_private_loop(*args: Any, **kwargs: Any) -> Any:
+        # `asyncio.run` and not a shared loop, deliberately. A sync door is
+        # reached from a thread with no loop running — a FastAPI threadpool
+        # worker, a pytest process, the CLI — so there is nothing to reuse,
+        # and a module-level loop would be a shared mutable this module has no
+        # reason to own. The `Task` it creates copies the ambient context, so
+        # `get_stream_writer()` and `ensure_config()` still answer from inside
+        # the body: pinned in
+        # `tests/test_a_migrated_node_still_answers_the_sync_door.py`, because
+        # a lost writer is a blank panel with a green suite
+        # (`launch-readiness/110`).
+        return asyncio.run(body(*args, **kwargs))
+
+    return RunnableCallable(through_a_private_loop, body, name=getattr(body, "__name__", None))
+
+
+def with_both_doors(node: Any) -> Any:
+    """`node` if it is already synchronous, else the two-door pair.
+
+    Total, and the sync case is **identity**: a `def` body handed on untouched
+    is a `def` body LangGraph wraps in its own `RunnableCallable`, exactly as it
+    did before this module existed. Wrapping one here would replace that with
+    ours for no behaviour anybody asked for, and would make every un-migrated
+    family's diff non-empty for the same nothing.
+    """
+    if inspect.iscoroutinefunction(node):
+        return both_doors(node)
+    return node

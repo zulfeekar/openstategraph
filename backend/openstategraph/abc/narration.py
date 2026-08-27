@@ -115,6 +115,9 @@ _TOOL_NAME_PHRASES: tuple[tuple[str, str], ...] = (
     ("retrieve", "Retrieving information."),
 )
 _UNKNOWN_TOOL_TEXT = "Calling a tool."
+
+#: "nothing on record", distinct from a tool that legitimately returned `None`.
+_MISS = object()
 _MAX_NARRATION_LEN = 80
 
 
@@ -158,6 +161,37 @@ class NarrationMiddleware(AgentMiddleware):
             report_progress(self._after_text)
         return None
 
+    # --- the async twins (`async-first/06`) ---------------------------------
+    #
+    # Phase D makes `_agent`'s node body `async def`, so the agent it builds is
+    # reached through `ainvoke`, and LangChain's guidance for that path is
+    # explicit: "custom middleware must use async hooks. Synchronous hooks
+    # remain supported with Deep Agents `invoke` and `stream`."
+    #
+    # The two halves fail differently, and the quiet one is the dangerous one.
+    # `awrap_tool_call` has no usable default and raises `NotImplementedError`
+    # naming the sync method — loud, and it killed a run. `abefore_model` and
+    # `aafter_model` default to **no-ops**, so a narration middleware without
+    # them would simply have gone silent on an async agent: a blank panel,
+    # nothing in the logs, both suites green — `launch-readiness/110` exactly,
+    # which is why they are here and pinned rather than left to the default.
+    #
+    # What is *not* duplicated is the deciding. Every hook below is the same
+    # body as its sync twin with the `await` in it; the cache lookup, the
+    # store write and the choice of line live in `_reuse`, `_remember` and
+    # `_narrate_after_tool`, so the two paths cannot drift into disagreeing
+    # about what this thread already knows.
+
+    async def abefore_model(
+        self, state: AgentState[Any], runtime: Runtime[Any]
+    ) -> dict[str, Any] | None:
+        return self.before_model(state, runtime)
+
+    async def aafter_model(
+        self, state: AgentState[Any], runtime: Runtime[Any]
+    ) -> dict[str, Any] | None:
+        return self.after_model(state, runtime)
+
     def wrap_tool_call(self, request: ToolCallRequest, handler: Any) -> Any:
         """The `launch-readiness/105` half: a before-line derived from the
         call itself (emitted *before* `handler` runs, so it lands while the
@@ -171,6 +205,35 @@ class NarrationMiddleware(AgentMiddleware):
         returns the stored result without invoking the tool again, and says
         so — a reuse the user cannot see is a reuse they cannot distrust.
         """
+        cache_key, thread_id, hit = self._reuse(request)
+        if hit is not _MISS:
+            return hit
+        result = handler(request)
+        return self._remember(result, cache_key, thread_id)
+
+    async def awrap_tool_call(self, request: ToolCallRequest, handler: Any) -> Any:
+        """`wrap_tool_call` with the one `await` that path needs.
+
+        The cache is the *same* store, deliberately: a reuse that depended on
+        which door the run came through would make `findings_inventory` — which
+        a retry's own prompt is built from (`launch-readiness/106`) — an
+        accident of transport.
+        """
+        cache_key, thread_id, hit = self._reuse(request)
+        if hit is not _MISS:
+            return hit
+        result = await handler(request)
+        return self._remember(result, cache_key, thread_id)
+
+    def _reuse(self, request: ToolCallRequest) -> tuple[tuple[str, str] | None, str | None, Any]:
+        """What this thread already knows about this exact call, if anything.
+
+        Returns the cache key, the thread it belongs to, and either the stored
+        result or `_MISS`. Emits the before-line on a miss, which is why this
+        is one method rather than a lookup: the line must be out on the wire
+        *before* the handler runs, and the two callers must not each remember
+        to do that.
+        """
         cache_key = self._cache_key(request)
         thread_id = self._thread_id(request) if cache_key is not None else None
         if thread_id is not None:
@@ -178,15 +241,19 @@ class NarrationMiddleware(AgentMiddleware):
             if bucket is not None and cache_key in bucket:
                 if not self._quiet:
                     report_progress(_REUSE_TEXT)
-                return bucket[cache_key]
-
+                return cache_key, thread_id, bucket[cache_key]
         if not self._quiet:
             report_progress(self._before_tool_text(request))
-        result = handler(request)
+        return cache_key, thread_id, _MISS
+
+    def _remember(
+        self, result: Any, cache_key: tuple[str, str] | None, thread_id: str | None
+    ) -> Any:
+        """Store the result where a later call can find it, and say what came back."""
         if thread_id is not None:
-            # `thread_id` is only ever set (line above) when `cache_key` is
-            # not `None` — this assert is for mypy's narrowing, not a new
-            # runtime possibility.
+            # `thread_id` is only ever set when `cache_key` is not `None` —
+            # this assert is for mypy's narrowing, not a new runtime
+            # possibility.
             assert cache_key is not None
             self._findings.setdefault(thread_id, {})[cache_key] = result
         if not self._quiet:

@@ -87,7 +87,25 @@ class OffloadMiddleware(AgentMiddleware):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Any],
     ) -> Any:
-        result = handler(request)
+        return self._offloaded(handler(request), request)
+
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Any],
+    ) -> Any:
+        """The same decision, with the one `await` the async path needs.
+
+        `async-first/06`: a deep-tier agent is reached through `ainvoke` once
+        `_agent`'s node body is `async def`, and `awrap_tool_call` has no
+        usable default — LangChain raises `NotImplementedError` naming the
+        sync method, so a deep agent without this would die on its first tool
+        call. Nothing about *what* to offload is written twice; that lives in
+        `_offloaded`.
+        """
+        return self._offloaded(await handler(request), request)
+
+    def _offloaded(self, result: Any, request: ToolCallRequest) -> Any:
         if not isinstance(result, ToolMessage):
             return result
         tool_name = request.tool_call.get("name", "")

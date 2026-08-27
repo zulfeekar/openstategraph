@@ -1183,9 +1183,21 @@ class _AsyncCapableSaver(_BaseSaver[Any]):  # type: ignore[misc,valid-type]
 def async_capable(saver: BaseCheckpointSaver[Any]) -> BaseCheckpointSaver[Any]:
     """`saver`, safe to hand to `graph.astream()`. See `_AsyncCapableSaver`.
 
-    Applied at the two streaming run handlers rather than inside
-    `build_checkpointer`, and that is the point: the process-wide saver stays
-    exactly what every synchronous caller already holds, and only the async
-    door wraps it.
+    Applied where a compiled graph receives its saver, rather than inside
+    `build_checkpointer`: the process-wide saver stays exactly what every
+    caller already holds, and only the graph gets the wrapper.
+
+    (Until `async-first/06` this was applied at the two streaming run handlers
+    alone, "and that is the point" — because at the time only `graph.astream()`
+    could reach a checkpointer's async four. Phase D's `async def` node bodies
+    reach them from the synchronous door as well, through the compiled agent
+    each one `ainvoke`s, so the compiler wraps it for every door. Nothing a
+    synchronous caller does changes: the sync four below are delegated one by
+    one, which is what makes the wrapper invisible to them.)
+
+    **Idempotent**, so a door that still wraps explicitly costs nothing and a
+    saver is never buried under two hops.
     """
+    if isinstance(saver, _AsyncCapableSaver):
+        return cast("BaseCheckpointSaver[Any]", saver)
     return cast("BaseCheckpointSaver[Any]", _AsyncCapableSaver(saver))

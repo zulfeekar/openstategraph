@@ -14,6 +14,8 @@ from openstategraph.abc.agent import DeepAgentNode, ReactAgentNode
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import CompiledPlan
 
+from conftest import drive_node
+
 
 class RecordingNode(ReactAgentNode):
     """A ReactAgentNode whose build records instead of constructing."""
@@ -50,7 +52,7 @@ def _run_factory(monkeypatch, data: dict) -> None:
     runtime = NodeRuntime(model=_summarizing_model())
     node = {"id": "a1", "type": "agent.llm", "data": data}
     run = runtime._agent("a1", node, CompiledPlan())
-    run(RunState(question="q"))  # type: ignore[typeddict-item]
+    drive_node(run, RunState(question="q"))  # type: ignore[typeddict-item]
 
 
 class TestAgentNodeDelegation:
@@ -116,7 +118,7 @@ class TestSummarizationFires:
         runtime = NodeRuntime(model=_summarizing_model())
         node = {"id": "a1", "type": "agent.llm", "data": data}
         run = runtime._agent("a1", node, CompiledPlan())
-        run(RunState(question="q"))  # type: ignore[typeddict-item]
+        drive_node(run, RunState(question="q"))  # type: ignore[typeddict-item]
         (built,) = RecordingNode.built
         return built
 
@@ -185,7 +187,7 @@ class TestSummarizationFires:
         )
         runtime = NodeRuntime(model=model)
         run = runtime._agent("a1", {"id": "a1", "type": "agent.llm", "data": {}}, CompiledPlan())
-        run(RunState(question="q"))  # type: ignore[typeddict-item]
+        drive_node(run, RunState(question="q"))  # type: ignore[typeddict-item]
         (built,) = RecordingNode.built
         middleware = built._middleware_contributions["summarization"]
         # Enough messages to leave a cutoff after `keep=("messages", 20)`, and

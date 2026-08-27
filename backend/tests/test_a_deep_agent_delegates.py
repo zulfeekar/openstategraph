@@ -37,6 +37,8 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import CompiledPlan, WorkflowCompiler
+
+from conftest import drive_node
 from openstategraph.compile.subagents import (
     subagent_declaration_problems,
     subagent_specs,
@@ -135,7 +137,7 @@ def _run_agent(data: dict[str, Any], model: ScriptedModel) -> dict[str, Any]:
     runtime = NodeRuntime(model=model)
     node = {"id": "a1", "type": "agent.llm", "data": data}
     run = runtime._agent("a1", node, CompiledPlan())
-    return run(RunState(question="what is the answer?"))  # type: ignore[typeddict-item]
+    return drive_node(run, RunState(question="what is the answer?"))  # type: ignore[typeddict-item]
 
 
 class TestADeclaredSubagentRuns:
@@ -178,7 +180,7 @@ class TestIsolationAndContextBothHold:
         runtime = NodeRuntime(model=model)
         node = {"id": "a1", "type": "agent.llm", "data": _agent_data()}
         run = runtime._agent("a1", node, CompiledPlan())
-        run(RunState(question="PARENT SECRET TURN"))  # type: ignore[typeddict-item]
+        drive_node(run, RunState(question="PARENT SECRET TURN"))  # type: ignore[typeddict-item]
 
         sub_turns = [
             turn for turn in model.seen if any(SUB_MARKER in c for _, c in turn)

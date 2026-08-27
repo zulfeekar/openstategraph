@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     # (install-experience ticket 12).
     from langgraph.store.base import BaseStore
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, Send
 
@@ -49,6 +50,7 @@ from openstategraph.compile.run_context import (
 )
 from openstategraph.compile.subagents import subagent_declaration_problems
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
+from openstategraph.compile.node_doors import with_both_doors
 from openstategraph.compile.state import STEP_BUDGET_FLOOR
 from openstategraph.step_budget import read_budget_stop
 from openstategraph.compile.state import NO_MODEL_MARKER  # noqa: F401  (re-exported)
@@ -1888,7 +1890,25 @@ class WorkflowCompiler:
                 # Wrapped here, beside `retry_policy` itself: the policy and
                 # the report of it firing are one concern and must not drift
                 # apart into the node factories (`recording_attempts`).
-                recording_attempts(node_id, node_factory(node_id, nodes[node_id], plan)),
+                # And `with_both_doors` outermost, which is the last thing
+                # between a node body and LangGraph (`async-first/06`). A
+                # migrated family's body is `async def`, and a node built from
+                # a coroutine function has an async door and no sync one — so
+                # one migrated node would make the whole compiled graph
+                # async-only and break the four synchronous doors this backend
+                # still has onto it: the blocking `/api/runs`, the MCP server,
+                # `CompiledWorkflow.run` (the library path a package's own
+                # `tests/` uses), and the CLI. `compile/node_doors.py` carries
+                # the measurement, and why this is a collaborator applied at
+                # one seam rather than a method on a base class. Identity for
+                # a `def` body, so no un-migrated family is touched — and
+                # outermost so `recording_attempts`, which already knows both
+                # kinds, keeps seeing the raw body.
+                with_both_doors(
+                    recording_attempts(
+                        node_id, node_factory(node_id, nodes[node_id], plan)
+                    )
+                ),
                 **overrides,
             )
 
@@ -1936,6 +1956,26 @@ class WorkflowCompiler:
 
         if not compile_graph:
             return builder
+        # And the saver reaches the graph async-capable, on **every** door
+        # (`async-first/06`). Phase A bridged it at the two streaming handlers
+        # and said why — at that point only `graph.astream()` could call a
+        # checkpointer's async four, so "the process-wide saver stays exactly
+        # what every synchronous caller already holds". Phase D expires that
+        # reasoning: a migrated node body is `async def` and invokes its own
+        # compiled agent through `ainvoke`, and a nested graph inherits the
+        # parent's checkpointer through the ambient config — so the async four
+        # are now reached from the *synchronous* door too, which was the one
+        # door the bridge deliberately did not cover. Live, that surfaced as
+        # `NotImplementedError: The SqliteSaver does not support async
+        # methods`, swallowed by the graph-wide error handler into an empty
+        # answer: two states, one output, again.
+        #
+        # Safe to apply here rather than at the doors because the wrapper is
+        # invisible to a synchronous caller by construction — `memory.py`'s
+        # `_AsyncCapableSaver` delegates the sync four one by one, and
+        # `__getattr__` passes `setup`, `conn` and the rest through. Idempotent,
+        # so the two handlers that still wrap explicitly cost nothing.
+        checkpointer = _async_capable_saver(checkpointer)
         if wants_cache and InMemoryCache is not None:
             # Only when asked. `cache=` on every graph would attach an
             # unbounded in-process dict to workflows that never opted in.
@@ -2080,3 +2120,19 @@ __all__ = [
     "default_port_resolver",
     "safe_name",
 ]
+
+
+def _async_capable_saver(checkpointer: Any) -> Any:
+    """`checkpointer`, able to answer the async four. Total, and idempotent.
+
+    `True`, `False` and `None` are the mount tri-state
+    (`compile/mount_persistence.py`) rather than savers, and pass through
+    untouched — a mount that inherits its parent's saver inherits the wrapped
+    one. Imported lazily so the compiler does not pull `memory` (and, through
+    it, sqlite and the optional postgres extra) into every import of itself.
+    """
+    if not isinstance(checkpointer, BaseCheckpointSaver):
+        return checkpointer
+    from openstategraph.memory import async_capable
+
+    return async_capable(checkpointer)

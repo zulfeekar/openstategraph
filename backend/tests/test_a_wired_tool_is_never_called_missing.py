@@ -142,7 +142,7 @@ class TestTheAgentIsToldWhatItHolds:
         original = agent_family.BaseAgentNode.build
 
         class _Stub:
-            def invoke(self, _payload: Any) -> dict[str, Any]:
+            async def ainvoke(self, _payload: Any) -> dict[str, Any]:
                 return {"messages": []}
 
         def spy(self: Any) -> Any:
@@ -168,8 +168,10 @@ class TestTheAgentIsToldWhatItHolds:
                 tmp_path, document, model=GenericFakeChatModel(messages=iter([]))
             )
             node = {n["id"]: n for n in document["nodes"]}["agent-chat"]
+            from conftest import drive_node
+
             step = runtime.factory(document)("agent-chat", node, plan)
-            step({"question": "email the boss a summary"})
+            drive_node(step, {"question": "email the boss a summary"})
         finally:
             agent_family.BaseAgentNode.build = original  # type: ignore[method-assign]
         return captured.get("prompt", "")

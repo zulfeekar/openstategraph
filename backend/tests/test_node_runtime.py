@@ -725,7 +725,7 @@ class TestConversationMemory:
         captured: dict = {}
 
         class FakeAgent:
-            def invoke(self, invocation):
+            async def ainvoke(self, invocation):
                 captured.update(invocation)
                 return {"messages": [AIMessage(content="answer")]}
 
@@ -737,7 +737,9 @@ class TestConversationMemory:
         runtime = NodeRuntime(model=GenericFakeChatModel(messages=iter([])))
         node = {"id": "a1", "type": "agent.llm", "data": {}}
         run = runtime.factory({"nodes": [node], "edges": []})("a1", node, CompiledPlan())
-        update = run(RunState(question="second question", messages=state_messages))  # type: ignore[typeddict-item]
+        from conftest import drive_node
+
+        update = drive_node(run, RunState(question="second question", messages=state_messages))  # type: ignore[typeddict-item]
         return captured, update
 
     def test_prior_turns_are_fed_back_to_the_agent(self, monkeypatch) -> None:

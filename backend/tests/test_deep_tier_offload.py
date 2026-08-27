@@ -205,3 +205,48 @@ def test_both_middlewares_land_in_their_reserved_slots(tmp_path):
 
     flat = table.flatten()
     assert flat.index(skills_mw) < flat.index(offload_mw)
+
+
+# --------------------------------------------------------------------------- #
+# The async twin (`async-first/06`).
+#
+# `_agent`'s body is `async def` in Phase D, so a deep-tier agent is reached
+# through `ainvoke` — and `awrap_tool_call` has no usable default: LangChain
+# raises `NotImplementedError` naming the sync method. A deep agent whose
+# offload middleware lacked it would have died on its first tool call.
+# --------------------------------------------------------------------------- #
+
+
+def test_the_async_path_offloads_the_same_way(tmp_path):
+    import asyncio
+
+    backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+    mw = OffloadMiddleware(
+        backend=backend, tool_name_prefixes=("query.",), threshold_chars=100
+    )
+    big = ToolMessage(content="y" * 500, tool_call_id="call-1")
+
+    async def handler(_req):
+        return big
+
+    result = asyncio.run(mw.awrap_tool_call(_request(), handler))
+
+    assert result is not big
+    assert "offloaded" in result.text
+    written_path = result.text.split("path='", 1)[1].split("'", 1)[0]
+    assert backend.read(written_path).file_data["content"] == "y" * 500
+
+
+def test_the_async_path_leaves_a_small_result_inline(tmp_path):
+    import asyncio
+
+    backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+    mw = OffloadMiddleware(
+        backend=backend, tool_name_prefixes=("query.",), threshold_chars=100
+    )
+    small = ToolMessage(content="short result", tool_call_id="call-2")
+
+    async def handler(_req):
+        return small
+
+    assert asyncio.run(mw.awrap_tool_call(_request(), handler)) is small

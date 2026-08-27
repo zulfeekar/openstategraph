@@ -400,3 +400,136 @@ class TestFindingsInventory:
         result = ToolMessage(content=[{"id": 1}], tool_call_id="call_x")
         _call(mw, tool_name="mcp_list_lenses", args={"domain": "sm"}, thread_id="t1", result=result)
         assert mw.findings_inventory("t2") == []
+
+
+# --------------------------------------------------------------------------- #
+# The async twins (`async-first/06`).
+#
+# Phase D makes `_agent`'s node body `async def`, so the agent it builds is
+# reached through `ainvoke` — and LangChain's own guidance is explicit that a
+# middleware invoked that way must implement the async hooks: "custom
+# middleware must use async hooks. Synchronous hooks remain supported with
+# Deep Agents `invoke` and `stream`."
+#
+# The two halves fail differently, and the quiet one is the dangerous one:
+# `awrap_tool_call` has no usable default and raises `NotImplementedError`
+# naming the sync method (loud, and it killed the run), while `abefore_model`
+# and `aafter_model` default to no-ops — so an un-migrated narration
+# middleware on an async agent would have gone **silent**, which is a blank
+# panel with a green suite: `launch-readiness/110` exactly.
+# --------------------------------------------------------------------------- #
+
+
+def _drive_hooks_through_an_async_graph(middleware: NarrationMiddleware) -> list[dict[str, Any]]:
+    import asyncio
+
+    async def node(state: _State, runtime=None):
+        await middleware.abefore_model(state, runtime)
+        await middleware.aafter_model(state, runtime)
+        return {"step": state.get("step", 0) + 1}
+
+    graph = StateGraph(_State).add_node("node", node).add_edge(START, "node").add_edge("node", END).compile()
+
+    async def collect() -> list[dict[str, Any]]:
+        return [chunk async for chunk in graph.astream({"step": 0}, stream_mode="custom")]
+
+    return asyncio.run(collect())
+
+
+def _drive_tool_hook_through_an_async_graph(
+    middleware: NarrationMiddleware, *, tool_name: str, result: ToolMessage
+) -> list[dict[str, Any]]:
+    import asyncio
+
+    request = ToolCallRequest(
+        tool_call={"name": tool_name, "args": {"value": "mongstad"}, "id": "call_abc123"},
+        tool=None,
+        state={},
+        runtime=None,
+    )
+    order: list[str] = []
+
+    async def handler(_req: ToolCallRequest) -> ToolMessage:
+        order.append("handler")
+        return result
+
+    async def node(state: _State, runtime=None):
+        order.append("before")
+        out = await middleware.awrap_tool_call(request, handler)
+        assert out is result
+        return {"step": state.get("step", 0) + 1}
+
+    graph = StateGraph(_State).add_node("node", node).add_edge(START, "node").add_edge("node", END).compile()
+
+    async def collect() -> list[dict[str, Any]]:
+        return [chunk async for chunk in graph.astream({"step": 0}, stream_mode="custom")]
+
+    events = asyncio.run(collect())
+    assert order[0] == "before"
+    return events
+
+
+class TestNarrationOnTheAsyncPath:
+    def test_the_model_hooks_still_reach_the_custom_channel(self) -> None:
+        events = _drive_hooks_through_an_async_graph(NarrationMiddleware())
+        reports = [progress_report(e) for e in events]
+        assert [r.message for r in reports if r] == [
+            "Thinking about the next step.",
+            "Finished thinking.",
+        ]
+
+    def test_quiet_is_still_quiet(self) -> None:
+        assert _drive_hooks_through_an_async_graph(NarrationMiddleware(quiet=True)) == []
+
+    def test_the_tool_hook_still_narrates(self) -> None:
+        result = ToolMessage(content=[{"id": 1}, {"id": 2}], tool_call_id="call_abc123")
+        events = _drive_tool_hook_through_an_async_graph(
+            NarrationMiddleware(), tool_name="query", result=result
+        )
+        assert len(events) == 2
+
+    def test_the_read_through_cache_is_the_same_store_on_both_paths(self) -> None:
+        """One body, two spellings of the `await`. A second cache reached only
+        by one path would make a reuse depend on which door the run came
+        through — and `findings_inventory` feeds a retry's prompt."""
+        import asyncio
+
+        middleware = NarrationMiddleware()
+        request = ToolCallRequest(
+            tool_call={"name": "mcp_list_lenses", "args": {}, "id": "c1"},
+            tool=None,
+            state={},
+            runtime=_FakeRuntime("one-thread"),
+        )
+        calls: list[str] = []
+
+        def sync_handler(_req: ToolCallRequest) -> ToolMessage:
+            calls.append("sync")
+            return ToolMessage(content="albums", tool_call_id="c1")
+
+        async def async_handler(_req: ToolCallRequest) -> ToolMessage:
+            calls.append("async")
+            return ToolMessage(content="albums", tool_call_id="c1")
+
+        def node(state: _State, runtime=None):
+            middleware.wrap_tool_call(request, sync_handler)
+            return {"step": 1}
+
+        async def anode(state: _State, runtime=None):
+            await middleware.awrap_tool_call(request, async_handler)
+            return {"step": 2}
+
+        config = {"configurable": {"thread_id": "one-thread"}}
+        sync_graph = (
+            StateGraph(_State).add_node("n", node).add_edge(START, "n").add_edge("n", END).compile()
+        )
+        async_graph = (
+            StateGraph(_State).add_node("n", anode).add_edge(START, "n").add_edge("n", END).compile()
+        )
+        sync_graph.invoke({"step": 0}, config)
+        asyncio.run(async_graph.ainvoke({"step": 0}, config))
+
+        # The second call never reached a handler: it was served from the
+        # store the first one wrote.
+        assert calls == ["sync"]
+        assert middleware.findings_inventory("one-thread") == ["mcp_list_lenses"]

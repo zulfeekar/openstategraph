@@ -34,7 +34,7 @@ import pytest
 from openstategraph.compile.node_runtime import NodeRuntime
 from openstategraph.compile.workflow_compiler import CompiledPlan
 
-from conftest import any_chat_model
+from conftest import any_chat_model, drive_node
 
 
 def _message(content: str, tool_calls: list[dict[str, Any]] | None = None) -> Any:
@@ -49,7 +49,10 @@ def _agent_answer(monkeypatch: pytest.MonkeyPatch, messages: list[Any]) -> str:
         def __init__(self, **_: Any) -> None: ...
 
         def build(self) -> Any:
-            return SimpleNamespace(invoke=lambda _invocation: {"messages": messages})
+            async def ainvoke(_invocation: Any) -> Any:
+                return {"messages": messages}
+
+            return SimpleNamespace(ainvoke=ainvoke)
 
     monkeypatch.setattr(agent_family, "agent_node_for_tier", lambda _tier: StubTier)
 
@@ -57,9 +60,9 @@ def _agent_answer(monkeypatch: pytest.MonkeyPatch, messages: list[Any]) -> str:
     plan = CompiledPlan(nodes=["a1"], edges=[], conditional={})
     runtime = NodeRuntime(model=any_chat_model())
     run = runtime.factory(document)("a1", document["nodes"][0], plan)
-    return run({"question": "q", "attempts": 0, "messages": [], "outputs": {}, "decisions": {}})[
-        "answer"
-    ]
+    return drive_node(
+        run, {"question": "q", "attempts": 0, "messages": [], "outputs": {}, "decisions": {}}
+    )["answer"]
 
 
 ANSWER = "Iron Maiden leads with $138.60.\n\n```sql\nSELECT ...\n```"
@@ -111,16 +114,18 @@ class TestAnAgentKeepsWhatItSaid:
             def __init__(self, **_: Any) -> None: ...
 
             def build(self) -> Any:
-                return SimpleNamespace(
-                    invoke=lambda _i: {"messages": [_message(ANSWER), _message("")]}
-                )
+                async def ainvoke(_i: Any) -> Any:
+                    return {"messages": [_message(ANSWER), _message("")]}
+
+                return SimpleNamespace(ainvoke=ainvoke)
 
         monkeypatch.setattr(agent_family, "agent_node_for_tier", lambda _t: StubTier)
         document = {"nodes": [{"id": "a1", "type": "agent.llm", "data": {}}], "edges": []}
         plan = CompiledPlan(nodes=["a1"], edges=[], conditional={})
         runtime = NodeRuntime(model=any_chat_model())
-        update = runtime.factory(document)("a1", document["nodes"][0], plan)(
-            {"question": "q", "attempts": 0, "messages": [], "outputs": {}, "decisions": {}}
+        update = drive_node(
+            runtime.factory(document)("a1", document["nodes"][0], plan),
+            {"question": "q", "attempts": 0, "messages": [], "outputs": {}, "decisions": {}},
         )
         assert update["outputs"]["a1"] == update["answer"] == ANSWER
 

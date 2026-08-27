@@ -217,7 +217,14 @@ class TestLoadWorkflowStillOwnsItsOwn:
 
         mine = InMemorySaver()
         compiled = load_workflow(package, model=_fake_model("x"), checkpointer=mine)
-        assert compiled.graph.checkpointer is mine
+        # `is mine` *through the async bridge*: since `async-first/06` the
+        # compiler hands every graph an async-capable wrapper around whatever
+        # saver it was given, because a migrated `async def` node body reaches
+        # the async four from the synchronous door too. The wrapper is
+        # transparent — `_inner` is the saver the caller supplied, and nothing
+        # else is between them — so the claim this test makes (an explicit
+        # checkpointer is never outranked by the default) is unchanged.
+        assert getattr(compiled.graph.checkpointer, "_inner", compiled.graph.checkpointer) is mine
         # Nothing was opened on disk, because nothing needed to be.
         assert not (tmp_path / "root" / STATE_DIR_NAME).exists()
 

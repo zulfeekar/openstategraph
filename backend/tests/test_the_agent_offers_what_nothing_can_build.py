@@ -38,7 +38,7 @@ from openstategraph.compile.node_runtime import NodeRuntime, RunState, RuntimeSe
 from openstategraph.compile.workflow_compiler import CompiledPlan
 from openstategraph.developer_channel import split_suggestion
 
-from conftest import any_chat_model
+from conftest import any_chat_model, drive_node
 
 CATALOG = "- tool.web-search — searches the web"
 
@@ -80,7 +80,7 @@ def _agent_prompt(**services_kwargs: object) -> str:
     runtime = NodeRuntime(services=RuntimeServices(model=any_chat_model(), **services_kwargs))  # type: ignore[arg-type]
     node = {"id": "agent-analyst", "type": "agent.llm", "data": {"systemPrompt": "Be terse."}}
     run = runtime._agent("agent-analyst", node, CompiledPlan())
-    run(RunState(question="q"))  # type: ignore[typeddict-item]
+    drive_node(run, RunState(question="q"))  # type: ignore[typeddict-item]
     (built,) = _RecordingAgent.built
     return built.resolve_prompt() or ""
 
@@ -95,7 +95,7 @@ def _worker_prompt(**services_kwargs: object) -> str:
         "data": {"role": "Gathers and states the facts."},
     }
     run = runtime._worker("worker-research", node, CompiledPlan())
-    run(RunState(task_id="task-1", task_instruction="Find best practices"))  # type: ignore[typeddict-item]
+    drive_node(run, RunState(task_id="task-1", task_instruction="Find best practices"))  # type: ignore[typeddict-item]
     (built,) = _RecordingWorker.built
     return built.resolve_prompt() or ""
 

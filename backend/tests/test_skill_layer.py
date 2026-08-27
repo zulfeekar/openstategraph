@@ -264,6 +264,9 @@ class TestTheCompilePathWiresIt:
                     def invoke(self, _payload: Any) -> dict[str, Any]:
                         return {"messages": []}
 
+                    async def ainvoke(self, _payload: Any) -> dict[str, Any]:
+                        return {"messages": []}
+
                 return Built()
 
         from openstategraph.abc import agent as agent_family
@@ -278,7 +281,9 @@ class TestTheCompilePathWiresIt:
         plan.skill_bindings = {"a1": ["md1"]}
         runtime = NodeRuntime(model=any_chat_model(), skills_context="House style.")
         run = runtime.factory({"nodes": [node], "edges": []})("a1", node, plan)
-        run(RunState(question="q", outputs={"md1": skill}))  # type: ignore[typeddict-item]
+        from conftest import drive_node
+
+        drive_node(run, RunState(question="q", outputs={"md1": skill}))  # type: ignore[typeddict-item]
         return captured
 
     def test_a_wired_skill_arrives_as_the_skill_layer(self, monkeypatch) -> None:
@@ -340,6 +345,9 @@ class TestTheWorkerComposesLikeEveryOtherPromptedNode:
             def build(self) -> Any:
                 class Built:
                     def invoke(self, _payload: Any) -> dict[str, Any]:
+                        return {"messages": []}
+
+                    async def ainvoke(self, _payload: Any) -> dict[str, Any]:
                         return {"messages": []}
 
                 return Built()
