@@ -57,6 +57,24 @@ like a word that was never ambiguous, so the node says which is which: a
 source that declares what it holds gives a conclusive *not covered*, one that
 does not says so plainly, and a failed search is neither.
 
+**Resolve source** is the same section's second node and the same idea about
+a different question: *which of the stores that could answer this is
+answering it?* A warehouse often holds one figure from several systems of
+record — a balances desk, a plant tracker, a public dataset — at different
+grains, and two of them can disagree while both are right. So the node asks
+your catalogue which ones are live, settles on the one the question named or
+the one your data declares as its default, and hands the answer the
+alternatives it did **not** take. What a reader gets is *"the figures for
+Russian gasoline supply come from BAV… this data also holds JODI and the
+plant tracker, and they can disagree. Ask for one by name"* — rather than a
+number with no lineage.
+
+It reports coverage for the same reason, and the two states it must never
+blur are *there is nothing to choose* (your catalogue declares one source)
+and *we could not tell* (it declares none). And where several sources are
+live and nothing settles which, it chooses **nothing**: that is a question
+for the person asking, not a coin toss.
+
 ---
 
 ## 3. A revision loop is two edges
@@ -419,6 +437,7 @@ The words this product uses, and what each one must not be mistaken for.
 | **example** | a finished package shipped in the install; you take a **copy** | one of your workflows; something you mount |
 | **organism** | a whole assembly — drawn or mounted | only the things you can drag |
 | **resolver** | a step that looks up what a word means here, before the model runs, and reports what it **covered** as well as what it found | a tool the agent may choose to call; a table or column lookup |
+| **system of record** | the store a figure actually came from — named in the answer, with the ones it was not taken from listed beside it | the workflow's database connection; a table |
 
 ---
 

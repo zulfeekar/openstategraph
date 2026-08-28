@@ -29,7 +29,7 @@ from openstategraph.validation import MOUNT_NODE_TYPES
 KNOWN_NODE_TYPES = frozenset({
     "input.text", "input.markdown", "input.skill", "agent.llm", "route.classifier",
     "route.grader", "human.approval", "guard.policy", "guard.check", "memory.segment",
-    "resolve.vocabulary",
+    "resolve.vocabulary", "resolve.source",
     "orchestrate.supervisor",
     "orchestrate.worker", "function.format_report", "output.formatted",
     # Spread, not spelled (ticket 08): a third organism must reach the

@@ -13,7 +13,7 @@ atomic-design tier, declared once in
 | `Output · atoms` | `output.formatted` |
 | `Reasoning & control · molecules` | `agent.llm`, `route.classifier`, `route.grader`, `guard.check`, `guard.policy`, `human.approval`, `orchestrate.supervisor`, `orchestrate.worker`, `function.format_report` |
 | `Memory · molecules` | `memory.segment` — its own section on purpose: a segment decides what is *remembered*, not what happens next, so filing it under `Reasoning & control` would have made that heading false |
-| `Resolution · molecules` | `resolve.vocabulary` — its own section for the same reason Memory has one: a resolver looks a word up and decides nothing |
+| `Resolution · molecules` | `resolve.vocabulary`, `resolve.source` — its own section for the same reason Memory has one: a resolver looks something up and decides nothing |
 
 A check decided by **code** — a schema conformance rule, a lookup against a
 known set, anything with a deterministic pass/fail — belongs on

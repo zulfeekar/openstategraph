@@ -35,8 +35,19 @@ tickets warn about as loudly as they warn about duplication. `112` shares
 nothing with these but the word "per-tool".
 
 So: **one carrier (`ToolResult.notes`), several note kinds, and a per-kind
-rendering.** A fourth kind (`one-chinook-honest/30`'s executed statement) is an
+rendering.** A further kind (`one-chinook-honest/30`'s executed statement) is an
 addition to the union here, not a second field on `ToolResult`.
+
+`SourceChoice` (`launch-readiness/150`) is the third, and it is the worked
+example of when a *new kind* is right rather than a wider old one. It shares
+the key, the holder and the lifecycle — it is minted at the one moment the run
+knows which store answered — so it belongs on this carrier. It is not a
+`Substitution`, because that tuple is **one term mapping to another** and this
+is **one choice among several declared alternatives**, where the alternatives
+not taken are the whole payload. Bending `Substitution` around it would have
+made `axis`/`canonical_value` mean something different depending on `kind`,
+which is the "one envelope for unrelated concerns" failure refused two
+paragraphs down.
 
 ## Two rails, and why the reader's is not the model's
 
@@ -98,6 +109,13 @@ logger = logging.getLogger(__name__)
 #: document can enumerate them without re-deriving the `Literal`.
 HOW_MATCHED: tuple[str, ...] = ("exact", "declared_synonym", "model_inference")
 
+#: The three ways a system of record can be settled *before* the model runs,
+#: and no fourth. Every one of them is a fact somebody else stated — the user
+#: named it, the catalogue declared it the default, or it was the only one
+#: there was. "The model preferred it" is deliberately absent: that is the
+#: state `launch-readiness/150` exists to make unrecordable.
+HOW_CHOSEN: tuple[str, ...] = ("named_in_question", "declared_default", "only_source")
+
 
 class Correction(BaseModel):
     """`launch-readiness/117`: what to do given this result, said by the tool.
@@ -155,6 +173,39 @@ class Substitution(BaseModel):
         return _normalise(self.user_term) != _normalise(self.canonical_value)
 
 
+class SourceChoice(BaseModel):
+    """`launch-readiness/150`: which store answered, and what else could have.
+
+    A `Substitution` is **one term mapping to another**. This is **one choice
+    among several declared alternatives**, and the alternatives are the
+    payload — so it is a sibling note kind rather than a field bent onto that
+    tuple. A reader told *"1664 comes from BAV"* has been given lineage; a
+    reader told *"…and this warehouse also holds JODI and the plant tracker,
+    which disagree"* has been given the thing they actually asked for, which
+    is somewhere to go next.
+
+    `quantity` is what the figures are, in the developer's words, because
+    *"which source"* is only answerable about something: the same warehouse
+    answers supply from one system of record and outages from another.
+
+    Unlike a `Substitution`, this always renders to a reader when it exists —
+    a source is never implied by the user's own words the way a canonical
+    spelling can be, so there is no "nothing actually changed" case to stay
+    silent about. Silence by default is preserved where it belongs instead:
+    where nothing was chosen, no note is minted at all.
+    """
+
+    kind: Literal["source_choice"] = "source_choice"
+    #: What the figures are — *"Russian gasoline supply"*.
+    quantity: str
+    #: The system of record this run used.
+    chosen: str
+    #: The declared systems of record it did **not** use. The payload.
+    alternatives: tuple[str, ...] = ()
+    #: How it was settled. Required — see the module docstring on `how_matched`.
+    how_chosen: Literal["named_in_question", "declared_default", "only_source"]
+
+
 #: The carrier's payload. A fourth kind (`one-chinook-honest/30`'s executed
 #: statement) is an addition here, never a second field on `ToolResult`.
 #:
@@ -164,7 +215,7 @@ class Substitution(BaseModel):
 #: and the explicit discriminator bought nothing except a `FieldInfo` repr
 #: inside `ToolResult`'s signature, which is the line
 #: `backend/tests/public_api.txt` pins across three interpreters.
-ToolNote = Union[Correction, Substitution]
+ToolNote = Union[Correction, Substitution, SourceChoice]
 
 
 def _normalise(value: str) -> str:
@@ -184,6 +235,8 @@ def notes_for_model(notes: tuple[ToolNote, ...] | list[ToolNote]) -> str:
             text = note.text.strip()
             if text:
                 lines.append(f"Next step: {text}")
+        elif isinstance(note, SourceChoice):
+            lines.append(_source_choice_for_model(note))
         elif isinstance(note, Substitution) and note.changed_the_question():
             lines.append(
                 f'Substituted: "{note.user_term}" is not a value in this data; '
@@ -191,6 +244,33 @@ def notes_for_model(notes: tuple[ToolNote, ...] | list[ToolNote]) -> str:
                 f"({_HOW_MATCHED_FOR_MODEL[note.how_matched]})."
             )
     return "\n".join(lines)
+
+
+def _source_choice_for_model(note: SourceChoice) -> str:
+    """Told to the model as a constraint on the query, not as a preference.
+
+    The step already made the choice deterministically, so what the model
+    needs is the filter, not an invitation to reconsider it.
+    """
+    quantity = note.quantity.strip()
+    subject = f"the figures for {quantity}" if quantity else "these figures"
+    line = (
+        f"Source settled before this call: {subject} come from {note.chosen} "
+        f"({_HOW_CHOSEN_FOR_MODEL[note.how_chosen]}). Query that source and no other."
+    )
+    if note.alternatives:
+        line += (
+            " This store also holds " + _english_list(note.alternatives) + " for the same "
+            "figures; do not mix them into one number."
+        )
+    return line
+
+
+_HOW_CHOSEN_FOR_MODEL: dict[str, str] = {
+    "named_in_question": "the user named it",
+    "declared_default": "this store declares it the default",
+    "only_source": "the only system of record declared here",
+}
 
 
 _HOW_MATCHED_FOR_MODEL: dict[str, str] = {
@@ -210,6 +290,9 @@ def notes_for_reader(notes: tuple[ToolNote, ...] | list[ToolNote]) -> str:
     """
     lines: list[str] = []
     for note in notes:
+        if isinstance(note, SourceChoice):
+            lines.append(_source_choice_for_reader(note))
+            continue
         if not isinstance(note, Substitution) or not note.changed_the_question():
             continue
         lines.append(
@@ -218,6 +301,43 @@ def notes_for_reader(notes: tuple[ToolNote, ...] | list[ToolNote]) -> str:
             f"{_HOW_MATCHED_FOR_READER[note.how_matched]}."
         )
     return "\n".join(_dedup(lines))
+
+
+def _source_choice_for_reader(note: SourceChoice) -> str:
+    """The sentence `launch-readiness/150` was filed to make unforgettable.
+
+    *"I do not understand where this number comes from."* — so it names the
+    store, says how that was settled, lists what else could have answered,
+    and tells the reader that asking for another is a thing they may do. The
+    last clause is not decoration: without it a reader learns there was a
+    choice and not that it is theirs.
+    """
+    quantity = note.quantity.strip()
+    subject = f"The figures for {quantity}" if quantity else "These figures"
+    head = f"{subject} come from {note.chosen} — {_HOW_CHOSEN_FOR_READER[note.how_chosen]}."
+    if not note.alternatives:
+        return head + (
+            " It is the only system of record this data declares for them, so there was "
+            "nothing to choose between."
+        )
+    return head + (
+        " This data also holds " + _english_list(note.alternatives) + " for the same figures, "
+        "and they can disagree. Ask for one by name and it will be re-run against that source."
+    )
+
+
+_HOW_CHOSEN_FOR_READER: dict[str, str] = {
+    "named_in_question": "the source you named",
+    "declared_default": "the source this data declares as its default",
+    "only_source": "the only source this data declares",
+}
+
+
+def _english_list(values: tuple[str, ...] | list[str]) -> str:
+    items = [v for v in values if v]
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
 
 
 _HOW_MATCHED_FOR_READER: dict[str, str] = {
@@ -298,7 +418,7 @@ def record_notes(
     unit test would make that claim false. Same contract, and same reason, as
     `report_progress`.
     """
-    keepable = [note for note in notes if isinstance(note, Substitution)]
+    keepable = [note for note in notes if isinstance(note, (Substitution, SourceChoice))]
     if not keepable:
         return False
     thread = thread_id if thread_id is not None else _current_thread()
@@ -329,8 +449,10 @@ def take_notes(thread_id: str | None = None) -> tuple[ToolNote, ...]:
 
 
 __all__ = [
+    "HOW_CHOSEN",
     "HOW_MATCHED",
     "Correction",
+    "SourceChoice",
     "Substitution",
     "ToolNote",
     "notes_for_model",

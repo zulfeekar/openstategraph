@@ -36,7 +36,7 @@ from openstategraph import (
 )
 from openstategraph.abc import (
     ITool, BaseTool, ToolResult, NoArgs, Field, ToolField,
-    Correction, Substitution,
+    Correction, Substitution, SourceChoice,
     IRouter, BaseRouter, Router, Classification,
     IGrader, BaseGrader, Grader, Verdict,
     IGuardrail, BaseGuardrail, Guardrail, GuardrailRule, Redaction, Screening,

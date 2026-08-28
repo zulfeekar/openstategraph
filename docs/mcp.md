@@ -115,8 +115,8 @@ The gist of what comes back:
     // …and the rest. The grammar: annotate.group, annotate.note,
     //  function.format_report, guard.check, guard.policy, human.approval, input.markdown,
     //  input.skill, input.text, memory.segment, orchestrate.supervisor,
-    //  orchestrate.worker, output.formatted, resolve.vocabulary, route.classifier,
-    //  route.grader, workflow.subgraph.
+    //  orchestrate.worker, output.formatted, resolve.source, resolve.vocabulary,
+    //  route.classifier, route.grader, workflow.subgraph.
     //
     //  Then every bindable tool, which is the half that matters when you are
     //  composing a document an agent can actually run: tool.chinook-execute-sql,

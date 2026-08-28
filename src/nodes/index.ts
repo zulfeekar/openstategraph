@@ -41,6 +41,11 @@ import {
   resolveVocabularyExecutor,
   resolveVocabularyNode,
 } from './resolve/ResolveVocabularyNode';
+import {
+  RESOLVE_SOURCE_TYPE,
+  resolveSourceExecutor,
+  resolveSourceNode,
+} from './resolve/ResolveSourceNode';
 import { PLATFORM_TOOL_NODES } from './tools/PlatformToolsNode';
 import { MCP_SERVER_TYPE, mcpServerExecutor, mcpServerNode } from './tools/McpServerNode';
 
@@ -113,6 +118,10 @@ export function registerNodeCatalogue(
       // document may need a term resolved, and which vocabulary it reads is
       // the node's own configuration.
       resolveVocabularyNode,
+      // Which store answers, declared before the model rather than picked by
+      // it (`launch-readiness` 150). The vocabulary resolver's sibling: same
+      // family, same three properties, and the alternatives are its payload.
+      resolveSourceNode,
       // Loop/graph engineering: split -> fan-out -> dispatch -> join.
       orchestratorNode,
       workerNode,
@@ -142,6 +151,7 @@ export function registerNodeCatalogue(
     guardCheckExecutor,
     memorySegmentExecutor,
     resolveVocabularyExecutor,
+    resolveSourceExecutor,
     orchestratorExecutor,
     workerExecutor,
     formatReportExecutor,
@@ -174,6 +184,7 @@ export const NODE_TYPE = {
   guardCheck: GUARD_CHECK_TYPE,
   memorySegment: MEMORY_SEGMENT_TYPE,
   resolveVocabulary: RESOLVE_VOCABULARY_TYPE,
+  resolveSource: RESOLVE_SOURCE_TYPE,
   mcpServer: MCP_SERVER_TYPE,
   orchestrator: ORCHESTRATOR_TYPE,
   worker: WORKER_TYPE,

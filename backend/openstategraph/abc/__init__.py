@@ -81,7 +81,7 @@ from openstategraph.abc.tool import BaseTool, Field, ITool, NoArgs, ToolField, T
 # user's behalf (`launch-readiness/127`). Same reasoning as `report_progress`
 # below — this is the import line a tool author is given, and a second path
 # for it would be a surface nobody finds.
-from openstategraph.abc.tool_notes import Correction, Substitution
+from openstategraph.abc.tool_notes import Correction, SourceChoice, Substitution
 # Not a ladder — the one thing a tool does *while* it runs. It lives here
 # because this is the import line a tool author is given, and a second
 # path for it would be a surface nobody finds.
@@ -122,6 +122,7 @@ __all__ = [
     "Redaction",
     "Router",
     "Screening",
+    "SourceChoice",
     "Substitution",
     "Subtask",
     "SystemPrompt",

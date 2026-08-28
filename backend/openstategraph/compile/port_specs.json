@@ -1331,6 +1331,101 @@
       ]
     },
     {
+      "type": "resolve.source",
+      "kind": "standard",
+      "category": "resolve",
+      "scope": "app",
+      "label": "Resolve source",
+      "description": "Names which of the stores that could answer this question is answering it, before the model picks, and lists the alternatives it did not take. No model call.",
+      "ports": [
+        {
+          "id": "question",
+          "direction": "in",
+          "type": "result",
+          "label": "question",
+          "required": true,
+          "max_connections": 1,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "catalogue",
+        "maxRetries",
+        "quantity",
+        "timeoutSeconds",
+        "whenUndecided"
+      ],
+      "fields": [
+        {
+          "key": "catalogue",
+          "kind": "text",
+          "label": "Catalogue",
+          "hint": "The package function this node asks, named the way `function.<name>` names it. It is called once with the question and returns the systems of record that could answer it — a name is enough, and a row that marks itself the default settles which one is used.",
+          "required": true,
+          "defaultValue": ""
+        },
+        {
+          "key": "quantity",
+          "kind": "text",
+          "label": "Figures",
+          "hint": "What the figures are, in your words. “Which source?” is only answerable about something — the same warehouse answers supply from one system of record and outages from another — and this is the phrase the disclosure names.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "whenUndecided",
+          "kind": "textarea",
+          "label": "When nothing settles it",
+          "hint": "Carried downstream when several systems of record are live and none is named or default. The coverage report itself is not optional: a figure with no stated source reads exactly like a figure from the wrong one, which is the defect this node exists to close.",
+          "required": false,
+          "defaultValue": "More than one system of record can answer this and none is declared the default. Say which ones are live and ask which is meant, rather than choosing one and presenting its figures as the figures."
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
       "type": "resolve.vocabulary",
       "kind": "standard",
       "category": "resolve",

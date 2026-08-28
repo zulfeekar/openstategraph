@@ -110,6 +110,11 @@ from openstategraph.vocabulary import (
     resolve_vocabulary,
     unresolved_source,
 )
+from openstategraph.sources import (
+    DEFAULT_WHEN_UNDECIDED,
+    resolve_source,
+    unresolved_catalogue,
+)
 from openstategraph.messages import content_text
 from openstategraph.reasoning import REASONING_EFFORT_KEY, apply_reasoning_effort
 
@@ -1223,6 +1228,9 @@ class NodeRuntime:
         # What a word means here, resolved before the model rather than
         # picked by it (`launch-readiness` 135).
         registry.register("resolve.vocabulary", self._resolve_vocabulary)
+        # Which store answers, settled before the model rather than picked by
+        # it (`launch-readiness` 150). The vocabulary resolver's sibling.
+        registry.register("resolve.source", self._resolve_source)
         registry.register("memory.segment", self._memory_segment)
         registry.register("orchestrate.supervisor", self._orchestrator)
         registry.register("orchestrate.worker", self._worker)
@@ -3827,6 +3835,82 @@ class NodeRuntime:
                 # model mentions it.
                 record_notes(resolution.substitutions)
                 block = resolution.render()
+
+            output = f"{question}\n\n---\n{block}" if question else block
+            return {"outputs": {node_id: output}}
+
+        return run
+
+    def _resolve_source(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+        """*Which store is answering this, and what else could have?*
+
+        `launch-readiness/150`. The engine is `openstategraph.sources`; this
+        builder is the seam between it and a drawn node — which catalogue,
+        what the figures are called, and what the run carries downstream when
+        several systems of record are live and nothing settles which.
+
+        The user's complaint it exists for was *"in the may number 1664 is
+        given in the table. I do not understand where this number comes from"*
+        — three of seven complaints in one round were this shape. A number
+        with no stated source and a number from the wrong source look
+        identical, and that is this project's most expensive failure attached
+        to the thing a user trusts most.
+
+        Four properties are asserted by
+        `tests/test_a_run_names_the_source_it_used.py`:
+
+        - **It is a step, not a tool**, for the same measured reason
+          `resolve.vocabulary` is: a source the model picks is a source that
+          changes between runs.
+        - **The alternatives are the payload.** `Substitution` maps one term
+          to another; this is one choice among several declared alternatives,
+          so it mints its own note kind (`SourceChoice`) on the run's rail and
+          `_output` discloses it whether or not the model mentions it.
+        - **Nothing to choose is not the same as could not tell.** A catalogue
+          declaring one source and a catalogue declaring none render
+          differently, by construction, with no toggle between them.
+        - **It settles nothing it was not told.** Where several sources are
+          live and none is named or default, no choice is recorded — that is
+          `guardrails/06`'s abstain, which is open and unbuilt, and this step
+          leaves the seam rather than inventing a second way to ask.
+
+        `answer` is deliberately not written, exactly as for the vocabulary
+        resolver: an intermediate step whose block landed in `answer` would
+        let a run whose model never spoke end with metadata as its answer.
+        """
+        data = node.get("data") or {}
+        catalogue_name = _text(data, "catalogue").strip()
+        key = f"function.{catalogue_name}" if catalogue_name else ""
+        catalogue = self.services.functions.get(key) if key else None
+        quantity = _text(data, "quantity").strip()
+        when_undecided = _text(data, "whenUndecided").strip() or DEFAULT_WHEN_UNDECIDED
+
+        upstream = [src for src, dst in plan.edges if dst == node_id]
+        conditional_upstream = [
+            src for src, dests in plan.conditional.items() if node_id in dests.values()
+        ]
+
+        def run(state: RunState) -> dict[str, Any]:
+            question = _upstream_text(state, upstream + conditional_upstream) or state.get(
+                "question", ""
+            )
+            if catalogue is None:
+                self.diagnostics.record(
+                    Finding.UNRESOLVED_FUNCTION, f"resolve.source:{catalogue_name}"
+                )
+                block = unresolved_catalogue(key or catalogue_name, when_undecided)
+            else:
+                selection = resolve_source(
+                    question,
+                    catalogue,
+                    quantity=quantity,
+                    catalogue_name=key,
+                    when_undecided=when_undecided,
+                )
+                # The run's own rail: the output node names the source whether
+                # or not the model remembered to.
+                record_notes(selection.notes)
+                block = selection.render()
 
             output = f"{question}\n\n---\n{block}" if question else block
             return {"outputs": {node_id: output}}

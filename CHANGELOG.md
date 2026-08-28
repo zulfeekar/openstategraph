@@ -3,6 +3,27 @@
 ## Unreleased
 
 ### Added
+- **A run says which store answered, and what else could have.** A new node
+  type, `resolve.source` (`launch-readiness/150`), and the engine behind it,
+  `openstategraph.sources`. It is the sibling of `resolve.vocabulary`:
+  deterministic, run **before** the model, and it records what it did on the
+  run's own rail rather than asking the model to remember. Vocabulary answers
+  *what does this word mean here*; this answers *which of the several stores
+  that could answer this is answering it, and what else could have*. A third
+  Tier-1 note kind carries it — `SourceChoice` (`quantity`, `chosen`,
+  `alternatives`, `how_chosen`), exported from `openstategraph.abc` and added
+  to `ToolResult.notes`' union — because `Substitution` is one term mapping to
+  another while this is one choice among several declared alternatives, and
+  the alternatives not taken are the payload. `how_chosen` has no default and
+  names only facts somebody else stated (`named_in_question`,
+  `declared_default`, `only_source`): there is no branch in which the platform
+  prefers a source. Where several are live and nothing settles which, **no
+  choice is recorded** — that is `guardrails/06`'s abstain, which is open and
+  unbuilt, and the seam is left rather than a second way to ask invented. The
+  coverage report cannot be switched off, and its two hardest states are kept
+  apart by construction: a catalogue declaring exactly one source says *there
+  is nothing to choose*, and one declaring none says *silence here is not
+  evidence*. No package uses it yet; wiring `cpl-mcp` is the next step.
 - **A tool can say what to do next, and what it substituted for your word —
   and the run records the second one rather than asking the model to remember
   it.** `ToolResult` gains `notes`, an empty-by-default tuple carrying two new
