@@ -414,6 +414,44 @@ seam. Subclassing `langchain_core.tools.BaseTool` would let every upstream
 change to its internals reach into the whole tool catalogue, and the compile
 seam would stop being one-directional.
 
+### If you build a `StructuredTool` by hand, resolve its type hints
+
+A tool atom goes through `as_langchain_tool()` and never meets this. A
+**middleware** slot does — `abc/async_task_middleware.py` builds five
+`StructuredTool`s directly — and there the injected-argument seam has a trap
+that costs a whole feature and reddens nothing.
+
+An argument annotated `runtime: ToolRuntime` is injected across **two** objects,
+and they read the signature differently:
+
+| Half | Decides | Reads through | Resolves a string annotation? |
+| --- | --- | --- | --- |
+| `ToolNode._get_all_injected_args` | *whether* to inject | `typing.get_type_hints` | **yes** |
+| `StructuredTool._injected_args_keys` | whether to *keep* it | `inspect.signature` | **no** |
+
+Under `from __future__ import annotations` — which nearly every module here
+carries — the second half sees the string `"ToolRuntime"`, does not recognise
+it, and drops the value the first half just injected. The function is then
+called without it and raises `TypeError: … missing 1 required positional
+argument: 'runtime'`, naming an argument the caller genuinely supplied.
+
+So resolve the hints onto the function object before handing it over:
+
+```python
+func.__annotations__ = get_type_hints(func)
+return StructuredTool.from_function(name=..., func=func, ...)
+```
+
+`infer_schema=False` is not involved either way; an explicit `args_schema`
+skips inference regardless.
+
+**And test it the way the runtime calls it.** A test that reaches the body as
+`tool.func(..., runtime=...)` hands the runtime over by name, which is the one
+thing no real caller does — that shape kept a suite green while every live tool
+call died (`async-first/16`). Drive `ToolNode` from an `AIMessage` carrying a
+tool call with an id:
+`backend/tests/test_a_model_can_actually_call_the_async_tools.py`.
+
 ### Two more rules the email tool demonstrates
 
 [`prebuilt_email.py`](../backend/openstategraph/prebuilt_email.py) is worth
