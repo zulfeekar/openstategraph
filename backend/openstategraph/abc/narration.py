@@ -69,6 +69,7 @@ from collections.abc import Callable
 from typing import Any
 
 from langchain.agents.middleware.types import AgentMiddleware, AgentState, ToolCallRequest
+from langchain_core.messages import ToolMessage
 from langgraph.runtime import Runtime
 
 from openstategraph.abc.tool_findings import MAX_SENTENCE_LEN, summarise_tool_result
@@ -151,6 +152,51 @@ _MISS = object()
 #: same number; `launch-readiness/143` needed a third, which is one too many
 #: for a comment to hold together. `tool_findings.MAX_SENTENCE_LEN` is the home.
 _MAX_NARRATION_LEN = MAX_SENTENCE_LEN
+
+
+def _answering(result: Any, request: ToolCallRequest) -> Any:
+    """The stored result, re-addressed to **this** call.
+
+    `launch-readiness/159`, and the whole of it. A cached `ToolMessage` still
+    carries the `tool_call_id` of the call that first produced it and the `.id`
+    that `add_messages` assigned that message. Handing the same object back on
+    a later lap breaks the `AIMessage`/`ToolMessage` pair twice over, and both
+    breakages are unrecoverable at the provider:
+
+    - **the stale `tool_call_id`** answers a call the preceding `AIMessage`
+      never made, and OpenAI refuses the whole request —
+      `"'tool_call_id' of 'call_…' not found in 'tool_calls' of previous
+      message"`. This is the 400 the owner saw three times, at
+      `messages.[7]`, `[18]` and `[25]`, always immediately after a
+      *"Reusing what I already looked up."* line;
+    - **the stale `.id`** makes `add_messages` dedupe the re-used answer onto
+      the *first* message's position rather than appending it, so the new tool
+      call is left with no answer at all.
+
+    Which of the two the provider reports depends on whether anything
+    downstream copied the message on its way out — `OffloadMiddleware` does,
+    and a copy gets a fresh id, so the deep tier gets the orphan rather than
+    the silent overwrite. Both are one defect and one fix.
+
+    `id=None` rather than a minted uuid: `add_messages` mints one for a message
+    that has none, so this hands the library the job it already owns instead of
+    growing a second place ids are made.
+
+    The shape is LangGraph's own, written into `ToolNode`'s docstring for
+    exactly this hook (`langgraph 1.2.10`, `prebuilt/tool_node.py`):
+    `return ToolMessage(content=cached, tool_call_id=request.tool_call["id"])`.
+    A `model_copy` here rather than a fresh construction so nothing else the
+    message carries — `status`, `artifact`, `response_metadata` — is silently
+    dropped on the reuse path but kept on the miss path.
+    """
+    if not isinstance(result, ToolMessage):
+        return result
+    call_id = request.tool_call.get("id")
+    if not call_id:
+        return result
+    if result.tool_call_id == call_id and result.id is None:
+        return result
+    return result.model_copy(update={"tool_call_id": call_id, "id": None})
 
 
 class NarrationMiddleware(AgentMiddleware):
@@ -333,7 +379,7 @@ class NarrationMiddleware(AgentMiddleware):
             if bucket is not None and cache_key in bucket:
                 if not self._quiet:
                     report_progress(_REUSE_TEXT)
-                return cache_key, thread_id, bucket[cache_key]
+                return cache_key, thread_id, _answering(bucket[cache_key], request)
         if not self._quiet and not _narrates_itself(request):
             report_progress(self._before_tool_text(request))
         return cache_key, thread_id, _MISS
@@ -346,6 +392,13 @@ class NarrationMiddleware(AgentMiddleware):
         name: str = "",
     ) -> Any:
         """Store the result where a later call can find it, and say what it found."""
+        if thread_id is not None and not isinstance(result, ToolMessage):
+            # Only a `ToolMessage` can be re-keyed to answer a later call
+            # (`_answering`). A `Command` carries its own message list with
+            # its own ids and its own state updates, and replaying one would
+            # be a second, different defect of the same family — so it is
+            # simply never stored. `launch-readiness/159`.
+            thread_id = None
         if thread_id is not None:
             # `thread_id` is only ever set when `cache_key` is not `None` —
             # this assert is for mypy's narrowing, not a new runtime

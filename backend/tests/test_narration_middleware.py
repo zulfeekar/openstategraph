@@ -286,12 +286,13 @@ def _call(
     args: dict[str, Any],
     thread_id: str | None,
     result: ToolMessage,
+    call_id: str = "call_x",
 ) -> tuple[Any, bool]:
     """Invokes `wrap_tool_call` once inside a real graph run (so
     `report_progress` has a stream to write to) and reports whether the
     underlying handler actually ran."""
     request = ToolCallRequest(
-        tool_call={"name": tool_name, "args": args, "id": "call_x"},
+        tool_call={"name": tool_name, "args": args, "id": call_id},
         tool=None,
         state={},
         runtime=_FakeRuntime(thread_id),
@@ -326,6 +327,39 @@ class TestReadThroughCache:
         assert invoked1 is True
         assert invoked2 is False
         assert out2 is result
+
+    def test_a_hit_answers_the_call_that_asked_not_the_one_that_first_ran(self) -> None:
+        """`launch-readiness/159`. The stored `ToolMessage` carries the *first*
+        call's `tool_call_id`; a second call has its own id, and a provider
+        refuses a `ToolMessage` that answers a call the preceding `AIMessage`
+        never made. The stored `.id` has to go too — `add_messages` dedupes on
+        it, which would overwrite the first answer instead of appending this
+        one."""
+        mw = NarrationMiddleware(quiet=True)
+        stored = ToolMessage(content=[{"id": 1}], tool_call_id="call_1", id="msg_1")
+        _call(
+            mw,
+            tool_name="mcp_list_lenses",
+            args={"domain": "sm"},
+            thread_id="t1",
+            result=stored,
+            call_id="call_1",
+        )
+        out2, invoked2 = _call(
+            mw,
+            tool_name="mcp_list_lenses",
+            args={"domain": "sm"},
+            thread_id="t1",
+            result=stored,
+            call_id="call_2",
+        )
+        assert invoked2 is False
+        assert out2.tool_call_id == "call_2"
+        assert out2.id is None
+        assert out2.content == stored.content
+        # The store itself is untouched — a third call must still find the
+        # original to re-key, not a copy addressed to the second call.
+        assert stored.tool_call_id == "call_1"
 
     def test_non_allowlisted_tool_is_always_invoked(self) -> None:
         mw = NarrationMiddleware(quiet=True)
