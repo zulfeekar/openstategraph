@@ -75,10 +75,17 @@ from openstategraph.compile.side_effects import (
     repetition_clause,
     upstream_of,
 )
+from openstategraph.compile.grounding import (
+    answers_from_outside_the_run,
+    gated_by,
+    reaches_without_passing,
+)
+from openstategraph.grounded_numbers import MODEL_AUTHORED, check_numbers_in_prose
 from openstategraph.compile.reducers import RESET as _RESET  # noqa: F401
 from openstategraph.validation import MOUNT_NODE_TYPES
 from openstategraph.compile.reducers import Reducer, reducer_for  # noqa: F401
 from openstategraph.compile.workflow_compiler import (
+    GUARD_CHECK_TYPE,
     GUARDRAIL_TYPE,
     CompiledPlan,
     failure_marker,
@@ -155,6 +162,20 @@ NO_ANSWER_PRODUCED = "The workflow finished without producing an answer."
 #: routers and graders and approvals forward, guardrails rewrite — none of
 #: them invent, so none of them is what an outbound policy exists to catch.
 _PRODUCES_CONTENT: tuple[str, ...] = ("agent.", "orchestrate.", "function.", "workflow.")
+
+#: Checks `guard.check` can name without a package function behind them
+#: (`launch-readiness` 151).
+#:
+#: **One entry, and the registry exists because one entry could not fit the
+#: existing contract.** `fn(text) -> str` is the narrow, serialisable seam
+#: every `function.*` node uses, and it is right: a function with access to
+#: raw graph state would be a second place for control flow to hide. But F3
+#: asks *did anything this run retrieved contain this number*, which is a
+#: question about the evidence, not about the text — so it is core's to
+#: answer, with the wider signature, rather than a contract widened for
+#: everybody. A package function of the same name still wins, so this is a
+#: default and not a reservation.
+_BUILT_IN_CHECKS: dict[str, Any] = {"numbers_in_prose": check_numbers_in_prose}
 
 #: Node types whose streamed text is machinery, not the reply.
 #:
@@ -1849,6 +1870,49 @@ class NodeRuntime:
             if capabilities:
                 self.diagnostics.record(
                     Finding.APPROVAL_COMES_TOO_LATE,
+                    node_id,
+                    source,
+                    ", ".join(capabilities),
+                )
+
+    def _open_world_capabilities(self, node_id: str, plan: CompiledPlan) -> list[str]:
+        """The distinct bound tool *types* on this node that answer from
+        outside the run's own data.
+
+        `plan.tool_bindings` read through `self._types`, exactly as
+        `_acting_capabilities` reads it and for the same two reasons: the
+        ambient rules append tools to nearly every agent alive, and the fix a
+        developer would reach for is on the canvas. A type that resolved to
+        nothing is skipped — nothing is bound, so nothing can answer.
+        """
+        found: list[str] = []
+        for tool_node_id in plan.tool_bindings.get(node_id, []):
+            tool_type = self._types.get(tool_node_id, "")
+            tool = self.services.tools.get(tool_type)
+            if tool is None or tool_type in found:
+                continue
+            if answers_from_outside_the_run(tool):
+                found.append(tool_type)
+        return found
+
+    def _report_undeclared_fallback(self, node_id: str, plan: CompiledPlan) -> None:
+        """Note an Output a model-supplied quantity can reach ungated.
+
+        Two narrowings, and they are the whole finding. It fires only where a
+        bound capability *declares* `open_world = True`, so an agent holding
+        the store's own query tools — the ordinary case — is never reported;
+        and the walk stops at a `guard.check`, so a document that already
+        gates its numbers is silent.
+
+        Sorted, so a document with two such producers above one Output reports
+        them in an order that does not depend on set iteration.
+        """
+        gates = gated_by(plan, self._types, GUARD_CHECK_TYPE)
+        for source in sorted(reaches_without_passing(node_id, plan, gates)):
+            capabilities = self._open_world_capabilities(source, plan)
+            if capabilities:
+                self.diagnostics.record(
+                    Finding.UNDECLARED_FALLBACK,
                     node_id,
                     source,
                     ", ".join(capabilities),
@@ -3717,6 +3781,18 @@ class NodeRuntime:
         data = node.get("data") or {}
         check_name = _text(data, "check").strip()
         fn = self.services.functions.get(f"function.{check_name}") if check_name else None
+        # `launch-readiness` 151. F3 — *every number in the prose appears in a
+        # result row* — cannot be a package function, and that is why it sat
+        # unwritten for three days: `fn(text) -> str` sees the candidate and
+        # nothing else, and this check needs the **evidence** as well. So core
+        # supplies it, with the wider signature, and a package function of the
+        # same name still wins — an adopter overrides by writing one.
+        built_in = _BUILT_IN_CHECKS.get(check_name) if fn is None else None
+        model_authored = frozenset(
+            candidate_id
+            for candidate_id, candidate_type in self._types.items()
+            if candidate_type.startswith(MODEL_AUTHORED)
+        )
         upstream = [src for src, dst in plan.edges if dst == node_id]
         conditional_upstream = [
             src for src, dests in plan.conditional.items() if node_id in dests.values()
@@ -3731,7 +3807,7 @@ class NodeRuntime:
             candidate = _upstream_text(state, upstream + conditional_upstream) or state.get(
                 "question", ""
             )
-            if fn is None:
+            if fn is None and built_in is None:
                 self.diagnostics.record(Finding.UNRESOLVED_FUNCTION, f"guard.check:{check_name}")
                 return {
                     "decisions": {node_id: "pass"},
@@ -3740,7 +3816,12 @@ class NodeRuntime:
                 }
 
             try:
-                reason = fn(candidate)
+                if built_in is not None:
+                    reason = built_in(candidate, state, model_authored)
+                elif fn is not None:
+                    reason = fn(candidate)
+                else:  # pragma: no cover - the branch above returns first
+                    reason = ""
             except Exception as exc:
                 reason = f"{type(exc).__name__}: {exc}"
             reason = reason.strip() if isinstance(reason, str) else str(reason or "")
@@ -4602,6 +4683,12 @@ class NodeRuntime:
         # case is deliberately silent.
         if GUARDRAIL_TYPE in self._types.values() and not self._guarded_upstream(node_id, plan):
             self.diagnostics.record(Finding.UNGUARDED_EXIT, node_id)
+        # `launch-readiness` 151: the same question one axis over — not "did a
+        # policy get bypassed" but "can a model-supplied quantity reach this
+        # Output with nothing between". Here for `UNGUARDED_EXIT`'s reason:
+        # an Output is the one node that knows what "reaching the reader"
+        # means, and both walks are backwards from it.
+        self._report_undeclared_fallback(node_id, plan)
 
         def run(state: RunState) -> dict[str, Any]:
             from langchain_core.messages import AIMessage

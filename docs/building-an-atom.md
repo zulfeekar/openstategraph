@@ -712,6 +712,45 @@ to 1, keep it out of the loop, or make the action safe to repeat. Neither
 finding can fail a build — the condition is a conservative default about a tool
 nobody declared, and a guess may be loud but may not exit 1.
 
+**Say whether your tool answers from outside the run's own data.**
+`open_world` is the other class attribute, and its default is `False`:
+
+```python
+class AskTheWeb(BaseTool):
+    ...
+    open_world = True             # this tool can hand back a fact your data
+                                  # cannot re-resolve
+```
+
+The rule it makes checkable is *a model may supply a word, never a number*. A
+guess about **language** — *"you probably mean Middle East Gulf"* — is safe,
+because the store re-resolves it and it either matches something real or is
+reported as not covered. A guess about a **quantity** is unfalsifiable at the
+moment it is made and indistinguishable from a fact. So the compiler answers
+one question about the graph: can a step holding this tool reach an Output with
+no `guard.check` between? If it can, you get a sentence naming the Output, the
+step and the capability.
+
+**This default is the quiet side, not the safe one, and that is deliberate.**
+Nearly every tool in a data workflow *is* the store, so a conservative default
+would put the sentence on every graph — and a finding that fires on every graph
+is a finding nobody reads. The declaration therefore sits on the unusual case:
+the tool that reaches past the run's own data. `tool.web-search` and
+`tool.web-fetch` declare it.
+
+The finding reports the **absence** of a gate, never the adequacy of one. A
+`guard.check` on the path silences it whatever that check verifies — judging a
+check's contents from the compiler is how a checker starts reporting success on
+a wrong query.
+
+**The gate itself is a node you draw.** `guard.check` with
+`check: numbers_in_prose` is built in — no `functions/` file needed — and it
+answers `pass`/`revise` on one question: does every quantity in the answer trace
+to something this run retrieved? A number in a result row, a number in the
+question, a count of the rows themselves and a rounding of a retrieved figure
+all pass. A percentage is exempt, because a share is almost always arithmetic
+over numbers the model was given.
+
 **If your tool's work is genuinely awaitable, write `_aexecute` instead.**
 `_execute` stays the one required method — it is what all 26 bundled tools
 implement, and nothing about it changed — and every tool also has an awaitable

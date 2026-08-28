@@ -67,14 +67,28 @@ def test_exactly_same_package_twice_currently_declares_a_finding() -> None:
     `Finding.OVERRIDE_APPLIED` reports it now compiles with are exactly what
     the example is *for*, declared rather than left as undeclared drift.
 
-    No other package in the gallery currently ships a deliberate, declared
-    warning. Inventing one to keep this test's premise alive was considered
-    and rejected the same way the docstring above rejected it for
-    `UNWIRED_REVISE`; if the gallery wants a second one, add it under its own
-    ticket and this assertion is where it gets named.
+    **Four more were named here by `launch-readiness` 151**, which is the
+    ticket this assertion asked for. `UNDECLARED_FALLBACK` reports a graph
+    whose Output can be reached from a step holding a capability that answers
+    from outside the run's own data, with no gate between — and the four
+    web-research examples are exactly that, on purpose. `delegate-by-mount`
+    declares its own with a `mountPath`, because the finding is
+    `web-research-digest`'s and it arrives behind `_MOUNTED`.
+
+    **The nineteen that declare nothing are the point.** A finding that fires
+    on every graph is a finding nobody reads, so the list below is as much a
+    narrowness pin as it is a declaration: every example whose agent is bound
+    to the store's own tools stays silent, including the ones that draw the
+    same shape inside a revision loop.
     """
     declaring = [e.slug for e in catalogue() if e.expected_findings]
-    assert declaring == ["same-package-twice"]
+    assert declaring == [
+        "same-package-twice",
+        "delegate-by-mount",
+        "youtube-trend-digest",
+        "web-research-digest",
+        "morning-brief",
+    ]
 
 
 def test_an_undeclared_warning_is_drift() -> None:
@@ -86,7 +100,7 @@ def test_an_undeclared_warning_is_drift() -> None:
 
 def test_a_declaration_that_no_longer_fires_is_drift() -> None:
     declared = Example(
-        slug="x", pattern="p", expected_findings=((Finding.UNWIRED_REVISE.value, ("g1",)),)
+        slug="x", pattern="p", expected_findings=((Finding.UNWIRED_REVISE.value, ("g1",), ""),)
     )
     undeclared, absent = warning_drift(declared, [])
     assert undeclared == []
@@ -100,7 +114,7 @@ def test_a_declaration_is_formatted_from_the_shared_template() -> None:
     correct declaration into drift.
     """
     declared = Example(
-        slug="x", pattern="p", expected_findings=((Finding.UNWIRED_REVISE.value, ("g1",)),)
+        slug="x", pattern="p", expected_findings=((Finding.UNWIRED_REVISE.value, ("g1",), ""),)
     )
     sentence = CompileDiagnostics.sentence_for(Finding.UNWIRED_REVISE).format("g1")
     assert warning_drift(declared, [sentence]) == ([], [])

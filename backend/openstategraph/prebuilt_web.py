@@ -156,6 +156,7 @@ class WebSearchTool(BaseTool):
     name = "web_search"
     #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
     side_effecting = False
+    open_world = True
     node_type = "tool.web-search"
     description = (
         "Search the web. Returns titles, URLs and snippets; follow up with "
@@ -225,6 +226,7 @@ class WebFetchTool(BaseTool):
     name = "web_fetch"
     #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
     side_effecting = False
+    open_world = True
     node_type = "tool.web-fetch"
     description = (
         "Fetch one public web page and return its readable text (truncated), "

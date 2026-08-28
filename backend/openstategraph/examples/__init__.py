@@ -151,7 +151,14 @@ class Example:
     #: By kind and subject rather than by pasted prose, so rewording a
     #: sentence in `diagnostics._SENTENCES` cannot turn a correct declaration
     #: into drift. See `warning_drift`.
-    expected_findings: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    #:
+    #: The third element is the **mount path** a finding was absorbed from,
+    #: empty for the ordinary case (`launch-readiness` 151). `delegate-by-mount`
+    #: is the shipped case: the finding is `web-research-digest`'s, and the
+    #: parent reports it behind `_MOUNTED`. Declaring the bare sentence there
+    #: would have been a declaration that never matched, which is the second
+    #: kind of drift this function exists to catch.
+    expected_findings: tuple[tuple[str, tuple[str, ...], str], ...] = ()
 
     @property
     def directory(self) -> Path:
@@ -241,10 +248,12 @@ def warning_drift(example: Example, actual: Sequence[str]) -> tuple[list[str], l
     """
     from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
 
-    declared = [
-        CompileDiagnostics.sentence_for(Finding(kind)).format(*subjects)
-        for kind, subjects in example.expected_findings
-    ]
+    from openstategraph.compile.diagnostics import _MOUNTED
+
+    declared = []
+    for kind, subjects, path in example.expected_findings:
+        sentence = CompileDiagnostics.sentence_for(Finding(kind)).format(*subjects)
+        declared.append(_MOUNTED.format(path=path, sentence=sentence) if path else sentence)
     undeclared = [warning for warning in actual if warning not in declared]
     absent = [sentence for sentence in declared if sentence not in actual]
     return undeclared, absent
@@ -258,7 +267,11 @@ def catalogue() -> tuple[Example, ...]:
             slug=entry["slug"],
             pattern=entry["pattern"],
             expected_findings=tuple(
-                (finding["finding"], tuple(finding.get("subjects", ())))
+                (
+                    finding["finding"],
+                    tuple(finding.get("subjects", ())),
+                    finding.get("mountPath", ""),
+                )
                 for finding in entry.get("expectedFindings", ())
             ),
         )

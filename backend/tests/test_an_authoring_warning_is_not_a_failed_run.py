@@ -298,6 +298,7 @@ class TestEveryProducerHasASide:
             Finding.MODEL_SELECTION_DEGRADED,
             Finding.REPEATED_SIDE_EFFECT,
             Finding.APPROVAL_COMES_TOO_LATE,
+            Finding.UNDECLARED_FALLBACK,
         }
     )
 

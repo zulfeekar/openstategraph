@@ -45,6 +45,22 @@ shared by the tool and by `functions/validate_sql.py`'s duplicate gate logic)
   `workflow.json` graph-shape change, out of scope for "close the cheap
   ones" the day before the demo.
 
+  **Correction, 2026-08-28 (`launch-readiness/151`).** The sentence above says
+  the check was "implemented as a standalone `check_numbers_in_prose()`". It
+  was not. Nothing of that name existed in this repository, in
+  `~/osg-demo/workflows/cpl-nl2sql`, or in any of the seven backups of that
+  package — only this paragraph claiming it, and `git log -S` finds the claim
+  and no code. That is the same defect the rule itself is about: an assertion
+  with no way to fail.
+
+  It is written now, in `backend/openstategraph/grounded_numbers.py`, and
+  wired — but **not as a package function**, which is why it could not have
+  been one. `guard.check` calls `fn(text: str) -> str`, and that signature sees
+  the candidate prose and nothing else; F3 needs the **evidence** as well. So
+  core supplies it as a built-in check named `numbers_in_prose`, reading tool
+  results out of `messages` and deterministic step outputs out of `outputs`. A
+  package function of the same name still wins, so an adopter can override it.
+
 All new checks verified against both a known-good query (no false positives)
 and deliberately-bad ones (SELECT *, DELETE, TOP 10, ungrouped column,
 double-quoted `"group"`) before wiring in. `pytest tests/` still shows the

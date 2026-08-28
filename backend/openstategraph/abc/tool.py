@@ -220,6 +220,27 @@ class BaseTool(ABC):
     #: of them, and the value an adopter gets by saying nothing is the value
     #: that cannot hurt them.
     side_effecting: ClassVar[bool] = True
+    #: Whether this tool answers from outside the run's own data — the open
+    #: web, a model's own knowledge — rather than from records the run
+    #: retrieved (`launch-readiness` 151).
+    #:
+    #: **The default is the quiet side, and that is the difference from
+    #: `side_effecting` above.** 121 defaults that one to `True` because an
+    #: undeclared tool must land on the safe side, and there the safe side is
+    #: also the rare side. Here it is inverted: nearly every tool in a
+    #: quantitative workflow *is* the store, so a conservative default would
+    #: fire `UNDECLARED_FALLBACK` on every graph holding an agent and a tool
+    #: — and a finding that fires on every graph is one nobody reads. The
+    #: costs of being wrong differ too: a false negative there sends a
+    #: duplicate mail, a false negative here is a missing sentence about a
+    #: hazard the run-time gate can still catch.
+    #:
+    #: Declaring `open_world = True` is a claim that this tool can hand the
+    #: model a fact the store cannot re-resolve. `WebSearchTool` and
+    #: `WebFetchTool` declare it. Additive on the same Tier-1 ladder rule as
+    #: `side_effecting`: a class attribute with a default touches no existing
+    #: implementation, in tree or in an adopter's.
+    open_world: ClassVar[bool] = False
     #: Controls the editor puts on this tool's card, declared by the tool
     #: (register PK-06). Empty is the common case — a stateless tool needs no
     #: configuration — and a *bundled* tool declares its card in TypeScript

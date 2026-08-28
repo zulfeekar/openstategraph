@@ -412,6 +412,18 @@ PREBUILT_TOOLS = """A recorded exception, with the shape visible in the base the
     declares seven constants or eight. What the ceiling is measuring here is
     the base's declaration surface, counted sixteen times.
 
+    **And once more on 2026-08-28** (`launch-readiness` 151).
+    `BaseTool.open_world` is the tenth: whether this tool answers from outside
+    the run's own data rather than from records it retrieved, so the compiler
+    can say that a graph binding one to the step that writes the answer, with
+    no gate between, can emit a number nothing retrieved. Same base, same
+    default-on-the-base shape, same reason it is charged to every tool — and
+    the count of tools moved from sixteen to twenty-one at the same time
+    because `_SqlExplorerBase` crossed on this commit and joins the record.
+    Its default is the *quiet* side rather than the safe one, which is the one
+    thing that differs from `side_effecting`, and the argument is on the
+    attribute itself.
+
     **And once more on 2026-08-27, same day, same base, different member**
     (`async-first/04`). `BaseTool.arun` is the ninth: the async twin of `run`,
     the caller's verb on the door `_aexecute` opens. This one is not a
@@ -657,7 +669,7 @@ ASYNC_DOORS = """**One added public member per model-driven verb, and the census
 
 
 RECORDED: dict[str, Recorded] = {
-    "compile.diagnostics.Finding": Recorded(17, FINDING_KINDS),
+    "compile.diagnostics.Finding": Recorded(18, FINDING_KINDS),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.DeepAgentNode": Recorded(13, NARRATE_TOGGLE),
@@ -677,26 +689,27 @@ RECORDED: dict[str, Recorded] = {
     "knowledge_explorer.CodebaseKnowledgeBuilder": Recorded(15, KNOWLEDGE_BUILDERS),
     "knowledge_engines.PostgresEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
     "knowledge_engines.MssqlEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
-    "prebuilt_sql.SqlGetSchemaTool": Recorded(13, PREBUILT_TOOLS),
-    "prebuilt_sql.SqlListTablesTool": Recorded(13, PREBUILT_TOOLS),
-    "prebuilt_sql.SqlQueryTool": Recorded(14, PREBUILT_TOOLS),
-    "prebuilt_youtube.YouTubeTranscriptTool": Recorded(16, PREBUILT_TOOLS),
-    "prebuilt_mcp.McpTool": Recorded(14, MCP_TOOL),
-    "knowledge_explorer.CodeGrepTool": Recorded(12, PREBUILT_TOOLS),
-    "knowledge_explorer.CodeLsTool": Recorded(12, PREBUILT_TOOLS),
-    "knowledge_explorer.CodeReadTool": Recorded(12, PREBUILT_TOOLS),
-    "knowledge_explorer.WriteTopicTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_architect.ValidateWorkflowTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_email.EmailSendTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_knowledge.KnowledgeLookupTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_platform.DescribeWorkflowTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_platform.ListWorkflowsTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_platform.PlatformGrepTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_platform.PlatformLsTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_platform.PlatformReadTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_session.SessionIdentityTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_web.WebFetchTool": Recorded(12, PREBUILT_TOOLS),
-    "prebuilt_web.WebSearchTool": Recorded(12, PREBUILT_TOOLS),
+    "prebuilt_sql._SqlExplorerBase": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_sql.SqlGetSchemaTool": Recorded(14, PREBUILT_TOOLS),
+    "prebuilt_sql.SqlListTablesTool": Recorded(14, PREBUILT_TOOLS),
+    "prebuilt_sql.SqlQueryTool": Recorded(15, PREBUILT_TOOLS),
+    "prebuilt_youtube.YouTubeTranscriptTool": Recorded(17, PREBUILT_TOOLS),
+    "prebuilt_mcp.McpTool": Recorded(15, MCP_TOOL),
+    "knowledge_explorer.CodeGrepTool": Recorded(13, PREBUILT_TOOLS),
+    "knowledge_explorer.CodeLsTool": Recorded(13, PREBUILT_TOOLS),
+    "knowledge_explorer.CodeReadTool": Recorded(13, PREBUILT_TOOLS),
+    "knowledge_explorer.WriteTopicTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_architect.ValidateWorkflowTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_email.EmailSendTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_knowledge.KnowledgeLookupTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_platform.DescribeWorkflowTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_platform.ListWorkflowsTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_platform.PlatformGrepTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_platform.PlatformLsTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_platform.PlatformReadTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_session.SessionIdentityTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_web.WebFetchTool": Recorded(13, PREBUILT_TOOLS),
+    "prebuilt_web.WebSearchTool": Recorded(13, PREBUILT_TOOLS),
     "evaluation.scoring.Scorecard": Recorded(17, SCORECARD),
     "memory._AsyncCapableSaver": Recorded(12, ASYNC_CAPABLE_SAVER),
 }

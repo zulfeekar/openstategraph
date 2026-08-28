@@ -277,6 +277,33 @@ class Finding(str, Enum):
     #:
     #: A **report**, not a failure — see `REPORT_ONLY`.
     APPROVAL_COMES_TOO_LATE = "approval_comes_too_late"
+    #: A node that can hand the model a fact the run cannot re-resolve, with
+    #: no gate between it and an Output, as `(output id, producing node id,
+    #: capability types)` — `launch-readiness` 151.
+    #:
+    #: The rule it makes checkable: **a model may supply a word, never a
+    #: number.** A guess about language is safe because the store re-resolves
+    #: it; a guess about a quantity is unfalsifiable at the moment it is made.
+    #: Measured here: three identical runs of one question gave a correct
+    #: answer, a correct refusal, and an invented 81-port country set (126,
+    #: 127). All three came from the same mechanism, and nothing downstream
+    #: could tell them apart.
+    #:
+    #: **Narrow on both sides, which is the half that decides whether anybody
+    #: reads the other half.** It fires only when a bound capability declares
+    #: `open_world = True` — the tool that reaches past the run's own data —
+    #: and it goes silent the moment a `guard.check` stands on the path. An
+    #: agent bound to the store's own query tools is the ordinary case and is
+    #: never reported.
+    #:
+    #: It reports the **absence** of a gate, never the adequacy of one. 133 is
+    #: the record of why: a check that accepted `SELECT DISTINCT k, a, b` as a
+    #: dedup reported success on a wrong query, which is worse than no check
+    #: because it turned "unverified" into "verified". Judging a placed gate's
+    #: contents from the compiler would be the same move.
+    #:
+    #: A **report**, not a failure — see `REPORT_ONLY`.
+    UNDECLARED_FALLBACK = "undeclared_fallback"
 
 
 #: What each finding says, and how many subjects it takes.
@@ -375,6 +402,13 @@ _SENTENCES: dict[Finding, str] = {
         "happened, and approving it changes only what the run records. Move the approval "
         "above that step, or reword its message as a notice rather than a decision."
     ),
+    Finding.UNDECLARED_FALLBACK: (
+        'Output "{0}" can be reached from "{1}", which holds a capability that answers '
+        "from outside this run's own data ({2}), and no check stands between them. A "
+        "quantity that arrives that way looks exactly like one your data returned, and "
+        "nothing downstream can tell them apart. Put a guard.check between that step and "
+        "this Output, or unbind that capability from the step that writes the answer."
+    ),
 }
 
 
@@ -448,6 +482,14 @@ _SENTENCES: dict[Finding, str] = {
 #: as a rule and once as a path around it. Here nobody drew anything twice, and
 #: the fact is inferred from a default. Different evidence, different side.
 #:
+#: `UNDECLARED_FALLBACK` joined it in `launch-readiness` 151 on the first of
+#: 121's two reasons and not the second: nothing about the graph it names is
+#: *wrong*. Binding a web tool to the node that writes the answer is a
+#: reasonable thing to draw, and the sentence is about what that arrangement
+#: makes *possible* rather than about something the run did. A document that
+#: runs, answers, and loses no capability is not one `validate` should exit 1
+#: on — and the fix it asks for is a node the author may deliberately not want.
+#:
 REPORT_ONLY: frozenset[Finding] = frozenset(
     {
         Finding.UNENFORCED_OUTCOME,
@@ -458,6 +500,7 @@ REPORT_ONLY: frozenset[Finding] = frozenset(
         Finding.MODEL_SELECTION_DEGRADED,
         Finding.REPEATED_SIDE_EFFECT,
         Finding.APPROVAL_COMES_TOO_LATE,
+        Finding.UNDECLARED_FALLBACK,
     }
 )
 
