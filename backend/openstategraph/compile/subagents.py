@@ -71,6 +71,20 @@ GENERAL_PURPOSE = "general-purpose"
 TOOLS_INHERIT = "inherit"
 TOOLS_NONE = "none"
 
+#: `mode` on a row: the worker's **lifecycle**, and the only thing that differs
+#: between the two (`async-first/08`).
+#:
+#: One field on the existing declaration rather than a second repeatable group,
+#: deliberately. A subagent is a subagent either way — a name, a description, a
+#: prompt, a tool choice, and the isolation rule — and the only question is
+#: whether the parent waits. Two groups would be two sets of validation, two
+#: field schemas and two chances for one to learn a rule the other did not.
+#:
+#: `sync` is the default and the absent value, so every document written before
+#: this field existed means exactly what it meant.
+MODE_SYNC = "sync"
+MODE_ASYNC = "async"
+
 
 def _rows(value: Any) -> list[dict[str, Any]]:
     """The declared rows, tolerantly — a list of mappings or nothing.
@@ -87,6 +101,18 @@ def _rows(value: Any) -> list[dict[str, Any]]:
     return [row for row in value if isinstance(row, dict)]
 
 
+def _mode(row: dict[str, Any]) -> str:
+    """A row's lifecycle, tolerantly: anything unrecognised reads as `sync`.
+
+    Tolerant in reading, strict in trusting. A document carrying a `mode` this
+    version has never heard of gets the **blocking** worker, which is the answer
+    that cannot surprise anyone: it runs, the parent waits, nothing is left
+    running after the turn. Widening the other way would start a background
+    child on a typo.
+    """
+    return MODE_ASYNC if _text(row, "mode", MODE_SYNC).strip() == MODE_ASYNC else MODE_SYNC
+
+
 def declares_subagents(data: dict[str, Any]) -> bool:
     """Whether this node's data carries any subagent row at all.
 
@@ -97,8 +123,15 @@ def declares_subagents(data: dict[str, Any]) -> bool:
     return bool(_rows(data.get("subagents")))
 
 
-def subagent_specs(data: dict[str, Any]) -> list[dict[str, Any]]:
-    """The well-formed rows, as `deepagents.SubAgent` dicts.
+def subagent_specs(
+    data: dict[str, Any], *, mode: str = MODE_SYNC
+) -> list[dict[str, Any]]:
+    """The well-formed rows of one lifecycle, as `deepagents.SubAgent` dicts.
+
+    `mode` defaults to `sync` so the deep tier's own `subagents=` parameter
+    keeps receiving exactly what it received before this field existed — an
+    async row is **not** also handed to `create_deep_agent`, or the same worker
+    would exist twice under one name with two different lifecycles.
 
     Malformed rows are **dropped**, not repaired: `subagent_declaration_problems`
     has already named each one on `plan.warnings`, and a repaired row would be a
@@ -117,6 +150,11 @@ def subagent_specs(data: dict[str, Any]) -> list[dict[str, Any]]:
         if not name or not description or not prompt or name in seen:
             continue
         seen.add(name)
+        # `seen` is filled from *every* well-formed row, not only the matching
+        # ones: a duplicate name is a duplicate whichever lifecycle the second
+        # row claims, and the problems walk below has already said so.
+        if _mode(row) != mode:
+            continue
         spec: dict[str, Any] = {
             "name": name,
             "description": description,
@@ -198,11 +236,36 @@ def subagent_declaration_problems(document: Any) -> list[str]:
     return problems
 
 
+def async_subagent_specs(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """The well-formed **async** rows. The opt-in signal for the slot.
+
+    Named rather than spelled `subagent_specs(data, mode=MODE_ASYNC)` at each
+    call site, because "does this agent carry the five async tools" is a
+    question the compiler asks in two places and a reader asks in more.
+    """
+    return subagent_specs(data, mode=MODE_ASYNC)
+
+
+def declares_async_subagents(data: dict[str, Any]) -> bool:
+    """Whether any row asks for a background worker, well-formed or not.
+
+    Kept apart from `async_subagent_specs` for the reason `declares_subagents`
+    is kept apart from `subagent_specs`: *nothing declared* and *everything
+    declared was malformed* are two different facts, and a warning that says
+    the wrong one is a warning nobody can act on.
+    """
+    return any(_mode(row) == MODE_ASYNC for row in _rows(data.get("subagents")))
+
+
 __all__ = [
     "SUBAGENTS_FIELD",
+    "MODE_ASYNC",
+    "MODE_SYNC",
     "GENERAL_PURPOSE",
     "TOOLS_INHERIT",
     "TOOLS_NONE",
+    "async_subagent_specs",
+    "declares_async_subagents",
     "declares_subagents",
     "subagent_specs",
     "subagent_declaration_problems",

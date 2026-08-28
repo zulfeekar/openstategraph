@@ -106,7 +106,8 @@ from openstategraph.compile.context import (  # noqa: F401
     retry_inventory,
     revision_request,
 )
-from openstategraph.compile.subagents import subagent_specs
+from openstategraph.async_tasks import ASYNC_TASKS_KEY, ASYNC_TASKS_SLOT
+from openstategraph.compile.subagents import async_subagent_specs, subagent_specs
 from openstategraph import injection
 from openstategraph.run_identity import run_identity
 from openstategraph.developer_channel import transcript_text
@@ -2228,6 +2229,26 @@ class NodeRuntime:
                     specs = subagent_specs(data)
                     if specs:
                         tier_kwargs["subagents"] = specs
+                # The other half of delegation (`async-first/08`): a row whose
+                # `mode` is `async` becomes a **background worker** the agent
+                # launches and collects later, not a blocking one. The slot is
+                # filled here and only here, and only when a document asked for
+                # it — an agent that declares none carries none of the five
+                # tools, which is the narrow-interface rule taken literally.
+                #
+                # Built by the compiler for the same reason `rubric`,
+                # `summarization` and `narration` above are: this is the one
+                # place this node's config becomes middleware. The base declares
+                # the slot and owns its order; it never fills it.
+                async_specs = (
+                    async_subagent_specs(data)
+                    if tier_cls is agent_family.DeepAgentNode
+                    else []
+                )
+                if async_specs:
+                    contributions[ASYNC_TASKS_SLOT] = self._async_task_middleware(
+                        node_id, async_specs, model, lc_tools
+                    )
                 # Progressive skill disclosure and tool-result offload
                 # (`launch-readiness/111`, carrying `101` and `102`). **One
                 # decision, not two**, and its default is the node's tool
@@ -2462,6 +2483,17 @@ class NodeRuntime:
             prior_files = (state.get("agent_files") or {}).get(node_id) or {}
             if prior_files:
                 invocation["files"] = dict(prior_files)
+            # The same threading for the same reason, one channel over
+            # (`async-first/08`). A task id that lived only in the agent's own
+            # state would be gone the moment this node returned, so the turn
+            # that *collects* a background answer would have nothing to look it
+            # up by — and a child that outlives the turn is the whole ticket.
+            tracked_tasks = state.get(ASYNC_TASKS_KEY) or {}
+            prior_tasks = (
+                tracked_tasks.get(node_id) or {} if isinstance(tracked_tasks, dict) else {}
+            )
+            if prior_tasks:
+                invocation[ASYNC_TASKS_KEY] = dict(prior_tasks)
             # `ainvoke`, and the `await` is the whole point of the migration:
             # an `async def` body that then blocked on `invoke()` would be
             # *worse* than the `def` body it replaced — it would hold the
@@ -2487,10 +2519,84 @@ class NodeRuntime:
                 "answer": answer,
                 "attempts": state.get("attempts", 0) + 1,
                 **({"agent_files": {node_id: new_files}} if new_files else {}),
+                **(
+                    {ASYNC_TASKS_KEY: {node_id: new_tasks}}
+                    if (new_tasks := result.get(ASYNC_TASKS_KEY))
+                    else {}
+                ),
                 **tool_report(node_id, result.get("messages") or [], wired),
             }
 
         return run
+
+    def _async_task_middleware(
+        self,
+        node_id: str,
+        specs: list[dict[str, Any]],
+        model: Any,
+        tools: list[Any],
+    ) -> Any:
+        """The `async-tasks` slot for one deep agent (`async-first/08`).
+
+        Each declared worker becomes a **launcher**: a coroutine that builds its
+        own `create_agent` loop from the row's prompt and runs a conversation on
+        it. The desk holds it; this method only says how to make one.
+
+        **Isolation is structural here, not a rule anybody has to remember.** A
+        launcher is handed a list of turn strings and nothing else — no parent
+        state, no parent messages, no closure over either. There is no route by
+        which the parent's conversation could reach a child even by accident,
+        which is why `tests/test_an_async_subagent_is_isolated.py` can assert it
+        on the launcher's own arguments.
+
+        The child inherits the parent's **model and tools**, and that is a
+        deliberate difference from the library, where an async subagent is a
+        graph on a remote server with its own everything. Here there is no
+        remote server to have anything, so the honest analogue of "its own tools
+        and capabilities" is the surface this node was wired with. When the
+        Agent Protocol desk lands, a row gains an optional `graphId` and this
+        method stops being the one that answers the question.
+        """
+        from langchain.agents import create_agent
+
+        from openstategraph.abc.async_task_middleware import AsyncTaskMiddleware
+        from openstategraph.async_tasks import desk_for
+        from openstategraph.run_identity import run_identity
+
+        def launcher_for(prompt: str) -> Any:
+            async def launch(turns: list[str], identity: dict[str, str]) -> str:
+                child = create_agent(model=model, tools=list(tools), system_prompt=prompt)
+                result = await child.ainvoke(
+                    {"messages": [{"role": "user", "content": turn} for turn in turns]},
+                    # The one thing that crosses. Without it a memory-scoped
+                    # tool inside the child resolves `workflow_slug` and
+                    # `thread_id` to nothing, and `memory.workflow_scope_slug`
+                    # says a nameless run **shares a key** — so two
+                    # conversations' children would write one namespace, which
+                    # is the opposite of the isolation this is built around.
+                    {"configurable": dict(identity)} if identity else None,
+                )
+                text = _final_text(result.get("messages") or [])
+                return text if isinstance(text, str) else str(text)
+
+            return launch
+
+        launchers = {
+            str(spec["name"]): launcher_for(str(spec.get("system_prompt") or ""))
+            for spec in specs
+        }
+
+        def desk_factory() -> Any:
+            # Keyed by workflow **and** node, resolved from the run rather than
+            # from the compile: two documents in one process can both hold an
+            # `agent_1`, and one agent must never be able to read another's
+            # tasks. `run_identity()` answers `{}` outside a run, which keys a
+            # scripted call under `":<node id>"` — deliberate, and the only
+            # honest key available when nothing has said which workflow this is.
+            slug = run_identity().get("workflow_slug", "")
+            return desk_for(f"{slug}:{node_id}", launchers)
+
+        return AsyncTaskMiddleware(subagents=specs, desk_factory=desk_factory)
 
     def _router(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
         """Classifies, and writes the branch for the conditional edge to read.

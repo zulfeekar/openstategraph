@@ -257,6 +257,33 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
               validate: (value) => (value.trim() ? null : 'Instructions required'),
             },
             {
+              // The worker's **lifecycle**, and the only thing that differs
+              // between the two (`async-first/08`). One field on the existing
+              // row rather than a second repeatable group: a subagent is a
+              // subagent either way — a name, a description, a prompt, a tool
+              // choice, and the isolation rule — and the only question is
+              // whether this agent waits for it.
+              //
+              // `sync` is the default and the absent value, so every document
+              // saved before this field existed means exactly what it meant.
+              //
+              // Declaring one `async` row is also what opts the agent into the
+              // five background-task tools. An agent with none carries none of
+              // them, which is the narrow-interface rule taken literally.
+              kind: 'select',
+              key: 'mode',
+              label: 'Lifecycle',
+              defaultValue: 'sync',
+              hint:
+                'Wait for it, or let it run in the background. A background ' +
+                'worker hands back a task id straight away and keeps going ' +
+                'after this run has answered — collect it in a later message.',
+              options: [
+                { value: 'sync', label: 'Wait for the answer' },
+                { value: 'async', label: 'Run in the background' },
+              ],
+            },
+            {
               // The library's own two states, and no third: a spec that omits
               // `tools` inherits the parent's, and one that passes `[]` has
               // none. A per-tool picker would need this node's wired tool

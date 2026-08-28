@@ -46,6 +46,7 @@ from dataclasses import replace
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from openstategraph.abc.middleware import MiddlewareSlotTable
+from openstategraph.async_tasks import ASYNC_TASKS_SLOT
 from openstategraph.abc.narration import build_narration_middleware
 from openstategraph.abc.prompt import SystemPrompt
 
@@ -111,6 +112,28 @@ class AbstractAgentNode(ABC):
         # constraint here and is security-sensitive.
         "narration",
         "subagents",
+        # Directly after `subagents`, and the position is an argument rather
+        # than a default (`async-first/08`). This slot is the *other* half of
+        # delegation — the workers that hand back a task id instead of an
+        # answer — so it belongs beside the one it mirrors, and a reader
+        # looking for "where does delegation happen" finds both in one place.
+        #
+        # It has no `wrap_tool_call`, so the nesting argument that fixed
+        # `narration`'s position does not apply to it. Its only hooks are
+        # `wrap_model_call` (which reports the live task roster on the
+        # `progress` rail) and its five tools, and neither is order-sensitive
+        # against anything below. What *is* load-bearing is that it stays
+        # **after** `narration`: the roster line is progress about the run, and
+        # a narrator that had not yet been given the model call has nothing to
+        # say about it.
+        #
+        # **Opt-in.** The compiler fills this slot only when a document
+        # declares an async subagent row; an agent that declares none carries
+        # none of the five tools and no `async_tasks` channel. Declaring the
+        # slot here is not the same as filling it — this list is the base
+        # owning the *order*, which is the one thing a contributor may not
+        # decide.
+        ASYNC_TASKS_SLOT,
         "summarization",
         "limits",
         "patch-tool-calls",

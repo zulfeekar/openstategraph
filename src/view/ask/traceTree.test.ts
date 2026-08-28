@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTrace, type ActivityRow } from './traceTree';
+import { buildTrace, spawnVerb, type ActivityRow } from './traceTree';
 
 const row = (patch: Partial<ActivityRow> & { node: string }): ActivityRow => ({
   taskId: null,
@@ -176,5 +176,22 @@ describe('buildTrace ownership (ticket 72)', () => {
     ]);
     expect(trace).toHaveLength(1);
     expect(trace[0]!.check).toBe('empty');
+  });
+});
+
+describe('a background worker does not read as an ordinary spawn', () => {
+  // `async-first/08`. The other three spawn kinds all end when this run ends,
+  // and a background worker does not. A reader told "spawned" for both would
+  // have no way to know that the run finishing means the work finished — which
+  // is the two-situations-rendering-identically defect this codebase keeps
+  // closing.
+  it('says the work continues, for the one kind where it does', () => {
+    expect(spawnVerb('async')).toBe('started in the background');
+  });
+
+  it('leaves every other kind saying exactly what it always said', () => {
+    for (const kind of ['fanout', 'subagent', 'subgraph'] as const) {
+      expect(spawnVerb(kind)).toBe('spawned');
+    }
   });
 });

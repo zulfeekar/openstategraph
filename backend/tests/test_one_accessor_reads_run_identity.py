@@ -206,6 +206,12 @@ IDENTITY_LITERAL_SITES: dict[str, str] = {
     "abc/deep_tier_offload.py": "accessor-caller",
     "api/schemas.py": "transport",
     "cli.py": "transport",
+    # `async-first/08`. `TaskRecord.thread_id` is the **child's** conversation
+    # on whatever runs it, not the run's `thread_id` — a different identity on a
+    # different clock, and the field name is the library's own (`AsyncTask`), so
+    # a document written against this desk needs no migration the day an Agent
+    # Protocol desk replaces it. This module reads no run config at all.
+    "async_tasks.py": "transport",
     "api/threads.py": "checkpoint",
     "compile/paused_mount.py": "checkpoint",
 }

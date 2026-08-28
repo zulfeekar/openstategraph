@@ -159,12 +159,26 @@ def _is_tool_message(message: Any) -> bool:
     return str(getattr(message, "type", "")) == "tool"
 
 
+#: Tool name -> the `spawn` kind calling it announces.
+#:
+#: `task` is the deep agent's blocking delegation — the parent waits.
+#: `start_async_task` is the background one (`async-first/08`) — the parent gets
+#: a task id and carries on, and the child outlives the turn. A reader has to be
+#: able to tell those apart, because *"a worker is running"* and *"a worker is
+#: running and this run has already finished"* are different situations, and
+#: this file's own theme is that two situations must never render identically.
+_SPAWNING_TOOLS: dict[str, str] = {
+    "task": "subagent",
+    "start_async_task": "async",
+}
+
+
 class SpawnWatcher:
     """Turns raw `updates` frames into *spawn* events — the moment a run
     creates a child worker or subagent.
 
-    Three signals, because the runtime spawns in three structurally different
-    ways and a user cannot be expected to know which one they are looking at:
+    Four signals over three shapes, because the runtime spawns in structurally
+    different ways and a user cannot be expected to know which one they are looking at:
 
     1. **Fan-out plan.** An orchestrator writes `subtasks[node_id] = [...]`
        and the conditional edge `Send`s one task each. The plan frame is the
@@ -174,6 +188,10 @@ class SpawnWatcher:
        calling its `task` tool; the call's arguments carry the subagent type
        and the task description. Detected on the agent's own model frame,
        which is where the tool call surfaces.
+    2b. **`start_async_task`**, the same signal on the same frame, announced as
+       `kind: "async"` because the lifecycle is different: the parent does not
+       wait, and the child is still running when this run ends
+       (`async-first/08`).
     3. **A namespace appearing for the first time.** A mounted workflow or
        team runs as a true nested subgraph and gets its own checkpoint
        namespace; the first frame bearing an unseen namespace head is that
@@ -254,7 +272,8 @@ class SpawnWatcher:
 
         for message in update.get("messages") or []:
             for call in _tool_calls_of(message):
-                if str(call.get("name") or "") != "task":
+                kind = _SPAWNING_TOOLS.get(str(call.get("name") or ""))
+                if kind is None:
                     continue
                 call_id = str(call.get("id") or "")
                 if call_id and call_id in self._tool_calls:
@@ -265,12 +284,19 @@ class SpawnWatcher:
                 args = args if isinstance(args, dict) else {}
                 spawns.append(
                     {
-                        "kind": "subagent",
+                        "kind": kind,
                         "parent": node_id,
-                        "label": str(args.get("subagent_type") or "") or "subagent",
+                        "label": str(args.get("subagent_type") or "") or kind,
                         "instruction": _snippet(
                             args.get("description") or args.get("instruction")
                         ),
+                        # For `async`, this is **the task id**, not merely the
+                        # call id: `abc/async_task_middleware.py` names the task
+                        # after the tool call that started it, so the string a
+                        # reader sees here is the one the model will poll with
+                        # and the one `async_tasks` is keyed by. That is what
+                        # lets a surface follow one background worker from
+                        # launch to answer without correlating anything.
                         "taskId": call_id or None,
                         "namespace": ns,
                     }

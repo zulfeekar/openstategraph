@@ -471,6 +471,42 @@ A subagent invoked as a tool is **isolated**: it receives a task and reports a
 result as a `ToolMessage`. It never sees the parent's message history or graph
 state. Do not design as though it does.
 
+### Waiting for a worker, or not
+
+A deep agent's **Delegation** section declares its subagents, and each row has a
+**Lifecycle**. It is the only thing that differs between the two, and it is the
+question a reader actually has:
+
+| Lifecycle | What the agent gets back | When it ends |
+| --- | --- | --- |
+| **Wait for the answer** (the default) | the worker's result, as a tool result | inside this step |
+| **Run in the background** | a task id, immediately | when it is done — which may be after this run has answered |
+
+A background worker is not a faster version of the first one; it is a different
+lifecycle. The agent launches it, carries on, and collects the answer with
+`check_async_task` — possibly in a **later message of the same conversation**,
+because the task ids are kept in the run's state rather than in the message
+history, and the conversation's checkpoint persists them.
+
+Two consequences worth knowing before you reach for it:
+
+- **A background worker lives in the server process.** Restart the server and it
+  is gone; checking it then says so rather than inventing a status. If a job
+  must survive a restart, it is not this.
+- **Follow-up instructions are queued, not injected.** `update_async_task`
+  reaches the worker as its *next turn*, once the turn it is on has finished. It
+  does not interrupt it mid-thought.
+
+Isolation is unchanged either way, and one thing does cross: the run's identity
+— who is asking, in which conversation, on which workflow — so a worker's
+memory-scoped tools land in the same place the parent's do. Messages and graph
+state do not.
+
+The run says so as it happens. The stream announces the launch as a `spawn`
+frame of kind `async`, attributed to the agent that launched it (a background
+worker is not a node on the canvas), and reports the live roster on the
+`progress` rail as each one moves from running to finished.
+
 ## Choosing, in one table
 
 | If… | Use |

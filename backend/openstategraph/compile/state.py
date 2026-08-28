@@ -201,6 +201,20 @@ class RunState(TypedDict, total=False):
     #: document must not share a findings store, and a node writes only its
     #: own key.
     agent_files: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    #: deep-agent node id -> that node's `{task_id: AsyncTask}` map
+    #: (`async-first/08`). The same threading as `agent_files` directly above,
+    #: for the same reason and by the same code: the agent's own state is
+    #: discarded when its node returns, and this is the channel the workflow's
+    #: checkpointer persists. Without it a task id would not survive to the turn
+    #: that collects the answer, which is the entire point of a child that
+    #: outlives the turn.
+    #:
+    #: The library puts this metadata outside message history deliberately —
+    #: *"deep agents compact their message history when the context window fills
+    #: up; if task IDs were only in tool messages they would be lost during
+    #: compaction"* — and MERGE is what that needs: `check` and `list` can both
+    #: write a row in one superstep, which is exactly the named-reducer rule.
+    async_tasks: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: grader node id -> the branch label it chose that no edge carries
     #: (`workflow-gallery` 31). Written only when the decision reached nothing,
     #: so its presence *is* the signal — the same shape as `forced` above.

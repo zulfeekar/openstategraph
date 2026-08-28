@@ -629,12 +629,18 @@ export type RunStreamEvent =
     }
   | {
       /** A run created a child worker or subagent — the spawn *moment*,
-       * emitted before the frame that revealed it. Three shapes of the same
+       * emitted before the frame that revealed it. Four shapes of the same
        * event: an orchestrator's fan-out plan (`fanout`), a deep agent's
-       * `task` tool call (`subagent`), and a mounted workflow starting its
-       * own nested subgraph (`subgraph`). */
+       * `task` tool call (`subagent`), the same agent's `start_async_task`
+       * call (`async`), and a mounted workflow starting its own nested
+       * subgraph (`subgraph`).
+       *
+       * `async` is the one whose lifecycle differs: the parent does not wait
+       * for it, and it is still running when this run ends. Its `taskId` is
+       * the id the agent will poll with, so a surface can follow one
+       * background worker from launch to answer. */
       readonly type: 'spawn';
-      readonly kind: 'fanout' | 'subagent' | 'subgraph';
+      readonly kind: 'fanout' | 'subagent' | 'async' | 'subgraph';
       /** The canvas node that did the spawning. */
       readonly parent: string;
       /** What to call the child: archetype, subagent type, or mounted node. */
@@ -1074,7 +1080,7 @@ export class RuntimeClient implements IRuntimeClient {
         const kind = asString(payload['kind']);
         onEvent({
           type: 'spawn',
-          kind: kind === 'fanout' || kind === 'subagent' ? kind : 'subgraph',
+          kind: kind === 'fanout' || kind === 'subagent' || kind === 'async' ? kind : 'subgraph',
           parent: asString(payload['parent']),
           label: asString(payload['label']),
           instruction: asString(payload['instruction']),

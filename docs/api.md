@@ -96,7 +96,7 @@ endpoints emit the identical vocabulary and one parser handles both.
 | `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `interruptible`, `path`, `pathSlugs`, `output`, and `check` with `reason` **only when a grader rejected the candidate without invoking a model** |
 | `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `block` (`text`/`reasoning`), `usage` (`{inputTokens, outputTokens, totalTokens}` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply** |
 | `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `current`, `total` (both `int` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs` |
-| `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
+| `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`async`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate**, plus `check` when that verdict cost no model call |
 | `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run** |
 | `error` | **terminal** — the run failed | `threadId`, `detail` |

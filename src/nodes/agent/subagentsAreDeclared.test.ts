@@ -33,13 +33,27 @@ describe('an agent declares its subagents as data', () => {
     expect(subagents().defaultValue).toEqual([]);
   });
 
-  it('asks for exactly the three strings the deep runtime requires, plus a tool choice', () => {
+  it('asks for exactly the three strings the deep runtime requires, plus a lifecycle and a tool choice', () => {
     expect(subagents().fields.map((f) => f.key)).toEqual([
       'name',
       'description',
       'systemPrompt',
+      'mode',
       'tools',
     ]);
+  });
+
+  it('offers the two lifecycles, and waiting is the one a saved document already meant', () => {
+    // `async-first/08`. One field on the existing row rather than a second
+    // repeatable group: a subagent is a subagent either way, and the only
+    // question is whether this agent waits for it. `sync` must stay the
+    // default, or every document saved before the field existed would start
+    // launching background children on load.
+    const mode = subagents().fields.find((f) => f.key === 'mode');
+    if (mode?.kind !== 'select') throw new Error('mode is not a select');
+    const options = typeof mode.options === 'function' ? mode.options({}) : mode.options;
+    expect(options.map((o) => o.value)).toEqual(['sync', 'async']);
+    expect(mode.defaultValue).toBe('sync');
   });
 
   it('refuses a row missing any of the three', () => {

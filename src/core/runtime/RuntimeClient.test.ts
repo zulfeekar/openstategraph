@@ -452,6 +452,45 @@ describe('RuntimeClient.runStream', () => {
     expect(updates).toEqual([null, 'task-1']);
   });
 
+  it('keeps `async` as its own spawn kind rather than folding it into subgraph', async () => {
+    // `async-first/08`. The client narrows `kind` to a union and falls back to
+    // `subgraph` for anything it does not recognise, which is the right default
+    // and exactly why a new kind has to be added on both sides at once. Folded
+    // into `subgraph`, a background worker would render as a mounted workflow
+    // starting — a different thing on a different clock, and the run finishing
+    // would read as the work finishing.
+    const text = sseBody([
+      [
+        'spawn',
+        {
+          kind: 'async',
+          parent: 'node:agent.deep-1',
+          label: 'researcher',
+          instruction: 'Count the ports',
+          taskId: 'call_async_1',
+          namespace: [],
+        },
+      ],
+      ['spawn', { kind: 'invented-by-a-newer-backend', parent: 'p', label: 'l', taskId: null }],
+      ['done', { answer: 'a', decisions: {}, outputs: {}, attempts: 0, mermaid: '', warnings: [] }],
+    ]);
+    const client = new RuntimeClient('http://rt', () => Promise.resolve(streamedResponse(text, 9)));
+
+    const spawns: { kind: string; parent: string; taskId: string | null }[] = [];
+    await client.runStream({ workflow: {}, question: 'q' }, (event) => {
+      if (event.type === 'spawn') {
+        spawns.push({ kind: event.kind, parent: event.parent, taskId: event.taskId });
+      }
+    });
+
+    expect(spawns).toEqual([
+      // Attribution: a background task is not a canvas node, so the frame names
+      // the agent that launched it. `taskId` is the id the agent will poll with.
+      { kind: 'async', parent: 'node:agent.deep-1', taskId: 'call_async_1' },
+      { kind: 'subgraph', parent: 'p', taskId: null },
+    ]);
+  });
+
   it('carries the resolved active canvas node, falling back to the frame node', async () => {
     // Ticket 01: the stream decides what is running; the client never guesses.
     // A frame from an older backend has no `activeNode` and must still work.

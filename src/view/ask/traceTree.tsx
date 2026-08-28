@@ -70,9 +70,23 @@ export interface ActivityRow {
 }
 
 export interface SpawnDetail {
-  readonly kind: 'fanout' | 'subagent' | 'subgraph';
+  readonly kind: 'fanout' | 'subagent' | 'async' | 'subgraph';
   readonly label: string;
   readonly instruction: string;
+}
+
+/**
+ * What a spawn row says it did.
+ *
+ * `async` is a different sentence rather than a different word, and the
+ * difference is the whole of `async-first/08`: the other three all end when
+ * this run ends, and a background worker does not. A reader told "spawned" for
+ * both would have no way to know that the run finishing means the work
+ * finished — which is exactly the two-situations-rendering-identically defect
+ * this codebase keeps closing.
+ */
+export function spawnVerb(kind: SpawnDetail['kind']): string {
+  return kind === 'async' ? 'started in the background' : 'spawned';
 }
 
 /** One node's subtree: the node plus the internal steps it ran. */
@@ -294,7 +308,9 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
             className="ask__activity-row ask__activity-row--spawn"
             title={step.spawn.instruction || undefined}
           >
-            <span className="ask__activity-node">⤷ spawned {step.spawn.label}</span>
+            <span className="ask__activity-node">
+              ⤷ {spawnVerb(step.spawn.kind)} {step.spawn.label}
+            </span>
             {step.spawn.instruction ? (
               <span className="ask__activity-spawn-task">{step.spawn.instruction}</span>
             ) : null}
