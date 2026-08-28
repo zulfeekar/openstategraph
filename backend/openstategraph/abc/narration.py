@@ -72,7 +72,11 @@ from langchain.agents.middleware.types import AgentMiddleware, AgentState, ToolC
 from langchain_core.messages import ToolMessage
 from langgraph.runtime import Runtime
 
-from openstategraph.abc.tool_findings import MAX_SENTENCE_LEN, summarise_tool_result
+from openstategraph.abc.tool_findings import (
+    MAX_SENTENCE_LEN,
+    failure_detail,
+    summarise_tool_result,
+)
 from openstategraph.abc.tool_sentences import describe_tool_call
 from openstategraph.progress import NARRATES_ITSELF, report_progress
 from openstategraph.run_identity import run_identity
@@ -218,6 +222,7 @@ class NarrationMiddleware(AgentMiddleware):
         after_text: str | None = None,
         describe: Callable[[str, dict[str, Any]], str | None] | None = None,
         summarise: Callable[[str, Any], str | None] | None = None,
+        explain: Callable[[str, Any], str | None] | None = None,
     ) -> None:
         super().__init__()
         self._quiet = quiet
@@ -280,6 +285,19 @@ class NarrationMiddleware(AgentMiddleware):
         # a table rather than subclassing a middleware. `None` is the shape
         # floor in `_after_tool_text` and nothing else.
         self._summarise = summarise
+        # `launch-readiness/163`: the *evidence* behind a finding, in the words
+        # of whatever produced it — the developer half of the same read.
+        #
+        # A second injected reader rather than a second return value from
+        # `summarise`, because the two have different audiences and a caller
+        # that confuses them leaks a driver's message into a customer's chat.
+        # It rides `Progress.detail`, which `api/streaming.py` drops for any
+        # audience but `Audience.DEVELOPER`; `summarise`'s sentence keeps
+        # crossing to both intact, exactly as `143` built it.
+        #
+        # `None` is silence and nothing else — no floor, because there is no
+        # honest generic evidence to invent when nobody has read this result.
+        self._explain = explain
         # Per-thread only (`launch-readiness/105`): the durable cross-session
         # store is `launch-readiness/99` and is deliberately unbuilt. Keyed
         # `thread_id -> {(tool_name, exact_args_json): result}` — never by
@@ -408,7 +426,7 @@ class NarrationMiddleware(AgentMiddleware):
         if not self._quiet:
             text = self._after_tool_text(name, result)
             if text is not None:
-                report_progress(text)
+                report_progress(text, detail=self._after_tool_detail(name, result))
         return result
 
     def findings_inventory(self, thread_id: str) -> list[str]:
@@ -539,6 +557,25 @@ class NarrationMiddleware(AgentMiddleware):
             return None
         return None
 
+    def _after_tool_detail(self, name: str, result: Any) -> str | None:
+        """The evidence behind the finding, for a developer only.
+
+        `launch-readiness/163`. One tier and no floor, unlike its two
+        siblings: a sentence can be derived from a result's shape, and
+        evidence cannot — a result nobody has read has no words of its own to
+        quote, and inventing some would be worse than the silence.
+
+        Never raises, on the same terms as the two lines above: narration must
+        never fail a run, and the finding is still emitted when this returns
+        nothing.
+        """
+        if self._explain is None:
+            return None
+        try:
+            return self._explain(name, getattr(result, "content", None))
+        except Exception:  # noqa: BLE001 — narration must never fail a run
+            return None
+
 
 def _narrates_itself(request: ToolCallRequest) -> bool:
     """Whether this tool already said what it is doing (`launch-readiness/145`).
@@ -596,5 +633,8 @@ def build_narration_middleware(*, quiet: bool = False) -> NarrationMiddleware:
     else is how a workflow overrides either one.
     """
     return NarrationMiddleware(
-        quiet=quiet, describe=describe_tool_call, summarise=summarise_tool_result
+        quiet=quiet,
+        describe=describe_tool_call,
+        summarise=summarise_tool_result,
+        explain=failure_detail,
     )

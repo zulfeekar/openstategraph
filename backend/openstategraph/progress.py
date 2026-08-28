@@ -106,9 +106,37 @@ class Progress(BaseModel):
     #: know the node it was called from and should not be asked to.
     node: str = ""
 
+    #: The evidence behind `message`, in the words of whatever produced it —
+    #: **developer audience only**, and the one field on this model that is
+    #: not safe to speak.
+    #:
+    #: `launch-readiness/163`. `message` is composed under `143`'s customer
+    #: seam, where no value from a result is ever interpolated and only
+    #: integers are spoken; that is why a failed query says *"That did not
+    #: work."* and nothing else. Correct for a customer, and useless for the
+    #: person who can actually fix the workflow: the owner watched six of
+    #: those in a row and had to paste the raw payload into a chat before
+    #: anybody could see the words `Invalid column name 'loading_time'`, which
+    #: had been sitting in the envelope the whole time.
+    #:
+    #: So the split is made here, in the model, rather than by widening
+    #: `message`: `message` keeps crossing to a customer intact and this rides
+    #: beside it. `api/streaming.py` drops it for any audience but
+    #: `Audience.DEVELOPER` — one gate, at the seam that already redacts per
+    #: audience — and `143`'s negative test still proves an ODBC message
+    #: cannot reach a customer.
+    #:
+    #: `None` means "no evidence to add", which is every progress line a tool
+    #: author writes by hand.
+    detail: str | None = None
+
 
 def report_progress(
-    message: str, *, current: int | None = None, total: int | None = None
+    message: str,
+    *,
+    current: int | None = None,
+    total: int | None = None,
+    detail: str | None = None,
 ) -> bool:
     """Says something about this step, mid-execution. Returns whether it landed.
 
@@ -125,6 +153,11 @@ def report_progress(
     from a script and testable with pytest — would be false if a progress line
     detonated a unit test. So the failure is swallowed and reported as `False`,
     which is also the honest answer to "did anyone hear that".
+
+    `detail` is the developer-only half (`launch-readiness/163`): evidence in
+    somebody else's words, shown to a developer and dropped for a customer at
+    the streaming seam. Leave it unset unless you are handing over text you
+    did not author.
     """
     try:
         from langgraph.config import get_config, get_stream_writer
@@ -134,7 +167,11 @@ def report_progress(
         writer(
             {
                 PROGRESS_KEY: Progress(
-                    message=message, current=current, total=total, node=node
+                    message=message,
+                    current=current,
+                    total=total,
+                    node=node,
+                    detail=detail,
                 ).model_dump()
             }
         )

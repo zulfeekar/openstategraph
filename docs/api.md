@@ -95,7 +95,7 @@ endpoints emit the identical vocabulary and one parser handles both.
 | --- | --- | --- |
 | `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `interruptible`, `path`, `pathSlugs`, `output`, and `check` with `reason` **only when a grader rejected the candidate without invoking a model** |
 | `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `block` (`text`/`reasoning`), `usage` (`{inputTokens, outputTokens, totalTokens}` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply** |
-| `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `current`, `total` (both `int` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs` |
+| `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `detail` (developer only, else `null`), `current`, `total` (both `int` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs` |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`async`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate**, plus `check` when that verdict cost no model call |
 | `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run** |
@@ -407,6 +407,26 @@ number, which JSON cannot carry.
 whoever is watching, so **it crosses to a customer intact** — unlike a tool's
 name or its payload, which do not. A silent forty-second gap is worst for the
 audience that cannot open a trace and work out what is happening.
+
+`detail` is the exception, and the only field on this frame a customer never
+receives. A finding line is composed so that **no value from a result is ever
+spoken** — only integers — which is why a failed query reads `That did not
+work.` and nothing more. That is right for a customer and useless for the
+person who can fix the workflow, so the tool's own words ride here instead:
+
+```
+event: progress
+data: {"node":"agent-sql","message":"That did not work.",
+       "detail":"internal_error: ('42S22', \"[Microsoft][ODBC Driver 18 for SQL Server]
+                 Invalid column name 'loading_time'. (207)\")",
+       "current":null,"total":null,"activeNode":"agent-sql", ...}
+```
+
+The gate is server-side: on a customer stream the field is `null` on every
+frame, whatever the tool said. It is `null` for a developer too on any line
+with nothing to explain, which is almost all of them — a field that fires
+every time is noise a reader learns to skip. Bounded at 400 characters and
+flattened to one line.
 
 **The built-in slow tools already send these.** Web Search says what it is
 searching for, Web Fetch names the host it is reading, YouTube Transcript names

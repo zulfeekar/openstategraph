@@ -42,7 +42,7 @@ openstategraph.abc.NoArgs = class(BaseModel)() -> None
 openstategraph.abc.NodeBuildContext = dataclass(object) fields(node_id,node,plan,capabilities,diagnostics,upstream_text,resolve_model)
 openstategraph.abc.NodeCapabilities = dataclass(object) fields(tools,functions,memory_store)
 openstategraph.abc.Orchestrator = class(BaseOrchestrator)(*, max_subtasks: 'int' = 8, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None, context: 'str' = '') -> 'None'
-openstategraph.abc.Progress = class(BaseModel)(*, message: str, current: Annotated[int | None, Ge(ge=0)] = None, total: Annotated[int | None, Ge(ge=0)] = None, node: str = '') -> None
+openstategraph.abc.Progress = class(BaseModel)(*, message: str, current: Annotated[int | None, Ge(ge=0)] = None, total: Annotated[int | None, Ge(ge=0)] = None, node: str = '', detail: str | None = None) -> None
 openstategraph.abc.ReactAgentNode = class(BaseAgentNode)(*, default_rules: 'str' = '', rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, context: 'str' = '', **kwargs: 'Any') -> 'None'
 openstategraph.abc.Redaction = dataclass(object) fields(entity,strategy,count)
 openstategraph.abc.Router = class(BaseRouter)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None, match_mode: 'str' = 'best', context: 'str' = '', destinations: 'dict[str, str] | None' = None) -> 'None'
@@ -56,7 +56,7 @@ openstategraph.abc.ToolField = dataclass(object) fields(key,label,kind,default_v
 openstategraph.abc.ToolResult = class(BaseModel)(*, ok: bool = True, content: str = '', error: str | None = None, notes: tuple[typing.Union[openstategraph.abc.tool_notes.Correction, openstategraph.abc.tool_notes.Substitution, openstategraph.abc.tool_notes.SourceChoice, openstategraph.abc.tool_notes.ToolFailure], ...] = ()) -> None
 openstategraph.abc.Verdict = class(BaseModel)(*, passed: bool, reason: str = '', feedback: str = '', failed_check: str = '') -> None
 openstategraph.abc.agent_node_for_tier = def(tier: 'str') -> 'type[BaseAgentNode]'
-openstategraph.abc.report_progress = def(message: 'str', *, current: 'int | None' = None, total: 'int | None' = None) -> 'bool'
+openstategraph.abc.report_progress = def(message: 'str', *, current: 'int | None' = None, total: 'int | None' = None, detail: 'str | None' = None) -> 'bool'
 openstategraph.errors.CredentialError = class(OpenStateGraphError,RuntimeError)(...)
 openstategraph.errors.DocumentError = class(OpenStateGraphError,ValueError)(...)
 openstategraph.errors.GENERIC_FAILURE_MESSAGE = str

@@ -603,6 +603,21 @@ export type RunStreamEvent =
        */
       readonly message: string;
       /**
+       * The evidence behind `message`, in the words of whatever produced it —
+       * and the one field on this frame a **customer never receives**
+       * (`launch-readiness/163`).
+       *
+       * `message` is composed so that no value from a result is ever spoken,
+       * which is why a failed query reads `"That did not work."`. That is
+       * right for a customer and useless for the person who can fix the
+       * workflow, so the driver's own words ride here instead and the backend
+       * drops the field for every audience but the developer one.
+       *
+       * `null` far more often than not: a customer run, a line with nothing
+       * to add, or a backend that predates the field.
+       */
+      readonly detail: string | null;
+      /**
        * How far along, when the step happens to know. `null` means **no
        * claim**, not zero: render a spinner rather than a bar until both are
        * numbers. Never a sentinel and never a non-finite number, which JSON
@@ -1067,6 +1082,10 @@ export class RuntimeClient implements IRuntimeClient {
           node: asString(payload['node']),
           namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
           message: asString(payload['message']),
+          // `null` unless the backend actually sent words: an empty string
+          // here would render as a dangling separator on the line.
+          detail:
+            typeof payload['detail'] === 'string' && payload['detail'] ? payload['detail'] : null,
           // `null` unless the backend sent an actual number: a step that does
           // not know how far along it is must not be rendered as being at 0.
           current: typeof payload['current'] === 'number' ? payload['current'] : null,

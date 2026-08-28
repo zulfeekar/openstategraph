@@ -154,10 +154,22 @@ def _golden() -> dict[str, list[str]]:
     return json.loads(GOLDEN.read_text(encoding="utf-8"))
 
 
-#: Fields added to the wire since the golden was captured, each with the
-#: ticket that added it. Named here rather than baked into the golden — see
-#: the module docstring.
-ADDED_SINCE_THE_GOLDEN = {"interruptible": "async-first/07"}
+#: Fields added to the wire since the golden was captured — `field -> (frame,
+#: ticket)`. Named here rather than baked into the golden; see the module
+#: docstring.
+#:
+#: **Scoped to a frame**, because a bare name is ambiguous the moment two
+#: frames use the same word. `error` has carried a `detail` since long before
+#: any of this, and stripping by name alone would quietly delete it from a
+#: future golden while claiming to be removing `launch-readiness/163`'s
+#: addition to `progress`.
+ADDED_SINCE_THE_GOLDEN = {
+    "interruptible": ("update", "token", "progress"),
+    # `launch-readiness/163`: the tool's own error text, developer-only, so a
+    # developer watching a failing MCP call can read what the customer
+    # sentence is written never to say.
+    "detail": ("progress",),
+}
 
 
 def _without_additions(frames: list[str]) -> list[str]:
@@ -176,9 +188,11 @@ def _without_additions(frames: list[str]) -> list[str]:
             trimmed.append(frame)
             continue
         payload = json.loads(body.rstrip("\n"))
-        for field in ADDED_SINCE_THE_GOLDEN:
-            payload.pop(field, None)
-        trimmed.append(_sse(head[len("event: ") :], payload))
+        name = head[len("event: ") :]
+        for field, frames_it_joined in ADDED_SINCE_THE_GOLDEN.items():
+            if name in frames_it_joined:
+                payload.pop(field, None)
+        trimmed.append(_sse(name, payload))
     return trimmed
 
 

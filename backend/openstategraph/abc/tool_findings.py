@@ -540,6 +540,99 @@ def summarise_tool_result(name: str, content: Any) -> str | None:
     return _sentence(finding, data)
 
 
+#: How much of somebody else's error text a progress line carries.
+#:
+#: Not `MAX_SENTENCE_LEN`: that ceiling exists so a *composed* sentence stays
+#: one line in a panel, and this is not a sentence — it is evidence, and the
+#: part a developer needs is often at the end (`Invalid column name
+#: 'loading_time'. (207)`). Long enough for a full ODBC message, short enough
+#: that a server returning a stack trace cannot flood the panel.
+MAX_DETAIL_LEN = 400
+
+
+def failure_detail(name: str, content: Any) -> str | None:
+    """The tool's own words for why this call failed — **developer only**.
+
+    `launch-readiness/163`. `summarise_tool_result` answers `"That did not
+    work."` for every failure it can read, which is `143`'s customer seam
+    working exactly as designed: no value from a result is interpolated and
+    only integers are spoken, so a driver's message cannot reach a chat. The
+    cost was that it could not reach *anybody* — the owner watched six of
+    those in a row on the developer surface and had to paste the raw payload
+    into a conversation before the cause (`Invalid column name
+    'loading_time'`) could be seen at all.
+
+    So this is the other half of the same read, deliberately kept as a
+    separate function rather than a second return value: the sentence and the
+    evidence have different audiences, and a caller that forgets which is
+    which should not be able to compile. `Progress.detail` carries it and
+    `api/streaming.py` drops it for any audience but `Audience.DEVELOPER`.
+
+    `None` whenever there is nothing to add — a success, an unreadable
+    payload, or a tool this module does not know. Never a guess and never a
+    restatement of the sentence: silence beats a line that says the same thing
+    twice.
+    """
+    name = (name or "").strip()
+    if name in _TEXT_TABLE:
+        text = _plain_text(content)
+        if text is None or not text.startswith(_HARNESS_ERROR_PREFIX):
+            return None
+        return _detail_fits(text[len(_HARNESS_ERROR_PREFIX) :])
+    if name not in _TABLE:
+        return None
+    envelope = result_envelope(content)
+    if envelope is None or envelope.get("ok") is not False:
+        # `ok is False` and nothing else, exactly as `summarise_tool_result`
+        # gates: a payload that merely happens to carry an `error` key is not
+        # a failure this module is entitled to speak for.
+        return None
+    return _detail_fits(_failure_words(envelope))
+
+
+#: Where a failure envelope keeps the words, narrowest first. Read as a list
+#: because there is no MCP convention for this — `isError` is the protocol's
+#: only failure signal and it is not in the payload — so every server that
+#: reports inside its envelope spells it differently. Tolerant in reading;
+#: the strict half is that `ok is False` had to be true before we look.
+_FAILURE_TEXT_KEYS: tuple[str, ...] = ("message", "error", "detail", "reason")
+
+
+def _failure_words(envelope: dict[str, Any]) -> str:
+    """The failure text this envelope carries, with its code when it has one.
+
+    The code first and the message after, because a code is short, stable and
+    greppable while the message is a sentence — and a developer scanning a
+    stack of narration lines reads the left edge.
+    """
+    message = ""
+    for key in _FAILURE_TEXT_KEYS:
+        value = envelope.get(key)
+        if isinstance(value, str) and value.strip():
+            message = " ".join(value.split())
+            break
+    code = envelope.get("error_code")
+    code_text = " ".join(str(code).split()) if isinstance(code, str) and code.strip() else ""
+    if code_text and message:
+        return f"{code_text}: {message}"
+    return code_text or message
+
+
+def _detail_fits(text: str) -> str | None:
+    """One line of evidence, bounded, or `None` when there is none.
+
+    Newlines collapse rather than wrap: this lands on a progress line beside a
+    spinner, and a multi-line payload there is the wall of debug text
+    `abc/narration.py` refuses.
+    """
+    flat = " ".join(text.split())
+    if not flat:
+        return None
+    if len(flat) <= MAX_DETAIL_LEN:
+        return flat
+    return flat[: MAX_DETAIL_LEN - 1].rstrip() + "\u2026"
+
+
 def _plain_text(content: Any) -> str | None:
     """The result as text, for a tool whose result *is* text.
 

@@ -329,3 +329,106 @@ class TestTheHarnessFileToolsReachTheCustomerToo:
         for line in _customer_lines_for_text("read_file", secret):
             assert "sk-" not in line
             assert "hunter2" not in line
+
+
+def _developer_frames(chunks: list[dict[str, Any]]) -> list[tuple[str, Any]]:
+    """The same chunks, folded for a developer. Same fold, one argument apart."""
+    runtime = SimpleNamespace(diagnostics=CompileDiagnostics())
+    out: list[tuple[str, Any]] = []
+    replay = [{"type": "custom", "ns": (), "data": chunk} for chunk in chunks]
+    for frame in drive_fold(
+        _stream_run(
+            ScriptedGraph(_Graph(replay)),
+            {},
+            {},
+            SimpleNamespace(warnings=[]),
+            KNOWN,
+            runtime,
+            "t1",
+            Audience.DEVELOPER,
+        )
+    ):
+        name = frame.split("\n")[0][len("event: ") :]
+        out.append((name, json.loads(frame.split("\n")[1][len("data: ") :])))
+    return out
+
+
+def _developer_progress(tool_name: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        data for event, data in _developer_frames(_narrate(tool_name, payload)) if event == "progress"
+    ]
+
+
+def _customer_progress(tool_name: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        data for event, data in _customer_frames(_narrate(tool_name, payload)) if event == "progress"
+    ]
+
+
+class TestTheDeveloperGetsTheToolsOwnError:
+    """`launch-readiness/163`, at the layer both audiences are decided.
+
+    The owner watched a run fail six times and read `"That did not work."`
+    six times — `143`'s customer sentence, doing exactly its job on the wrong
+    surface. He had to paste the raw payload into a conversation before
+    anybody could see `Invalid column name 'loading_time'`, which had been in
+    the envelope the whole time.
+
+    Every assertion here goes through the real `_stream_run`, twice, one
+    argument apart. A unit test on the composing function would have been
+    green for both of `112`'s live leaks.
+    """
+
+    def test_a_developer_sees_the_drivers_own_words(self) -> None:
+        detail = _developer_progress("mcp_execute_sql", EXECUTE_SQL_FAILED)[-1]["detail"]
+        assert detail is not None
+        assert "Incorrect syntax near '1'" in detail
+        assert "internal_error" in detail
+
+    def test_a_customer_sees_none_of_them(self) -> None:
+        assert _customer_progress("mcp_execute_sql", EXECUTE_SQL_FAILED)[-1]["detail"] is None
+
+    def test_the_sentence_is_the_same_for_both_and_the_evidence_is_not(self) -> None:
+        # The half `143` settled must survive untouched: the *message* still
+        # crosses audiences intact, and the split is made beside it rather
+        # than inside it.
+        developer = _developer_progress("mcp_execute_sql", EXECUTE_SQL_FAILED)
+        customer = _customer_progress("mcp_execute_sql", EXECUTE_SQL_FAILED)
+        assert [f["message"] for f in developer] == [f["message"] for f in customer]
+        assert developer[-1]["message"] == "That did not work."
+
+    def test_the_drivers_text_still_cannot_reach_a_customer_by_any_field(self) -> None:
+        # The negative one, and the one that matters. Not "the detail is
+        # None" — every value of every key on every customer frame.
+        blob = json.dumps(_customer_frames(_narrate("mcp_execute_sql", EXECUTE_SQL_FAILED))).lower()
+        for fragment in ("odbc", "sqlexecdirectw", "incorrect syntax", "internal_error", "42000"):
+            assert fragment not in blob, fragment
+
+    def test_a_successful_call_carries_no_evidence_to_either_audience(self) -> None:
+        # Silence by default. A field that fires on every line is noise a
+        # reader learns to skip, which is the failure `tool_notes` names.
+        for frame in _developer_progress("mcp_execute_sql", EXECUTE_SQL):
+            assert frame["detail"] is None
+        for frame in _customer_progress("mcp_execute_sql", EXECUTE_SQL):
+            assert frame["detail"] is None
+
+    def test_the_before_line_never_carries_evidence(self) -> None:
+        # Two frames per call; only the finding can have anything to explain.
+        assert _developer_progress("mcp_execute_sql", EXECUTE_SQL_FAILED)[0]["detail"] is None
+
+    def test_a_failed_harness_read_explains_itself_to_a_developer(self) -> None:
+        frames = [
+            data
+            for event, data in _developer_frames(_narrate_text("read_file", READ_MISSING))
+            if event == "progress"
+        ]
+        assert frames[-1]["message"] == "That did not work."
+        assert frames[-1]["detail"]
+
+    def test_a_failed_harness_read_explains_nothing_to_a_customer(self) -> None:
+        frames = [
+            data
+            for event, data in _customer_frames(_narrate_text("read_file", READ_MISSING))
+            if event == "progress"
+        ]
+        assert frames[-1]["detail"] is None

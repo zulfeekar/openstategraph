@@ -26,7 +26,9 @@ from typing import Any
 
 from openstategraph.abc.tool_findings import (
     FINDING_TOOL_NAMES,
+    MAX_DETAIL_LEN,
     MAX_SENTENCE_LEN,
+    failure_detail,
     summarise_tool_result,
 )
 from openstategraph.abc.tool_sentences import TOOL_NAMES
@@ -630,3 +632,56 @@ class TestTheHarnessReaderIsToleranAndStillStrict:
     def test_a_search_that_errored_part_way_reports_the_failure_not_a_count(self) -> None:
         partial = "Path unreadable\n\nPartial matches:\n/a.txt"
         assert summarise_tool_result("grep", partial) == "That did not work."
+
+
+class TestTheEvidenceBehindAFailure:
+    """`launch-readiness/163`: the other half of the same read.
+
+    `summarise_tool_result` answers `"That did not work."` for every failure
+    it can read — `143`'s customer seam, working. This is the developer half,
+    a separate function on purpose: the sentence and the evidence have
+    different audiences, and a caller that confuses them leaks a driver's
+    message into a chat.
+    """
+
+    def test_a_failed_query_hands_over_the_drivers_own_words(self) -> None:
+        detail = failure_detail("mcp_execute_sql", _as_text(EXECUTE_SQL_FAILED))
+        assert detail is not None
+        assert "Incorrect syntax near '1'" in detail
+
+    def test_the_error_code_leads_because_a_reader_scans_the_left_edge(self) -> None:
+        detail = failure_detail("mcp_execute_sql", _as_text(EXECUTE_SQL_FAILED))
+        assert detail is not None and detail.startswith("internal_error: ")
+
+    def test_a_success_explains_nothing(self) -> None:
+        assert failure_detail("mcp_execute_sql", _as_text(EXECUTE_SQL)) is None
+
+    def test_a_tool_nobody_has_read_a_result_from_explains_nothing(self) -> None:
+        # No floor, unlike the sentence: a result nobody has read has no words
+        # of its own to quote, and inventing some is worse than silence.
+        assert failure_detail("some_tool_nobody_declared", '{"ok": false, "message": "boom"}') is None
+
+    def test_a_payload_that_merely_carries_an_error_key_is_left_alone(self) -> None:
+        # The widening test. `ok is False` and nothing else — this product
+        # prints JSON as prose constantly, and a result set with an `error`
+        # column is ordinary data.
+        payload = '{"ok": true, "data": {"rows": [{"error": "unpaid"}], "row_count": 1}}'
+        assert failure_detail("mcp_execute_sql", payload) is None
+
+    def test_a_failure_with_no_words_says_nothing_rather_than_something_empty(self) -> None:
+        assert failure_detail("mcp_execute_sql", '{"ok": false}') is None
+
+    def test_a_multi_line_payload_arrives_as_one_line(self) -> None:
+        detail = failure_detail("mcp_execute_sql", '{"ok": false, "message": "a\\nb\\n  c"}')
+        assert detail == "a b c"
+
+    def test_a_server_that_returns_a_stack_trace_cannot_flood_the_panel(self) -> None:
+        detail = failure_detail("mcp_execute_sql", json.dumps({"ok": False, "message": "x" * 5000}))
+        assert detail is not None and len(detail) <= MAX_DETAIL_LEN
+
+    def test_a_failed_harness_read_hands_over_its_error_without_the_prefix(self) -> None:
+        detail = failure_detail("read_file", READ_MISSING)
+        assert detail is not None and not detail.startswith("Error: ")
+
+    def test_a_successful_harness_read_explains_nothing(self) -> None:
+        assert failure_detail("read_file", READ_SHORT) is None

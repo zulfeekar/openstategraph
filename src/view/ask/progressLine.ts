@@ -14,6 +14,14 @@ export interface ProgressFrame {
   readonly message: string;
   readonly current: number | null;
   readonly total: number | null;
+  /**
+   * The evidence behind `message`, when the backend sent any.
+   *
+   * `launch-readiness/163`. Never populated on a customer stream — the
+   * audience gate is at the SSE seam, not here — so this function does not
+   * have to know which surface it is composing for, and cannot get it wrong.
+   */
+  readonly detail?: string | null;
 }
 
 /**
@@ -23,6 +31,13 @@ export interface ProgressFrame {
  * total gives `(3)`, and a total with no count gives nothing — "of 12" alone
  * says less than the message already did, and a bare `(12)` would read as
  * progress rather than as the size of the job.
+ *
+ * `detail`, when the frame carries it, is appended after an em dash:
+ * `"That did not work. — internal_error: …Invalid column name 'loading_time'"`.
+ * It goes *after* the sentence rather than replacing it because the sentence
+ * is the part that is always true and always short — a reader scanning a
+ * stack of narration lines reads the left edge, and only stops on the one
+ * that failed.
  */
 export function progressLine(frame: ProgressFrame): string {
   const count =
@@ -31,5 +46,6 @@ export function progressLine(frame: ProgressFrame): string {
         ? ` (${frame.current}/${frame.total})`
         : ` (${frame.current})`
       : '';
-  return `${frame.message}${count}`;
+  const detail = frame.detail ? ` \u2014 ${frame.detail}` : '';
+  return `${frame.message}${count}${detail}`;
 }

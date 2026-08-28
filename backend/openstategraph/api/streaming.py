@@ -834,6 +834,12 @@ FRAME_FIELDS: dict[str, tuple[str, ...]] = {
     "progress": (
         "node", "namespace", "message", "current", "total",
         "activeNode", "path", "pathSlugs", "interruptible",
+        # `launch-readiness/163`. Always present, `null` for a customer and
+        # for any line with no evidence behind it — a frame that omitted the
+        # key would make "this audience does not get it" and "this line had
+        # nothing to add" the same wire shape, which is the distinction the
+        # field exists to draw.
+        "detail",
     ),
     "spawn": ("kind", "parent", "label", "instruction", "taskId", "namespace"),
     "interrupt": ("threadId", "node", "message", "candidate", "verdict", "reason", "check"),
@@ -1682,6 +1688,29 @@ async def _run_frames(
                         # intact — a silent forty-second gap is worse for the
                         # audience that cannot open a trace to explain it.
                         "message": report.message,
+                        # The evidence behind that message, in the words of
+                        # whatever produced it — **developer only**
+                        # (`launch-readiness/163`).
+                        #
+                        # The line above is composed under `143`'s customer
+                        # seam, where no value from a result is interpolated
+                        # and only integers are spoken, which is why a failed
+                        # query says "That did not work." and nothing more.
+                        # Right for a customer, useless for the person who can
+                        # fix the workflow: the owner watched six of those and
+                        # had to paste the raw payload into a chat before
+                        # anybody could see `Invalid column name
+                        # 'loading_time'`.
+                        #
+                        # So the split is made here, once, at the seam that
+                        # already redacts per audience — not by widening the
+                        # sentence, which would put a driver's message on
+                        # every surface. `None` for a customer, and `None`
+                        # for the overwhelming majority of developer frames
+                        # too: nothing invents evidence it does not have.
+                        "detail": (
+                            report.detail if audience is Audience.DEVELOPER else None
+                        ),
                         "current": report.current,
                         "total": report.total,
                         "activeNode": progress_active,
