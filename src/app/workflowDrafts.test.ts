@@ -153,9 +153,9 @@ describe('per-slug drafts', () => {
       editing.serializer,
       newWriteGuard(),
     );
-    expect(store.getItem(`openstategraph-workflow-${draftIdForSlug('chinook-assistant')}`)).not.toBe(
-      null,
-    );
+    expect(
+      store.getItem(`openstategraph-workflow-${draftIdForSlug('chinook-assistant')}`),
+    ).not.toBe(null);
 
     discardDraftAfterDelete('chinook-assistant', store);
 

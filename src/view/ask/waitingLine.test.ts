@@ -33,9 +33,7 @@ describe('waitingLine', () => {
     // one run, because narration is cleared by its own step completing and
     // the wait then looked fresh again. A placeholder that blinks is worse
     // than the gap it fills.
-    expect(
-      waitingLine({ ...base, stepsSoFar: 6, saidSomething: true }),
-    ).toBeNull();
+    expect(waitingLine({ ...base, stepsSoFar: 6, saidSomething: true })).toBeNull();
   });
 
   it('says nothing while tokens are arriving', () => {

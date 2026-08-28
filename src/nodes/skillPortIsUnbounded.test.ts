@@ -46,7 +46,9 @@ describe('the skill port', () => {
     // which is the whole defect, not a smaller version of it.
     const specs = JSON.parse(
       readFileSync('backend/openstategraph/compile/port_specs.json', 'utf8'),
-    ) as { node_types: { type: string; ports: { id: string; max_connections: number | null }[] }[] };
+    ) as {
+      node_types: { type: string; ports: { id: string; max_connections: number | null }[] }[];
+    };
 
     const withSkill = specs.node_types.filter((type) =>
       type.ports.some((port) => port.id === SKILL_PORT_ID),

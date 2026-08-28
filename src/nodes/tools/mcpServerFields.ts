@@ -181,7 +181,7 @@ export const MCP_LOCKED_NOTE =
   'value never is. A server that is unreachable, that rejects the credential, ' +
   'or that does not speak MCP costs this agent its tools and says so in the ' +
   'run’s warnings; it never fails the compile. The connection is opened once ' +
-  'and held open, so a call costs what the server takes and no handshake.';;
+  'and held open, so a call costs what the server takes and no handshake.';
 
 /**
  * The one sentence a developer needs before adding a second row, on the card

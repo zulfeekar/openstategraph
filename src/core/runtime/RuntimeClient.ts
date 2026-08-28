@@ -399,7 +399,7 @@ export type RunStreamEvent =
        *
        * Falls back to `node` when the backend predates the field.
        */
-      readonly activeNode: string;      /**
+      readonly activeNode: string; /**
        * Whether Stop, right now, **cancels** the node this frame names —
        * rather than merely walking away from it (`async-first/07`).
        *
@@ -516,7 +516,7 @@ export type RunStreamEvent =
        * says nothing about where the run is", and a consumer leaves the
        * highlight alone.
        */
-      readonly activeNode: string;      /**
+      readonly activeNode: string; /**
        * Whether Stop, right now, **cancels** the node this frame names —
        * rather than merely walking away from it (`async-first/07`).
        *
@@ -611,7 +611,7 @@ export type RunStreamEvent =
       readonly current: number | null;
       readonly total: number | null;
       /** The canvas node to show as running — same meaning as on `token`. */
-      readonly activeNode: string;      /**
+      readonly activeNode: string; /**
        * Whether Stop, right now, **cancels** the node this frame names —
        * rather than merely walking away from it (`async-first/07`).
        *

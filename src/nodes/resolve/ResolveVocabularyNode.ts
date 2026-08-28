@@ -157,8 +157,7 @@ export const resolveVocabularyNode: INodeDefinition = defineNode(
         type: PORT.result,
         label: 'result',
         maxConnections: null,
-        description:
-          'The question, plus what this vocabulary named and what it covered.',
+        description: 'The question, plus what this vocabulary named and what it covered.',
       },
     ],
   },

@@ -250,10 +250,7 @@ export function supersedeDraftAfterHostWrite(
  * Called once, from the Workflows panel's delete handler, mirroring
  * `supersedeDraftAfterHostWrite`'s one-call-site discipline.
  */
-export function discardDraftAfterDelete(
-  slug: string,
-  store: KeyValueStore = browserStore(),
-): void {
+export function discardDraftAfterDelete(slug: string, store: KeyValueStore = browserStore()): void {
   deleteWorkflow(store, draftIdForSlug(slug));
 }
 
