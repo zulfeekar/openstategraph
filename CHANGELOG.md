@@ -222,6 +222,22 @@
   so a run degrades rather than crashing (`providers-and-credentials` 08).
 
 ### Fixed
+- **A flattened `$ref` still calls the tool** (`launch-readiness/158`). The
+  correction to `156`'s premise, and a stronger fix than it: `mcp_resolve_lens`
+  is not uncallable. Its nested form answers `ok: true`, its schema reaches the
+  model intact through `langchain-mcp-adapters`, and other clients call it
+  without trouble — `gpt-4o-mini` flattened the `$ref`. Nothing is wrong with
+  that service. It is still ours, because *it should not matter which model is
+  driving*: `156` makes a refusal readable so a model can retry, and this
+  removes the dependency on the retry being right. `prebuilt_mcp` now performs
+  the **one legal wrapping** where the schema forces it — exactly one required
+  top-level property, that property an object (inline or through a local
+  `$ref`), every key sent one of its own, and nothing sent matching a top-level
+  name. Where a second wrapping is legal, or a flat call is itself a legal
+  top-level call missing its wrapper, nothing is adapted and `156`'s readable
+  refusal stands: an adapter that rewrites a wrong call into a *different*
+  wrong call is worse than the failure it replaced. One-directional on purpose
+  — a nested call against a flat schema is left alone.
 - **An MCP tool error no longer kills the run, and the run says so itself**
   (`launch-readiness/156`). Live, `cpl-mcp` answered a real question with
   *"unable to retrieve … due to an authentication issue with the data

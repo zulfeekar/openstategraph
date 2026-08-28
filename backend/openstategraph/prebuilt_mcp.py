@@ -790,8 +790,12 @@ def _argument_shape_hint(schema: Any, sent: Mapping[str, Any]) -> str | None:
     against a table whose columns are `load_port` and `load_date`, because the
     two tools that would have told it were the two it could not call.
 
-    **The schema is ours to read and was already in hand at bind time.** The
-    mismatch itself is the service's; saying which shape it wants is not.
+    **The schema is ours to read and was already in hand at bind time.** It is
+    also honest — `158` carries that correction: the nested form works, the
+    schema reaches the model intact, and a weaker model flattened the `$ref`.
+    Since `158` the forced case is *adapted* rather than reported, so what
+    reaches here is a refusal no schema could forecast — and saying which shape
+    the tool wanted is still the most useful thing to say about it.
 
     Strict in trusting, and narrowly so: a hint is offered only where the
     schema declares **exactly one** required property, that property is an
@@ -822,6 +826,89 @@ def _argument_shape_hint(schema: Any, sent: Mapping[str, Any]) -> str | None:
         f"You sent {flat} at the top level. Retry with "
         f'{{"{wrapper}": {{ … the fields you just sent … }}}}.'
     )
+
+
+def _object_schema(schema: Mapping[str, Any], declared: Any) -> Mapping[str, Any] | None:
+    """One property's own schema, resolved through a local `$ref`, if it is an object.
+
+    Only `#/$defs/…` and `#/definitions/…` inside this same document. A remote
+    or non-local reference is something this build cannot read, and a shape it
+    cannot read is a shape it must not rewrite a call into.
+    """
+    if not isinstance(declared, Mapping):
+        return None
+    reference = declared.get("$ref")
+    if isinstance(reference, str):
+        for prefix, key in (("#/$defs/", "$defs"), ("#/definitions/", "definitions")):
+            if reference.startswith(prefix):
+                pool = schema.get(key)
+                target = pool.get(reference[len(prefix) :]) if isinstance(pool, Mapping) else None
+                return target if isinstance(target, Mapping) else None
+        return None
+    if declared.get("type") == "object" or isinstance(declared.get("properties"), Mapping):
+        return declared
+    return None
+
+
+def _adapted_arguments(schema: Any, sent: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The one legal wrapping of a flattened call, or `None`.
+
+    `launch-readiness/158`, and the correction that produced it. `156` was
+    filed believing `mcp_resolve_lens` was *uncallable* because its schema
+    nests its arguments under `inp`. It is not: the nested form answers
+    `ok: true`, the schema reaches the model intact through
+    `langchain-mcp-adapters`, and other clients call it without trouble.
+    **`gpt-4o-mini` flattened the `$ref`.** Nothing is wrong with that service.
+
+    That is still ours, because *"it doesn't matter which model — the app
+    should work"*. `156` makes the refusal readable so a model can retry; this
+    removes the dependency on the retry being right, which is the same move
+    CLAUDE.md's own worked example asks for (`every-workflow-green/13`: an
+    argument typed `str`, an agent sending the object its name invited, and a
+    run that died re-appending it).
+
+    **The strict half is the whole risk**, because tolerance here rewrites what
+    the model asked for. So nothing is adapted unless the schema *forces* the
+    wrapping, which is all four of:
+
+    - exactly one required top-level property;
+    - that property is an object, inline or through a local `$ref`;
+    - every key sent is one of that object's own properties;
+    - nothing sent matches a top-level property name.
+
+    Where a second wrapping is legal, or a flat call is itself a legal
+    top-level call missing its wrapper, nothing happens and `156`'s readable
+    refusal stands — an adapter that rewrites a wrong call into a *different*
+    wrong call is worse than the failure it replaced. An unknown field is
+    therefore never smuggled inside the wrapper: the model's mistake was the
+    field name, and it has to read that back.
+
+    Deliberately one-directional. Unwrapping a nested call for a flat schema is
+    not done, because no case has been seen, and every widening here needs the
+    test that proves ordinary calls are untouched.
+    """
+    if not isinstance(schema, Mapping) or not sent:
+        return None
+    required = schema.get("required")
+    if not isinstance(required, list) or len(required) != 1:
+        return None
+    wrapper = required[0]
+    if not isinstance(wrapper, str) or wrapper in sent:
+        return None
+    properties = schema.get("properties")
+    if not isinstance(properties, Mapping):
+        return None
+    if any(key in properties for key in sent):
+        return None
+    inner = _object_schema(schema, properties.get(wrapper))
+    if inner is None:
+        return None
+    fields = inner.get("properties")
+    if not isinstance(fields, Mapping):
+        return None
+    if any(key not in fields for key in sent):
+        return None
+    return {wrapper: dict(sent)}
 
 
 def _text_block(text: str) -> dict[str, Any]:
@@ -960,6 +1047,7 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:  # noqa: ARG001 — see bel
         # loop on an ordinary future while the work happens over there — no
         # thread is blocked, which is what makes an async agent running four
         # of these at once still concurrent.
+        kwargs = _adapted_arguments(schema, kwargs) or kwargs
         try:
             answer = await run_on_mcp_loop_async(inner(**kwargs))
         except ToolException as refused:
@@ -971,6 +1059,7 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:  # noqa: ARG001 — see bel
         report_progress(_line(kwargs))
         # Not `asyncio.run`: that opened a loop per call, and a loop per call
         # is a session per call, which is the handshake this seam removes.
+        kwargs = _adapted_arguments(schema, kwargs) or kwargs
         try:
             answer = run_on_mcp_loop(inner(**kwargs))
         except ToolException as refused:

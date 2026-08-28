@@ -16,7 +16,17 @@ server refused. `_MCPToolExecutionError` then **raised out of our wrapper and
 was caught nowhere**, `agent1` produced no result, and the agent composed a
 cause for its own silence.
 
-## Why the wrapper is the defect and not the schema
+## The schema is honest, and this file no longer says otherwise
+
+An earlier draft of this header called those two tools *uncallable*. They are
+not, and `158` carries the correction: the nested form answers `ok: true`, the
+schema reaches the model intact, and other clients call it without trouble —
+`gpt-4o-mini` flattened the `$ref`. Nothing is wrong with that service.
+`158` then removes the dependency on a model retrying correctly at all; what
+this file proves is the floor underneath it, for every refusal no schema can
+forecast.
+
+## Why the wrapper is the defect
 
 `langchain_mcp_adapters` already answers this correctly: the tool it builds
 carries `handle_tool_error=_handle_mcp_tool_error`, so an `isError=True` result
@@ -25,9 +35,8 @@ correct. **`_wrap_async_tool` rebuilt the `StructuredTool` and did not carry
 that across** — so a bare MCP client handled this bad call gracefully and we
 did not. We were strictly worse than no wrapper.
 
-The mismatch itself is the CPL service's and is not fixed here. What *is* ours
-is that the tool's own JSON schema says which shape it wants, we hold it at
-bind time, and nobody was telling the model.
+What *is* ours is that the tool's own JSON schema says which shape it wants,
+we hold it at bind time, and nobody was telling the model.
 
 ## Tolerant is not silent
 
@@ -79,6 +88,18 @@ NESTED_SCHEMA: dict[str, Any] = {
             "properties": {"question": {"type": "string"}, "lens": {"type": "string"}},
         }
     },
+}
+
+#: One required wrapper, but `question` is *also* a top-level property — so
+#: `158` will not adapt a flat call here, and this refusal is one no schema can
+#: forecast. Exactly the case the hint below exists for.
+SHADOWED_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "inp": {"type": "object", "properties": {"question": {"type": "string"}}},
+        "question": {"type": "string"},
+    },
+    "required": ["inp"],
 }
 
 FLAT_SCHEMA: dict[str, Any] = {
@@ -301,8 +322,13 @@ class TestTheModelIsToldWhatWentWrong:
     def test_the_shape_the_tool_actually_wants_is_named(self, run) -> None:
         """The information was in the tool's own JSON schema, which we hold at
         bind time, and nobody was telling the model — so it guessed
-        `departure_port` for three turns instead."""
-        _, model = run()
+        `departure_port` for three turns instead.
+
+        Driven against a schema `158` deliberately refuses to adapt, because
+        that is what is left once the forced case is handled: a refusal no
+        schema could forecast, where saying which shape was wanted is still the
+        most useful thing there is to say."""
+        _, model = run(schema=SHADOWED_SCHEMA)
 
         assert "inp" in model.tool_text()
         assert "nested" in model.tool_text().lower()
