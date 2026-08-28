@@ -4,9 +4,14 @@ import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import { abandonDeletedWorkflow } from './diskAutosave';
 import {
+  BLIND_AFTER_FAILED_POLLS,
   CURRENT_SLUG_KEY,
-  decideFileWatchAction,
+  IN_TOUCH,
+  type WatchReach,
+  decideWatchStep,
   getKnownSavedAt,
+  getWatchReach,
+  publishWatchReach,
   recordKnownSavedAt,
 } from './workflowFileWatch';
 
@@ -67,6 +72,9 @@ export function useWorkflowFileWatch(onNotify: (message: string) => void): void 
     const client = clientRef.current;
     if (!client) return;
     let cancelled = false;
+    // Held here rather than in a ref: it belongs to this poll loop and dies
+    // with it. The *published* copy is what surfaces read.
+    let reach: WatchReach = getWatchReach();
 
     const poll = async () => {
       const slug = sessionStorage.getItem(CURRENT_SLUG_KEY);
@@ -76,8 +84,21 @@ export function useWorkflowFileWatch(onNotify: (message: string) => void): void 
       // `decideFileWatchAction` and `WorkflowFileClient.summary` on why a
       // surface listing cannot answer "does my file still exist".
       const outcome = await client.summary(slug);
-      if (!cancelled && outcome.ok) {
-        const action = decideFileWatchAction(outcome.value, getKnownSavedAt(slug));
+      if (cancelled) return;
+
+      // **Every outcome is acted on, including the ones that never arrived**
+      // (`say-it-on-the-surface/07`). This used to read `if (outcome.ok)` with
+      // no `else`, so a poll that could not reach the backend was
+      // indistinguishable from one that reached it and found nothing wrong —
+      // nine failed polls over forty-five seconds produced nothing at all,
+      // while a deletion produced a toast and health produced nothing. Two of
+      // the three states were one output, on the surface whose whole job is to
+      // say what is true.
+      const step = decideWatchStep(outcome, getKnownSavedAt(slug), reach);
+      reach = step.reach;
+      publishWatchReach(reach);
+      {
+        const action = step.action;
         switch (action.kind) {
           case 'baseline':
             recordKnownSavedAt(slug, action.savedAt);
@@ -104,6 +125,23 @@ export function useWorkflowFileWatch(onNotify: (message: string) => void): void 
               'This workflow changed on disk — open Manage Workflows and Load it to see the latest version.',
             );
             break;
+          case 'notify-blind':
+            // Named as a **wait**, never as work — `launch-readiness/141`'s
+            // discipline, for the same reason: claiming to know what is
+            // happening when you do not is the defect one layer down. This
+            // says what stopped being knowable and what is unaffected. It
+            // does not say the backend is down, because the only thing
+            // observed is that this call did not answer.
+            onNotify(
+              `Cannot reach the backend — nothing has answered for ${BLIND_AFTER_FAILED_POLLS} checks in a row, ` +
+                'so this editor can no longer tell you whether this workflow is still on disk. ' +
+                'Your canvas is unaffected.',
+            );
+            break;
+          case 'notify-back-in-touch':
+            // Said because the alternative is a stale alarm nobody clears.
+            onNotify('Back in touch with the backend — this workflow is being watched again.');
+            break;
           case 'none':
             break;
         }
@@ -115,6 +153,10 @@ export function useWorkflowFileWatch(onNotify: (message: string) => void): void 
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      // Nothing is polling any more, so nothing can claim to be blind: a
+      // marker outliving the watch that raised it is the stale alarm this
+      // ticket is about, with the arrow reversed.
+      publishWatchReach(IN_TOUCH);
     };
   }, [onNotify]);
 }

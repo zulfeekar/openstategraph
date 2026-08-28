@@ -1,3 +1,4 @@
+import { type Result } from '@core/kernel/Result';
 import { type WorkflowSummary } from '@core/runtime/WorkflowFileClient';
 
 /**
@@ -43,7 +44,9 @@ export type FileWatchAction =
   | { readonly kind: 'none' }
   | { readonly kind: 'baseline'; readonly savedAt: string }
   | { readonly kind: 'notify-deleted' }
-  | { readonly kind: 'notify-changed' };
+  | { readonly kind: 'notify-changed' }
+  | { readonly kind: 'notify-blind' }
+  | { readonly kind: 'notify-back-in-touch' };
 
 /**
  * The pure decision behind one poll: given what the backend currently
@@ -83,4 +86,126 @@ export function decideFileWatchAction(
   if (known === undefined) return { kind: 'baseline', savedAt: entry.savedAt };
   if (entry.savedAt !== known) return { kind: 'notify-changed' };
   return { kind: 'none' };
+}
+
+/* -------------------------------------------------------------------------
+ * Whether the watch can see at all — `say-it-on-the-surface/07`
+ * ---------------------------------------------------------------------- */
+
+/**
+ * How far the watch is from the backend right now.
+ *
+ * `decideFileWatchAction` above answers *what the file says*. This answers the
+ * question underneath it — *did anything answer* — and it exists because the
+ * hook used to act only `if (outcome.ok)` with no `else`, so a poll that could
+ * not reach the backend was indistinguishable from one that reached it and
+ * found nothing wrong. **A watch that goes quiet when it cannot see is a watch
+ * that reports "fine" when it means "blind."**
+ *
+ * Staged live on 2026-08-28 by shimming `fetch` to reject the summary call:
+ * nine consecutive failed polls over ~45 s, zero DOM mutations, no toast, Save
+ * and Publish both live and Save's tooltip still promising to overwrite a
+ * folder nothing had been able to see.
+ */
+export interface WatchReach {
+  /** Failed polls since the last one that answered. Reset by any success. */
+  readonly consecutiveFailures: number;
+  /** Whether the failures have gone on long enough to be worth saying. */
+  readonly blind: boolean;
+}
+
+/** The starting reach: silence before the first poll is not an outage. */
+export const IN_TOUCH: WatchReach = { consecutiveFailures: 0, blind: false };
+
+/**
+ * Consecutive failed polls before the watch says it cannot see.
+ *
+ * **Argued, not picked.** Polls are five seconds apart, so three consecutive
+ * failures is a continuous window of at least ten seconds across three
+ * independent attempts, and at least fifteen since the last answer.
+ *
+ * - **Why not one.** A single dropped request is not an outage, and this
+ *   repository's own development loop manufactures them: editing anything
+ *   under `backend/` or `workflows/` reloads uvicorn, which is a one-to-two
+ *   second gap that lands inside a single poll. A banner on every reload is
+ *   the panel that cries wolf, which this project has now hit four times, and
+ *   the cost of that is a reader who ignores the true one.
+ * - **Why not more.** The audit staged nine failures over forty-five seconds
+ *   and saw nothing at all. Three names a genuine outage within fifteen
+ *   seconds rather than never, which is the same order as the five seconds
+ *   the deleted verdict already takes.
+ * - **Why consecutive rather than a rate.** One successful poll resets the
+ *   count, so a flapping link that lands even one answer in three never
+ *   accumulates — and it should not, because a watch that answered ten
+ *   seconds ago is not blind.
+ *
+ * The threshold can afford to wait for evidence because blindness is a
+ * *knowledge* defect and no longer a destructive one: `launch-readiness/147`
+ * disarmed the writer and made every editor save `must_exist`, so a save into
+ * a package that vanished during the blind window fails with a 404 rather than
+ * resurrecting it hollow.
+ */
+export const BLIND_AFTER_FAILED_POLLS = 3;
+
+/**
+ * One whole poll: what it did to the reach, and the single thing to say.
+ *
+ * Pure, so the sequence a live outage produces can be *run* — nine failures,
+ * a flapping link, a deletion that lands while the watch is blind — none of
+ * which a timer-and-network hook can be asked about. A suite that only
+ * exercises successful polls stays green against exactly the defect this
+ * function exists for.
+ *
+ * On a success that ends a blind spell the underlying verdict wins whenever
+ * there is one: `notify-deleted` carries a consequence (147 disarms the
+ * writer on it) and already implies contact was restored, while the marker
+ * clears from `reach` either way. "Back in touch" is said only when there is
+ * nothing more informative to say.
+ */
+export function decideWatchStep(
+  outcome: Result<WorkflowSummary | null, string>,
+  known: string | undefined,
+  reach: WatchReach,
+): { readonly reach: WatchReach; readonly action: FileWatchAction } {
+  if (!outcome.ok) {
+    const consecutiveFailures = reach.consecutiveFailures + 1;
+    const blind = reach.blind || consecutiveFailures >= BLIND_AFTER_FAILED_POLLS;
+    return {
+      reach: { consecutiveFailures, blind },
+      action: blind && !reach.blind ? { kind: 'notify-blind' } : { kind: 'none' },
+    };
+  }
+  const action = decideFileWatchAction(outcome.value, known);
+  if (reach.blind && action.kind === 'none') {
+    return { reach: IN_TOUCH, action: { kind: 'notify-back-in-touch' } };
+  }
+  return { reach: IN_TOUCH, action };
+}
+
+/**
+ * The reach, published where a *persistent* surface can read it.
+ *
+ * A toast is not enough on its own and the ticket says why: it fades after
+ * five seconds, and what survives the fade was identical in all three states.
+ * Same shape as `subscribeOpenSlug` — the toolbar's Save subscribes and
+ * re-derives, rather than a parent remembering to bump a nonce.
+ */
+let reach: WatchReach = IN_TOUCH;
+const reachListeners = new Set<() => void>();
+
+export function getWatchReach(): WatchReach {
+  return reach;
+}
+
+export function publishWatchReach(next: WatchReach): void {
+  if (next.consecutiveFailures === reach.consecutiveFailures && next.blind === reach.blind) return;
+  reach = next;
+  for (const listener of reachListeners) listener();
+}
+
+export function subscribeWatchReach(listener: () => void): () => void {
+  reachListeners.add(listener);
+  return () => {
+    reachListeners.delete(listener);
+  };
 }

@@ -62,6 +62,7 @@ import { useEntryQuestion } from './useEntryQuestion';
 import { runIntent } from './runIntent';
 import { subscribeOpenSlug } from '@app/openWorkflow';
 import { subscribeOpenAddress } from '@app/openAddress';
+import { subscribeWatchReach } from '@app/workflowFileWatch';
 import { saveAffordance } from './saveAffordance';
 import { usePublishState } from './usePublishState';
 import { publishedMessage, unpublishedMessage } from '@view/workflow/consequences';
@@ -169,9 +170,15 @@ export function TopBar({
     const refresh = () => setSave(saveAffordance());
     const offSlug = subscribeOpenSlug(refresh);
     const offAddress = subscribeOpenAddress(refresh);
+    // The third store it depends on (`say-it-on-the-surface/07`): whether the
+    // file watch can still reach the backend. Same reason as the other two —
+    // the sentence is a claim about a folder, and it stops being true the
+    // moment nothing can look at that folder.
+    const offReach = subscribeWatchReach(refresh);
     return () => {
       offSlug();
       offAddress();
+      offReach();
     };
   }, []);
   // **Is what I am editing live to customers?** (`ship-it` 39.) The other
@@ -390,7 +397,26 @@ export function TopBar({
               disabled={saving}
             >
               {save.label}
-              {save.unsaved ? <span className="topbar__unsaved" aria-hidden="true" /> : null}
+              {/* **The persistent half of telling three states apart**
+                  (`say-it-on-the-surface/07`). Deleted, unreachable and
+                  healthy all rendered identically once the toast faded — and
+                  a toast fades in five seconds. One element with a state, not
+                  two dots: `unsaved` is already legible from the hint and from
+                  an empty address bar, while "nothing has answered for three
+                  checks" is carried nowhere else. */}
+              {save.marker !== null ? (
+                <span
+                  className="topbar__unsaved"
+                  data-state={save.marker}
+                  role={save.marker === 'unreachable' ? 'status' : undefined}
+                  aria-hidden={save.marker === 'unreachable' ? undefined : true}
+                  aria-label={
+                    save.marker === 'unreachable'
+                      ? 'Cannot reach the backend — this workflow is no longer being watched'
+                      : undefined
+                  }
+                />
+              ) : null}
             </Button>
           </Tooltip>
           {/* **Who can see this** — `ship-it` 39. The badge and the verb are

@@ -167,6 +167,15 @@
   vertical-align: middle;
 }
 
+/* "Nothing has answered for three checks" (`say-it-on-the-surface/07`). A
+   different colour and a ring rather than a second dot: the mark is one
+   element with a state, so a reader never has to tell two dots apart, and the
+   ring reads as a warning at 6px where a hue change alone would not. */
+.topbar__unsaved[data-state='unreachable'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--color-status-danger, #ef4444);
+}
+
 /* The lifecycle cluster — `ship-it` 39. The badge and its verb read as one
    thing because they are one fact, and the gap is the row token's half so the
    pair does not look like two unrelated controls that happen to be adjacent. */

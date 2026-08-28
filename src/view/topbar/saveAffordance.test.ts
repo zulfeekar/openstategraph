@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { parseMountAddress } from '@core/model/MountAddress';
+import { IN_TOUCH, type WatchReach } from '@app/workflowFileWatch';
 import { saveAffordance } from './saveAffordance';
+
+const blind: WatchReach = { consecutiveFailures: 3, blind: true };
 
 /**
  * `say-it-on-the-surface` 01 — the toolbar's Save says which of the three acts
@@ -40,5 +43,56 @@ describe('saveAffordance', () => {
     expect(save.hint).toContain('the mounted package itself is not changed');
     // Not "unsaved": the parent exists, so there is nothing to warn about.
     expect(save.unsaved).toBe(false);
+  });
+});
+
+/**
+ * `say-it-on-the-surface/07` — the third thing Save has to be honest about.
+ *
+ * "Save to workflows/<slug>/ on the backend, overwriting what is there" is a
+ * confident sentence about a folder nothing has been able to see for the last
+ * three polls. The ticket asks that the affordance *reflect reality*; it
+ * explicitly does not ask for Save to be taken away, because saving while the
+ * backend is briefly unreachable is a normal thing a person does.
+ */
+describe('saveAffordance while the watch cannot reach the backend', () => {
+  it('stops claiming to know what is in the folder', () => {
+    const save = saveAffordance(null, 'chinook-assistant', blind);
+    expect(save.unreachable).toBe(true);
+    expect(save.hint).toContain('Cannot reach the backend');
+    expect(save.hint).not.toContain('overwriting what is there');
+    // It still names the folder — the address is not in doubt, only its state.
+    expect(save.hint).toContain('workflows/chinook-assistant/');
+  });
+
+  it('does not take Save away', () => {
+    // Not disabled on a guess: the word is unchanged, and a queued or retried
+    // save is exactly what a person expects to still work through a blip.
+    const save = saveAffordance(null, 'chinook-assistant', blind);
+    expect(save.label).toBe('Save');
+    expect(saveAffordance(null, null, blind).label).toBe('Save');
+  });
+
+  it('says it about a document with no folder too', () => {
+    const save = saveAffordance(null, null, blind);
+    expect(save.unsaved).toBe(true);
+    expect(save.unreachable).toBe(true);
+    expect(save.hint).toContain('Cannot reach the backend');
+  });
+
+  it('says nothing extra while the watch is in touch', () => {
+    const save = saveAffordance(null, 'chinook-assistant', IN_TOUCH);
+    expect(save.unreachable).toBe(false);
+    expect(save.hint).not.toContain('Cannot reach');
+  });
+
+  it('marks at most one thing, and unreachable is the one nothing else says', () => {
+    // The dot on Save already means "no folder yet". Two dots on one button
+    // is a worse answer than one, so the marker is a single state and the
+    // invisible fact wins — `unsaved` is also legible from the hint and from
+    // an empty address bar.
+    expect(saveAffordance(null, null, blind).marker).toBe('unreachable');
+    expect(saveAffordance(null, null, IN_TOUCH).marker).toBe('unsaved');
+    expect(saveAffordance(null, 'chinook-assistant', IN_TOUCH).marker).toBeNull();
   });
 });
