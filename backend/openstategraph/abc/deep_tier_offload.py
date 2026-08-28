@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import shutil
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -38,7 +39,7 @@ DEFAULT_OFFLOAD_THRESHOLD_CHARS = 4000
 
 
 def build_skills_middleware(
-    *, root_dir: str | Path, sources: Sequence[str | tuple[str, str]]
+    *, backend: Any, sources: Sequence[str | tuple[str, str]]
 ) -> SkillsMiddleware:
     """Fills the `"skills"` slot: name + description now, body on demand.
 
@@ -47,11 +48,16 @@ def build_skills_middleware(
     has to provision `invoke(files={...})`. The library's own system prompt
     fragment lists each skill's name and description; the body is read later
     by the agent's own `read_file` tool, on the path shown in that list.
+
+    It takes the **store**, not a directory, and takes the *same* one the
+    offload seam and the tier's own file tools were given
+    (`launch-readiness/149`). The library lists skills in `before_agent`, at
+    run time, so a second backend of its own would list a different thread's
+    store than the one the paths it prints resolve in — the dangling-pointer
+    failure `surface_can_dereference` exists to prevent, reintroduced one
+    layer down.
     """
-    return SkillsMiddleware(
-        backend=FilesystemBackend(root_dir=root_dir, virtual_mode=True),
-        sources=list(sources),
-    )
+    return SkillsMiddleware(backend=backend, sources=list(sources))
 
 
 class OffloadMiddleware(AgentMiddleware):
@@ -224,9 +230,10 @@ def surface_can_dereference(
 HARNESS_PREAMBLE = (
     "You are running inside a harness that gives you a virtual filesystem. "
     "`ls`, `read_file`, `write_file` and `grep` reach it and nothing else: it "
-    "is private to this run and confined to it, no path you write is visible "
-    "to the person asking, and it is a workspace for large material rather "
-    "than the place your answer goes.\n\n"
+    "is private to this conversation and confined to it — no other "
+    "conversation and no other person can read what you write — no path you "
+    "write is visible to the person asking, and it is a workspace for large "
+    "material rather than the place your answer goes.\n\n"
     "A large tool result is not returned to you in full. It is written to a "
     "file and you are handed the path instead, in a line reading `[offloaded: "
     "N chars written to path=...]`. That path is the result — the data was "
@@ -236,7 +243,9 @@ HARNESS_PREAMBLE = (
     "Prefer the tool that answers the question over the filesystem. The files "
     "hold what your tools returned; they are not a source of facts on their "
     "own, and searching them is never a substitute for asking the tool that "
-    "knows."
+    "knows. A file you find may have been written earlier in this "
+    "conversation, in answer to a different question: it is what a tool "
+    "returned then, not what it would return now."
 )
 
 #: The sentence that is only true once skills were actually disclosed
@@ -344,13 +353,18 @@ def plan_disclosure(
             ),
         )
 
-    root = _disclosure_root(package_dir)
-    backend = FilesystemBackend(root_dir=root, virtual_mode=True)
+    # Decided here, projected later. The decision is what the *prompt* needs
+    # — which skills leave the flat injection — and it is the same in every
+    # conversation; the copy on disk belongs to whichever store this run
+    # opens, and `ThreadScopedBackend` writes it as that store is created.
+    disclosed = [skill.name for skill in _worth_disclosing(package_dir)]
+    backend = ThreadScopedBackend(
+        package_dir=package_dir, project_skills=bool(disclosed)
+    )
     contributions: dict[str, Any] = {}
-    disclosed = _project_skills(package_dir, root)
     if disclosed:
         contributions["skills"] = build_skills_middleware(
-            root_dir=root, sources=[SKILLS_VIRTUAL_ROOT]
+            backend=backend, sources=[SKILLS_VIRTUAL_ROOT]
         )
     contributions["filesystem"] = OffloadMiddleware(
         backend=backend,
@@ -367,13 +381,97 @@ def plan_disclosure(
 #: Where a projected skill lives inside the run's own store.
 SKILLS_VIRTUAL_ROOT = "/skills"
 
-#: One root per package per process. Building a second would give the same
-#: agent two stores and make the pointer it was handed unresolvable in the
-#: other.
-_ROOTS: dict[str, Path] = {}
+#: How long a conversation's store survives with nothing touching it. A store
+#: nobody has read or written for an hour belongs to a conversation nobody is
+#: in; keeping it is `launch-readiness/96` in another costume — an unbounded
+#: directory of dead runs — and the only thing lost by removing it is a
+#: dereference in a conversation that has already stopped.
+THREAD_ROOT_TTL_SECONDS = 3600.0
+
+#: And a ceiling, for the burst the TTL cannot see: a server answering
+#: hundreds of conversations inside one TTL window would otherwise hold every
+#: one of their stores at once. The least-recently-touched go first.
+MAX_LIVE_THREAD_ROOTS = 64
+
+#: One directory per package, holding one subdirectory per conversation. The
+#: package level exists so a sweep has somewhere to sweep and so a process
+#: leaves one tree per package rather than one per conversation.
+_PACKAGE_BASES: dict[str, Path] = {}
+
+#: **One root per package per THREAD, not per process** (`launch-readiness/149`).
+#:
+#: The comment that stood here argued the per-process store from one run: a
+#: second root would give the same agent two stores and make the pointer it
+#: was handed unresolvable in the other. That is true and is still why the
+#: *same* store is handed to the skills middleware, the offload middleware and
+#: the tier's own file tools. It was never an argument for sharing a writable
+#: scratch directory between two different conversations, which is what it
+#: silently bought: three consecutive runs of one question on one server, and
+#: run 2 answered out of the files run 1 wrote, having called no query at all.
+#:
+#: The key is `thread_id` because that is the identifier the graph actually
+#: carries — on the installed `langgraph 1.2.10` a node's config exposes
+#: `execution_info.run_id` as `None`, while `configurable["thread_id"]` is
+#: always there, is what the checkpointer keys on, and is what
+#: `POST /api/runs/resume` demands back. It is also the narrowest scope that
+#: does not invent a second bug: a resume is the same thread, and its
+#: transcript still carries offload pointers that have to resolve.
+#:
+#: The empty key is the store for a caller with no run config at all — a
+#: script, a unit test, a tool called off the graph. It is one store, not
+#: everyone's.
+_ROOTS: dict[tuple[str, str], Path] = {}
+
+#: When each root was last resolved, for the sweep. In-process bookkeeping
+#: rather than directory mtimes, which do not move when a nested file is
+#: written.
+_TOUCHED: dict[tuple[str, str], float] = {}
 
 
-def _disclosure_root(package_dir: Any) -> Path:
+def _scope_key() -> str:
+    """The conversation this call belongs to, or `""` off the graph.
+
+    `run_identity` is the one place the four identity keys are read
+    (`run_identity.py`), and it already answers `{}` rather than raising when
+    there is no runnable context. A caller with no thread is a normal caller,
+    not an error.
+    """
+    from openstategraph.run_identity import run_identity
+
+    return run_identity().get("thread_id", "")
+
+
+def _package_base(key: str) -> Path:
+    base = _PACKAGE_BASES.get(key)
+    if base is None or not base.is_dir():
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+        base = Path(tempfile.mkdtemp(prefix=f"osg-disclosure-{digest}-")).resolve()
+        _PACKAGE_BASES[key] = base
+    return base
+
+
+def _sweep(now: float) -> None:
+    """Remove the stores of conversations that have stopped.
+
+    Runs when a new one is opened, which is the only moment the count can
+    grow, so nothing schedules anything and nothing runs on a quiet server.
+    """
+    for key in [k for k, seen in _TOUCHED.items() if now - seen > THREAD_ROOT_TTL_SECONDS]:
+        _forget(key)
+    if len(_ROOTS) >= MAX_LIVE_THREAD_ROOTS:
+        oldest = sorted(_TOUCHED, key=lambda k: _TOUCHED[k])
+        for key in oldest[: len(_ROOTS) - MAX_LIVE_THREAD_ROOTS + 1]:
+            _forget(key)
+
+
+def _forget(key: tuple[str, str]) -> None:
+    root = _ROOTS.pop(key, None)
+    _TOUCHED.pop(key, None)
+    if root is not None:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def _disclosure_root(package_dir: Any, *, project_skills: bool = False) -> Path:
     """A writable store the model is jailed inside, never the package itself.
 
     Rooting the backend at the package directory would have been shorter and
@@ -381,14 +479,67 @@ def _disclosure_root(package_dir: Any) -> Path:
     source tree, and the agent's own `read_file`/`grep` would be pointed at
     every file in the package rather than at the skills its prompt lists. A
     scratch root holds exactly what this seam put there.
+
+    Scoped to the calling conversation — see `_ROOTS`. Skills are projected
+    into each new store as it is opened, because isolation is of what the
+    *agent wrote* and never of what it was *given*: a read-only projection
+    absent from the second conversation's store would leave every path in the
+    disclosure prompt dangling, which is the same defect pointed backwards.
     """
-    key = str(package_dir or "")
+    package_key = str(package_dir or "")
+    key = (package_key, _scope_key())
     root = _ROOTS.get(key)
+    now = time.monotonic()
     if root is None or not root.is_dir():
-        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
-        root = Path(tempfile.mkdtemp(prefix=f"osg-disclosure-{digest}-"))
+        _sweep(now)
+        digest = hashlib.sha256(key[1].encode("utf-8")).hexdigest()[:12]
+        root = _package_base(package_key) / (digest if key[1] else "no-thread")
+        root.mkdir(parents=True, exist_ok=True)
+        # Resolved, because `FilesystemBackend` compares a resolved path
+        # against its root and `/var` is a symlink to `/private/var` on
+        # macOS — an unresolved root refuses every path under itself.
+        root = root.resolve()
         _ROOTS[key] = root
+        if project_skills:
+            _project_skills(package_dir, root)
+    _TOUCHED[key] = now
     return root
+
+
+class ThreadScopedBackend(FilesystemBackend):
+    """`FilesystemBackend` whose root is *this conversation's* store.
+
+    A subclass rather than a factory, and that is the installed library's
+    choice rather than ours: the docs show `create_deep_agent(backend=lambda
+    runtime: ...)` resolving a per-thread sandbox, but `deepagents==0.7.5`
+    raises `TypeError` on a callable backend — *"Backend factories were
+    removed in deepagents 0.7"*. Where the docs and the installed version
+    disagree, the installed version wins.
+
+    So the scoping goes where the state is. `FilesystemBackend` keeps exactly
+    one attribute that says where it reads and writes — `cwd` — and every
+    operation resolves through it, so a property is the whole of the change
+    and none of the library's path jailing is re-implemented or weakened.
+    """
+
+    def __init__(self, *, package_dir: Any, project_skills: bool) -> None:
+        self._package_dir = package_dir
+        self._project_skills = project_skills
+        super().__init__(root_dir=tempfile.gettempdir(), virtual_mode=True)
+
+    @property
+    def cwd(self) -> Path:  # type: ignore[override]
+        return _disclosure_root(
+            self._package_dir, project_skills=self._project_skills
+        )
+
+    @cwd.setter
+    def cwd(self, _value: Any) -> None:
+        """Swallow the base constructor's one assignment.
+
+        `FilesystemBackend.__init__` writes `self.cwd` from `root_dir`; there
+        is no root to fix here, because the answer depends on who is asking.
+        """
 
 
 def _disclosable(package_dir: Any) -> list[Any]:
@@ -435,6 +586,28 @@ def _skills_prompt_fixed_cost() -> int:
     return len(defaults.get("system_prompt") or "")
 
 
+def _worth_disclosing(package_dir: Any) -> list[Any]:
+    """The skills that will be projected — decided, never written.
+
+    Split from `_project_skills` by `launch-readiness/149`: the *decision*
+    belongs to the compiler, once, because it is what the prompt is built
+    from; the *copy* belongs to each conversation's store, because that is
+    where the paths in that prompt have to resolve.
+
+    Disclosure is only worth doing when it saves more than it costs. The
+    bodies leave the prompt; the library's instructions and one name +
+    description per skill arrive.
+    """
+    candidates = _disclosable(package_dir)
+    if not candidates:
+        return []
+    saved = sum(len(skill.body) for skill in candidates)
+    added = _skills_prompt_fixed_cost() + sum(
+        len(skill.name) + len(skill.description) for skill in candidates
+    )
+    return candidates if saved > added else []
+
+
 def _project_skills(package_dir: Any, root: Path) -> list[str]:
     """Project `<package>/skills/*.md` into `<root>/skills/<name>/SKILL.md`.
 
@@ -450,19 +623,9 @@ def _project_skills(package_dir: Any, root: Path) -> list[str]:
     only place anybody edits, and the copy is rebuilt from it, inside a
     scratch root nothing else reads.
     """
-    candidates = _disclosable(package_dir)
+    candidates = _worth_disclosing(package_dir)
     if not candidates:
         return []
-    # Disclosure is only worth doing when it saves more than it costs. The
-    # bodies leave the prompt; the library's instructions and one name +
-    # description per skill arrive.
-    saved = sum(len(skill.body) for skill in candidates)
-    added = _skills_prompt_fixed_cost() + sum(
-        len(skill.name) + len(skill.description) for skill in candidates
-    )
-    if saved <= added:
-        return []
-
     projected: list[str] = []
     target_root = root / "skills"
     if target_root.exists():
@@ -482,8 +645,11 @@ __all__ = [
     "DEFAULT_OFFLOAD_THRESHOLD_CHARS",
     "FILE_READ_TOOL_NAMES",
     "DeepTierDisclosure",
+    "MAX_LIVE_THREAD_ROOTS",
     "OffloadMiddleware",
     "SKILLS_VIRTUAL_ROOT",
+    "THREAD_ROOT_TTL_SECONDS",
+    "ThreadScopedBackend",
     "build_skills_middleware",
     "harness_preamble",
     "plan_disclosure",

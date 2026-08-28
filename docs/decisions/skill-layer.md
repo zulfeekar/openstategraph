@@ -127,6 +127,25 @@ filesystem is and that it is confined, that an offload pointer *is* the
 result, and that the files hold what tools returned rather than being a source
 of facts. `DeepAgentNode.__init__` composes it in.
 
+**One of those sentences was false for an hour, and that is why the store
+moved rather than the sentence** (`launch-readiness/149`). The text shipped
+saying the filesystem "is private to this run and confined to it". *Confined*
+was true; *private to this run* was not — the store was one root per package
+**per process**, so a long-lived server handed every run of that package the
+same writable scratch directory. It was measured, not reasoned about: three
+consecutive `cpl-mcp` runs of one question, and run 2 called no query tool at
+all and answered out of run 1's files. A locked sentence a package author
+cannot edit is the worst place for a false claim, which is this document's own
+argument for putting the contract here, so the fix had to make the sentence
+true rather than soften it. The store is now scoped to the **conversation** —
+`thread_id`, the only identifier the graph carries (on `langgraph 1.2.10` a
+node's `execution_info.run_id` is `None`), the key the checkpointer uses, and
+the value a resume must present. Per-run would have been narrower and would
+have broken resume: an offload pointer sitting in a resumed thread's
+transcript has to keep resolving. The preamble says "private to this
+conversation", and adds the one thing that then follows — a file may have been
+written earlier in this conversation, so it is what a tool returned *then*.
+
 It is **conditional**, on `surface_can_dereference` and nothing else — the same
 condition that decides whether those middlewares are contributed at all. A
 react-tier node, and a deep-tier node whose file tools read a store this seam

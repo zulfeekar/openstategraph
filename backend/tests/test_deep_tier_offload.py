@@ -43,7 +43,10 @@ def _skill_dir(tmp_path, name="greet", body="Full instructions go here.\n" * 50)
 
 def test_skill_body_absent_from_initial_prompt_but_name_and_description_present(tmp_path):
     virtual_root = _skill_dir(tmp_path)
-    mw = build_skills_middleware(root_dir=tmp_path, sources=[virtual_root])
+    mw = build_skills_middleware(
+        backend=FilesystemBackend(root_dir=tmp_path, virtual_mode=True),
+        sources=[virtual_root],
+    )
 
     # SkillsMiddleware renders its system-prompt fragment from discovered
     # metadata at construction — this is the progressive-disclosure claim
@@ -78,7 +81,10 @@ def _render_skills_list(mw) -> str:
 
 def test_skill_body_is_reachable_on_demand(tmp_path):
     virtual_root = _skill_dir(tmp_path, body="THE FULL BODY TEXT")
-    mw = build_skills_middleware(root_dir=tmp_path, sources=[virtual_root])
+    mw = build_skills_middleware(
+        backend=FilesystemBackend(root_dir=tmp_path, virtual_mode=True),
+        sources=[virtual_root],
+    )
     backend = mw._backend
     result = backend.read(f"{virtual_root}/greet/SKILL.md")
     assert result.error is None
@@ -196,7 +202,10 @@ def test_both_middlewares_land_in_their_reserved_slots(tmp_path):
     from openstategraph.abc.middleware import MiddlewareSlotTable
 
     root = _skill_dir(tmp_path)
-    skills_mw = build_skills_middleware(root_dir=tmp_path, sources=[str(root)])
+    skills_mw = build_skills_middleware(
+        backend=FilesystemBackend(root_dir=tmp_path, virtual_mode=True),
+        sources=[str(root)],
+    )
     backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
     offload_mw = OffloadMiddleware(backend=backend, tool_name_prefixes=("query.",))
 

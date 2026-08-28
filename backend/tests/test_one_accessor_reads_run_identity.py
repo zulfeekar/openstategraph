@@ -200,6 +200,10 @@ IDENTITY_LITERAL_SITES: dict[str, str] = {
     "api/streaming.py": "accessor-caller",
     "abc/narration.py": "accessor-caller",
     "abc/tool_notes.py": "accessor-caller",
+    # `launch-readiness/149`: the deep tier's store is scoped to the
+    # conversation, so this module reads `thread_id` — through the accessor,
+    # like the three above it.
+    "abc/deep_tier_offload.py": "accessor-caller",
     "api/schemas.py": "transport",
     "cli.py": "transport",
     "api/threads.py": "checkpoint",
@@ -219,6 +223,7 @@ ACCESSOR_CALLERS: tuple[str, ...] = (
     "prebuilt_session.py",
     "abc/narration.py",
     "abc/tool_notes.py",
+    "abc/deep_tier_offload.py",
 )
 
 
