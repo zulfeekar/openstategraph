@@ -436,3 +436,197 @@ class TestTheTableCoversOnlyVerifiedShapes:
         assert "views of the data" in (
             summarise_tool_result("mcp_list_lenses", _as_text(LIST_LENSES)) or ""
         )
+
+
+# ===================================================================== #
+# `launch-readiness/144` — the deep-agent harness's own file tools
+# ===================================================================== #
+#
+# Captured verbatim by driving `FilesystemMiddleware(...).tools` from the
+# installed `deepagents==0.7.5` against a real `FilesystemBackend`
+# (`virtual_mode=True`, the same one `abc/deep_tier_offload.py` builds), one
+# call per case, on 2026-08-28. `144` is explicit that these shapes must be
+# read rather than guessed — a guessed shape produces no line and looks
+# exactly like a tool with nothing to report.
+#
+# They carry paths on purpose, including the `/offload/…` shape
+# `launch-readiness/112` caught reaching a customer chat.
+
+LS = "['/a.txt', '/big.json', '/offload/', '/sub/']"
+LS_EMPTY = "No files found"
+LS_ERROR = "Error: Path '/nope': path_not_found"
+GLOB = "['/a.txt', '/sub/b.txt']"
+GLOB_NONE = "No files found"
+GREP_FILES = "/a.txt\n/sub/b.txt"
+GREP_COUNT = "/a.txt: 1\n/sub/b.txt: 10"
+GREP_CONTENT = "/a.txt:\n  3: alpha beta\n/sub/b.txt:\n  1: alpha\n  2: alpha"
+GREP_NONE = "No matches found"
+READ_SHORT = "1  hello\n2  world\n3  alpha beta"
+READ_PAGINATED = (
+    "  1  line 0\n100  line 99\n\n"
+    "[Read 100 lines (lines 1-100 of 250 total). 150 lines remaining from offset 100.]"
+)
+#: The one that matters most: `launch-readiness/102` writes a large tool
+#: result to a file and the agent reads it back. It is one very long line.
+READ_OFFLOADED = '1  {"ok": true, "request_id": "b375dd84", "data": {"lenses": ["cargoflow"]}}'
+READ_EMPTY = "1  System reminder: File exists but has empty contents"
+READ_MISSING = "Error: File '/nope.txt' not found"
+WRITE_OK = "Updated file /new.txt"
+EDIT_OK = "Successfully replaced 3 instance(s) of the string in '/m.txt'"
+
+HARNESS_CASES = (
+    ("ls", LS),
+    ("ls", LS_EMPTY),
+    ("ls", LS_ERROR),
+    ("glob", GLOB),
+    ("glob", GLOB_NONE),
+    ("grep", GREP_FILES),
+    ("grep", GREP_COUNT),
+    ("grep", GREP_CONTENT),
+    ("grep", GREP_NONE),
+    ("read_file", READ_SHORT),
+    ("read_file", READ_PAGINATED),
+    ("read_file", READ_OFFLOADED),
+    ("read_file", READ_EMPTY),
+    ("read_file", READ_MISSING),
+    ("write_file", WRITE_OK),
+    ("edit_file", EDIT_OK),
+)
+
+
+class TestTheHarnessFileToolsNowSayWhatTheyFound:
+    def test_every_one_of_them_has_a_finding(self) -> None:
+        # Before `144` all six were absent from the table, so each said what
+        # it was doing and then nothing — the most frequent line in a
+        # deep-tier panel, twelve times over, carrying no account.
+        for name, content in HARNESS_CASES:
+            assert summarise_tool_result(name, content) is not None, (name, content)
+
+    def test_a_read_says_how_many_lines_and_whether_that_is_the_file(self) -> None:
+        assert summarise_tool_result("read_file", READ_SHORT) == "Read 3 lines."
+        assert (
+            summarise_tool_result("read_file", READ_PAGINATED)
+            == "Read 100 of 250 lines in the file."
+        )
+
+    def test_an_offloaded_payload_read_back_is_not_called_one_line(self) -> None:
+        # `144`'s own warning, and the reason this entry needed a decision
+        # rather than a line count: `launch-readiness/102` offloads a large
+        # result to a file, so the read that matters most is a single 48,000
+        # character line. `"Read 1 line."` would be `143`'s `"1 result."`
+        # defect in a new place — a number that looks real and is not.
+        line = summarise_tool_result("read_file", READ_OFFLOADED)
+        assert line == "Read 73 characters on one line."
+        assert "1 line" not in (line or "")
+
+    def test_an_empty_file_is_not_a_one_line_file(self) -> None:
+        assert summarise_tool_result("read_file", READ_EMPTY) == "That file is empty."
+
+    def test_a_listing_counts_folders_as_folders(self) -> None:
+        assert summarise_tool_result("ls", LS) == "Found 4 files and folders."
+        assert summarise_tool_result("ls", LS_EMPTY) == "Nothing in that folder."
+        assert summarise_tool_result("glob", GLOB) == "Found 2 matching files."
+        assert summarise_tool_result("glob", GLOB_NONE) == "No matching files."
+
+    def test_a_search_counts_what_its_own_output_mode_actually_carries(self) -> None:
+        # Three output modes, and only two of them carry a match count at all.
+        # The third says what it knows and does not invent the other half.
+        assert summarise_tool_result("grep", GREP_FILES) == "Found matches in 2 files."
+        assert summarise_tool_result("grep", GREP_COUNT) == "Found 11 matches in 2 files."
+        assert summarise_tool_result("grep", GREP_CONTENT) == "Found 3 matches in 2 files."
+        assert summarise_tool_result("grep", GREP_NONE) == "No matches found."
+
+    def test_a_write_and_an_edit_report_what_they_did(self) -> None:
+        assert summarise_tool_result("write_file", WRITE_OK) == "Saved the file."
+        assert summarise_tool_result("edit_file", EDIT_OK) == "Changed 3 places in the file."
+
+    def test_a_refusal_no_longer_reads_exactly_like_a_success(self) -> None:
+        # The harness answers a refusal as `"Error: …"` prose, never
+        # `{"ok": false}`. Both used to produce no line at all.
+        assert summarise_tool_result("read_file", READ_MISSING) == "That did not work."
+        assert summarise_tool_result("ls", LS_ERROR) == "That did not work."
+
+    def test_a_subagent_report_stays_absent_because_nothing_in_it_is_countable(self) -> None:
+        # `144`'s own rule, and the honest half of it: `task` returns free
+        # prose. A shape that cannot be counted honestly stays out of the
+        # table rather than being approximated.
+        assert "task" not in FINDING_TOOL_NAMES
+        assert summarise_tool_result("task", "I looked into it and here is what I think.") is None
+
+
+class TestNoPathFromTheHarnessIsEverSpoken:
+    """The rule `144` asked for, stated as tests rather than as a paragraph.
+
+    A path is speakable when a **person** authored it as a name — the reader's
+    own words, a repository file a developer asked about, or a document
+    published under a name its author chose (`mcp_skill_read`'s
+    `cargoflow/SKILL.md`, which `tool_sentences.py` does speak). It is not
+    speakable when the machinery minted it. The harness fails that test for a
+    sharper reason than "internal": **one tool reads both kinds** — the same
+    `read_file` fetches a published skill and an offload envelope — so the
+    discrimination would have to be a guess about a prefix.
+    """
+
+    def test_not_one_harness_finding_contains_a_path(self) -> None:
+        for name, content in HARNESS_CASES:
+            line = summarise_tool_result(name, content) or ""
+            assert "/" not in line, (name, line)
+            assert ".txt" not in line, (name, line)
+
+    def test_the_offload_path_112_caught_live_cannot_recur_through_a_read(self) -> None:
+        hostile = (
+            "['/offload/mcp_list_lenses/call_eeR8/3LoOli2BeA5Cqk4p6ik.txt', "
+            "'http://localhost:8080/mcp/']"
+        )
+        for tool in ("ls", "glob"):
+            line = summarise_tool_result(tool, hostile) or ""
+            assert "/offload/" not in line
+            assert "http" not in line
+        assert summarise_tool_result("ls", hostile) == "Found 2 files and folders."
+
+    def test_a_files_own_contents_never_cross(self) -> None:
+        secret = "1  api_key = sk-not-a-real-key\n2  password = hunter2"
+        line = summarise_tool_result("read_file", secret) or ""
+        assert "sk-" not in line and "hunter2" not in line
+        assert line == "Read 2 lines."
+
+    def test_stripping_the_digits_leaves_a_published_shape_here_too(self) -> None:
+        from openstategraph.abc.tool_findings import SENTENCE_SHAPES
+
+        for name, content in HARNESS_CASES:
+            line = summarise_tool_result(name, content)
+            assert line
+            skeleton = re.sub(r"\d+", "#", line)
+            assert skeleton in SENTENCE_SHAPES, (name, skeleton)
+
+
+class TestTheHarnessReaderIsToleranAndStillStrict:
+    def test_a_shape_it_cannot_parse_costs_the_line_and_nothing_else(self) -> None:
+        assert summarise_tool_result("ls", "something else entirely") is None
+        assert summarise_tool_result("read_file", "no line numbers here") is None
+        assert summarise_tool_result("write_file", "who knows") is None
+        assert summarise_tool_result("edit_file", "who knows") is None
+
+    def test_a_result_arriving_as_content_blocks_reads_the_same(self) -> None:
+        # The shape an MCP boundary produces, and the one `143` found live.
+        assert summarise_tool_result("read_file", [{"type": "text", "text": READ_SHORT}]) == (
+            "Read 3 lines."
+        )
+
+    def test_a_truncated_listing_says_it_is_a_prefix(self) -> None:
+        # Both of the library's own markers, read off `deepagents==0.7.5`.
+        note = (
+            "Note: the search stopped early because it hit its time limit. The paths above are "
+            "valid but incomplete."
+        )
+        assert summarise_tool_result("glob", f"['/a.txt', '/b.txt']\n\n{note}") == (
+            "Found the first 2 matching files of a longer list."
+        )
+        guidance = "... [results truncated, try being more specific with your parameters]"
+        assert summarise_tool_result("ls", f"['/a.txt', '/b.txt', {guidance!r}]") == (
+            "Found the first 2 files and folders of a longer list."
+        )
+
+    def test_a_search_that_errored_part_way_reports_the_failure_not_a_count(self) -> None:
+        partial = "Path unreadable\n\nPartial matches:\n/a.txt"
+        assert summarise_tool_result("grep", partial) == "That did not work."

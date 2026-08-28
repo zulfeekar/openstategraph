@@ -43,10 +43,16 @@ from tests.test_tool_findings import (  # noqa: E402
     CANONICAL_MISS,
     EXECUTE_SQL,
     EXECUTE_SQL_FAILED,
+    GREP_COUNT,
     INTERNALS,
     LIST_LENSES,
+    LS,
+    READ_MISSING,
+    READ_OFFLOADED,
+    READ_SHORT,
     SEARCH_TABLES,
     SKILL_GREP,
+    WRITE_OK,
 )
 
 KNOWN = {"agent1": "agent-1", "in1": "in1"}
@@ -125,6 +131,53 @@ def _customer_frames(chunks: list[dict[str, Any]]) -> list[tuple[str, Any]]:
         name = frame.split("\n")[0][len("event: ") :]
         out.append((name, json.loads(frame.split("\n")[1][len("data: ") :])))
     return out
+
+
+def _narrate_text(tool_name: str, content: str) -> list[dict[str, Any]]:
+    """`_narrate`, for a tool whose result is prose rather than an envelope.
+
+    `launch-readiness/144`. The deep-agent harness's own file tools answer
+    with plain text carrying a path — `"Updated file /new.txt"`, a listing
+    that is nothing *but* paths — so they need following to the customer for
+    the same reason `143`'s findings did: `112`'s two leaks were both composed
+    correctly and caught in a browser.
+    """
+    middleware = build_narration_middleware()
+    request = ToolCallRequest(
+        tool_call={
+            "name": tool_name,
+            "args": {"file_path": "/offload/mcp_list_lenses/call_eeR8/3LoOli2.txt"},
+            "id": "call_abc123",
+        },
+        tool=None,
+        state={},
+        runtime=None,
+    )
+    result = ToolMessage(content=content, tool_call_id="call_abc123")
+
+    def handler(_req: ToolCallRequest) -> ToolMessage:
+        return result
+
+    def node(state: _State, runtime=None):
+        middleware.wrap_tool_call(request, handler)
+        return {"step": 1}
+
+    graph = (
+        StateGraph(_State)
+        .add_node("agent1", node)
+        .add_edge(START, "agent1")
+        .add_edge("agent1", END)
+        .compile()
+    )
+    return list(graph.stream({"step": 0}, stream_mode="custom"))
+
+
+def _customer_lines_for_text(tool_name: str, content: str) -> list[str]:
+    return [
+        data["message"]
+        for event, data in _customer_frames(_narrate_text(tool_name, content))
+        if event == "progress"
+    ]
 
 
 def _customer_lines(tool_name: str, payload: dict[str, Any]) -> list[str]:
@@ -228,3 +281,51 @@ class TestNothingInternalCrossesToACustomer:
             if f.startswith("event: progress")
         ]
         assert developer == _customer_lines("mcp_execute_sql", EXECUTE_SQL)
+
+
+HARNESS_CASES = (
+    ("read_file", READ_SHORT),
+    ("read_file", READ_OFFLOADED),
+    ("read_file", READ_MISSING),
+    ("ls", LS),
+    ("grep", GREP_COUNT),
+    ("write_file", WRITE_OK),
+)
+
+
+class TestTheHarnessFileToolsReachTheCustomerToo:
+    """`launch-readiness/144`, followed to the same place `143` was.
+
+    These are the most frequent lines on a deep-tier run, and every one of
+    their results is *made of paths*. `144`'s scope note is that a path is not
+    automatically safe to speak; this is where that stops being a claim.
+    """
+
+    def test_a_customer_sees_what_the_read_found(self) -> None:
+        assert _customer_lines_for_text("read_file", READ_SHORT)[-1] == "Read 3 lines."
+
+    def test_a_failed_read_is_no_longer_indistinguishable_from_silence(self) -> None:
+        assert _customer_lines_for_text("read_file", READ_MISSING)[-1] == "That did not work."
+
+    def test_every_harness_call_now_carries_an_account_of_itself(self) -> None:
+        # Two lines: what it is doing, then what it found. Before `144` the
+        # second one did not exist for any of these.
+        for name, content in HARNESS_CASES:
+            assert len(_customer_lines_for_text(name, content)) == 2, name
+
+    def test_no_path_reaches_the_customer_from_either_line(self) -> None:
+        # The argument is an `/offload/` path on every one of these calls —
+        # the exact string `launch-readiness/112` caught in a customer chat.
+        # Neither the before-line (which declares no argument for these tools)
+        # nor the finding may show it.
+        for name, content in HARNESS_CASES:
+            for line in _customer_lines_for_text(name, content):
+                assert "/offload/" not in line, (name, line)
+                assert ".txt" not in line, (name, line)
+                assert "3LoOli2" not in line, (name, line)
+
+    def test_a_files_own_contents_never_reach_the_customer(self) -> None:
+        secret = "1  api_key = sk-not-a-real-key\n2  password = hunter2"
+        for line in _customer_lines_for_text("read_file", secret):
+            assert "sk-" not in line
+            assert "hunter2" not in line
