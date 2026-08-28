@@ -84,6 +84,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 from openstategraph.abc.tool_findings import result_envelope
 from openstategraph.abc.tool_notes import (
+    Correction,
     ToolFailure,
     ToolNote,
     notes_for_model,
@@ -627,6 +628,22 @@ _NOTES_KEY = "notes"
 _NOTE_KINDS = frozenset({"next_step", "substitution", "source_choice"})
 
 
+def _envelopes(content: Any, artifact: Any) -> list[Any]:
+    """Both places an MCP result can carry an envelope, read once.
+
+    The text and the structured content, because a server may use either and
+    `157` already had to read both. Split out so `_unretryable_note` reads
+    exactly what `_declared_notes` reads — two spellings of "where the
+    envelope is" would drift the first time a third carrier appeared.
+    """
+    envelopes: list[Any] = [result_envelope(content)]
+    if isinstance(artifact, Mapping):
+        structured = artifact.get("structured_content")
+        if isinstance(structured, Mapping):
+            envelopes.append(dict(structured))
+    return envelopes
+
+
 def _declared_notes(content: Any, artifact: Any) -> tuple[ToolNote, ...]:
     """The notes an MCP server declared about this call, believed or dropped.
 
@@ -659,11 +676,7 @@ def _declared_notes(content: Any, artifact: Any) -> tuple[ToolNote, ...]:
     A payload this cannot parse costs nothing: no notes, and the result travels
     on untouched.
     """
-    envelopes = [result_envelope(content)]
-    if isinstance(artifact, Mapping):
-        structured = artifact.get("structured_content")
-        if isinstance(structured, Mapping):
-            envelopes.append(dict(structured))
+    envelopes = _envelopes(content, artifact)
 
     found: list[ToolNote] = []
     for envelope in envelopes:
@@ -677,6 +690,77 @@ def _declared_notes(content: Any, artifact: Any) -> tuple[ToolNote, ...]:
             if note is not None:
                 found.append(note)
     return tuple(found)
+
+
+#: What a server says when it has already decided a repeat will not help.
+#:
+#: `launch-readiness/164`. **Not an MCP convention** — the protocol's only
+#: failure signal is `isError` on the result, and it says nothing about
+#: repeating the call — so this is one server's own envelope field, read here
+#: at the seam where a stranger's envelope arrives, and nowhere else.
+_RETRYABLE_KEY = "retryable"
+
+#: The corrective a `retryable: false` becomes, in our words rather than the
+#: server's.
+#:
+#: Ours because the server did not author a sentence: it set a boolean, and
+#: turning a boolean into an instruction is composition, not quotation. The
+#: service's own message is already in the content the model is handed
+#: (`launch-readiness/156`), so this adds the one thing the payload does not
+#: say out loud — *do not simply do that again*.
+#:
+#: It never names the tool, on `abc/narration.py`'s standing rule, and it is a
+#: `Correction`, so it reaches the model and never a reader.
+_UNRETRYABLE_TEXT = (
+    "The service reported this call as not retryable: making the same call again "
+    "will fail the same way. Change the approach — different arguments, a "
+    "different capability, or read the guidance this service publishes — or say "
+    "what is missing and stop."
+)
+
+
+def _unretryable_note(envelopes: list[Any]) -> tuple[ToolNote, ...]:
+    """A corrective for a failure the server itself called unrepeatable.
+
+    `launch-readiness/164`. Every CPL MCP failure carries `"retryable": false`
+    and nothing read it, while `117`'s whole argument is that a tool result
+    should say what to do next **and something should read it**. Here the
+    server was already sending the corrective in a structured field and it was
+    dropped on the floor.
+
+    **How this is not the inference `157` refused.** That rule is about domain
+    claims: a `Substitution` derived from `entities[].value` would put one
+    package's vocabulary into the platform, because that field looks exactly
+    like a dozen fields meaning something else. This derives no domain claim
+    at all. `ok` and `retryable` are two booleans about **this call**, `ok` is
+    already the key `tool_findings` reads to know a call failed, and the only
+    thing composed from them is *do not repeat it unchanged* — which is what
+    the word means in every dialect that has it.
+
+    The strict half is the gate, and it is narrow on purpose:
+
+    - both must be **real booleans**. A server that answers `"false"`, `0` or
+      `"no"` has said something this build will not guess at, and a result set
+      with a `retryable` column is ordinary data left alone;
+    - `ok` must be `False`. `retryable` on a *successful* call is not a
+      failure and is none of our business;
+    - a server that declares its own notes still wins nothing away and loses
+      nothing: this is one more note beside them, not instead of them.
+
+    **What this is not a fix for.** Graph-level retry never fired on a tool
+    failure and never could — `retry_policy` re-runs a node that *raised*, and
+    a tool returning a failure envelope returns normally
+    (`tests/test_a_tool_failure_is_not_a_node_failure.py` pins it). The thing
+    that repeats an unretryable call is the model, so the corrective goes on
+    the model rail, which is also the only rail `117` ever claimed.
+    """
+    for envelope in envelopes:
+        if not isinstance(envelope, Mapping):
+            continue
+        retryable = envelope.get(_RETRYABLE_KEY)
+        if envelope.get("ok") is False and retryable is False:
+            return (Correction(text=_UNRETRYABLE_TEXT),)
+    return ()
 
 
 def _believable(entry: Any) -> ToolNote | None:
@@ -717,7 +801,10 @@ def _with_declared_notes(result: Any) -> Any:
     else:
         content, artifact = result
 
-    notes = _declared_notes(content, artifact)
+    # Declared first, ours after: a server that authored its own corrective
+    # gets the last word before this one, and a reader of the appended block
+    # meets the tool's sentence before the platform's.
+    notes = _declared_notes(content, artifact) + _unretryable_note(_envelopes(content, artifact))
     if not notes:
         return result
 

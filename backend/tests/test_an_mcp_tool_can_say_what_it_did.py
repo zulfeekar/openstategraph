@@ -351,3 +351,138 @@ class TestTheAwaitablePathIsUnchanged:
 
         asyncio.run(wrapped.coroutine(place="Mongstad"))
         assert take_notes(THREAD), "the awaitable door recorded nothing"
+
+
+class TestACallTheServerCalledUnretryable:
+    """`launch-readiness/164`, at the seam `157` built.
+
+    Every CPL MCP failure carries `"retryable": false` and nothing read it,
+    while `117`'s whole argument is that a tool result should say what to do
+    next **and something should read it**. The corrective was already being
+    sent, in a structured field, and was dropped on the floor.
+
+    It reaches the **model** rail and only that one, because the model is what
+    repeats the call: `tests/test_a_tool_failure_is_not_a_node_failure.py`
+    proves graph-level `retry_policy` never fired on a tool failure and could
+    not have.
+    """
+
+    def test_the_corrective_reaches_the_model_in_the_same_message(
+        self, tmp_path: Path, remote
+    ) -> None:
+        remote(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error_code": "internal_error",
+                    "message": "Invalid column name 'loading_time'. (207)",
+                    "retryable": False,
+                }
+            )
+        )
+
+        _, model = _run(tmp_path, None)
+
+        assert "not retryable" in model.tool_messages()
+
+    def test_the_failure_itself_is_still_delivered_whole(self, tmp_path: Path, remote) -> None:
+        # `156` made the service's own message readable to the model. The
+        # corrective is appended beside it, never in place of it.
+        remote(json.dumps({"ok": False, "message": "boom", "retryable": False}))
+
+        _, model = _run(tmp_path, None)
+
+        assert '"boom"' in model.tool_messages()
+
+    def test_it_never_reaches_the_reader(self, tmp_path: Path, remote) -> None:
+        # A `Correction` is addressed to the model. Putting a tool's
+        # instruction to itself in front of a person is the scratchpad leak
+        # `abc/narration.py` closed.
+        remote(json.dumps({"ok": False, "message": "boom", "retryable": False}))
+
+        answer, _ = _run(tmp_path, None)
+
+        assert answer == ANSWER
+
+    def test_a_failure_the_server_says_is_worth_repeating_gets_no_corrective(
+        self, tmp_path: Path, remote
+    ) -> None:
+        remote(json.dumps({"ok": False, "message": "timed out", "retryable": True}))
+
+        _, model = _run(tmp_path, None)
+
+        assert "not retryable" not in model.tool_messages()
+
+    def test_a_failure_that_says_nothing_about_repeating_gets_no_corrective(
+        self, tmp_path: Path, remote
+    ) -> None:
+        # Silence is not consent in either direction: a server that never
+        # heard of the field has made no claim, and we invent none.
+        remote(json.dumps({"ok": False, "message": "boom"}))
+
+        _, model = _run(tmp_path, None)
+
+        assert "not retryable" not in model.tool_messages()
+
+    def test_retryable_on_a_successful_call_is_none_of_our_business(
+        self, tmp_path: Path, remote
+    ) -> None:
+        remote(json.dumps({"ok": True, "value": "Mongstad [NO]", "retryable": False}))
+
+        _, model = _run(tmp_path, None)
+
+        assert "not retryable" not in model.tool_messages()
+
+    def test_a_data_column_called_retryable_is_not_a_claim(self, tmp_path: Path, remote) -> None:
+        """The widening test. This product prints JSON as prose constantly,
+        and a result set with a `retryable` column is ordinary data."""
+        remote(
+            json.dumps(
+                {
+                    "ok": True,
+                    "rows": [{"job": "load", "retryable": False}],
+                    "retryable": "false",
+                }
+            )
+        )
+
+        _, model = _run(tmp_path, None)
+
+        assert "not retryable" not in model.tool_messages()
+
+    def test_the_word_false_spelled_as_a_string_says_nothing(
+        self, tmp_path: Path, remote
+    ) -> None:
+        # Strict in trusting: a real boolean or nothing. `"false"`, `0` and
+        # `"no"` are three guesses this build refuses to make.
+        for spelling in ("false", 0, "no"):
+            remote(json.dumps({"ok": False, "message": "boom", "retryable": spelling}))
+
+            _, model = _run(tmp_path / str(spelling), None)
+
+            assert "not retryable" not in model.tool_messages(), spelling
+
+    def test_it_travels_in_the_structured_content_too(self, tmp_path: Path, remote) -> None:
+        remote("the call failed", {"structured_content": {"ok": False, "retryable": False}})
+
+        _, model = _run(tmp_path, None)
+
+        assert "not retryable" in model.tool_messages()
+
+    def test_a_server_that_declared_its_own_corrective_keeps_it(
+        self, tmp_path: Path, remote
+    ) -> None:
+        remote(
+            json.dumps(
+                {
+                    "ok": False,
+                    "retryable": False,
+                    "notes": [{"kind": "next_step", "text": "Read _cross_cutting/JOINS.md."}],
+                }
+            )
+        )
+
+        _, model = _run(tmp_path, None)
+
+        assert "Read _cross_cutting/JOINS.md." in model.tool_messages()
+        assert "not retryable" in model.tool_messages()
