@@ -53,9 +53,14 @@ blocking call. *Stop means stop* still requires the async door.
 `compile/node_doors.py` stays exactly as it is, and is still needed: a `def`
 body is untouched, and a caller holding the escape hatch may still call
 `compiled.invoke(...)` directly. That caller keeps the old per-node-call
-loop, and therefore keeps this defect — `async-first/13` carries the argument
-for why the escape hatch is a narrower promise than a door, and the three
-shapes a fix there could take.
+loop, and therefore keeps this defect. `async-first/13` settled what to do
+about it: **the loop stays, and the failure learns to name the fix.** A
+run-scoped loop for the node door was rejected a second time on a measurement
+— a node body has no `run_id`, `checkpoint_ns` is per node, `thread_id` is the
+conversation rather than the run, and no signal at all says a run has *ended*,
+so there is still no owner — and refusing at compile time was rejected because
+more than one migrated body is not a predicate for failure. See `_WRONG_DOOR`
+in `compile/node_doors.py`.
 
 **One seam, not four call sites.** Four doors that each had to remember two
 calls is the defect `api/diagram.py` was created to end for Mermaid, with a

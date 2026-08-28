@@ -245,7 +245,9 @@ graph = workflow.graph      # a plain compiled LangGraph StateGraph
   client does not survive (`RuntimeError: Event loop is closed`). Every door
   this project ships — `openstategraph run`, `POST /api/runs`, the MCP
   server, `workflow.ask()` — already drives the async side for you, so this
-  is only about driving `.graph` yourself.
+  is only about driving `.graph` yourself. If you hit it anyway, the
+  exception says this rather than naming a closed loop; the graph is still
+  unwrapped, and nothing that works today is refused.
 - **`workflow.json` is documented, versioned and migrated**, and it is yours —
   it lives in your repository, not in a database we control.
 - **`.warnings` tells you what did not wire**, so a degraded workflow is a

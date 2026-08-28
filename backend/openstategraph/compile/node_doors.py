@@ -92,6 +92,41 @@ __all__ = [
 INTERRUPTIBLE = "__openstategraph_interruptible__"
 
 
+#: The message `asyncio` raises when a resource outlives the loop that made it.
+#: Matched as a substring because it arrives wrapped — LangGraph appends
+#: ``During task with name '<node>'`` — and because the raiser is
+#: `asyncio.base_events`, not a library whose exception type we could catch.
+_CLOSED_LOOP = "Event loop is closed"
+
+#: What that failure means when it comes out of the sync door, and the one
+#: thing a reader can act on (`async-first/13`).
+#:
+#: **A diagnosis, raised at the failure rather than refused at compile.** The
+#: ticket's second shape was to detect at build time — the compiler knows how
+#: many `INTERRUPTIBLE` nodes a graph has — and that is wrong, because more
+#: than one migrated body is not a predicate for failure: two `async def`
+#: nodes with nothing loop-bound in them run through `.invoke()` perfectly
+#: well, and so does a pair sharing a pooled `httpx.AsyncClient`. Refusing
+#: them would refuse working code, and `CompiledWorkflow.graph` is documented
+#: as unwrapped precisely because wrapping it is where the execution engine
+#: this project refuses to write would begin. So nothing that works stops
+#: working; only the run that was already dead learns to say which door.
+#:
+#: It is chained (`raise ... from exc`), never substituted. A diagnosis is a
+#: guess about somebody else's traceback, and the day a body raises this for a
+#: reason of its own, `__cause__` is what says so.
+_WRONG_DOOR = (
+    "This graph has an async node body and was driven through LangGraph's "
+    "synchronous API, which gives one event loop per node call — a connection "
+    "pool, a model client's transport, or anything else a body leaves bound to "
+    "the first loop does not survive the second. Drive the compiled graph with "
+    "`ainvoke` / `astream` instead, or use a door this package ships "
+    "(`workflow.ask(...)`, `openstategraph run`, `POST /api/runs`), which run "
+    "one loop for the whole run. See 'The escape hatches' in "
+    "docs/what-is-this.md."
+)
+
+
 def both_doors(body: Callable[..., Any]) -> Any:
     """`body`, presented to LangGraph with a sync door as well as an async one.
 
@@ -112,7 +147,9 @@ def both_doors(body: Callable[..., Any]) -> Any:
         # which is the scope that actually has an owner. What still comes
         # here is a caller holding the escape hatch and calling
         # `compiled.invoke(...)` itself, and a graph LangGraph drives
-        # synchronously for its own reasons.
+        # synchronously for its own reasons. `async-first/13` decided to keep
+        # it that way and diagnose instead — see `_WRONG_DOOR` above for the
+        # argument, and for the two shapes that were rejected.
         #
         # `asyncio.run` and not a shared loop, deliberately. A sync door is
         # reached from a thread with no loop running — a FastAPI threadpool
@@ -124,7 +161,12 @@ def both_doors(body: Callable[..., Any]) -> Any:
         # `tests/test_a_migrated_node_still_answers_the_sync_door.py`, because
         # a lost writer is a blank panel with a green suite
         # (`launch-readiness/110`).
-        return asyncio.run(body(*args, **kwargs))
+        try:
+            return asyncio.run(body(*args, **kwargs))
+        except RuntimeError as exc:
+            if _CLOSED_LOOP not in str(exc):
+                raise
+            raise RuntimeError(_WRONG_DOOR) from exc
 
     pair = RunnableCallable(
         through_a_private_loop, body, name=getattr(body, "__name__", None)
