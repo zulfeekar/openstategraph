@@ -439,6 +439,102 @@ backend — which is why the flat `discover_skills` concatenation stays the
 correct default everywhere else rather than being a fallback anybody switches
 on.
 
+---
+
+## The pointer is deferred, not immediate (2026-08-28, `launch-readiness/162`)
+
+`102` built the offload as a substitution in `wrap_tool_call`: a result over
+`threshold_chars` was replaced with its pointer **on arrival**. Against a
+single-server MCP node the prefix filter is the whole surface, so the
+substitution was effectively unconditional — and a result replaced on arrival
+is a result the model never sees once.
+
+Measured live on `cpl-mcp`, 2026-08-28:
+
+```
+mcp_describe_lens_tables("cargoflow")   14,101 chars   -> pointer
+mcp_skill_read("cargoflow/SKILL.md")    18,856 chars   -> pointer
+mcp_resolve_lens(question=...)           3,037 chars   -> in band
+```
+
+The two calls carrying column names became pointers and the one routing the
+lens did not, so the agent held the right lens and had never seen a column. It
+wrote `loading_time`; the column is `load_date`. A trace closes it: three
+queries on imagined date columns, six paged `read_file`s down the offload file,
+`load_date` at line 211, and the next query correct.
+
+### The distinction, and why it is not the one the ticket expected
+
+> A column list is not a large *result*. It is the *contract for writing the
+> next call*.
+
+That is true, and it is not implementable, because **nothing on the MCP wire
+says which a result is**. The three candidates on the ticket all classify the
+*content*:
+
+1. **A per-node exemption list** — a setting somebody has to find, which `111`
+   argued against for this exact middleware, and which leaves every package
+   whose author has not yet watched an agent invent a column name broken.
+2. **A declared note** — right in principle, and `157` built the rails for it.
+   But nothing declares it today and CPL's server does not, so it fixes zero
+   live packages and leaves every undeclared server — which is all of them —
+   on the unsafe side.
+3. **Content-shaped** — refused. `157` refused to read `entities[].value` out
+   of a payload for the same reason: it would put one package's vocabulary into
+   the platform.
+
+**So the platform classifies the *moment* instead, which is the one thing it
+knows for certain.**
+
+> A pointer is a fine way to see something again. It is never an acceptable
+> way to see it for the first time.
+
+Every tool result now arrives whole, exactly once. The file is still written at
+arrival — so the path is live from the first turn — and the substitution moves
+to `before_model`, which collapses any eligible `ToolMessage` sitting *before*
+the last `AIMessage` in the transcript. Position is the test, and it is exact
+rather than heuristic: a result after the last `AIMessage` is one the current
+turn produced and the model has never replied from; one before it has already
+been in a window the model answered from.
+
+What this keeps:
+
+- **`102` in full.** The transcript still cannot grow without bound; a large
+  result occupies the window for one model call and then leaves it. Genuine
+  data results are offloaded exactly as before, one turn later. The only cost
+  is that peak window is one turn's large results higher, which is the price of
+  the model being able to act at all.
+- **The safe side, with nothing to declare.** No server, package author or
+  setting has to be found for a first sight to arrive whole. Failure is safe in
+  both directions too: only a *recorded* write earns a pointer, so a result
+  whose file could not be written is never collapsed, and a run resumed in a
+  fresh process has an empty record and keeps its transcript whole rather than
+  carrying a pointer into a store that no longer exists.
+- **`143`'s narration, for free.** The finding line is read off the envelope in
+  the `narration` slot, which nests inside `filesystem`; the envelope is no
+  longer rewritten underneath it, so "Found 5 tables." is now said about tables
+  that actually arrived.
+
+`SLOT_ORDER` needed no change and that is load-bearing: `filesystem` already
+sits before `summarization`, and `before_*` hooks run first to last, so the
+summarizer sees the collapsed transcript. The collapse is returned as a
+`messages` state update rather than a request override, because `add_messages`
+replaces by id — so the saved checkpoint, the summarizer's input and the
+model's window all tell one story.
+
+Live A/B on a deep tier over MCP with **no package-level exemption**, the
+owner's question, `openai/gpt-4o-mini`, failed `mcp_execute_sql` calls per run:
+
+```
+arrival-time pointer (before)   7, 5, 11, and one run that produced no answer
+                                an invented column name in every run that ran
+deferred pointer (after)        0, 5, 0, 0, 2, 0, 0, 8   over eight runs
+                                one invented column name in eight, in the one
+                                run that never called mcp_describe_lens_tables
+```
+
+Every run that called `mcp_describe_lens_tables` received the schema in band.
+
 ### Three things the wiring found by measuring rather than assuming
 
 - **`SkillsMiddleware` reads `<source>/<name>/SKILL.md` directories; this

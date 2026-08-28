@@ -19,7 +19,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from deepagents.backends import FilesystemBackend
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 from openstategraph.abc.agent import AbstractAgentNode
 from openstategraph.abc.deep_tier_offload import (
@@ -95,7 +95,14 @@ def _request(tool_name="query.run", call_id="call-1"):
     return SimpleNamespace(tool_call={"name": tool_name, "id": call_id})
 
 
-def test_large_tool_result_above_threshold_is_offloaded(tmp_path):
+def test_large_tool_result_above_threshold_is_written_but_arrives_whole(tmp_path):
+    """`launch-readiness/162`: the file is written now, the pointer comes later.
+
+    Arrival is the one turn the model can act on the result, so the
+    substitution the ticket was filed against does not happen here. What does
+    happen here is the write, so the path a later pointer names is already
+    live.
+    """
     backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
     mw = OffloadMiddleware(
         backend=backend, tool_name_prefixes=("query.",), threshold_chars=100
@@ -103,14 +110,51 @@ def test_large_tool_result_above_threshold_is_offloaded(tmp_path):
     big = ToolMessage(content="x" * 500, tool_call_id="call-1")
     result = mw.wrap_tool_call(_request(), lambda req: big)
 
-    assert result is not big
-    assert "offloaded" in result.text
-    assert "call-1" in result.text
-    # And the content really landed on the backend, retrievable by path.
-    written_path = result.text.split("path='", 1)[1].split("'", 1)[0]
-    read_back = backend.read(written_path)
+    assert result is big
+    assert result.text == "x" * 500
+    read_back = backend.read("/offload/query.run/call-1.txt")
     assert read_back.error is None
     assert read_back.file_data["content"] == "x" * 500
+
+
+def test_it_becomes_a_pointer_once_the_model_has_answered_on_it(tmp_path):
+    """And only then: position in the transcript is the whole test."""
+    backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+    mw = OffloadMiddleware(
+        backend=backend, tool_name_prefixes=("query.",), threshold_chars=100
+    )
+    big = ToolMessage(content="x" * 500, tool_call_id="call-1", id="m-2")
+    mw.wrap_tool_call(_request(), lambda req: big)
+
+    fresh = [AIMessage(content="", id="m-1"), big]
+    assert mw.before_model({"messages": fresh}, None) is None
+
+    answered = [*fresh, AIMessage(content="I read it.", id="m-3")]
+    update = mw.before_model({"messages": answered}, None)
+
+    assert update is not None
+    (collapsed,) = update["messages"]
+    assert collapsed.id == "m-2"
+    assert collapsed.content.startswith("[offloaded: 500 chars")
+    assert "/offload/query.run/call-1.txt" in collapsed.content
+    # Idempotent: a second pass has nothing left to say about it.
+    assert mw.before_model({"messages": [collapsed, AIMessage(content="ok")]}, None) is None
+
+
+def test_a_result_whose_write_failed_is_never_collapsed(tmp_path, monkeypatch):
+    """Only a recorded write earns a pointer — the safe side of the failure."""
+    backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+    monkeypatch.setattr(
+        backend, "write", lambda *a, **k: SimpleNamespace(error="disk full")
+    )
+    mw = OffloadMiddleware(
+        backend=backend, tool_name_prefixes=("query.",), threshold_chars=100
+    )
+    big = ToolMessage(content="x" * 500, tool_call_id="call-1", id="m-2")
+    mw.wrap_tool_call(_request(), lambda req: big)
+
+    answered = [AIMessage(content="", id="m-1"), big, AIMessage(content="read", id="m-3")]
+    assert mw.before_model({"messages": answered}, None) is None
 
 
 def test_small_tool_result_below_threshold_is_left_inline(tmp_path):
@@ -233,17 +277,23 @@ def test_the_async_path_offloads_the_same_way(tmp_path):
     mw = OffloadMiddleware(
         backend=backend, tool_name_prefixes=("query.",), threshold_chars=100
     )
-    big = ToolMessage(content="y" * 500, tool_call_id="call-1")
+    big = ToolMessage(content="y" * 500, tool_call_id="call-1", id="m-2")
 
     async def handler(_req):
         return big
 
     result = asyncio.run(mw.awrap_tool_call(_request(), handler))
 
-    assert result is not big
-    assert "offloaded" in result.text
-    written_path = result.text.split("path='", 1)[1].split("'", 1)[0]
-    assert backend.read(written_path).file_data["content"] == "y" * 500
+    assert result is big
+    assert backend.read("/offload/query.run/call-1.txt").file_data["content"] == "y" * 500
+
+    # And `abefore_model` collapses it on the same rule the sync hook does —
+    # the hook whose library default is a silent no-op rather than a raise, so
+    # an async run missing it would come back as unbounded growth, not an error.
+    answered = [AIMessage(content="", id="m-1"), big, AIMessage(content="read", id="m-3")]
+    update = asyncio.run(mw.abefore_model({"messages": answered}, None))
+    assert update is not None
+    assert update["messages"][0].content.startswith("[offloaded: 500 chars")
 
 
 def test_the_async_path_leaves_a_small_result_inline(tmp_path):

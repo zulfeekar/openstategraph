@@ -302,7 +302,15 @@ def query_rows(sql: str) -> str:
 
 
 class OffloadRetriever(Recorder):
-    """Calls a big tool, then follows the pointer instead of re-calling it."""
+    """Sees the rows whole, works on, then follows the pointer they became.
+
+    Rewritten for `launch-readiness/162`. It used to look for a pointer on the
+    turn the result arrived, which is the defect that ticket is about: the
+    first sight is now the rows themselves, and the pointer appears on the
+    next turn, once the model has answered on them. The recall claim `102`
+    cared about is unchanged and is still asserted — the data comes back
+    through the file, never through a second call to the tool.
+    """
 
     def _generate(self, messages: Any, *args: Any, **kwargs: Any) -> ChatResult:
         turn = self._turn(messages)
@@ -317,6 +325,14 @@ class OffloadRetriever(Recorder):
                 )
             )
         if len(results) == 1:
+            if BIG_RESULT_MARKER not in results[0]:
+                return _reply(AIMessage(content="NEVER SAW THE ROWS"))
+            # One more turn of work, which is what makes the rows a thing the
+            # model has already answered on.
+            return _reply(
+                AIMessage(content="", tool_calls=[{"name": "ls", "args": {}, "id": "c2"}])
+            )
+        if len(results) == 2:
             match = re.search(r"path='([^']+)'", results[0])
             if not match:
                 return _reply(AIMessage(content="NO POINTER"))
@@ -327,7 +343,7 @@ class OffloadRetriever(Recorder):
                         {
                             "name": "read_file",
                             "args": {"file_path": match.group(1), "limit": 5000},
-                            "id": "c2",
+                            "id": "c3",
                         }
                     ],
                 )
@@ -412,14 +428,18 @@ class TestOffloadRecall:
         model = OffloadRetriever()
         _run(model, package_dir=_package(tmp_path), with_tool=True)
 
+        # The rows reached the model whole, on the turn they arrived
+        # (`launch-readiness/162`) — the second turn is the first one that
+        # holds a tool result at all.
+        assert BIG_RESULT_MARKER in model.seen[1][-1][1]
+
         results = model.tool_results
-        assert len(results) >= 2, "the agent never followed the pointer"
-        # The transcript never carried the rows...
+        assert len(results) >= 3, "the agent never followed the pointer"
+        # By the last turn the rows have left the transcript...
         assert BIG_RESULT_MARKER not in results[0]
         assert "offloaded" in results[0]
-        # ...and the data came back through the file, not through a second
-        # call to the tool.
-        assert BIG_RESULT_MARKER in results[1]
+        # ...and came back through the file, not through a second call.
+        assert BIG_RESULT_MARKER in results[2]
         assert len(_CALLS) == 1, f"the tool was re-called: {_CALLS}"
 
 

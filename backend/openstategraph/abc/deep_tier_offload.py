@@ -23,6 +23,7 @@ import hashlib
 import shutil
 import tempfile
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -30,7 +31,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from deepagents.backends import FilesystemBackend
 from deepagents.middleware.skills import SkillsMiddleware
 from langchain.agents.middleware.types import AgentMiddleware, ToolCallRequest
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 #: Default: a tool result whose text exceeds this many characters is a
 #: candidate for offload. Below it, inlining is cheaper than a file written
@@ -61,16 +62,63 @@ def build_skills_middleware(
 
 
 class OffloadMiddleware(AgentMiddleware):
-    """Fills the `"filesystem"` slot: large tool results go to disk, not the transcript.
+    """Fills the `"filesystem"` slot: large tool results leave the transcript **after** the model has read them.
 
     Prefix-filtered, never blanket (`launch-readiness/102`): only tool calls
     whose name starts with one of `tool_name_prefixes` are even considered,
     and only a result whose text exceeds `threshold_chars` is written out —
     a short result stays inline, because a store of one-line files makes
-    `grep` useless. A written result is replaced with a pointer naming the
-    path and instructing the agent to use `grep`/`read_file` on the backend,
-    so retrieval is a real capability and not a promise the model must recall
-    unprompted.
+    `grep` useless. A written result is eventually replaced with a pointer
+    naming the path and instructing the agent to use `grep`/`read_file` on the
+    backend, so retrieval is a real capability and not a promise the model must
+    recall unprompted.
+
+    **The pointer is deferred, and that is `launch-readiness/162`.** Until then
+    the substitution happened in `wrap_tool_call`, on arrival, so a result over
+    threshold was *never once* seen by the model. Measured on `cpl-mcp`:
+    `mcp_describe_lens_tables` returned 14,101 characters of column names and
+    the model received a path, so it wrote SQL against `loading_time` where the
+    column is `load_date` — six failed queries in one run, then six paged
+    `read_file`s down the offload file to find at line 211 what it had already
+    been sent.
+
+    **The platform does not decide whether a result is schema or data, and must
+    not.** Nothing on the MCP wire says which it is, and `157` refused for good
+    reason to read meaning out of a stranger's payload shape — that would put
+    one package's vocabulary into the platform. The three candidates the ticket
+    named all classify the *content*; this classifies the *moment*, which is
+    the one thing the platform knows for certain:
+
+        A pointer is a fine way to see something again. It is never an
+        acceptable way to see it for the first time.
+
+    So the file is written on arrival — the path is live immediately, and
+    `read_file` on it works from the first turn — and the message keeps its
+    text. `before_model` collapses it later, once the model has answered on it,
+    which is decided by position alone: a `ToolMessage` after the last
+    `AIMessage` is *this* turn's result and stays whole; one before it has
+    already been in a context window the model replied from.
+
+    What this preserves, deliberately:
+
+    - **`102` in full.** The transcript still cannot grow without bound. A
+      large result occupies the window for exactly one model call, then leaves
+      it. The only cost is that peak window is one turn's large results higher
+      than before, and that is the price of the model being able to act at all.
+    - **The safe side for an undeclared tool, universally.** There is nothing
+      to declare, so no server, no package author and no setting has to be
+      found for a first sight to arrive whole — which is what an exemption list
+      (`111` argued against exactly that) or a declared note (nothing declares
+      one today) would each have required.
+    - **`143`'s narration**, for free. The finding line is read off the
+      envelope in the `narration` slot; the envelope is no longer rewritten
+      underneath it, so "Found 5 tables." is now said about tables that arrived.
+
+    Failure is on the safe side in both directions. A result whose file could
+    not be written is never collapsed, because only a recorded write earns a
+    pointer; and a run resumed in a fresh process has an empty record, so its
+    replayed transcript stays whole rather than carrying a pointer into a store
+    that no longer exists.
     """
 
     def __init__(
@@ -86,6 +134,13 @@ class OffloadMiddleware(AgentMiddleware):
         self._prefixes = tuple(tool_name_prefixes)
         self._threshold = threshold_chars
         self._path_for = path_for or _default_path_for
+        #: `tool_call_id -> (path, chars)` for results this seam actually
+        #: wrote. Only an entry here earns a pointer, so a write that failed
+        #: leaves the result whole. Keyed by tool call id, which is unique per
+        #: call, so two conversations sharing this instance cannot collide;
+        #: bounded because a long-lived compiled node would otherwise hold one
+        #: entry per tool call for the life of the process.
+        self._written: OrderedDict[str, tuple[str, int]] = OrderedDict()
 
     def _eligible(self, tool_name: str) -> bool:
         if not self._prefixes:
@@ -97,7 +152,7 @@ class OffloadMiddleware(AgentMiddleware):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Any],
     ) -> Any:
-        return self._offloaded(handler(request), request)
+        return self._recorded(handler(request), request)
 
     async def awrap_tool_call(
         self,
@@ -113,9 +168,16 @@ class OffloadMiddleware(AgentMiddleware):
         call. Nothing about *what* to offload is written twice; that lives in
         `_offloaded`.
         """
-        return self._offloaded(await handler(request), request)
+        return self._recorded(await handler(request), request)
 
-    def _offloaded(self, result: Any, request: ToolCallRequest) -> Any:
+    def _recorded(self, result: Any, request: ToolCallRequest) -> Any:
+        """Write the file, and hand the result back **whole**.
+
+        The substitution is not made here — see the class docstring. What
+        happens here is the half that has to happen now: the store is written
+        while the text exists, so the path in a later pointer is one the agent
+        can already follow.
+        """
         if not isinstance(result, ToolMessage):
             return result
         tool_name = request.tool_call.get("name", "")
@@ -142,11 +204,89 @@ class OffloadMiddleware(AgentMiddleware):
             # An ordinary write failure the backend *did* catch and
             # report as a result.
             return result
-        pointer = (
-            f"[offloaded: {len(text)} chars written to path={path!r}. "
-            f"Use grep(path={path!r}, ...) or read_file({path!r}) to inspect it.]"
-        )
-        return result.model_copy(update={"content": pointer})
+        call_id = request.tool_call.get("id") or ""
+        if call_id:
+            self._written[call_id] = (path, len(text))
+            self._written.move_to_end(call_id)
+            while len(self._written) > MAX_RECORDED_OFFLOADS:
+                self._written.popitem(last=False)
+        return result
+
+    # -- the deferred half ------------------------------------------------- #
+
+    def before_model(self, state: Any, runtime: Any = None) -> dict[str, Any] | None:
+        return self._collapse(state)
+
+    async def abefore_model(self, state: Any, runtime: Any = None) -> dict[str, Any] | None:
+        """The same decision, on the hook the async path reaches.
+
+        `async-first/06` again: a deep-tier agent is driven through `ainvoke`,
+        and unlike `wrap_model_call` the `before_model` default is a silent
+        no-op rather than a raise — so an async run without this would simply
+        never collapse anything and the defect would come back as unbounded
+        growth instead of an error. Nothing about *what* to collapse is written
+        twice; that lives in `_collapse`.
+        """
+        return self._collapse(state)
+
+    def _collapse(self, state: Any) -> dict[str, Any] | None:
+        """Replace results the model has already answered on with their pointers.
+
+        Position is the whole test, and it is exact rather than heuristic: the
+        messages after the last `AIMessage` are the results of the tool calls
+        *that* message requested, so they have never been in a context window
+        the model replied from. Everything before it has.
+
+        Returned as a `messages` update rather than by mutating the list,
+        because `add_messages` replaces by id — so the collapse lands in the
+        checkpoint, which is what keeps the saved transcript, the summarizer's
+        input and the model's window telling one story. `summarization` sits
+        after `filesystem` in `SLOT_ORDER` and `before_*` runs first to last,
+        so the summarizer already sees the collapsed transcript.
+        """
+        messages = (state or {}).get("messages") or []
+        last_ai = -1
+        for index, message in enumerate(messages):
+            if isinstance(message, AIMessage):
+                last_ai = index
+        updates: list[Any] = []
+        for index, message in enumerate(messages):
+            if index > last_ai or not isinstance(message, ToolMessage):
+                continue
+            if not getattr(message, "id", None):
+                # Unaddressable by `add_messages`, so a replacement would be
+                # appended as a *second* copy rather than swapped in. Left
+                # whole: costing context is the recoverable failure here.
+                continue
+            recorded = self._written.get(getattr(message, "tool_call_id", "") or "")
+            if recorded is None:
+                continue
+            path, chars = recorded
+            if str(message.content).startswith(POINTER_PREFIX):
+                continue
+            updates.append(
+                message.model_copy(update={"content": _pointer(path, chars)})
+            )
+        return {"messages": updates} if updates else None
+
+
+#: How many written results one middleware instance remembers it can point at.
+#: An entry is ~120 bytes and a conversation's whole transcript is collapsed
+#: from the newest end, so the only thing a lower bound loses is the pointer
+#: for a result far enough back that a summarizer has almost certainly removed
+#: it already.
+MAX_RECORDED_OFFLOADS = 512
+
+#: The opening of the pointer, named once because two places test for it: the
+#: collapse must not re-collapse a message it already rewrote.
+POINTER_PREFIX = "[offloaded: "
+
+
+def _pointer(path: str, chars: int) -> str:
+    return (
+        f"{POINTER_PREFIX}{chars} chars written to path={path!r}. "
+        f"Use grep(path={path!r}, ...) or read_file({path!r}) to inspect it.]"
+    )
 
 
 def _default_path_for(request: ToolCallRequest) -> str:
@@ -221,6 +361,14 @@ def surface_can_dereference(
 #: file, not to call the tool a second time. A harness whose whole premise is
 #: read-then-write had never said so.
 #:
+#: It is also the paragraph `launch-readiness/162` had to correct, and the
+#: correction is the whole change stated to the model: it used to open "A large
+#: tool result is not returned to you in full", which stopped being true the
+#: moment the pointer became deferred. Saying so is not decoration — the
+#: sentence that matters now is that arrival is the turn the result is in front
+#: of you, because a model that postpones reading it is the one case this
+#: design still fails.
+#:
 #: The last paragraph points the other way on purpose, and it is the half a
 #: preamble written only to advertise the filesystem would miss. A virtual-FS
 #: toolset invites a model to search files for facts that live in a database
@@ -234,12 +382,14 @@ HARNESS_PREAMBLE = (
     "conversation and no other person can read what you write — no path you "
     "write is visible to the person asking, and it is a workspace for large "
     "material rather than the place your answer goes.\n\n"
-    "A large tool result is not returned to you in full. It is written to a "
-    "file and you are handed the path instead, in a line reading `[offloaded: "
-    "N chars written to path=...]`. That path is the result — the data was "
-    "fetched and it is still there. To see any part of it again, `grep` that "
-    "path for what you need or `read_file` it; never call the tool a second "
-    "time to look at data you already have.\n\n"
+    "A large tool result reaches you in full once, on the turn it arrives, "
+    "and then leaves the conversation. It is also written to a file, and from "
+    "the next turn onward it reads `[offloaded: N chars written to "
+    "path=...]`. That path is still the result — the data was fetched and it "
+    "is still there. So read a large result when it arrives, because that is "
+    "the turn it is in front of you; to see any part of it again, `grep` that "
+    "path for what you need or `read_file` it, and never call the tool a "
+    "second time to look at data you already have.\n\n"
     "Prefer the tool that answers the question over the filesystem. The files "
     "hold what your tools returned; they are not a source of facts on their "
     "own, and searching them is never a substitute for asking the tool that "
@@ -646,7 +796,9 @@ __all__ = [
     "FILE_READ_TOOL_NAMES",
     "DeepTierDisclosure",
     "MAX_LIVE_THREAD_ROOTS",
+    "MAX_RECORDED_OFFLOADS",
     "OffloadMiddleware",
+    "POINTER_PREFIX",
     "SKILLS_VIRTUAL_ROOT",
     "THREAD_ROOT_TTL_SECONDS",
     "ThreadScopedBackend",

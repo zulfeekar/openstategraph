@@ -117,15 +117,19 @@ to be; it puts the sentence where nobody can remove it.
 
 **The preamble also carries the harness contract, and only where it is true**
 (`launch-readiness/120`). A deep-tier agent is handed a virtual filesystem and
-an offload seam that replaces a large tool result with a path — and until this
-landed, nothing told it so. The pointer says *where* a result went; nothing
+an offload seam that eventually replaces a large tool result with a path — and
+until this landed, nothing told it so. The pointer says *where* a result went; nothing
 said the habit: the data was already fetched, so re-read the file rather than
 calling the tool again. `HARNESS_PREAMBLE` (in
 `abc/deep_tier_offload.py`, beside the seam it describes) says it once, for
 every package, in three paragraphs with no domain word in them — what the
 filesystem is and that it is confined, that an offload pointer *is* the
 result, and that the files hold what tools returned rather than being a source
-of facts. `DeepAgentNode.__init__` composes it in.
+of facts. The middle paragraph was rewritten by `launch-readiness/162`: it used
+to open *"a large tool result is not returned to you in full"*, which stopped
+being true when the pointer became deferred, and the sentence that replaced it
+is the one the model now has to act on — the result arrives whole on the turn
+it arrives, and that is the turn to read it. `DeepAgentNode.__init__` composes it in.
 
 **One of those sentences was false for an hour, and that is why the store
 moved rather than the sentence** (`launch-readiness/149`). The text shipped
