@@ -80,6 +80,7 @@ from openstategraph.compile.grounding import (
     gated_by,
     reaches_without_passing,
 )
+from openstategraph.counted_rows import check_row_counts_in_prose
 from openstategraph.grounded_numbers import MODEL_AUTHORED, check_numbers_in_prose
 from openstategraph.compile.reducers import RESET as _RESET  # noqa: F401
 from openstategraph.validation import MOUNT_NODE_TYPES
@@ -178,7 +179,29 @@ _PRODUCES_CONTENT: tuple[str, ...] = ("agent.", "orchestrate.", "function.", "wo
 #: answer, with the wider signature, rather than a contract widened for
 #: everybody. A package function of the same name still wins, so this is a
 #: default and not a reservation.
-_BUILT_IN_CHECKS: dict[str, Any] = {"numbers_in_prose": check_numbers_in_prose}
+#: A **second** entry (`launch-readiness` 165), on the same argument and a
+#: different axis. `numbers_in_prose` asks where a number came from;
+#: `row_counts_in_prose` asks what it counted — a bare `COUNT(*)` returns rows,
+#: and the run that published *"1,454,449 dark vessels"* had retrieved that
+#: number honestly, so 151's gate passed it correctly. Both need the evidence
+#: rather than the text, which is what keeps them here.
+#: How much of a query's answer the run's record keeps (`launch-readiness` 165).
+#:
+#: State is checkpointed, so an uncapped copy of every result row would grow
+#: the run's own record without bound for the sake of a gate that needs a
+#: number. A scalar aggregate — the shape this exists for — is a few dozen
+#: characters, so the cap is never reached by the case it was written for.
+#:
+#: Stated so nobody rediscovers it as a bug: a gate reading this sees the
+#: **head** of a large result. That is a real hole for a check that must see
+#: every row, and none for one about a `COUNT(*)`, whose whole answer is one
+#: cell.
+QUERY_RESULT_RECORD_CAP = 2000
+
+_BUILT_IN_CHECKS: dict[str, Any] = {
+    "numbers_in_prose": check_numbers_in_prose,
+    "row_counts_in_prose": check_row_counts_in_prose,
+}
 
 #: Node types whose streamed text is machinery, not the reply.
 #:
@@ -594,18 +617,39 @@ def tool_report(
     #: "never executed" are different things, and that query did leave the
     #: building.
     queried: list[str] = []
+    #: `call id -> the query text`, so the answer can be attached to the
+    #: question when it arrives (`launch-readiness` 165). This scan already
+    #: had the query in its hand and threw it away, which is why every gate
+    #: downstream of an agent was blind: `_agent` returns `outputs`, `answer`
+    #: and this row, and **no messages at all**, so a `guard.check` reading
+    #: `state["messages"]` sees nothing an agent retrieved.
+    asked: dict[str, str] = {}
+    queries: list[dict[str, str]] = []
     for message in messages or []:
         for call in getattr(message, "tool_calls", None) or []:
             args = call.get("args") if isinstance(call, dict) else None
             if not isinstance(args, dict):
                 continue
-            if not any(looks_like_sql_query(value) for value in args.values()):
+            sql = next((str(v) for v in args.values() if looks_like_sql_query(v)), "")
+            if not sql:
                 continue
             if str(call.get("id") or "") in unaccepted:
                 continue
+            call_id = str(call.get("id") or "")
+            if call_id:
+                asked[call_id] = sql
             name = str((call.get("name") if isinstance(call, dict) else "") or "")
             if name and name not in queried:
                 queried.append(name)
+        if getattr(message, "type", None) == "tool" and getattr(message, "status", None) != "error":
+            sql = asked.get(str(getattr(message, "tool_call_id", "") or ""), "")
+            if sql:
+                exchange = {
+                    "sql": sql,
+                    "result": str(getattr(message, "content", ""))[:QUERY_RESULT_RECORD_CAP],
+                }
+                if exchange not in queries:
+                    queries.append(exchange)
         names = rejected_tool_names(getattr(message, "content", None))
         for name in names:
             if name not in refused:
@@ -634,6 +678,9 @@ def tool_report(
     # must not look the same, and only presence is a claim.
     if queried:
         row["queried"] = queried
+    # Absent rather than empty, for the same reason `queried` is.
+    if queries:
+        row["queries"] = queries
     update: dict[str, Any] = {"tool_use": {node_id: row}}
     if refused:
         update["unmet_tools"] = {node_id: refused}
@@ -2807,7 +2854,27 @@ class NodeRuntime:
             for row in raw_rubric
         ] if isinstance(raw_rubric, list) else []
         cap = int(data.get("maxAttempts") or self.services.max_attempts)
+        # Both sources, because a **conditional** upstream is not in
+        # `plan.edges` (`launch-readiness` 165). A `guard.check`'s `pass` and
+        # another grader's `pass` are conditional edges, so a grader reading
+        # only `plan.edges` sees no candidate at all and rejects with "The
+        # answer is empty" — without a model call, so nothing in the trace
+        # says why. Found by wiring 165's gate into `cpl-mcp` and running it:
+        # four live runs, four empty answers, the full draft sitting in
+        # `outputs[guard1]` the whole time.
+        #
+        # `_guard_check` was written after this and already reads both. That
+        # is the asymmetry, not a difference between the two node kinds:
+        # `diagnostics.py` tells people to put a guard between a step and the
+        # output, and every graph that has a grader on that path — the
+        # ordinary NL2SQL shape — silently emptied its answer for following
+        # the advice.
         upstream = [src for src, dst in plan.edges if dst == node_id]
+        upstream += [
+            src
+            for src, dests in plan.conditional.items()
+            if node_id in dests.values() and src not in upstream
+        ]
         skills = plan.skill_bindings.get(node_id, [])
         # Whether this grader can actually send anything back
         # (`workflow-gallery` 31). Read from the plan at build time, which is

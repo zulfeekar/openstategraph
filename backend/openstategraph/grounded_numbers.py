@@ -114,7 +114,11 @@ def _is_candidate(prose: str, match: re.Match[str]) -> bool:
     start, end = match.span()
     before = prose[start - 1] if start else ""
     after = prose[end] if end < len(prose) else ""
-    if before.isalnum() or before in "_.":
+    # `before` is `""` when the number opens the text, and `"" in "_."` is
+    # True — so until `launch-readiness/165` found it, a quantity at offset 0
+    # was never a candidate and an answer beginning *"1,454,449 dark
+    # vessels"* escaped this gate entirely.
+    if before.isalnum() or (before and before in "_."):
         return False
     if after.isalnum() or after == "_":
         return False
@@ -126,6 +130,27 @@ def _is_candidate(prose: str, match: re.Match[str]) -> bool:
     return True
 
 
+def quantities_in(prose: str) -> list[tuple[str, Decimal, int]]:
+    """Every digit run in `prose` that is a **quantity**, as `(literal, value, end)`.
+
+    The candidate rule of this module's docstring, made reusable: `_is_candidate`
+    was private and `ungrounded_numbers` was its only caller, so a second reader
+    of "which numbers in this answer are claims" would have had to re-implement
+    the identifier / list-marker / percentage exclusions and drift from them.
+    `launch-readiness/165` is that second reader (`counted_rows.py`), and it
+    needs `end` as well, to see what noun the claim was attached to.
+    """
+    found: list[tuple[str, Decimal, int]] = []
+    for match in _NUMBER.finditer(prose or ""):
+        if not _is_candidate(prose or "", match):
+            continue
+        value = _value(match.group())
+        if value is None:
+            continue
+        found.append((match.group(), value, match.end()))
+    return found
+
+
 def ungrounded_numbers(prose: str, evidence: str, question: str = "") -> list[str]:
     """The quantities in `prose` that nothing the run retrieved supports.
 
@@ -135,12 +160,8 @@ def ungrounded_numbers(prose: str, evidence: str, question: str = "") -> list[st
     grounded = _roundings(numbers_in(evidence)) | numbers_in(question) | _row_counts(evidence)
     unsupported: list[str] = []
     seen: set[str] = set()
-    for match in _NUMBER.finditer(prose or ""):
-        literal = match.group()
-        if literal in seen or not _is_candidate(prose or "", match):
-            continue
-        value = _value(literal)
-        if value is None or value in grounded:
+    for literal, value, _end in quantities_in(prose):
+        if literal in seen or value in grounded:
             continue
         seen.add(literal)
         unsupported.append(literal)
@@ -164,6 +185,15 @@ def retrieved_evidence(state: Mapping[str, Any], model_authored: Iterable[str]) 
     """
     excluded = set(model_authored)
     parts: list[str] = []
+    # **The rail that actually carries an agent's results.** The paragraph
+    # above says an agent's rows "come back as `ToolMessage`s" — they come
+    # back to the *agent's own loop*: `_agent` returns `outputs`, `answer` and
+    # `tool_use`, and no messages, so this walk found nothing on any graph
+    # whose SQL runs inside an agent. `launch-readiness/165` measured that on
+    # a live run and gave `tool_report` a place to record the exchange.
+    for row in (state.get("tool_use") or {}).values():
+        for exchange in (row or {}).get("queries") or []:
+            parts.append(str((exchange or {}).get("result") or ""))
     for message in state.get("messages") or []:
         if getattr(message, "type", "") == "tool":
             parts.append(str(getattr(message, "content", "")))

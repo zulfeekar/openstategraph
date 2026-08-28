@@ -300,6 +300,17 @@ class TestLegitimateProseIsNotTheDefect:
     def test_a_numbered_list_is_formatting(self) -> None:
         assert ungrounded_numbers("1. Ras Tanura\n2. Jubail\n", "port\nRas Tanura\nJubail\n") == []
 
+    def test_a_quantity_that_opens_the_answer_is_still_a_quantity(self) -> None:
+        """`launch-readiness/165`, found while writing `counted_rows.py`.
+
+        `_is_candidate` read `before in "_."` with `before` empty at offset 0,
+        and `"" in "_."` is True — so every number opening an answer was
+        classified as part of an identifier and skipped. An answer beginning
+        *"81 ports are in the Persian Gulf"* escaped this gate entirely.
+        """
+        assert ungrounded_numbers("81 ports are in the Persian Gulf.", "port\nRas Tanura\n") == ["81"]
+        assert ungrounded_numbers("1664 kbd in May.", "month,kbd\nMay,1664\n") == []
+
 
 class TestWhereTheEvidenceComesFrom:
     """Two rails, because a workflow uses one or the other and a check that
@@ -379,3 +390,23 @@ class TestTheGateRunsInsideAGuardCheckNode:
         step, diagnostics = self._step(tmp_path)
         step({"question": "q", "outputs": {"a1": "fine"}, "messages": []})
         assert not diagnostics.any(Finding.UNRESOLVED_FUNCTION)
+
+
+class TestTheAgentRailIsNotSilentlyEmpty:
+    """`launch-readiness/165`, measured on a live run rather than reasoned.
+
+    This module's own docstring promised that an agent's SQL rows arrive as
+    `ToolMessage`s. They arrive in the agent's *loop*; `_agent` returns
+    `outputs`, `answer` and `tool_use` and no messages, so on the only shape
+    that matters here — a guard downstream of an agent — the evidence was
+    empty and every number in the answer read as invented.
+    """
+
+    def test_a_query_an_agent_ran_is_evidence(self) -> None:
+        state = {
+            "messages": [],
+            "outputs": {},
+            "tool_use": {"a1": {"queries": [{"sql": "SELECT SUM(kbd) FROM t", "result": "kbd\n1664\n"}]}},
+        }
+        assert "1664" in retrieved_evidence(state, ["a1"])
+        assert check_numbers_in_prose("May was 1664 kbd.", state, ["a1"]) == ""
