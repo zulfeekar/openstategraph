@@ -247,9 +247,12 @@ class Finding(str, Enum):
     #: body* on a retry; a drawn cycle re-enters the node from a grader's
     #: `revise`. Neither carries any memory of what already happened, so a
     #: mail sent on attempt one is sent again on attempt two, and a revision
-    #: after the send is a second mail. `workflows/support-triage` is both at
-    #: once: three `tool.email-send` on `a-account`, inside
-    #: `router1 -> a-account -> grader1 -> router1`.
+    #: after the send is a second mail. `workflows/support-triage` was both at
+    #: once until `launch-readiness` 122 redrew it: three `tool.email-send` on
+    #: `a-account`, inside `router1 -> a-account -> grader1 -> router1`. The
+    #: shape is kept here as the worked case; no shipped package draws it now,
+    #: and `test_a_send_that_can_happen_twice.py` synthesises it rather than
+    #: reading one.
     #:
     #: **Narrow on purpose.** A read-only capability inside a cycle is the
     #: evaluator-optimizer pattern this product exists to draw, and a warning
@@ -263,8 +266,9 @@ class Finding(str, Enum):
     #: **upstream** of it, as `(gate node id, acting node id, capability
     #: types)` — the second half of `launch-readiness` 121.
     #:
-    #: `support-triage`'s `gate1` reads *"Approve to send it"* and sits below
-    #: the only send capability in the document. The mail is already gone when
+    #: `support-triage`'s `gate1` reads *"Approve to send it"* and sat below
+    #: the only send capability in the document until `launch-readiness` 122
+    #: moved the capability out of it entirely. The mail is already gone when
     #: the person is asked, so what they authorise is a status change — two
     #: states with one indistinguishable output, at an operator's expense.
     #:

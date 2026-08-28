@@ -177,60 +177,6 @@
         "title": "Ticket"
       },
       {
-        "id": "node:tool.email-send-1",
-        "type": "tool.email-send",
-        "position": {
-          "x": 940,
-          "y": 620
-        },
-        "size": {
-          "width": 252,
-          "height": 184
-        },
-        "parentId": null,
-        "data": {
-          "maxRetries": "",
-          "timeoutSeconds": "",
-          "to": ""
-        }
-      },
-      {
-        "id": "node:tool.email-send-2",
-        "type": "tool.email-send",
-        "position": {
-          "x": 1276,
-          "y": 620
-        },
-        "size": {
-          "width": 252,
-          "height": 184
-        },
-        "parentId": null,
-        "data": {
-          "maxRetries": "",
-          "timeoutSeconds": "",
-          "to": ""
-        }
-      },
-      {
-        "id": "node:tool.email-send-3",
-        "type": "tool.email-send",
-        "position": {
-          "x": 1612,
-          "y": 620
-        },
-        "size": {
-          "width": 252,
-          "height": 184
-        },
-        "parentId": null,
-        "data": {
-          "maxRetries": "",
-          "timeoutSeconds": "",
-          "to": ""
-        }
-      },
-      {
         "id": "out-held",
         "type": "output.formatted",
         "position": {
@@ -396,36 +342,6 @@
         "target": {
           "nodeId": "router1",
           "portId": "question"
-        }
-      },
-      {
-        "source": {
-          "nodeId": "node:tool.email-send-1",
-          "portId": "tool"
-        },
-        "target": {
-          "nodeId": "a-account",
-          "portId": "tools"
-        }
-      },
-      {
-        "source": {
-          "nodeId": "node:tool.email-send-2",
-          "portId": "tool"
-        },
-        "target": {
-          "nodeId": "a-account",
-          "portId": "tools"
-        }
-      },
-      {
-        "source": {
-          "nodeId": "node:tool.email-send-3",
-          "portId": "tool"
-        },
-        "target": {
-          "nodeId": "a-account",
-          "portId": "tools"
         }
       },
       {

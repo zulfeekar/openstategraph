@@ -65,11 +65,27 @@ is pinned once, generically, in
 `backend/tests/test_a_router_re_dispatches_a_revision.py`, against a minimal
 two-branch document driven through a real compiled graph.
 
-This packaged copy carries ten nodes rather than the dev workspace copy's
-thirteen: the three `tool.email-send` nodes are deliberately absent, because
-sending mail needs credentials a fresh installer does not have
-(`workflow-gallery` 78). That difference is the one thing left unsynced
-between the two copies, and it is recorded, not accidental.
+The two copies now carry the same ten nodes. Until `launch-readiness` 122 the
+dev workspace copy carried three more — `tool.email-send` bound to
+`a-account` — and `workflow-gallery` 78 recorded that difference as
+deliberate-and-unsynced while declining to decide it either way. It is decided:
+they were an authoring accident, and they are gone.
+
+The argument, because a deletion should say why it was safe. All three had an
+empty recipient; all three sat on `a-account` alone, while `a-billing` and
+`a-technical` answer the same kind of ticket with no send at all; their ids
+were the editor's own drag-minted `node:tool.email-send-1/2/3` where every
+other node here is named by hand; and `gate1.approved` goes to an
+`output.formatted`, so nothing on the approved path ever sent anything. What
+they did do was sit **above** the gate, inside the revision cycle, in a
+document whose entire promise is that nothing reaches a customer without a
+person saying so — which is what `121`'s two findings said, correctly, on every
+compile.
+
+**Nothing in this example sends mail, and that is the design**, not a
+limitation of a packaged copy. Adding a send means adding it *below* `gate1`,
+on its own node, outside the cycle, with `maxRetries` set to 1 — otherwise
+`REPEATED_SIDE_EFFECT` fires again and will be right to.
 
 ### 2. The person at the gate is told what the machine thought
 

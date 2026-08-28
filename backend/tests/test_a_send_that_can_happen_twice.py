@@ -1,8 +1,15 @@
 """launch-readiness 121 — a capability that acts outside the run, run twice.
 
-`workflows/support-triage` binds three `tool.email-send` to `a-account`, and
-`a-account` sits inside `router1 -> a-account -> grader1 -> router1`. Two
-independent mechanisms re-enter that node and neither carries any memory of
+`workflows/support-triage` bound three `tool.email-send` to `a-account`, and
+`a-account` sits inside `router1 -> a-account -> grader1 -> router1`. That
+drawing is gone — `launch-readiness` 122 settled it as an authoring accident and
+deleted it, and `test_support_triage_gates_before_it_sends.py` now holds the
+shape — so the fixtures below **synthesise** it rather than reading the package.
+They always did; the past tense is the only thing that changed here, and it
+matters because a docstring citing a document that no longer draws the hazard is
+the stale claim `CLAUDE.md` warns about twice.
+
+Two independent mechanisms re-enter that node and neither carries any memory of
 what it already did:
 
 - **Retry.** `workflow_compiler.build` gives every node
@@ -13,9 +20,9 @@ what it already did:
 - **The revision loop.** A grader asking for a revision after the mail went
   out gets a second mail, bounded only by the step budget.
 
-And `gate1` — a `human.approval` reading *"Approve to send it"* — sits
-**downstream** of the only send capability, so the mail is gone before a
-person is asked. That is LangGraph's documented hazard read at graph scale:
+And `gate1` — a `human.approval` reading *"Approve to send it"* — sat
+**downstream** of the only send capability, so the mail was gone before a
+person was asked. That is LangGraph's documented hazard read at graph scale:
 *"Place side effects after `interrupt` calls"* / *"Separate side effects into
 separate nodes when possible"* (docs-langchain, Interrupts; installed
 `langgraph 1.2.10`).
@@ -210,9 +217,12 @@ def _loop(*, tool_type: str, **agent_data: Any) -> dict[str, Any]:
 
 
 def _support_triage_shape() -> dict[str, Any]:
-    """`workflows/support-triage`, reduced to the three facts that matter: a
-    send capability on an agent, a revision loop the agent is inside, and an
-    approval gate below all of it."""
+    """`workflows/support-triage` **as it was drawn until 122**, reduced to the
+    three facts that matter: a send capability on an agent, a revision loop the
+    agent is inside, and an approval gate below all of it. Synthesised on
+    purpose — the package no longer draws this, and a detector whose fixture is
+    a live document stops testing the detector the day somebody fixes the
+    document."""
     return {
         "version": 2,
         "name": "triage",
@@ -303,7 +313,7 @@ class TestTheDeveloperIsToldTheSendCanRepeat:
         assert "side_effecting" in sentence
 
     def test_three_copies_of_one_capability_say_it_once(self, tmp_path: Any) -> None:
-        """`support-triage` wires three `tool.email-send` nodes to one agent.
+        """`support-triage` wired three `tool.email-send` nodes to one agent.
         Three identical sentences is the noise `absorb`'s slug key was written
         to avoid, reached here by keying the subject on the *type*."""
         document = _straight_line()

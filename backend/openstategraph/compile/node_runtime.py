@@ -1863,7 +1863,7 @@ class NodeRuntime:
         dangerous. `UNRESOLVED_TOOL` already says the true thing about that
         node, and nothing is bound, so nothing can act.
 
-        Deduplicated by type: `support-triage` wires three `tool.email-send`
+        Deduplicated by type: `support-triage` wired three `tool.email-send`
         nodes to one agent, and three identical sentences is the noise
         `absorb`'s slug key was written to avoid.
         """
