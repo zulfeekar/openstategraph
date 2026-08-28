@@ -203,6 +203,80 @@ def surface_can_dereference(
     return bool(FILE_READ_TOOL_NAMES.intersection(tool_surface))
 
 
+#: **What the harness is, told to the model that is inside it**
+#: (`launch-readiness/120`). Locked, core-owned, and domain-free: every word
+#: here is about OSG's own machinery, so it can ride every deep-tier agent in
+#: every workflow without describing anything a package author owns.
+#:
+#: The middle paragraph is the one the ticket was filed for. `OffloadMiddleware`
+#: above already tells the model *where* a large result went — the pointer names
+#: the path and the two tools that open it. Nothing told it the **habit**: that
+#: the fetch already happened, so the way to see that data again is to read the
+#: file, not to call the tool a second time. A harness whose whole premise is
+#: read-then-write had never said so.
+#:
+#: The last paragraph points the other way on purpose, and it is the half a
+#: preamble written only to advertise the filesystem would miss. A virtual-FS
+#: toolset invites a model to search files for facts that live in a database
+#: (`launch-readiness/146`: a dozen file reads answering one question, seven of
+#: them after the query had already returned its rows). The neighbouring system
+#: takes the tools away; this at least says what the files are for.
+HARNESS_PREAMBLE = (
+    "You are running inside a harness that gives you a virtual filesystem. "
+    "`ls`, `read_file`, `write_file` and `grep` reach it and nothing else: it "
+    "is private to this run and confined to it, no path you write is visible "
+    "to the person asking, and it is a workspace for large material rather "
+    "than the place your answer goes.\n\n"
+    "A large tool result is not returned to you in full. It is written to a "
+    "file and you are handed the path instead, in a line reading `[offloaded: "
+    "N chars written to path=...]`. That path is the result — the data was "
+    "fetched and it is still there. To see any part of it again, `grep` that "
+    "path for what you need or `read_file` it; never call the tool a second "
+    "time to look at data you already have.\n\n"
+    "Prefer the tool that answers the question over the filesystem. The files "
+    "hold what your tools returned; they are not a source of facts on their "
+    "own, and searching them is never a substitute for asking the tool that "
+    "knows."
+)
+
+#: The sentence that is only true once skills were actually disclosed
+#: (`launch-readiness/111`). Kept apart from `HARNESS_PREAMBLE` rather than
+#: folded into it, because a package with no `skills/` discloses nothing and
+#: would otherwise be told to go and read files that do not exist — the same
+#: lie as describing a filesystem to an agent that has none, one paragraph
+#: smaller.
+SKILL_DISCLOSURE_PREAMBLE = (
+    "Some of your instructions are not in this prompt. They are listed by name "
+    "and description, and you open the one you need with `read_file` — read it "
+    "before acting on the task it covers, rather than working from its "
+    "one-line description."
+)
+
+
+def harness_preamble(
+    tool_surface: Iterable[str],
+    *,
+    shares_backend: bool,
+    skills_disclosed: bool = False,
+) -> str:
+    """The harness contract this agent has earned, or ``""``.
+
+    **The same condition, not a second one.** `surface_can_dereference` is what
+    decides whether the offload and skills middlewares are contributed at all
+    (`plan_disclosure`), so it is also exactly what decides whether there is
+    anything true to say about them. A separate check here would be a second
+    place for the answer to be decided and therefore a second place for it to
+    drift — and drift in the expensive direction: a preamble describing a
+    filesystem to an agent that has none is a lie the platform tells on every
+    turn, and a package author can neither see it nor fix it.
+    """
+    if not surface_can_dereference(tool_surface, shares_backend=shares_backend):
+        return ""
+    if skills_disclosed:
+        return f"{HARNESS_PREAMBLE}\n\n{SKILL_DISCLOSURE_PREAMBLE}"
+    return HARNESS_PREAMBLE
+
+
 @dataclass(frozen=True)
 class DeepTierDisclosure:
     """What one node's tool surface earned it — decided in one place.
@@ -403,12 +477,15 @@ def _project_skills(package_dir: Any, root: Path) -> list[str]:
 
 __all__ = [
     "DEEP_TIER_FILE_TOOLS",
+    "HARNESS_PREAMBLE",
+    "SKILL_DISCLOSURE_PREAMBLE",
     "DEFAULT_OFFLOAD_THRESHOLD_CHARS",
     "FILE_READ_TOOL_NAMES",
     "DeepTierDisclosure",
     "OffloadMiddleware",
     "SKILLS_VIRTUAL_ROOT",
     "build_skills_middleware",
+    "harness_preamble",
     "plan_disclosure",
     "surface_can_dereference",
 ]

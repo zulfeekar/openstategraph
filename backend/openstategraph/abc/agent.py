@@ -42,6 +42,7 @@ Pinned by ``tests/test_the_agent_ladder_needs_no_async_door.py``, because
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import replace
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from openstategraph.abc.middleware import MiddlewareSlotTable
@@ -428,6 +429,44 @@ class DeepAgentNode(BaseAgentNode):
         #: path, and without this the harness reads a different store and
         #: finds nothing there — which is a silent wrong answer, not an error.
         self._backend = backend
+        #: **What the harness is, said once by the platform**
+        #: (`launch-readiness/120`). Everything this tier hands the model that
+        #: no other tier does — a virtual filesystem, and an offload seam that
+        #: replaces a large tool result with a path — was, until this line,
+        #: explained to it by nobody. The pointer says where a result went; the
+        #: habit ("re-read it, do not fetch it twice") had no home at all, so
+        #: every package author either wrote it themselves, differently, or did
+        #: not write it. That is the platform failing to say something once.
+        #:
+        #: Composed here rather than declared on `PROMPT`, because a ClassVar
+        #: cannot be conditional and this text must be. `harness_preamble()`
+        #: gates it on `surface_can_dereference` — the *same* condition that
+        #: decided whether the middlewares were contributed — so a deep node
+        #: whose file tools read a store this seam never wrote to is told
+        #: nothing, and `BaseAgentNode.PROMPT.preamble` stays empty for the
+        #: tiers with no harness to describe.
+        #:
+        #: Prepended to whatever preamble the class declares rather than
+        #: replacing it: a tier that owns machinery of its own keeps it, and
+        #: the harness contract is the outermost fact about the run.
+        from openstategraph.abc.deep_tier_offload import (
+            DEEP_TIER_FILE_TOOLS,
+            harness_preamble,
+        )
+
+        harness = harness_preamble(
+            tuple(getattr(t, "name", "") for t in self.tools) + DEEP_TIER_FILE_TOOLS,
+            shares_backend=self._backend is not None,
+            # A fact, not a guess: the compiler contributes this slot only when
+            # it actually projected skills into the run's store.
+            skills_disclosed="skills" in self._middleware_contributions,
+        )
+        if harness:
+            declared = self.prompt.preamble.strip()
+            self.prompt = replace(
+                self.prompt,
+                preamble=f"{harness}\n\n{declared}" if declared else harness,
+            )
 
     def build_agent(
         self, *, model: Any, tools: list[Any], system_prompt: str | None, middleware: list[Any]
