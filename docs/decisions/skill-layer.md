@@ -115,6 +115,31 @@ renders *before* the rules — the same asymmetry `held_tools_context`
 documents. It is not a solution to indirect prompt injection and does not claim
 to be; it puts the sentence where nobody can remove it.
 
+**The preamble also carries the harness contract, and only where it is true**
+(`launch-readiness/120`). A deep-tier agent is handed a virtual filesystem and
+an offload seam that replaces a large tool result with a path — and until this
+landed, nothing told it so. The pointer says *where* a result went; nothing
+said the habit: the data was already fetched, so re-read the file rather than
+calling the tool again. `HARNESS_PREAMBLE` (in
+`abc/deep_tier_offload.py`, beside the seam it describes) says it once, for
+every package, in three paragraphs with no domain word in them — what the
+filesystem is and that it is confined, that an offload pointer *is* the
+result, and that the files hold what tools returned rather than being a source
+of facts. `DeepAgentNode.__init__` composes it in.
+
+It is **conditional**, on `surface_can_dereference` and nothing else — the same
+condition that decides whether those middlewares are contributed at all. A
+react-tier node, and a deep-tier node whose file tools read a store this seam
+never wrote to, are told nothing: a preamble claiming a filesystem to an agent
+that has none is a lie the platform tells every turn, and a package author can
+neither see it nor fix it. `BaseAgentNode.PROMPT.preamble` therefore stays
+`""` — a ClassVar cannot be conditional — and the harness text is *prepended*
+to whatever preamble a tier declares.
+
+The reason it belongs here rather than in a package's `rules`: it was being
+written in `rules`. `cpl-mcp`'s own `systemPrompt` carried a longer version of
+the same paragraph, which is the platform having failed to say it once.
+
 **Ambient package skills stay context.** `workflows/<slug>/skills/*.md`, loaded
 by `discover_skills()`, are house style for every agent in the package — not a
 choice made about one node — and they keep riding as generated context, as the
