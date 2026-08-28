@@ -3,6 +3,7 @@ import { subscribeOpenSlug } from './openWorkflow';
 import {
   claimHolder,
   deleteWorkflow,
+  handOverWorkflow,
   moveWorkflow,
   readWorkflow,
   type KeyValueStore,
@@ -331,6 +332,82 @@ export function discardDraftAfterDelete(
   });
   if (decision.discarded) deleteWorkflow(store, draftId);
   return decision;
+}
+
+/**
+ * Carry this tab's draft onto the fresh key it was just re-keyed to —
+ * **`launch-readiness` 153**, and the mirror of `adoptSlugForDraft`.
+ *
+ * ## What was missing
+ *
+ * `147` releases the open slug when a tab is told its workflow was deleted
+ * elsewhere, which re-keys autosave to a minted `wf-<timestamp>`. Autosave
+ * writes nothing until the next edit, so between the delete and that edit the
+ * document exists only in memory — the `slug-<slug>` draft is not this tab's
+ * any more and the new key holds nothing. A reload showed a blank canvas while
+ * the work sat in `localStorage` under a name nobody would ask for again.
+ * Recoverable, never destroyed; what was missing is the route back.
+ *
+ * ## Why this does not break `adoptSlugForDraft`'s rule
+ *
+ * That rule reads: *a draft that already has an identity is never re-filed
+ * under another one*, because doing it on an ordinary open-slug change would
+ * file the scratch document the user is editing as the opened workflow's
+ * unsaved edits. This is the mirror case and the rule is intact rather than
+ * bent — the identity has **ceased to exist**. The package is gone, a slug is
+ * frozen and cannot be re-taken, and the destination is a key that names *no*
+ * document at all, which is the one direction that rule leaves open. Nothing is
+ * ever carried onto another `slug-…` key: that is asserted here, not assumed.
+ *
+ * ## Who may carry it
+ *
+ * Only the tab writing under that key. `148` established that a draft is
+ * origin-scoped and only its own tab may drop it; the same boundary decides
+ * this, in the other direction. `previousDraftId` is read by the caller
+ * **before** the re-key, because afterwards this tab's key is the new one and
+ * the question can no longer be asked.
+ *
+ * The live claim is deliberately *not* consulted, unlike `decideDraftDiscard`.
+ * A claim is keyed by draft id, so two tabs on one slug write one claim and it
+ * cannot separate them — and the answer is safe either way, because this
+ * deletes nothing: a second tab arriving after the first finds nothing to move,
+ * keeps the document on its own canvas, and can still Save it as a new package.
+ */
+export interface DraftCarryDecision {
+  readonly carried: boolean;
+  /** Why it was not carried. Absent when it was. */
+  readonly reason?: 'not-this-tabs-draft' | 'no-fresh-key' | 'nothing-to-carry';
+}
+
+/** The rule, pure, with the two keys already read (`decideDraftDiscard`'s shape). */
+export function decideDraftCarry(input: {
+  readonly draftId: string;
+  readonly thisTabsDraftId: string | null;
+}): DraftCarryDecision {
+  if (input.draftId !== input.thisTabsDraftId) {
+    return { carried: false, reason: 'not-this-tabs-draft' };
+  }
+  return { carried: true };
+}
+
+export function carryDraftToFreshKey(
+  slug: string,
+  previousDraftId: string | null,
+  nextDraftId: string | null,
+  store: KeyValueStore = browserStore(),
+): DraftCarryDecision {
+  const draftId = draftIdForSlug(slug);
+  const decision = decideDraftCarry({ draftId, thisTabsDraftId: previousDraftId });
+  if (!decision.carried) return decision;
+  // A key that names a workflow is never a destination — see above, and
+  // `adoptSlugForDraft` for the loss that rule exists to prevent.
+  if (nextDraftId == null || nextDraftId === '' || slugOfDraftId(nextDraftId) != null) {
+    return { carried: false, reason: 'no-fresh-key' };
+  }
+  if (!handOverWorkflow(store, draftId, nextDraftId)) {
+    return { carried: false, reason: 'nothing-to-carry' };
+  }
+  return { carried: true };
 }
 
 /** Whether this browser holds a draft for `subject` (a slug or an address). */

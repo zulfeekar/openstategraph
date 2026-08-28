@@ -114,7 +114,12 @@ export function useWorkflowFileWatch(onNotify: (message: string) => void): void 
             //
             // It clears the open slug, so this is the last poll for it and the
             // notice is raised once rather than every five seconds.
-            abandonDeletedWorkflow(slug);
+            // `deleted-elsewhere`: the user did not ask for this, and their
+            // unsaved edits are still on screen — so the browser draft is
+            // carried onto the fresh key the release re-keys this tab to,
+            // rather than being left under a slug this tab no longer names
+            // (`launch-readiness` 153).
+            abandonDeletedWorkflow(slug, 'deleted-elsewhere');
             onNotify(
               'This workflow was deleted on disk. Your copy is still open here — ' +
                 'Save it to create a new workflow from it.',

@@ -153,7 +153,7 @@ describe('what the tab does once it knows', () => {
     const workbench = anOpenTabEditing('probe');
     backend.delete('probe');
 
-    abandonDeletedWorkflow('probe');
+    abandonDeletedWorkflow('probe', 'deleted-elsewhere');
 
     const outcome = await writeOpenWorkflowToDisk(
       client,
@@ -172,7 +172,7 @@ describe('what the tab does once it knows', () => {
     setOpenSlug('probe');
     const workbench = anOpenTabEditing('probe');
 
-    abandonDeletedWorkflow('probe');
+    abandonDeletedWorkflow('probe', 'deleted-elsewhere');
 
     // A slug is minted at first save and frozen, because a slug that moves
     // renames a directory — so the path forward for a document whose package
@@ -189,7 +189,7 @@ describe('what the tab does once it knows', () => {
     backend.create('other');
     const client = new WorkflowFileClient('', backend.fetch, null);
 
-    abandonDeletedWorkflow('other');
+    abandonDeletedWorkflow('other', 'deleted-elsewhere');
 
     const workbench = anOpenTabEditing('probe');
     const outcome = await writeOpenWorkflowToDisk(

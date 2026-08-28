@@ -406,6 +406,62 @@ export function moveWorkflow(store: KeyValueStore, fromId: string, toId: string)
   return true;
 }
 
+/**
+ * Re-key a stored workflow **and disown it** — `launch-readiness` 153.
+ *
+ * `moveWorkflow` carries the envelope across untouched, which is exactly right
+ * for a rename this tab performs on its own draft: the `writerId` still names
+ * the writer, and the compare-and-set goes on protecting it.
+ *
+ * A hand-over is the other case. The draft being carried may have been written
+ * by an *earlier page load* of this same tab — a tab that opened a workflow and
+ * had not typed since holds a draft whose `writerId` no live guard matches —
+ * and the destination is a key freshly minted for the tab doing the carrying.
+ * Left as it is, that tab's very next keystroke reads as a clobber of a newer
+ * write and autosave stops, announcing another tab that does not exist.
+ *
+ * So the `writerId` is dropped and everything else, `savedAt` included, is kept
+ * byte for byte. `detectConflict` reads an envelope with no writer as *nobody
+ * owns these bytes*, which is the truth: the destination is a `wf-<timestamp>`
+ * only this tab can name, so there is no second writer to protect against.
+ *
+ * **Refuses an occupied destination**, exactly as `moveWorkflow` does, and for
+ * the same reason: landing on another document's draft is ticket 23's data loss
+ * with the arrow reversed.
+ */
+export function handOverWorkflow(store: KeyValueStore, fromId: string, toId: string): boolean {
+  if (fromId === toId) return false;
+  const raw = read(store, keyFor(fromId));
+  if (raw == null) return false;
+  if (read(store, keyFor(toId)) != null) return false;
+
+  let payload: string = raw;
+  try {
+    const envelope = JSON.parse(raw) as Record<string, unknown>;
+    delete envelope['writerId'];
+    envelope['workflowId'] = toId;
+    payload = JSON.stringify(envelope);
+  } catch {
+    // Unreadable bytes are carried as they are. The reader quarantines them
+    // wherever they live, and refusing to move them would strand the only copy
+    // under a key nobody asks for again.
+  }
+
+  try {
+    store.setItem(keyFor(toId), payload);
+  } catch {
+    // See `moveWorkflow`: leaving the original in place is the safe half of a
+    // failed move.
+    return false;
+  }
+  try {
+    store.removeItem(keyFor(fromId));
+  } catch {
+    // The copy landed. A source that cannot be removed is a stale row.
+  }
+  return true;
+}
+
 export function mostRecentWorkflowId(store: KeyValueStore): string | null {
   return listWorkflows(store)[0]?.id ?? null;
 }

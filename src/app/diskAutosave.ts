@@ -5,7 +5,12 @@ import type { MountContext } from '@core/model/MountContext';
 import { isInstance } from '@core/model/MountAddress';
 import { getOpenAddress } from './openAddress';
 import { clearOpenSlug, getOpenSlug } from './openWorkflow';
-import { type DraftRestoreReport } from './workflowDrafts';
+import {
+  carryDraftToFreshKey,
+  currentDraftId,
+  discardDraftAfterDelete,
+  type DraftRestoreReport,
+} from './workflowDrafts';
 import { CURRENT_SLUG_KEY, forgetKnownSavedAt } from './workflowFileWatch';
 import { writeHostPackage } from './hostPackageWrite';
 
@@ -291,11 +296,70 @@ export function forgetDiskDocument(slug: string): void {
  *
  * Lives here, beside the writer it disarms, rather than in the watch that
  * calls it: the watch's job is to decide, and this is what the decision means.
+ *
+ * ## The draft goes with the tab — `launch-readiness` 153
+ *
+ * Releasing the slug re-keys autosave to a fresh `wf-<timestamp>`, and autosave
+ * writes nothing until the next edit. So between the delete and that edit the
+ * document lived **only in memory**: the `slug-<slug>` draft was no longer this
+ * tab's and the new key held nothing, and a reload landed on a blank canvas
+ * while the work sat in `localStorage` under a name nobody would ask for again.
+ * Observed live. `carryDraftToFreshKey` moves it onto the new key, which makes
+ * "who owns this draft now" one statement instead of two half-answers, and
+ * deletes nothing.
+ *
+ * ## Why the cause is a parameter and not a default
+ *
+ * The two callers want opposite things with the draft and only they know which
+ * is which, so neither may be guessed:
+ *
+ * - **`deleted-elsewhere`** — the file watch, acting on somebody else's delete.
+ *   The user did not ask for this and their unsaved edits are still on screen,
+ *   so the draft is **carried**.
+ * - **`deleted-here`** — the Workflows panel, acting on this tab's own Delete.
+ *   `148` already settled that: this tab's own draft goes, because the user
+ *   asked for it; another live tab's is kept and the user is told.
+ *
+ * The discard moved *in here* rather than staying a second call beside it, so
+ * a third caller cannot get the order wrong — which is exactly what the second
+ * call site had wrong (`launch-readiness` 169): it asked "is this draft this
+ * tab's?" after the release had already re-keyed the tab, so the answer was
+ * always no and the panel's own delete kept the orphan `95` exists to remove
+ * while telling the user another tab was editing it.
  */
-export function abandonDeletedWorkflow(slug: string): void {
+export type DeleteCause = 'deleted-here' | 'deleted-elsewhere';
+
+/** What became of this browser's draft of the package. */
+export type AbandonedDraft =
+  /** Moved onto the fresh key this tab was re-keyed to (`deleted-elsewhere`). */
+  | 'carried'
+  /** Removed: the user asked for this delete, in this tab (`deleted-here`). */
+  | 'discarded'
+  /** Left alone because another live tab is editing it (`148`). */
+  | 'kept-for-another-tab'
+  /** There was nothing under the slug's key, or it was not this tab's to move. */
+  | 'untouched';
+
+export interface AbandonOutcome {
+  readonly draft: AbandonedDraft;
+}
+
+export function abandonDeletedWorkflow(slug: string, cause: DeleteCause): AbandonOutcome {
   forgetDiskDocument(slug);
   forgetKnownSavedAt(slug);
+
+  // Read **before** the release, because releasing the slug re-keys this tab
+  // and afterwards the question "was this tab writing that draft" can no longer
+  // be asked. Getting this order wrong is `launch-readiness` 169.
+  const before = currentDraftId();
   if (getOpenSlug() === slug) clearOpenSlug();
+
+  if (cause === 'deleted-here') {
+    const decision = discardDraftAfterDelete(slug, undefined, before);
+    return { draft: decision.discarded ? 'discarded' : 'kept-for-another-tab' };
+  }
+  const carry = carryDraftToFreshKey(slug, before, currentDraftId());
+  return { draft: carry.carried ? 'carried' : 'untouched' };
 }
 
 /**

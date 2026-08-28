@@ -27,7 +27,6 @@ import {
 } from '@design/primitives';
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
 import { abandonDeletedWorkflow } from '@app/diskAutosave';
-import { discardDraftAfterDelete } from '@app/workflowDrafts';
 import { sweepBrowserStorage, type SweepReport } from '@app/browserStorageSweep';
 import { getOpenSlug } from '@app/openWorkflow';
 import {
@@ -366,20 +365,23 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         // delete** (`launch-readiness` 147). This branch used to do two of the
         // three by hand and the file watch none of them, which is how a second
         // tab came to re-create the package — hollow — on its next keystroke.
-        abandonDeletedWorkflow(slug);
-        // Otherwise this browser's own draft of the deleted workflow survives
-        // under `slug-<slug>` and is silently adopted by the next workflow
-        // minted with the same slug (`launch-readiness` 95).
         //
-        // **It answers rather than obeying** (`launch-readiness` 148).
-        // `localStorage` is the origin's, not this tab's, so this call used to
-        // delete another window's unsaved edits. It now declines when a live
-        // tab is editing that draft, and the user is told which happened.
-        const draft = discardDraftAfterDelete(slug);
+        // **And the draft goes with it, in the same call**
+        // (`launch-readiness` 169). This browser's own draft of the deleted
+        // workflow must not survive under `slug-<slug>`, where the next
+        // workflow minted with the same slug silently adopts it
+        // (`launch-readiness` 95) — but it **answers rather than obeys**
+        // (`launch-readiness` 148): `localStorage` is the origin's, not this
+        // tab's, so another live tab's unsaved edits are kept and the user is
+        // told. Both used to be a second call *after* this one, which asked
+        // "is that draft this tab's?" once the release had already re-keyed
+        // this tab — so the answer was always no, the orphan stayed, and the
+        // user was told about another tab that did not exist.
+        const draft = abandonDeletedWorkflow(slug, 'deleted-here');
         onNotify(
-          draft.discarded
-            ? deletedMessage(name)
-            : deletedMessage(name) + draftKeptForAnotherTabMessage(),
+          draft.draft === 'kept-for-another-tab'
+            ? deletedMessage(name) + draftKeptForAnotherTabMessage()
+            : deletedMessage(name),
         );
         void refreshList();
       } else {
