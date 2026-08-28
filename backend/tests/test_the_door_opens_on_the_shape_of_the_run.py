@@ -218,8 +218,26 @@ class TestBoundMeansWiredOnTheCanvas:
                     assert snapshot < source.index(ambient), (name, ambient)
 
     def test_neither_factory_reports_the_mutated_list(self) -> None:
-        """The snapshot, not the list that keeps growing under it."""
+        """The snapshot, not the list that keeps growing under it.
+
+        Read off the call's **third argument** rather than off `", wired)"`,
+        which is what this line matched until `launch-readiness` 103 added a
+        fourth (`unbound`). A trailing-paren match asserts the argument's
+        position only for as long as it happens to be last, so the fix that
+        added an argument reddened a test about something else entirely.
+        """
+        import ast as _ast
+
         for name in ("_agent", "_worker"):
-            source = self._factory(name)
-            assert "tool_report(node_id, " in source, name
-            assert ", wired)" in source[source.index("tool_report(") :], name
+            tree = _ast.parse(self._factory(name))
+            calls = [
+                n
+                for n in _ast.walk(tree)
+                if isinstance(n, _ast.Call)
+                and isinstance(n.func, _ast.Name)
+                and n.func.id == "tool_report"
+            ]
+            assert calls, name
+            for call in calls:
+                assert _ast.unparse(call.args[0]) == "node_id", name
+                assert _ast.unparse(call.args[2]) == "wired", name

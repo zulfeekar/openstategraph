@@ -85,11 +85,13 @@ from openstategraph.compile.reducers import RESET as _RESET  # noqa: F401
 from openstategraph.validation import MOUNT_NODE_TYPES
 from openstategraph.compile.reducers import Reducer, reducer_for  # noqa: F401
 from openstategraph.compile.workflow_compiler import (
+    CAPABILITY_UNAVAILABLE_ANSWER,
     GUARD_CHECK_TYPE,
     GUARDRAIL_TYPE,
     CompiledPlan,
     failure_marker,
     step_budget_floor_for,
+    unbound_capability_claim,
     unrun_query_claim,
 )
 # Re-exported, not merely used: `context.py` was carved out of this module and
@@ -495,7 +497,12 @@ def _final_text(messages: list[Any]) -> str:
             return text
     return ""
 
-def tool_report(node_id: str, messages: list[Any], bound: list[str]) -> dict[str, Any]:
+def tool_report(
+    node_id: str,
+    messages: list[Any],
+    bound: list[str],
+    unbound: list[str] | tuple[str, ...] = (),
+) -> dict[str, Any]:
     """What this node was given, what it used, and what it was refused.
 
     The seam every tool-binding factory shares. Ticket 33 built the
@@ -616,6 +623,12 @@ def tool_report(node_id: str, messages: list[Any], bound: list[str]) -> dict[str
     # A tool the runtime refused never ran, so it never sent anything either.
     queried = [name for name in queried if name in ran]
     row: dict[str, Any] = {"bound": list(bound), "ran": ran}
+    # What the canvas drew and the compile could not produce
+    # (`launch-readiness` 103). Absent when nothing failed, for the same reason
+    # `queried` is: only presence is a claim, and `bound: []` on its own has
+    # meant both "no tools by design" and "every tool here is missing".
+    if unbound:
+        row["unbound"] = list(unbound)
     # Absent rather than empty, for the reason the docstring gives about
     # `unmet_tools`: a node that sent no query and a node with no query to send
     # must not look the same, and only presence is a claim.
@@ -1102,6 +1115,12 @@ class NodeRuntime:
         #: `CAPABILITY_FAILED` is populated from outside, by
         #: `WorkflowServices.runtime_for`.
         self.diagnostics = CompileDiagnostics()
+        #: Agent/worker node id -> the canvas-wired tool nodes that produced no
+        #: tool at all (`launch-readiness` 103). Written by `_bind_tools` at
+        #: build time — which is when a capability's absence is actually known —
+        #: and read into the node's `tool_use` row so a downstream grader can
+        #: tell a decline that is an answer from a decline that is a bug report.
+        self._unbound_capabilities: dict[str, list[str]] = {}
         #: Graph node names whose streamed text is machinery rather than the
         #: reply — the compile half of the streaming audience boundary
         #: (ticket 25; `api/audience.AnswerChannel` is the other half).
@@ -1789,10 +1808,23 @@ class NodeRuntime:
         """
         lc_tools: list[Any] = []
         warnings: list[str] = []
+        #: The drawn capabilities that produced no tool at all (`launch-readiness`
+        #: 103). Kept because this is the only place both halves are known — the
+        #: tool nodes the canvas wired, and what each one actually handed back —
+        #: and because losing it is what let a run reach a grader with no way to
+        #: tell *"a writer agent has no tools"* from *"an MCP card was drawn and
+        #: the server was down"*. `CAPABILITY_FAILED` below says it to a
+        #: developer; this says it to the run.
+        unbound: list[str] = []
         for tool_node_id in plan.tool_bindings.get(node_id, []):
             tool = self._bound_tool(tool_node_id)
             if tool is None:
+                # An unresolved type. `UNRESOLVED_TOOL` already says the true
+                # thing about the node, and nothing is bound, so the capability
+                # is just as absent as one whose server refused.
+                unbound.append(tool_node_id)
                 continue
+            before = len(lc_tools)
             try:
                 lc_tools.extend(tool.as_langchain_tools(warnings=warnings))
             except Exception as exc:
@@ -1802,6 +1834,17 @@ class NodeRuntime:
                     f"({type(exc).__name__}: {exc}) — the other tools wired to it are "
                     "unaffected, but its answer will not be grounded in that data source."
                 )
+            if len(lc_tools) == before:
+                # An empty list is how `tool.mcp` reports a server that would
+                # not answer — it appends a warning rather than raising, which
+                # is the contract. Counting the list rather than catching the
+                # exception is therefore the only reading that covers both.
+                unbound.append(tool_node_id)
+        if unbound:
+            # Absent rather than empty, the convention `queried` and
+            # `unmet_tools` already follow: a node with nothing to report must
+            # not look like a node reporting nothing.
+            self._unbound_capabilities[node_id] = unbound
         for message in warnings:
             self.diagnostics.record(Finding.CAPABILITY_FAILED, message)
         self._report_repeated_side_effect(node_id, plan)
@@ -2524,7 +2567,12 @@ class NodeRuntime:
                     if (new_tasks := result.get(ASYNC_TASKS_KEY))
                     else {}
                 ),
-                **tool_report(node_id, result.get("messages") or [], wired),
+                **tool_report(
+                    node_id,
+                    result.get("messages") or [],
+                    wired,
+                    self._unbound_capabilities.get(node_id, ()),
+                ),
             }
 
         return run
@@ -2853,11 +2901,25 @@ class NodeRuntime:
             # teach the grader ladder about `tool_use`, and a grader is a
             # judgement over a text.
             unrun = unrun_query_claim(candidate, state.get("tool_use"), upstream)
+            # The second fact of the same kind, and the one this node used to
+            # be blind to (`launch-readiness` 103). An agent whose drawn
+            # capabilities all resolved to nothing did not answer the question;
+            # it reported its own brokenness in the answer slot, and a refusal
+            # is trivially grounded, so both criteria passed it and a broken
+            # run shipped with the confidence of a working one.
+            #
+            # It is read before the model for the reason the whole
+            # deterministic prelude is: this is a fact, and paying a judgement
+            # to notice it would be slower, costlier and less reliable — and a
+            # model can be talked out of a fact.
+            blocked = unbound_capability_claim(state.get("tool_use"), upstream)
             # Spelled as a statement rather than the conditional expression it
             # was: `await` is legal in a ternary and reads as though both arms
             # might be awaited, and the whole point of the `unrun` arm is that
             # no model is asked.
-            if unrun:
+            if blocked:
+                verdict = Verdict.reject(blocked, check="unbound_capability")
+            elif unrun:
                 verdict = Verdict.reject(unrun, check="unrun_query")
             else:
                 verdict = await grader.agrade(
@@ -2894,7 +2956,11 @@ class NodeRuntime:
             remaining = state.get("remaining_steps")
             starved = isinstance(remaining, int) and remaining <= floor
             exhausted = judged >= cap or starved
-            branch = "pass" if verdict.passed or exhausted else "revise"
+            # `blocked` forces the `pass` branch and the ticket says why: a
+            # retry with the same missing capability produces the same refusal
+            # and burns the budget. The branch is the *edge*, not the verdict —
+            # what travels along it is replaced below.
+            branch = "pass" if verdict.passed or exhausted or blocked else "revise"
 
             # The ceiling reports itself when it has nothing to hand on.
             #
@@ -2911,7 +2977,21 @@ class NodeRuntime:
             # disliked is still the answer the workflow produced, and replacing
             # it with our commentary would be worse than passing it on.
             outcome = candidate
-            if branch == "pass" and not candidate.strip() and not verdict.passed:
+            if blocked:
+                # **Not the model's prose.** The refusal was correct and it is
+                # still not an answer — and it named internal tool ids on a
+                # customer surface to say so, which is the platform's job and
+                # not a model's. `CAPABILITY_UNAVAILABLE_ANSWER` says the one
+                # thing the refusal could not say honestly about itself: this
+                # is not an answer to the question that was asked.
+                #
+                # This is the one case that replaces a *non-empty* candidate.
+                # The rule below — a candidate the grader merely disliked is
+                # still what the workflow produced — holds against a judgement.
+                # It cannot hold against a fact that says the producer had
+                # nothing to produce from.
+                outcome = CAPABILITY_UNAVAILABLE_ANSWER
+            elif branch == "pass" and not candidate.strip() and not verdict.passed:
                 # Which ceiling was hit changes what a reader can do about it:
                 # a cap is a number on this card, the step budget is a number
                 # on the workflow. Saying "after 500 attempts" for a run that
@@ -2968,7 +3048,15 @@ class NodeRuntime:
                     }
                 },
             }
-            if branch == "pass" and not verdict.passed:
+            if blocked:
+                # Deliberately neither `forced` nor `budget_stops`: both name a
+                # ceiling that was hit, and no ceiling was hit here. The
+                # developer-facing sentence for this is
+                # `Finding.CAPABILITY_FAILED`, recorded by `_bind_tools` at
+                # compile time — which is earlier, more specific, and already
+                # reaches the run response, the CLI and `CompiledWorkflow`.
+                pass
+            elif branch == "pass" and not verdict.passed:
                 # A budget stop is a force-pass too, and the *publication* is
                 # identical — so it stays out of `forced`, whose sentence
                 # names the attempts cap. Two ceilings, two sentences, one
@@ -3627,7 +3715,9 @@ class NodeRuntime:
                 # shares one node id, so two subtasks refused the same tool
                 # merge to one offer, which is the right number of cards
                 # (ticket 36).
-                **tool_report(node_id, out, wired),
+                **tool_report(
+                    node_id, out, wired, self._unbound_capabilities.get(node_id, ())
+                ),
                 # Which worker node ran which subtask (ticket 17). Every
                 # dispatched instance shares one node id, so the task id is
                 # what keeps them apart — the same reason `worker_results` is

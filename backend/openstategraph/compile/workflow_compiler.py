@@ -387,6 +387,71 @@ def looks_like_sql_query(text: Any) -> bool:
     return bool(_SQL_STATEMENT.search(str(text or "")))
 
 
+#: What a run says when the capability its answer depended on never
+#: materialised (`launch-readiness` 103).
+#:
+#: Customer-facing, so it names no node and no tool: which capability failed is
+#: a developer fact and `Finding.CAPABILITY_FAILED` already carries it, from
+#: `_bind_tools`, on the channel a lost capability has always travelled. What a
+#: customer needs is the one thing the refusal could not tell them honestly —
+#: that this is not an answer to their question.
+CAPABILITY_UNAVAILABLE_ANSWER = (
+    "This workflow could not run: a capability it needs was not available, so "
+    "the question was never actually answered."
+)
+
+
+def unbound_capability_claim(tool_use: Any, nodes: Any = ()) -> str | None:
+    """"This node was drawn capabilities and not one of them exists" — or None.
+
+    `launch-readiness` 103. An agent whose MCP card bound nothing — the server
+    was down and tools bind at compile time — answered *"I cannot properly
+    answer because this workflow does not have the CPL MCP tools"*, and the
+    grader passed it, because a refusal is trivially grounded and
+    `BaseGrader`'s refusal clause says an honest decline is a correct answer.
+    It is, when the workflow is whole. This is the fact that says it is not.
+
+    Read off the run's own record, with no model call and no string matching
+    against *"I cannot"*: nothing upstream is asked to self-report a refusal it
+    has every incentive to misreport, and `Correction`-shaped prompt rules have
+    been declined on this project six times.
+
+    Three conjuncts, and the narrowness is the safety:
+
+    1. **A drawn capability resolved to nothing.** `unbound` is written by
+       `_bind_tools`, which is the only place that knows both the tool nodes
+       the canvas wired and what each one actually produced. An agent with
+       nothing wired has no key here at all — a writer agent has no tools by
+       design, exactly as `used_no_tools` says, and must never be accused.
+    2. **That node bound nothing else either.** One capability of two failing
+       costs one capability; the agent still holds a working tool and can still
+       work. That is the contract `_bind_tools` already advertises.
+    3. **No node anywhere bound anything.** Same shape as `unrun_query_claim`'s
+       "any query anywhere clears the run": a document whose other agent is
+       fully equipped is not a broken run.
+    """
+    rows = tool_use if isinstance(tool_use, dict) else {}
+    if any(isinstance(row, dict) and row.get("bound") for row in rows.values()):
+        return None
+
+    named = [str(n) for n in (nodes or []) if str(n) in rows]
+    for node_id in named or list(rows):
+        row = rows.get(node_id)
+        if not isinstance(row, dict):
+            continue
+        unbound = [str(n) for n in (row.get("unbound") or [])]
+        if not unbound:
+            continue
+        return (
+            f'"{node_id}" was wired '
+            f"{len(unbound)} {'capability' if len(unbound) == 1 else 'capabilities'} "
+            f"({', '.join(unbound)}) and not one of them was available, so "
+            "nothing it says is grounded in anything. Retrying cannot make a "
+            "capability appear — repair the capability, or draw a different one."
+        )
+    return None
+
+
 def unrun_query_claim(candidate: str, tool_use: Any, nodes: Any = ()) -> str | None:
     """"This answer shows a query nothing ever sent" — or None.
 
