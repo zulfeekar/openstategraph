@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { showsThinking } from './settledThinking';
+import { SpawnedPills } from './SpawnedPills';
 import { attemptsLine } from './attemptsLine';
 import { rectOfAdded } from './revealAdded';
 import { doorHeadline } from './doorHeadline';
@@ -1862,6 +1863,12 @@ function Turn({
               stopped, failed, paused — clears it without having to remember
               to. `aria-live` because for a screen reader this line is the only
               evidence the run has not died. */}
+          {/* Between the record and the live line: a pill is neither a step
+              that ran nor the sentence being said now — it is *what this run
+              handed to somebody else*, and it belongs where a reader looks
+              after asking "what is taking so long". Nothing here is savable
+              and nothing here writes: see `SpawnedPills`. */}
+          <SpawnedPills rows={turn.activity} running={turn.running} />
           {turn.running && turn.progress ? (
             <ThinkingLine text={turn.progress.text} className="ask__live" />
           ) : (

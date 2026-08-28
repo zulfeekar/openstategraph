@@ -820,3 +820,21 @@
 .ask__suggestion--build {
   border-left: 3px solid var(--color-border-strong, var(--color-border));
 }
+
+/* What this run spawned (`canvas-feels-right/07`). A row of chips between the
+   step record and the live line — wrapping rather than scrolling, because a
+   fan-out of forty is a fact a reader should be able to see all of, and a
+   horizontal scroller hides the tail exactly when the count is the point. */
+.ask__spawned {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-top: var(--space-2);
+}
+
+.ask__spawned-label {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  margin-right: var(--space-1);
+}

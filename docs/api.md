@@ -101,6 +101,28 @@ endpoints emit the identical vocabulary and one parser handles both.
 | `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run** |
 | `error` | **terminal** — the run failed | `threadId`, `detail` |
 
+#### `spawn.parent` is a hint, not an address
+
+A `spawn` frame's `parent` is the graph step the launch was read off, and that
+is **not always a canvas node**. Measured on 2026-08-28: an orchestrator's
+`Send` fan-out announces `parent: "lead1"`, which is a card; a deep agent's
+`task` or `start_async_task` call is read off the agent's own inner model step,
+so the same field says `parent: "model"`, which is not.
+
+The evidence that survives is `namespace`. Its head is `<node id>:<checkpoint
+id>`, so the part before the `:` names the node the child was launched from —
+the same resolution the server itself does for a `subgraph` spawn. A client
+that shows spawned work beside its owner should take `parent` when it names a
+node it knows and fall back to the namespace head otherwise; the editor's
+`spawnOwner` is that rule.
+
+`taskId` is the child's own identity and joins the frames it produced: a
+`fanout` child's `update` frames carry the same id the spawn announced. A
+`subagent` and an `async` child produce **no** frames on this stream at all —
+the first reports back as one `ToolMessage`, and the second runs on a desk
+outside the run — so an empty account for those two is correct rather than a
+gap.
+
 #### Audience: what a customer's run cannot carry
 
 **Changed.** `done` used to carry `warnings` unconditionally, and every
