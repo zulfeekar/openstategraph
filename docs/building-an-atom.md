@@ -270,8 +270,10 @@ story in its module docstring.
 ### A result can say what to do next, and what it swapped for the user's word
 
 `ToolResult.notes` carries what a tool has to say *about* the call, beside the
-result itself. Two kinds, both optional, both empty by default — a tool that
-attaches nothing behaves exactly as it did before the field existed.
+result itself. Three kinds — `Correction`, `Substitution` and `SourceChoice`
+— all optional, all empty by default, so a tool that attaches nothing behaves
+exactly as it did before the field existed. The two below are the ones a tool
+author writes by hand; `SourceChoice` is minted by `resolve.source`.
 
 ```python
 from openstategraph.abc import Correction, Substitution, ToolResult
@@ -309,6 +311,33 @@ The two go different places, and that is the point:
   and `model_inference` renders as *"a mapping the model worked out for
   itself, which nothing in this data states"* — a guess that landed and a
   guess that did not must not read alike.
+
+### A tool that is not a `BaseTool` reaches the same rails
+
+`record_notes` is called from `BaseTool.run`, which is every tool in this
+repository and every adopter's — but not the tools an MCP server offers. Those
+arrive from `load_mcp_tools` as `StructuredTool`s and are re-wrapped by
+[`prebuilt_mcp._wrap_async_tool`](../backend/openstategraph/prebuilt_mcp.py),
+because an MCP call runs on a pooled session on a private daemon loop and the
+awaitable half never passes through `_execute` at all (`async-first/11`).
+
+So for `tool.mcp` the seam is the wrapper, and the notes come from the server's
+own result envelope (`launch-readiness/157`):
+
+```json
+{"ok": true, "value": "Mongstad [NO]",
+ "notes": [{"kind": "substitution", "user_term": "Mongstad",
+            "axis": "load_port", "canonical_value": "Mongstad [NO]",
+            "how_matched": "declared_synonym"}]}
+```
+
+Read tolerantly — from the text *or* the structured content — and trusted
+strictly: `notes` is read only where it is a **list**, every entry must name a
+`kind` this build knows, and it must then validate against that member of the
+union in full. A result set with a column called `notes` is ordinary data and
+is left alone. Nothing is inferred from a payload's shape: a server is a
+stranger's, and guessing a substitution out of one would put one package's
+vocabulary into the platform.
 
 **Attach one only where the result is genuinely ambiguous** — zero rows, a
 truncated page, a rejected statement, a word you had to translate. A corrective

@@ -529,7 +529,7 @@ def summarise_tool_result(name: str, content: Any) -> str | None:
     finding = _TABLE.get(name)
     if finding is None:
         return None
-    envelope = _envelope(content)
+    envelope = result_envelope(content)
     if envelope is None:
         return None
     if envelope.get("ok") is False:
@@ -545,7 +545,7 @@ def _plain_text(content: Any) -> str | None:
 
     A `ToolMessage` from an in-process tool carries a plain string; the same
     result crossing an MCP boundary arrives as content blocks. Both are read,
-    for `_envelope`'s reason and by the same helper — anything else is not
+    for `result_envelope`'s reason and by the same helper — anything else is not
     something this module claims to understand.
     """
     if isinstance(content, str):
@@ -555,7 +555,7 @@ def _plain_text(content: Any) -> str | None:
     return None
 
 
-def _envelope(content: Any) -> dict[str, Any] | None:
+def result_envelope(content: Any) -> dict[str, Any] | None:
     """The result as a mapping, or `None`.
 
     Tolerant in reading, strict in trusting (CLAUDE.md). Three shapes arrive
@@ -575,6 +575,13 @@ def _envelope(content: Any) -> dict[str, Any] | None:
 
     Anything else — free prose, an object carrying no JSON — is not something
     this module claims to understand, and the caller's floor gets its turn.
+
+    **Public within `abc/` rather than private** (`launch-readiness/157`).
+    "What shape does a tool result arrive in" is one piece of knowledge, and
+    `prebuilt_mcp` needs the identical answer to find the notes a server
+    declared. Two decoders for one wire format is the duplication DRY actually
+    forbids — and the third shape above was only learned by running the thing,
+    so the second copy would have been the one that never learned it.
     """
     if isinstance(content, dict):
         return content

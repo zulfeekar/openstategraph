@@ -82,6 +82,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.abc.tool_findings import result_envelope
+from openstategraph.abc.tool_notes import ToolNote, notes_for_model, record_notes
 from openstategraph.abc.tool_sentences import describe_tool_call
 from openstategraph.progress import NARRATES_ITSELF, report_progress
 
@@ -609,6 +611,135 @@ def _discover_all(
 _UNKNOWN_REMOTE_CALL = "Asking a connected service."
 
 
+#: The one key a server declares its notes under, and the kinds it may name.
+#:
+#: `kind` is **required** here even though every member of the union defaults
+#: it — that default exists so a tool author writing `Correction(text=…)` in
+#: Python need not repeat themselves, and applying it to a stranger's JSON
+#: would turn any object carrying a `text` field into a corrective addressed to
+#: the model. Strict in trusting means the server names the kind.
+_NOTES_KEY = "notes"
+_NOTE_KINDS = frozenset({"next_step", "substitution", "source_choice"})
+
+
+def _declared_notes(content: Any, artifact: Any) -> tuple[ToolNote, ...]:
+    """The notes an MCP server declared about this call, believed or dropped.
+
+    `launch-readiness/157`. `record_notes` is called from `BaseTool.run`, and
+    nothing an MCP server offers passes through it — the tools arrive as
+    `StructuredTool`s from `load_mcp_tools` and are re-wrapped here. So the
+    recording seam moves to where the result is, and this is the half that
+    decides *what there is to record*.
+
+    **Nothing is inferred.** A server is a stranger's, so deriving a
+    substitution from a payload shape would put one package's vocabulary into
+    `core/` — and `mcp_resolve_lens`'s `entities[].value` looks exactly like a
+    dozen fields that mean something else. A server **declares** its notes,
+    under `notes`, in the same envelope it already returns.
+
+    Tolerant in reading, strict in trusting (CLAUDE.md), and the strict half is
+    the one that regresses:
+
+    - the envelope is read from the text *and* from the structured content,
+      because an MCP result carries both and a server may use either;
+    - `notes` is read only where it is a **list** — a result set with a column
+      called `notes`, or a `"notes": "no remarks"` field, is ordinary data and
+      is left alone;
+    - every entry must name a `kind` this build knows, and must then validate
+      against that member of the union in full. A `Substitution` with no
+      `how_matched` is refused rather than defaulted, which is the whole of
+      `127`: a substitution that cannot say how it knew is exactly the record
+      this must be unable to make.
+
+    A payload this cannot parse costs nothing: no notes, and the result travels
+    on untouched.
+    """
+    envelopes = [result_envelope(content)]
+    if isinstance(artifact, Mapping):
+        structured = artifact.get("structured_content")
+        if isinstance(structured, Mapping):
+            envelopes.append(dict(structured))
+
+    found: list[ToolNote] = []
+    for envelope in envelopes:
+        if not isinstance(envelope, Mapping):
+            continue
+        declared = envelope.get(_NOTES_KEY)
+        if not isinstance(declared, list):
+            continue
+        for entry in declared:
+            note = _believable(entry)
+            if note is not None:
+                found.append(note)
+    return tuple(found)
+
+
+def _believable(entry: Any) -> ToolNote | None:
+    """One declared entry, validated against the union, or `None`.
+
+    Failure is silent by design. A server that ships a malformed note has said
+    nothing this build can act on, and raising here would turn a disclosure
+    somebody added as a courtesy into a dead tool call.
+    """
+    from pydantic import TypeAdapter, ValidationError
+
+    if not isinstance(entry, Mapping):
+        return None
+    if entry.get("kind") not in _NOTE_KINDS:
+        return None
+    try:
+        return cast(ToolNote, TypeAdapter(ToolNote).validate_python(dict(entry)))
+    except ValidationError:
+        return None
+
+
+def _with_declared_notes(result: Any) -> Any:
+    """Record this call's notes on the run, and append the model's half.
+
+    The two rails `abc/tool_notes` describes, reached from a tool that is
+    legitimately not a `BaseTool`. `record_notes` puts the reader's half on the
+    run for `compile/node_runtime._output` to render; `notes_for_model` rides
+    back with the result, in the same message, which is the whole of `117`.
+
+    Byte-for-byte the previous behaviour when a server declares nothing —
+    which is every server today — right down to the tuple the agent receives.
+    """
+    if not isinstance(result, tuple) or len(result) != 2:
+        # `response_format` is carried across from the discovered tool, so a
+        # server answering in the plain `"content"` shape is a real case. It
+        # carries no artifact and no structured content; read what there is.
+        content, artifact = result, None
+    else:
+        content, artifact = result
+
+    notes = _declared_notes(content, artifact)
+    if not notes:
+        return result
+
+    record_notes(notes)
+    addendum = notes_for_model(notes)
+    if addendum:
+        content = _append_text(content, addendum)
+    return (content, artifact) if isinstance(result, tuple) else content
+
+
+def _append_text(content: Any, addendum: str) -> Any:
+    """The addendum, in whichever shape this content already is.
+
+    A string for the plain case, one more text block for the content-block
+    list an MCP tool actually produces. Anything else is returned untouched
+    rather than stringified — handing a model its own artifact as text is the
+    defect `response_format` is carried across to prevent.
+    """
+    if isinstance(content, str):
+        return f"{content}\n\n{addendum}"
+    if isinstance(content, list) and all(
+        isinstance(block, dict) and block.get("type") == "text" for block in content
+    ):
+        return [*content, {"type": "text", "text": addendum}]
+    return content
+
+
 def _wrap_async_tool(tool: Any, server: str) -> Any:  # noqa: ARG001 — see below
     """The sync shim: the original `coroutine`, plus a `func` that runs it.
 
@@ -676,13 +807,13 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:  # noqa: ARG001 — see bel
         # loop on an ordinary future while the work happens over there — no
         # thread is blocked, which is what makes an async agent running four
         # of these at once still concurrent.
-        return await run_on_mcp_loop_async(inner(**kwargs))
+        return _with_declared_notes(await run_on_mcp_loop_async(inner(**kwargs)))
 
     def _call(**kwargs: Any) -> Any:
         report_progress(_line(kwargs))
         # Not `asyncio.run`: that opened a loop per call, and a loop per call
         # is a session per call, which is the handshake this seam removes.
-        return run_on_mcp_loop(inner(**kwargs))
+        return _with_declared_notes(run_on_mcp_loop(inner(**kwargs)))
 
     return StructuredTool(
         name=tool.name,

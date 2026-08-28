@@ -3,6 +3,24 @@
 ## Unreleased
 
 ### Added
+- **An MCP tool can say what it did, on both note rails**
+  (`launch-readiness/157`). `record_notes` is called from `BaseTool.run`, and
+  `prebuilt_mcp._wrap_async_tool` re-wraps every remote tool as a plain
+  `StructuredTool` — so until now **no `tool.mcp` tool in any package could
+  carry a `Correction` or a `Substitution`**, which is why `117`, `127` and
+  `139` were all stalled against the one tool family that matters most. The
+  fix is not "make it a `BaseTool`": `async-first/11` established that the
+  awaitable half never passes through `_execute`, and the pooled session on a
+  private daemon loop (`777e829`, 1.21 s → 0.54 s) depends on that. The
+  recording seam moves to where the result is instead — the wrapper reads the
+  notes a server **declared** in its own result envelope under `notes`,
+  records the reader's half on the run and appends the model's half to the
+  content, on both entry points. Nothing is inferred from a payload shape: a
+  server is a stranger's, and deriving a substitution from one would put a
+  package's vocabulary in `core/`. Every entry must name a `kind` this build
+  knows and validate against that member of the union in full, so a `notes`
+  **column** in a result set, a `"notes": "no remarks"` field, and a
+  `Substitution` with no `how_matched` are all left alone.
 - **A run says which store answered, and what else could have.** A new node
   type, `resolve.source` (`launch-readiness/150`), and the engine behind it,
   `openstategraph.sources`. It is the sibling of `resolve.vocabulary`:
