@@ -856,6 +856,43 @@ def build_store(workflows_root_dir: Path | str | None = None) -> BaseStore:
     return InMemoryStore()
 
 
+# ---------------------------------------------------------------------------
+# The checkpointer seam — every path in one place
+# ---------------------------------------------------------------------------
+#
+# Four things below can end up being the saver a graph is compiled with, and
+# `async-first/03` asked for them in one place a reader can hold rather than
+# spread over four docstrings. In the order a request resolves them:
+#
+# 1. `build_checkpointer()` — the process-wide default, held by
+#    `WorkflowServices` and shared by HTTP, MCP and `load_workflow`. Postgres
+#    if `OPENSTATEGRAPH_POSTGRES_URL` is set, else a `SqliteSaver` on the state
+#    directory, else an `InMemorySaver` having said loudly why.
+#    `OPENSTATEGRAPH_CHECKPOINT_PATH=memory` opts out on top of everything.
+# 2. `checkpointer_for(settings, slug, fallback)` — one document's
+#    `settings.checkpointer: "sqlite"` gets its own file; anything else keeps
+#    the process default. Per workflow, not per process.
+# 3. `async_capable(saver)` — the bridge, applied by the compiler to whatever
+#    (1) or (2) produced. It adds the async four in a worker thread over the
+#    sync ones and leaves the sync four untouched, so the three still-blocking
+#    transports cannot tell they are holding a wrapper.
+# 4. The one that is deliberately **not** here: `AsyncSqliteSaver`. Phase B
+#    measured it (`async-first/03`, 2026-08-28) and it lost on both axes —
+#    2.2x-2.4x *slower* than the bridge from 8 concurrent runs upward, because
+#    every one of its operations takes a single `asyncio.Lock` over a single
+#    aiosqlite connection thread while the bridge's `check_same_thread=False`
+#    connection is walked by the whole default thread pool; and it captures a
+#    loop in `__init__`, so it cannot be constructed in a plain script at all.
+#    That second one is a portability break, not a trade: `load_workflow`
+#    promises the emitted graph runs anywhere Python runs. The bridge is the
+#    destination, not a stopgap. Both facts are pinned in
+#    `tests/test_the_async_run_path_can_use_the_servers_saver.py`, because a
+#    number in a comment has no way to fail.
+#
+# Only (3) is invisible to a caller. (1) and (2) each emit exactly one status
+# line saying whether the checkpoints are on disk, because a limitation a user
+# discovers by losing work is not a stated limitation.
+
 
 def checkpoint_path(workflows_root_dir: Path | str | None = None) -> Path | None:
     """Where the process-wide checkpointer writes, or None for in-memory.
