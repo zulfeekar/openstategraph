@@ -1,4 +1,12 @@
-"""The `"narration"` slot: one line before a model call, one line after.
+"""The `"narration"` slot: what a step is doing, and what it found.
+
+**The shape changed in `launch-readiness/143` and the header's old first line
+— "one line before a model call, one line after" — no longer describes it.**
+The lines are now placed where something is actually known: `before_model`
+still says a model call has started, `after_model` says nothing by default
+(see `NarrationMiddleware.__init__`), and `wrap_tool_call` — the one hook that
+holds a tool, its arguments *and* its result — says what the call is doing on
+the way in and what it found on the way out.
 
 `launch-readiness/104`. The evidence: a real trace of "which lenses are
 available?" took 50.2s; inside it, a tool call answered in 66ms and one
@@ -55,6 +63,7 @@ from typing import Any
 from langchain.agents.middleware.types import AgentMiddleware, AgentState, ToolCallRequest
 from langgraph.runtime import Runtime
 
+from openstategraph.abc.tool_findings import MAX_SENTENCE_LEN, summarise_tool_result
 from openstategraph.abc.tool_sentences import describe_tool_call
 from openstategraph.progress import report_progress
 from openstategraph.run_identity import run_identity
@@ -128,7 +137,12 @@ _UNKNOWN_TOOL_TEXT = "Calling a tool."
 
 #: "nothing on record", distinct from a tool that legitimately returned `None`.
 _MISS = object()
-_MAX_NARRATION_LEN = 80
+
+#: The panel's ceiling, imported rather than re-declared. It lived here *and*
+#: in `tool_sentences.py` as two literal `80`s that a comment claimed were the
+#: same number; `launch-readiness/143` needed a third, which is one too many
+#: for a comment to hold together. `tool_findings.MAX_SENTENCE_LEN` is the home.
+_MAX_NARRATION_LEN = MAX_SENTENCE_LEN
 
 
 class NarrationMiddleware(AgentMiddleware):
@@ -147,12 +161,28 @@ class NarrationMiddleware(AgentMiddleware):
         *,
         quiet: bool = False,
         before_text: str = "Thinking about the next step.",
-        after_text: str = "Finished thinking.",
+        after_text: str | None = None,
         describe: Callable[[str, dict[str, Any]], str | None] | None = None,
+        summarise: Callable[[str, Any], str | None] | None = None,
     ) -> None:
         super().__init__()
         self._quiet = quiet
         self._before_text = before_text
+        # `launch-readiness/143`: **declared silence, not a deleted line.**
+        # This defaulted to `"Finished thinking."`, authored for `104`'s
+        # replace-in-place live line, where its job was to stop the panel
+        # sitting on "Thinking…" once the model returned. `140` put the
+        # narration in a *stack* that keeps every line, and there the same
+        # sentence alternated with the real ones and carried nothing — it says
+        # the line above it has stopped being true, which the line below it
+        # already says. `110`'s pulsing marker does the live-line job now, and
+        # `after_model` is the one hook in the loop that knows nothing worth
+        # reporting: `before_model` has not called anything yet and
+        # `wrap_tool_call` holds the result. So the honest default is nothing.
+        #
+        # The parameter stays, and a caller passing a string still gets it —
+        # "nothing here narrates" is a decision on record, exactly as `quiet`
+        # is, rather than code somebody removed.
         self._after_text = after_text
         # `launch-readiness/112`: what this call *is doing*, when somebody
         # knows. Injected rather than imported here, so this class keeps the
@@ -161,6 +191,13 @@ class NarrationMiddleware(AgentMiddleware):
         # replaces a table rather than subclassing a middleware. `None` is
         # the keyword floor below and nothing else.
         self._describe = describe
+        # `launch-readiness/143`: what the call *found*, when the result says
+        # so. Injected on the same terms as `describe` and for the same
+        # reason — the class stays free of tool names and of any server's
+        # payload shape, and a workflow contributing its own findings replaces
+        # a table rather than subclassing a middleware. `None` is the shape
+        # floor in `_after_tool_text` and nothing else.
+        self._summarise = summarise
         # Per-thread only (`launch-readiness/105`): the durable cross-session
         # store is `launch-readiness/99` and is deliberately unbuilt. Keyed
         # `thread_id -> {(tool_name, exact_args_json): result}` — never by
@@ -175,7 +212,7 @@ class NarrationMiddleware(AgentMiddleware):
         return None
 
     def after_model(self, state: AgentState[Any], runtime: Runtime[Any]) -> dict[str, Any] | None:
-        if not self._quiet:
+        if not self._quiet and self._after_text:
             report_progress(self._after_text)
         return None
 
@@ -214,9 +251,10 @@ class NarrationMiddleware(AgentMiddleware):
         """The `launch-readiness/105` half: a before-line derived from the
         call itself (emitted *before* `handler` runs, so it lands while the
         tool is still in flight, not once it is already done), and an
-        after-line derived from the result's shape. Both go through the same
-        `report_progress()` seam as `before_model`/`after_model` — one
-        `"narration"` vocabulary, not two.
+        after-line derived from the result — its envelope where somebody has
+        read one (`abc/tool_findings.py`, `launch-readiness/143`), its Python
+        shape otherwise. Both go through the same `report_progress()` seam as
+        `before_model`/`after_model` — one `"narration"` vocabulary, not two.
 
         Also the `launch-readiness/105` read-through cache: an allowlisted
         tool called twice in the same thread with the exact same arguments
@@ -227,7 +265,7 @@ class NarrationMiddleware(AgentMiddleware):
         if hit is not _MISS:
             return hit
         result = handler(request)
-        return self._remember(result, cache_key, thread_id)
+        return self._remember(result, cache_key, thread_id, self._tool_name(request))
 
     async def awrap_tool_call(self, request: ToolCallRequest, handler: Any) -> Any:
         """`wrap_tool_call` with the one `await` that path needs.
@@ -241,7 +279,7 @@ class NarrationMiddleware(AgentMiddleware):
         if hit is not _MISS:
             return hit
         result = await handler(request)
-        return self._remember(result, cache_key, thread_id)
+        return self._remember(result, cache_key, thread_id, self._tool_name(request))
 
     def _reuse(self, request: ToolCallRequest) -> tuple[tuple[str, str] | None, str | None, Any]:
         """What this thread already knows about this exact call, if anything.
@@ -265,9 +303,13 @@ class NarrationMiddleware(AgentMiddleware):
         return cache_key, thread_id, _MISS
 
     def _remember(
-        self, result: Any, cache_key: tuple[str, str] | None, thread_id: str | None
+        self,
+        result: Any,
+        cache_key: tuple[str, str] | None,
+        thread_id: str | None,
+        name: str = "",
     ) -> Any:
-        """Store the result where a later call can find it, and say what came back."""
+        """Store the result where a later call can find it, and say what it found."""
         if thread_id is not None:
             # `thread_id` is only ever set when `cache_key` is not `None` —
             # this assert is for mypy's narrowing, not a new runtime
@@ -275,7 +317,7 @@ class NarrationMiddleware(AgentMiddleware):
             assert cache_key is not None
             self._findings.setdefault(thread_id, {})[cache_key] = result
         if not self._quiet:
-            text = self._after_tool_text(result)
+            text = self._after_tool_text(name, result)
             if text is not None:
                 report_progress(text)
         return result
@@ -336,6 +378,11 @@ class NarrationMiddleware(AgentMiddleware):
         thread_id = run_identity(config).get("thread_id", "")
         return thread_id or None
 
+    @staticmethod
+    def _tool_name(request: ToolCallRequest) -> str:
+        """The tool's own id, used to *look things up* and never to say them."""
+        return request.tool_call.get("name") or ""
+
     def _before_tool_text(self, request: ToolCallRequest) -> str:
         """The sharpest honest line available for this call.
 
@@ -345,7 +392,7 @@ class NarrationMiddleware(AgentMiddleware):
         tool nobody has authored a sentence for still says — and no tier ever
         names the tool.
         """
-        raw_name = request.tool_call.get("name") or ""
+        raw_name = self._tool_name(request)
         if self._describe is not None:
             try:
                 sentence = self._describe(raw_name, request.tool_call.get("args") or {})
@@ -359,13 +406,40 @@ class NarrationMiddleware(AgentMiddleware):
                 return phrase
         return _UNKNOWN_TOOL_TEXT
 
-    @staticmethod
-    def _after_tool_text(result: Any) -> str | None:
-        """Derived from the result's *shape* only — never a model call, and
-        never a guess. A shape this cannot honestly describe is omitted
-        rather than mis-described (the ticket's own honesty clause)."""
+    def _after_tool_text(self, name: str, result: Any) -> str | None:
+        """What this call found, in one sentence, or nothing.
+
+        Two tiers, narrowest first, mirroring `_before_tool_text` exactly
+        (`launch-readiness/143`): a finding read out of *this* result's own
+        envelope by somebody who has seen one, then the shape floor below —
+        which is all a result whose envelope nobody has read can honestly
+        support. Neither tier ever names the tool, and neither ever speaks a
+        value: the finding tier interpolates integers only, and the floor
+        interpolates a length.
+
+        Never a model call and never a guess. A result this cannot honestly
+        describe is omitted rather than mis-described (`104`'s honesty
+        clause), which is why the floor still answers `None` to free text.
+        """
         content = getattr(result, "content", None)
+        if self._summarise is not None:
+            try:
+                found = self._summarise(name, content)
+            except Exception:  # noqa: BLE001 — narration must never fail a run
+                found = None
+            if found:
+                return found
         if isinstance(content, list):
+            if _is_block_list(content):
+                # `launch-readiness/143`, found on the live run: an MCP result
+                # arrives as `[{"type": "text", "text": "{…}"}]`, so a
+                # 121-row query counted as a list said `"1 result."` — a
+                # number that looks real and is not. One text block is one
+                # block, never one result, and this floor has no way to read
+                # what is inside it. `abc/tool_findings.py` does, for a tool
+                # somebody has read a result from; here, silence is the only
+                # honest answer.
+                return None
             n = len(content)
             if n == 0:
                 return "No rows."
@@ -377,6 +451,19 @@ class NarrationMiddleware(AgentMiddleware):
         return None
 
 
+def _is_block_list(content: list[Any]) -> bool:
+    """Whether this list is a message's content blocks rather than records.
+
+    A block carries `text`; a record carries whatever the tool put in it. The
+    distinction is the difference between counting what a tool found and
+    counting how many pieces its answer was delivered in.
+    """
+    return bool(content) and all(
+        isinstance(item, str) or (isinstance(item, dict) and isinstance(item.get("text"), str))
+        for item in content
+    )
+
+
 def build_narration_middleware(*, quiet: bool = False) -> NarrationMiddleware:
     """The base's default filler for the `"narration"` slot.
 
@@ -385,11 +472,15 @@ def build_narration_middleware(*, quiet: bool = False) -> NarrationMiddleware:
     something else under the same name) and never a hardcoded instance —
     "inherit the capability, not the composition."
 
-    This is also the one place `launch-readiness/112`'s sentence table is
-    wired in, and there is exactly one of these functions, so every agent gets
-    the sharper line without any node type opting in. The table is a
-    *contribution into the slot* rather than a change to the middleware: the
-    class above still knows no tool names, and passing `describe=` something
-    else is how a workflow overrides it.
+    This is also the one place the two tables are wired in —
+    `launch-readiness/112`'s sentence table (what a call *is doing*) and
+    `launch-readiness/143`'s finding table (what it *found*) — and there is
+    exactly one of these functions, so every agent gets both without any node
+    type opting in. They are *contributions into the slot* rather than changes
+    to the middleware: the class above still knows no tool names and no
+    server's payload shape, and passing `describe=` or `summarise=` something
+    else is how a workflow overrides either one.
     """
-    return NarrationMiddleware(quiet=quiet, describe=describe_tool_call)
+    return NarrationMiddleware(
+        quiet=quiet, describe=describe_tool_call, summarise=summarise_tool_result
+    )

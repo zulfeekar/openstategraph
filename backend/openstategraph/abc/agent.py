@@ -85,16 +85,30 @@ class AbstractAgentNode(ABC):
         # — the slot is only ever filled when a workflow asked for it and the
         # extra is installed (`openstategraph.injection`).
         "injection-screening",
-        # Second — right after screening, and before anything that touches
-        # state or the model request. It has nothing security-sensitive to
-        # order against, only a preference: its `before_model` line should
-        # announce intent before other middleware has acted, and — because
-        # `after_*` hooks run **last to first** — sitting this early means
-        # its `after_model` line lands late, close to last, after most of
-        # the table has already finished (`launch-readiness/104`).
-        "narration",
         "skills",
         "filesystem",
+        # After `filesystem`, and the position is an argument
+        # (`launch-readiness/143`). It sat second until then, on a preference
+        # about hook order: its `before_model` line should announce intent
+        # early, and because `after_*` runs last-to-first, sitting early made
+        # its `after_model` line land late (`launch-readiness/104`). Half of
+        # that argument has since expired — `after_model` is silent by default
+        # now, because it is the one hook in the loop that knows nothing worth
+        # reporting.
+        #
+        # What replaced it is a `wrap_tool_call` constraint, and `wrap_*`
+        # **nests**: the first middleware in the list wraps all the others. So
+        # sitting second put narration *outside* `OffloadMiddleware`, and what
+        # it saw of a large tool result was the pointer offload had already
+        # substituted — `[offloaded: 48213 chars written to path=...]`. The
+        # one moment the run knows something true was being read after another
+        # middleware had rewritten it. Inside offload, narration sees the
+        # result the tool actually returned and can say what it found; offload
+        # still substitutes its pointer for the model, unchanged.
+        #
+        # It stays after `injection-screening`, which is the one hard
+        # constraint here and is security-sensitive.
+        "narration",
         "subagents",
         "summarization",
         "limits",

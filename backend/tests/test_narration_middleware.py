@@ -47,18 +47,28 @@ def _drive_hooks_through_a_real_graph(middleware: NarrationMiddleware) -> list[d
 
 
 class TestNarrationMiddleware:
-    def test_fires_before_and_after(self) -> None:
+    def test_the_model_hooks_speak_once_where_they_know_something(self) -> None:
+        # `launch-readiness/143`. Two lines became one, deliberately.
+        # `before_model` genuinely has something to say — a model call is
+        # about to take forty seconds. `after_model` does not: it knew only
+        # that the line above it had stopped being true, which in `140`'s
+        # stack the next line already says.
         events = _drive_hooks_through_a_real_graph(NarrationMiddleware())
-        assert len(events) == 2
+        assert len(events) == 1
 
     def test_lands_on_the_streamed_channel_not_only_the_final_message(self) -> None:
         events = _drive_hooks_through_a_real_graph(NarrationMiddleware())
         reports = [progress_report(e) for e in events]
         assert all(r is not None for r in reports)
-        assert [r.message for r in reports] == [
-            "Thinking about the next step.",
-            "Finished thinking.",
-        ]
+        assert [r.message for r in reports] == ["Thinking about the next step."]
+
+    def test_the_after_line_is_declared_silence_not_deleted_code(self) -> None:
+        # The `quiet` argument's own rule, applied to one line: a caller who
+        # wants an after-line still gets one, so "nothing here narrates" stays
+        # a decision on record rather than a hook somebody removed.
+        events = _drive_hooks_through_a_real_graph(NarrationMiddleware(after_text="Done."))
+        reports = [progress_report(e) for e in events]
+        assert [r.message for r in reports if r] == ["Thinking about the next step.", "Done."]
 
     def test_uses_the_existing_progress_envelope_not_a_second_channel(self) -> None:
         events = _drive_hooks_through_a_real_graph(NarrationMiddleware())
@@ -228,14 +238,23 @@ class TestSlotWiring:
         table = node.resolve_middleware()
         assert table.get("narration") is sharper
 
-    def test_narration_sits_right_after_screening(self) -> None:
-        # Ordering contract, not behaviour: `injection-screening` must stay
-        # first (security-sensitive — CLAUDE.md, `before_*` runs
-        # first-to-last). Narration has nothing to order against it, so it
-        # takes the very next slot: early enough that its `after_model` line
-        # (after_* runs last-to-first) lands late, close to last.
+    def test_narration_stays_after_screening(self) -> None:
+        # The one *hard* ordering constraint, and it is security-sensitive:
+        # `injection-screening` runs `before_*` first-to-last and must act on
+        # the text before anything else does.
         order = AbstractAgentNode.SLOT_ORDER
-        assert order.index("narration") == order.index("injection-screening") + 1
+        assert order.index("narration") > order.index("injection-screening")
+
+    def test_narration_sits_inside_the_offload_it_has_to_see_through(self) -> None:
+        # `launch-readiness/143`, and the reason narration moved off the
+        # second slot. `wrap_*` **nests**: the first middleware in the list
+        # wraps all the others. Outside `filesystem`, what narration saw of a
+        # large tool result was the pointer `OffloadMiddleware` had already
+        # substituted, so the one hook that holds a real result was reading
+        # another middleware's replacement for it. Later in the list is
+        # further *in*.
+        order = AbstractAgentNode.SLOT_ORDER
+        assert order.index("narration") > order.index("filesystem")
 
 
 class TestSlotTableNoneSilencing:
@@ -473,10 +492,12 @@ class TestNarrationOnTheAsyncPath:
     def test_the_model_hooks_still_reach_the_custom_channel(self) -> None:
         events = _drive_hooks_through_an_async_graph(NarrationMiddleware())
         reports = [progress_report(e) for e in events]
-        assert [r.message for r in reports if r] == [
-            "Thinking about the next step.",
-            "Finished thinking.",
-        ]
+        assert [r.message for r in reports if r] == ["Thinking about the next step."]
+
+    def test_the_after_line_stays_available_on_the_async_path_too(self) -> None:
+        events = _drive_hooks_through_an_async_graph(NarrationMiddleware(after_text="Done."))
+        reports = [progress_report(e) for e in events]
+        assert [r.message for r in reports if r] == ["Thinking about the next step.", "Done."]
 
     def test_quiet_is_still_quiet(self) -> None:
         assert _drive_hooks_through_an_async_graph(NarrationMiddleware(quiet=True)) == []
