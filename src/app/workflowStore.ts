@@ -448,6 +448,32 @@ export function releaseSession(store: KeyValueStore, id: string, guard: WriteGua
   }
 }
 
+/**
+ * The writer id of the tab currently editing `id`, or `null` when none is.
+ *
+ * Split out of `isClaimedByAnother` for `launch-readiness` 148: a second
+ * reader needs the same question asked without a `WriteGuard` to compare
+ * against. `discardDraftAfterDelete` is deciding whether a draft belongs to
+ * *some other tab* while holding no guard of its own, and the storage sweep
+ * asks it of every key at once. One parser, three callers.
+ */
+export function claimHolder(
+  store: KeyValueStore,
+  id: string,
+  nowMs: () => number = () => Date.now(),
+  staleAfterMs: number = CLAIM_STALE_MS,
+): string | null {
+  const raw = read(store, claimKeyFor(id));
+  if (raw == null) return null;
+  try {
+    const claim = JSON.parse(raw) as { writerId?: unknown; at?: unknown };
+    if (typeof claim.writerId !== 'string' || typeof claim.at !== 'number') return null;
+    return nowMs() - claim.at < staleAfterMs ? claim.writerId : null;
+  } catch {
+    return null;
+  }
+}
+
 /** True when a *different*, still-live tab holds `id`. */
 export function isClaimedByAnother(
   store: KeyValueStore,
@@ -456,16 +482,8 @@ export function isClaimedByAnother(
   nowMs: () => number = () => Date.now(),
   staleAfterMs: number = CLAIM_STALE_MS,
 ): boolean {
-  const raw = read(store, claimKeyFor(id));
-  if (raw == null) return false;
-  try {
-    const claim = JSON.parse(raw) as { writerId?: unknown; at?: unknown };
-    if (typeof claim.writerId !== 'string' || typeof claim.at !== 'number') return false;
-    if (claim.writerId === guard.writerId) return false;
-    return nowMs() - claim.at < staleAfterMs;
-  } catch {
-    return false;
-  }
+  const holder = claimHolder(store, id, nowMs, staleAfterMs);
+  return holder != null && holder !== guard.writerId;
 }
 
 /**

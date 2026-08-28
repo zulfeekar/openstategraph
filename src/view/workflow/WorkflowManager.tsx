@@ -28,6 +28,7 @@ import {
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
 import { abandonDeletedWorkflow } from '@app/diskAutosave';
 import { discardDraftAfterDelete } from '@app/workflowDrafts';
+import { sweepBrowserStorage, type SweepReport } from '@app/browserStorageSweep';
 import { getOpenSlug } from '@app/openWorkflow';
 import {
   WorkflowFileClient,
@@ -46,7 +47,9 @@ import {
 } from './createNewWorkflow';
 import {
   deleteConfirmation,
+  browserStorageLine,
   deletedMessage,
+  draftKeptForAnotherTabMessage,
   publishedMessage,
   rowActionHint,
   rowStatusHint,
@@ -102,6 +105,7 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   const client = useMemo(() => new WorkflowFileClient(), []);
   const [workflows, setWorkflows] = useState<readonly WorkflowSummary[]>([]);
   const [listError, setListError] = useState<string | null>(null);
+  const [storage, setStorage] = useState<SweepReport | null>(null);
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
   // The scaffold's own templates (scale-and-adopt ticket 04), fetched — never
@@ -138,6 +142,12 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
 
   const refreshList = useCallback(async (): Promise<readonly WorkflowSummary[]> => {
     const outcome = await client.list();
+    // The one moment this browser holds an authoritative answer to *"which
+    // slugs does the backend still have"*, which is what tells an orphaned
+    // draft from unsaved work (`launch-readiness` 96). A failed listing is not
+    // "no workflows": it sweeps with `knownSlugs: null`, which touches no
+    // slug-keyed draft at all and retires only what needs no listing.
+    setStorage(sweepStorage(outcome.ok ? new Set(outcome.value.map((wf) => wf.slug)) : null));
     if (outcome.ok) {
       setListError(null);
       setWorkflows(outcome.value);
@@ -360,8 +370,17 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
         // Otherwise this browser's own draft of the deleted workflow survives
         // under `slug-<slug>` and is silently adopted by the next workflow
         // minted with the same slug (`launch-readiness` 95).
-        discardDraftAfterDelete(slug);
-        onNotify(deletedMessage(name));
+        //
+        // **It answers rather than obeying** (`launch-readiness` 148).
+        // `localStorage` is the origin's, not this tab's, so this call used to
+        // delete another window's unsaved edits. It now declines when a live
+        // tab is editing that draft, and the user is told which happened.
+        const draft = discardDraftAfterDelete(slug);
+        onNotify(
+          draft.discarded
+            ? deletedMessage(name)
+            : deletedMessage(name) + draftKeptForAnotherTabMessage(),
+        );
         void refreshList();
       } else {
         onNotify(`Could not delete: ${outcome.error}`);
@@ -558,6 +577,9 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                 ))}
               </ul>
             )}
+            {storage != null && (
+              <p className="workflow-manager__storage">{browserStorageLine(storage)}</p>
+            )}
           </PanelSection>
         )}
 
@@ -628,4 +650,18 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       </PanelBody>
     </Panel>
   );
+}
+
+/**
+ * Run the bounded storage sweep, if this host has storage at all.
+ *
+ * Called from the list refresh rather than from app start, because this is the
+ * one place holding an authoritative backend listing — and `launch-readiness`
+ * 96's orphan rule is a comparison against that listing, not a clock. A host
+ * with no `localStorage` (a test, a non-DOM render) has nothing to sweep and
+ * nothing to report, which is exactly true and not an error.
+ */
+function sweepStorage(knownSlugs: ReadonlySet<string> | null): SweepReport | null {
+  if (typeof localStorage === 'undefined') return null;
+  return sweepBrowserStorage(localStorage, { nowMs: Date.now(), knownSlugs });
 }

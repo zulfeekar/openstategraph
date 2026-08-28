@@ -102,6 +102,24 @@ export function deletedMessage(name: string): string {
 }
 
 /**
+ * The clause added when the delete deliberately left a draft alone —
+ * **`launch-readiness` 148**.
+ *
+ * A browser tab shares `localStorage` with every other tab of this editor, so
+ * a delete here used to remove another window's unsaved edits without ever
+ * mentioning it. It no longer does; this is the half of that fix the user can
+ * see. It names the tab rather than the storage, because "your other window
+ * still has unsaved changes" is a thing a person can act on and "a draft key
+ * was retained" is not.
+ */
+export function draftKeptForAnotherTabMessage(): string {
+  return (
+    ' Another tab still has unsaved edits to it open — they were left alone, ' +
+    'and saving there will create a new workflow.'
+  );
+}
+
+/**
  * The toast after a publish.
  *
  * Names the transition, not the new state alone: *what changed* is the thing
@@ -136,5 +154,43 @@ export function unpublishedMessage(name: string): string {
   return (
     `Unpublished: ${name} — back to draft: ${CHAT_APP_AUDIENCE} no longer see it in their ` +
     `list. Nothing is deleted; the folder is untouched.`
+  );
+}
+
+/**
+ * What this browser is holding, and when it lets go — **`launch-readiness`
+ * 96**.
+ *
+ * The ticket's second half: *"surfacing current localStorage usage somewhere
+ * the user can act on it before a quota error blocks a save"*. Until now the
+ * only reader of any of these families was a `QuotaExceededError`, which
+ * arrives attached to whichever save happened next and blames it.
+ *
+ * Three deliberate choices in one sentence:
+ *
+ * - **It names the budget**, because a number with nothing to compare it to
+ *   is not something anyone can act on.
+ * - **It says when things go**, because the alternative is a user who assumes
+ *   nothing ever does — which was true until this shipped, and is the whole
+ *   ticket.
+ * - **It does not offer a "clear" button.** A draft may be the only copy of
+ *   somebody's work; a control that discards all of them at once is a bigger
+ *   hazard than the growth it answers, and the sweep already bounds that.
+ */
+export function browserStorageLine(held: {
+  readonly bytesHeld: number;
+  readonly draftsHeld: number;
+  readonly corruptHeld: number;
+}): string {
+  const kb = Math.max(1, Math.round(held.bytesHeld / 1000));
+  const drafts = `${held.draftsHeld} autosaved draft${held.draftsHeld === 1 ? '' : 's'}`;
+  const snapshots =
+    held.corruptHeld === 0
+      ? ''
+      : `, ${held.corruptHeld} unreadable snapshot${held.corruptHeld === 1 ? '' : 's'}`;
+  return (
+    `This browser holds ${drafts}${snapshots} — about ${kb}kB of a 4,000kB limit. ` +
+    'Drafts of workflows that no longer exist are cleared after 30 days; ' +
+    'a draft of a workflow you still have is kept until you save or delete it.'
   );
 }

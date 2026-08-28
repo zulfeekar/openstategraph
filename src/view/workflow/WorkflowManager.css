@@ -110,3 +110,16 @@
   justify-content: flex-start;
   text-align: left;
 }
+
+/* What this browser is holding, and when it lets go (`launch-readiness` 96).
+   Sits under the list rather than above it: it is a standing fact about the
+   store, not a thing to read before the workflows are. Bordered off the list
+   so it is not mistaken for a row. */
+.workflow-manager__storage {
+  border-top: 1px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-2);
+}

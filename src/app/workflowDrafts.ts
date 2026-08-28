@@ -1,6 +1,7 @@
 import type { Workbench } from './Workbench';
 import { subscribeOpenSlug } from './openWorkflow';
 import {
+  claimHolder,
   deleteWorkflow,
   moveWorkflow,
   readWorkflow,
@@ -60,6 +61,18 @@ export function draftIdForSlug(slug: string): string {
 }
 
 const SLUG_DRAFT_PREFIX = 'slug-';
+
+/**
+ * The slug a draft id names, or `null` when the id names no workflow.
+ *
+ * The inverse of `draftIdForSlug`, and the reason it is exported: the storage
+ * sweep has to tell a draft that *has* an identity — and can therefore be
+ * compared against the backend's listing — from a `wf-<timestamp>` scratch
+ * draft, which never had one and never can be orphaned.
+ */
+export function slugOfDraftId(id: string): string | null {
+  return id.startsWith(SLUG_DRAFT_PREFIX) ? id.slice(SLUG_DRAFT_PREFIX.length) : null;
+}
 
 /**
  * Where a tab records which draft key it is writing under.
@@ -233,9 +246,9 @@ export function supersedeDraftAfterHostWrite(
 
 /**
  * Drop this browser's draft of a package that was just deleted on the
- * backend — **`launch-readiness` 95**.
+ * backend — **`launch-readiness` 95**, corrected by **`launch-readiness` 148**.
  *
- * ## The orphan
+ * ## The orphan (95)
  *
  * A draft is keyed `slug-<slug>` (`draftIdForSlug`), and deleting a workflow
  * from the Workflows panel only ever called the backend's `remove(slug)` — it
@@ -243,15 +256,81 @@ export function supersedeDraftAfterHostWrite(
  * in `localStorage` under the exact name the *next* workflow with that slug
  * would mint, because slugs are derived from titles and re-using a title
  * (`"Chinook Assistant"`, say) re-mints the same slug. So a re-created
- * workflow of the same name silently inherited a stranger's leftover draft —
- * the shape of the stale-draft symptom that motivated this sweep, minus one
- * step: no rename was even needed, deletion alone was enough.
+ * workflow of the same name silently inherited a stranger's leftover draft.
  *
- * Called once, from the Workflows panel's delete handler, mirroring
- * `supersedeDraftAfterHostWrite`'s one-call-site discipline.
+ * ## The tab this was reaching into (148)
+ *
+ * `localStorage` belongs to the **origin**, not to the tab. Every tab of the
+ * editor shares one, so an unconditional `deleteWorkflow` here was a delete
+ * performed on every tab at once — and one of them may have been holding
+ * unsaved work. Reproduced live: type in tab B, delete from tab A's panel, and
+ * B's draft key is `absent`, which is why B's next reload landed on a blank
+ * canvas. Unsaved work destroyed by a gesture in a different window, with no
+ * prompt and no undo.
+ *
+ * **The reconciliation is not tab-scoping.** A draft is per *workflow* and has
+ * been since ticket 23 — see this module's own header — and `96` exists
+ * precisely because a draft is *"the only copy of someone's work"* and must
+ * outlive the tab that made it. Moving drafts to `sessionStorage` would answer
+ * 96 by doing the thing 96 refused to do: lose them on a tab close. So drafts
+ * stay origin-scoped, and the *remover* learns the boundary instead.
+ *
+ * ## What it reads, and why the claim is the right signal
+ *
+ * The origin already records which draft each live tab is editing:
+ * `claimSession` writes a claim on a ten-second heartbeat and it goes stale in
+ * thirty. So a live claim on this slug's draft, held by a tab that is not this
+ * one, is the origin saying *somebody is typing into this right now*. That is
+ * exactly the case 148 is about, and it is the only case where the draft is
+ * kept.
+ *
+ * `thisTabsDraftId` is what separates *my* draft from *theirs*: a claim on a
+ * key this tab is itself writing under is this tab's own, and its own draft is
+ * still discarded, because the user asked for this delete and `147` has
+ * already released the slug. Passed in rather than read from `sessionStorage`
+ * inside, so a test can drive two tabs against one store — which is the only
+ * kind of test that can fail against this defect.
+ *
+ * Returns a decision rather than nothing, because *"your other tab still has
+ * unsaved edits to that"* is a sentence the user is owed. Called from one
+ * place, mirroring `supersedeDraftAfterHostWrite`'s discipline.
  */
-export function discardDraftAfterDelete(slug: string, store: KeyValueStore = browserStore()): void {
-  deleteWorkflow(store, draftIdForSlug(slug));
+export interface DraftDiscardDecision {
+  readonly discarded: boolean;
+  /** Why it was kept. Absent when it was discarded. */
+  readonly reason?: 'another-tab-is-editing';
+}
+
+/**
+ * The rule, with every ambient fact already read — `say-it-on-the-surface`
+ * 07's shape, for the same reason: the case that must **not** fire is a race
+ * between two browser tabs, and a decision expressed as data can be tested
+ * at any clock.
+ */
+export function decideDraftDiscard(input: {
+  readonly draftId: string;
+  readonly thisTabsDraftId: string | null;
+  readonly liveClaimHolder: string | null;
+}): DraftDiscardDecision {
+  if (input.liveClaimHolder == null) return { discarded: true };
+  if (input.draftId === input.thisTabsDraftId) return { discarded: true };
+  return { discarded: false, reason: 'another-tab-is-editing' };
+}
+
+export function discardDraftAfterDelete(
+  slug: string,
+  store: KeyValueStore = browserStore(),
+  thisTabsDraftId: string | null = currentDraftId(),
+  nowMs: () => number = () => Date.now(),
+): DraftDiscardDecision {
+  const draftId = draftIdForSlug(slug);
+  const decision = decideDraftDiscard({
+    draftId,
+    thisTabsDraftId,
+    liveClaimHolder: claimHolder(store, draftId, nowMs),
+  });
+  if (decision.discarded) deleteWorkflow(store, draftId);
+  return decision;
 }
 
 /** Whether this browser holds a draft for `subject` (a slug or an address). */
