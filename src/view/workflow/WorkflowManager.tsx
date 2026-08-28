@@ -26,9 +26,9 @@ import {
   TextInput,
 } from '@design/primitives';
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
-import { forgetKnownSavedAt } from '@app/workflowFileWatch';
+import { abandonDeletedWorkflow } from '@app/diskAutosave';
 import { discardDraftAfterDelete } from '@app/workflowDrafts';
-import { clearOpenSlug, getOpenSlug } from '@app/openWorkflow';
+import { getOpenSlug } from '@app/openWorkflow';
 import {
   WorkflowFileClient,
   type WorkflowExample,
@@ -346,12 +346,17 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       if (!confirm(deleteConfirmation(name, published))) return;
       const outcome = await client.remove(slug);
       if (outcome.ok) {
-        // Deleting the workflow this tab has open also takes it out of the
-        // URL: leaving `?w=` pointing at a package that no longer exists would
-        // turn the next reload into a 404 toast about work the user deleted
-        // deliberately.
-        if (getOpenSlug() === slug) clearOpenSlug();
-        forgetKnownSavedAt(slug);
+        // Everything this tab believed about the package, dropped at once —
+        // the disk-autosave baseline, the `savedAt` it knew, and the open slug
+        // with the `?w=` that goes with it. Leaving `?w=` pointing at a package
+        // that no longer exists would turn the next reload into a 404 toast
+        // about work the user deleted deliberately.
+        //
+        // **One spelling, shared with the tab that only *hears* about the
+        // delete** (`launch-readiness` 147). This branch used to do two of the
+        // three by hand and the file watch none of them, which is how a second
+        // tab came to re-create the package — hollow — on its next keystroke.
+        abandonDeletedWorkflow(slug);
         // Otherwise this browser's own draft of the deleted workflow survives
         // under `slug-<slug>` and is silently adopted by the next workflow
         // minted with the same slug (`launch-readiness` 95).

@@ -1326,12 +1326,18 @@
       },
       "SaveWorkflowAtSlugRequest": {
         "additionalProperties": false,
-        "description": "What `PUT /api/workflows/{slug}` accepts \u2014 workflow-gallery ticket 42.\n\nIdentical to :class:`SaveWorkflowRequest` but for tolerating the `slug`\nthat `WorkflowDocumentResponse` hands back, so *fetch, edit, put it\nback* is writable without reshaping the payload. The field is\n**echo-only**: the path is the identity, and a `slug` disagreeing with\nit is refused by the route rather than honoured (a body carrying another\nworkflow's slug is a confused client, not an instruction to cross-write).\n\n`extra=\"forbid\"` is inherited and deliberately not relaxed further \u2014\nit is what makes a typo an error instead of a silent no-op. One field\nwas admitted, not the door.",
+        "description": "What `PUT /api/workflows/{slug}` accepts \u2014 workflow-gallery ticket 42.\n\nIdentical to :class:`SaveWorkflowRequest` but for tolerating the `slug`\nthat `WorkflowDocumentResponse` hands back, so *fetch, edit, put it\nback* is writable without reshaping the payload. The field is\n**echo-only**: the path is the identity, and a `slug` disagreeing with\nit is refused by the route rather than honoured (a body carrying another\nworkflow's slug is a confused client, not an instruction to cross-write).\n\n`extra=\"forbid\"` is inherited and deliberately not relaxed further \u2014\nit is what makes a typo an error instead of a silent no-op. One field\nwas admitted, not the door.\n\n`must_exist` is the second, and it is a data-loss guard rather than a\nconvenience (launch-readiness 147). This endpoint creates a package when\nthe slug is free \u2014 right for the CLI, a script or a test, and catastrophic\nfor an editor tab whose package another tab deleted a moment ago: one\nkeystroke re-made the directory with `workflow.json` alone, and the\n`tools/`, `functions/` and `tests/` that made the workflow work were gone\nfor good. A client that believes it is *editing* an existing package says\nso, and gets a 404 instead of a resurrection. Default `False`, because the\ncreate is not the defect \u2014 writing to a slug you were told is gone is.",
         "properties": {
           "document": {
             "additionalProperties": true,
             "title": "Document",
             "type": "object"
+          },
+          "must_exist": {
+            "default": false,
+            "description": "Refuse to create: answer 404 if no package exists at this slug. For a client that holds a package and is editing it, so a save cannot re-create one that was deleted underneath it.",
+            "title": "Must Exist",
+            "type": "boolean"
           },
           "name": {
             "minLength": 1,
@@ -3044,7 +3050,7 @@
         ]
       },
       "put": {
-        "description": "Writes the package's `workflow.json` and stamps `saved_at`.\n\nThe slug is the path parameter and is frozen at creation; the body\ncarries the display name and the document, never the slug. Announces\nthe change on `/api/events` **after** the write succeeded.\n\n**Addresses an existing package.** It still creates one if the slug is\nfree \u2014 naming a directory explicitly is how the CLI and a test write a\npackage they intend to own \u2014 but a client that does not yet have a\nslug must `POST /api/workflows` and be given one, because a slug it\ninvented from a name may already belong to somebody else's workflow\n(ticket 20).",
+        "description": "Writes the package's `workflow.json` and stamps `saved_at`.\n\nThe slug is the path parameter and is frozen at creation; the body\ncarries the display name and the document, never the slug. Announces\nthe change on `/api/events` **after** the write succeeded.\n\n**Addresses an existing package.** It still creates one if the slug is\nfree \u2014 naming a directory explicitly is how the CLI and a test write a\npackage they intend to own \u2014 but a client that does not yet have a\nslug must `POST /api/workflows` and be given one, because a slug it\ninvented from a name may already belong to somebody else's workflow\n(ticket 20).\n\n**Unless the body says `must_exist`**, in which case a free slug is a\n404 rather than a create. That is for the caller the create is wrong\nfor: an editor tab whose package was deleted underneath it, whose next\nkeystroke used to re-make the directory holding `workflow.json` alone\nwhile the package's `tools/`, `functions/` and `tests/` stayed deleted\n(launch-readiness 147). The flag is the client's declaration that it\nholds a package, not a change to what this endpoint is for.",
         "operationId": "save_workflow_api_workflows__slug__put",
         "parameters": [
           {

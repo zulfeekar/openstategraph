@@ -911,6 +911,17 @@ editor slugified the name in the browser and PUT to the result, so a second
 "My Workflow" landed on the first one's directory and overwrote it, 200 OK,
 no prompt, no trace.
 
+**Unless you send `must_exist: true`**, which turns a free slug into a `404`
+instead of a create. That is for the caller the create is wrong for: a client
+that already holds a package and is *editing* it. Without it, an editor tab
+whose workflow another tab had deleted re-created the package on its next
+keystroke — `workflow.json` and `AGENTS.md` and nothing else, with the
+package's `tools/`, `functions/`, `tests/`, `skills/`, `middlewares/` and
+`data/` gone for good and `published` reset to `false`, reported as a
+successful save (`launch-readiness` 147). The editor now sets it on every save
+it makes. A script that intends to own a directory simply omits it, and the
+behaviour above is unchanged.
+
 The slug is **frozen at creation**. Renaming a workflow changes the display
 name inside `workflow.json` and never the directory, so every link, mount and
 line of git history keeps resolving.

@@ -289,7 +289,19 @@ describe('WorkflowFileClient.save', () => {
     expect(stub.calls[0]!.url).toBe('http://rt/api/workflows/my-flow');
     expect(stub.calls[0]!.init?.method).toBe('PUT');
     const body = JSON.parse(stub.calls[0]!.init?.body as string);
-    expect(body).toEqual({ name: 'My Flow', document: { nodes: [], edges: [] } });
+    // `must_exist` on every save, and it is a data-loss guard rather than a
+    // detail (launch-readiness 147). `PUT` creates a package at a free slug on
+    // purpose, for the CLI and for scripts; for this client that behaviour
+    // meant a tab whose workflow another tab had deleted re-created it on the
+    // next keystroke, holding `workflow.json` alone while its `tools/` stayed
+    // gone. Every save this client makes addresses a package it already holds
+    // — a document with no slug goes through `create` — so the flag is true of
+    // all of them, and asserted here so it cannot quietly stop being sent.
+    expect(body).toEqual({
+      name: 'My Flow',
+      document: { nodes: [], edges: [] },
+      must_exist: true,
+    });
   });
 
   it('url-encodes the slug', async () => {

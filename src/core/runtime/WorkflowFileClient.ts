@@ -735,13 +735,36 @@ export class WorkflowFileClient
     }
   }
 
+  /**
+   * Overwrite a package this editor already holds — **and never create one.**
+   *
+   * `PUT /api/workflows/{slug}` creates a package when the slug is free, on
+   * purpose: naming a directory explicitly is how the CLI, a script and a test
+   * write a package they intend to own. It is the wrong answer for exactly one
+   * caller, and that caller is this one.
+   *
+   * launch-readiness 147, reproduced live twice. Another tab deletes the open
+   * workflow; this tab is told within five seconds and keeps its autosave
+   * baseline; somebody types **one character**; the `PUT` re-creates the
+   * directory holding `workflow.json` and `AGENTS.md`, and the `tools/`,
+   * `functions/`, `tests/`, `skills/`, `middlewares/` and `data/` that made
+   * the workflow work are gone for good — with `published` reset to `False`,
+   * no prompt, no toast and no error, because the save genuinely succeeded.
+   *
+   * So `must_exist` goes on every save this client makes. It costs nothing to
+   * say and is true of all of them: a document with no slug is created through
+   * `create`, which is what mints the slug in the first place. The flag rather
+   * than a `summary` call first, because two round trips have a delete-shaped
+   * gap between them — the store answers the existence question in the same
+   * call that does the write.
+   */
   async save(slug: string, name: string, document: unknown): Promise<Result<void, string>> {
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name, document }),
+        body: JSON.stringify({ name, document, must_exist: true }),
       });
     } catch {
       return Err(this.unreachable());

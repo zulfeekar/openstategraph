@@ -441,10 +441,18 @@ def save_workflow(
     slug must `POST /api/workflows` and be given one, because a slug it
     invented from a name may already belong to somebody else's workflow
     (ticket 20).
+
+    **Unless the body says `must_exist`**, in which case a free slug is a
+    404 rather than a create. That is for the caller the create is wrong
+    for: an editor tab whose package was deleted underneath it, whose next
+    keystroke used to re-make the directory holding `workflow.json` alone
+    while the package's `tools/`, `functions/` and `tests/` stayed deleted
+    (launch-readiness 147). The flag is the client's declaration that it
+    holds a package, not a change to what this endpoint is for.
     """
     from datetime import datetime, timezone
 
-    from openstategraph.api.workflow_store import InvalidSlugError
+    from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
 
     if request.slug is not None and request.slug != slug:
         # Tolerant in reading, strict in trusting: the echoed slug is
@@ -465,7 +473,13 @@ def save_workflow(
             name=request.name,
             document=request.document,
             saved_at=datetime.now(timezone.utc).isoformat(),
+            must_exist=request.must_exist,
         )
+    except WorkflowNotFoundError as exc:
+        # The same sentence `GET /api/workflows/{slug}/summary` answers with,
+        # because it is the same fact and a client comparing the two must not
+        # have to reconcile two spellings of "it is gone".
+        raise HTTPException(status_code=404, detail=f"No workflow named {slug!r}") from exc
     except InvalidSlugError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     announce(services, "saved", slug)

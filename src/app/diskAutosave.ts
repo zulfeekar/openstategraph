@@ -4,6 +4,7 @@ import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import type { MountContext } from '@core/model/MountContext';
 import { isInstance } from '@core/model/MountAddress';
 import { getOpenAddress } from './openAddress';
+import { clearOpenSlug, getOpenSlug } from './openWorkflow';
 import { type DraftRestoreReport } from './workflowDrafts';
 import { CURRENT_SLUG_KEY, forgetKnownSavedAt } from './workflowFileWatch';
 import { writeHostPackage } from './hostPackageWrite';
@@ -252,6 +253,49 @@ export async function ensureDiskBaseline(
 /** Drop a slug's baseline — for tests, and for a package that was deleted. */
 export function forgetDiskDocument(slug: string): void {
   lastWritten.delete(slug);
+}
+
+/**
+ * Stop writing to a package that no longer exists, and let the document go on.
+ *
+ * **launch-readiness 147, a data-loss blocker.** The file watch already told
+ * this tab its workflow had been deleted, within five seconds, in a toast that
+ * named the right cause — and then nothing happened. The baseline stayed, so
+ * one keystroke fired the writer, `PUT` re-created the directory at a free
+ * slug, and the package came back holding `workflow.json` and `AGENTS.md`
+ * while `tools/`, `functions/`, `tests/`, `skills/`, `middlewares/` and
+ * `data/` — the user's own Python — stayed deleted. The tab looked like it
+ * had saved successfully, because it had.
+ *
+ * The two calls are two different things and both are needed:
+ *
+ * - **`forgetDiskDocument`** is the disarm. `writeOpenWorkflowToDisk` reads a
+ *   missing baseline as *never write this package*, which is already its rule
+ *   for a document that did not come from this slug — and a document whose
+ *   slug no longer names anything is exactly that.
+ * - **`clearOpenSlug`** is the path forward, and it is why this is not just a
+ *   disarm. A slug is minted at first save and frozen, because a slug that
+ *   moves renames a directory; so a document whose package is gone cannot have
+ *   that identity back, and the honest offer is a **new** package. Releasing
+ *   the slug is what makes the next Save call `create` and be handed a fresh
+ *   one, exactly as it does for a canvas that was never saved.
+ *
+ * **The document itself is untouched.** Dropping it would be this ticket's
+ * data loss with the arrow reversed, and it is the one thing the user still
+ * has. It keeps autosaving to the browser under the freshly minted draft key
+ * `clearOpenSlug` announces (`followOpenSubjectWithDraftKey`).
+ *
+ * `forgetKnownSavedAt` goes with them so nothing is left claiming to know when
+ * a file that does not exist was last written — and so a package later created
+ * at the same slug is baselined afresh rather than compared against a corpse.
+ *
+ * Lives here, beside the writer it disarms, rather than in the watch that
+ * calls it: the watch's job is to decide, and this is what the decision means.
+ */
+export function abandonDeletedWorkflow(slug: string): void {
+  forgetDiskDocument(slug);
+  forgetKnownSavedAt(slug);
+  if (getOpenSlug() === slug) clearOpenSlug();
 }
 
 /**

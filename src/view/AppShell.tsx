@@ -26,7 +26,7 @@ import { useViewportWidth } from './layout/useViewportWidth';
 import { interruptedRunNotice, takeInterruptedRun } from './ask/interruptedRun';
 import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
 import { DrillBanner } from './workflow/DrillBanner';
-import { useWorkflowFileWatch } from '@app/workflowFileWatch';
+import { useWorkflowFileWatch } from '@app/useWorkflowFileWatch';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import { RuntimeClient } from '@core/runtime/RuntimeClient';
 import { OpenStreams } from '@core/runtime/OpenStreams';

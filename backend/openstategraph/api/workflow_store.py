@@ -424,7 +424,15 @@ class WorkflowStore:
             f"after {_MINT_ATTEMPTS + 1} attempts"
         )
 
-    def save(self, slug: str, *, name: str, document: dict[str, Any], saved_at: str) -> None:
+    def save(
+        self,
+        slug: str,
+        *,
+        name: str,
+        document: dict[str, Any],
+        saved_at: str,
+        must_exist: bool = False,
+    ) -> None:
         """Overwrite the package at `slug` — a slug the caller already holds.
 
         Deliberately still create-or-overwrite, because the slug is in the
@@ -432,6 +440,23 @@ class WorkflowStore:
         writes a package it intends to own. What must never mint a slug by
         guessing is the editor, and it no longer does — it calls
         :meth:`create` and is told which slug it got.
+
+        `must_exist` is the opt-out of that create, and it exists because a
+        create is exactly the wrong answer for one caller: **an editor tab
+        whose package was deleted underneath it** (launch-readiness 147). One
+        keystroke fired disk autosave, this method re-made the directory, and
+        the package came back holding `workflow.json` and `AGENTS.md` while
+        `tools/`, `functions/`, `tests/`, `skills/`, `middlewares/` and
+        `data/` — the user's own Python — stayed gone, with `published` reset
+        to `False`. The deletion looked undone in every listing.
+
+        An *opt-in* flag rather than a change of default, because the create
+        is not the defect: a client writing to a slug it has been told is gone
+        is. A caller that holds a package asks for `must_exist=True` and is
+        told `WorkflowNotFoundError` instead of quietly minting a corpse; the
+        CLI, a script and a test keep the behaviour this method was written
+        for. `WorkflowFileClient.save` sets it on every call, because every
+        save the editor makes addresses a package it already holds.
         """
         directory = self.directory_for(slug)
         # The *package*, not the directory, is what already exists: ticket 20's
@@ -440,6 +465,11 @@ class WorkflowStore:
         # either. Both used to count as "not new", so neither got its
         # `AGENTS.md` or its draft flag.
         is_new = not (directory / "workflow.json").is_file()
+        # Checked here rather than by the caller asking first, and that is the
+        # point of it being in the store: a `describe`-then-`save` from the
+        # client is two round trips with a delete-shaped gap between them.
+        if must_exist and is_new:
+            raise WorkflowNotFoundError(slug)
         directory.mkdir(parents=True, exist_ok=True)
         self._write(directory, name=name, document=document, saved_at=saved_at, is_new=is_new)
 

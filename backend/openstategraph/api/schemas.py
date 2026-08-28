@@ -651,9 +651,28 @@ class SaveWorkflowAtSlugRequest(SaveWorkflowRequest):
     `extra="forbid"` is inherited and deliberately not relaxed further —
     it is what makes a typo an error instead of a silent no-op. One field
     was admitted, not the door.
+
+    `must_exist` is the second, and it is a data-loss guard rather than a
+    convenience (launch-readiness 147). This endpoint creates a package when
+    the slug is free — right for the CLI, a script or a test, and catastrophic
+    for an editor tab whose package another tab deleted a moment ago: one
+    keystroke re-made the directory with `workflow.json` alone, and the
+    `tools/`, `functions/` and `tests/` that made the workflow work were gone
+    for good. A client that believes it is *editing* an existing package says
+    so, and gets a 404 instead of a resurrection. Default `False`, because the
+    create is not the defect — writing to a slug you were told is gone is.
     """
 
     slug: str | None = None
+    must_exist: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("must_exist", "mustExist"),
+        description=(
+            "Refuse to create: answer 404 if no package exists at this slug. "
+            "For a client that holds a package and is editing it, so a save "
+            "cannot re-create one that was deleted underneath it."
+        ),
+    )
 
 
 class TemplateResponse(BaseModel):
