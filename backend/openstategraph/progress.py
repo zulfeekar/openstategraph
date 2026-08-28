@@ -52,6 +52,36 @@ __all__ = ["PROGRESS_KEY", "Progress", "progress_report", "report_progress"]
 #: `"progress"` is a word anyone might reasonably write.
 PROGRESS_KEY = "openstategraph.progress"
 
+#: A tool's `metadata` key meaning **this tool reports its own start**, so the
+#: `"narration"` slot must not report it a second time.
+#:
+#: `launch-readiness/145`. Two producers were narrating the same MCP call with
+#: the *same sentence* out of the *same table* — `prebuilt_mcp._wrap_async_tool`
+#: from inside the tool, and `NarrationMiddleware` from around it — and the
+#: duplication was invisible because every surface collapsed a line repeated
+#: back to back. `145` stopped the panel doing that (a repeat is evidence:
+#: `launch-readiness/146`), and the moment it did, a live `cpl-mcp` run read
+#:
+#: ```
+#: Looking up which views of the data are available.
+#: Looking up which views of the data are available.
+#: Found 15 views of the data.
+#: ```
+#:
+#: The fix is the DRY one — **one call, one narrator** — and not a filter: a
+#: middleware cannot tell a duplicate from a genuine second call, which is the
+#: whole reason collapsing was the wrong answer in the view. So the tool
+#: *declares* that it speaks for itself and the middleware stands down for the
+#: before-line only. The finding afterwards is still the middleware's: it is
+#: the one place that holds the result.
+#:
+#: Declared here rather than in either module because both already import this
+#: seam and neither imports the other — a literal in two files is exactly the
+#: drift this key exists to prevent. Removing the tool's own line instead was
+#: rejected: a subagent's tool stack is assembled by `create_deep_agent` and
+#: does not carry our middleware, so the tool's line is the only one there.
+NARRATES_ITSELF = "openstategraph.narrates_itself"
+
 
 class Progress(BaseModel):
     """One thing a step said about itself mid-execution.

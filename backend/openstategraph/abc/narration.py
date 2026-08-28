@@ -1,12 +1,20 @@
 """The `"narration"` slot: what a step is doing, and what it found.
 
-**The shape changed in `launch-readiness/143` and the header's old first line
-— "one line before a model call, one line after" — no longer describes it.**
-The lines are now placed where something is actually known: `before_model`
-still says a model call has started, `after_model` says nothing by default
-(see `NarrationMiddleware.__init__`), and `wrap_tool_call` — the one hook that
+**The shape changed in `launch-readiness/143` and again in `145`; the header's
+old first line — "one line before a model call, one line after" — no longer
+describes it.** The lines are now placed where something is actually known,
+and **the two model hooks are silent by default**: `before_model` knows
+nothing yet and `after_model` knows only that a model returned (see
+`NarrationMiddleware.__init__` for each). `wrap_tool_call` — the one hook that
 holds a tool, its arguments *and* its result — says what the call is doing on
-the way in and what it found on the way out.
+the way in and what it found on the way out, and is now the *whole* of what
+this middleware says out loud.
+
+That is not the panel going quiet. A step with nothing to report is covered
+without a sentence: `141`'s waiting line owns the opening silence and `110`'s
+pulsing marker owns the gaps between lines. What went away is the sentence
+that repeated identically every lap, which in `140`'s keep-everything stack
+was half of what a reader had to read.
 
 `launch-readiness/104`. The evidence: a real trace of "which lenses are
 available?" took 50.2s; inside it, a tool call answered in 66ms and one
@@ -65,7 +73,7 @@ from langgraph.runtime import Runtime
 
 from openstategraph.abc.tool_findings import MAX_SENTENCE_LEN, summarise_tool_result
 from openstategraph.abc.tool_sentences import describe_tool_call
-from openstategraph.progress import report_progress
+from openstategraph.progress import NARRATES_ITSELF, report_progress
 from openstategraph.run_identity import run_identity
 
 # `launch-readiness/105`: a read-through cache for tool calls that return
@@ -160,13 +168,41 @@ class NarrationMiddleware(AgentMiddleware):
         self,
         *,
         quiet: bool = False,
-        before_text: str = "Thinking about the next step.",
+        before_text: str | None = None,
         after_text: str | None = None,
         describe: Callable[[str, dict[str, Any]], str | None] | None = None,
         summarise: Callable[[str, Any], str | None] | None = None,
     ) -> None:
         super().__init__()
         self._quiet = quiet
+        # `launch-readiness/145`: **the before-line is silent by default now,
+        # on the same terms `143` silenced the after-line.**
+        #
+        # It used to say `"Thinking about the next step."`, and every word of
+        # that was true: `before_model` fires before the call and genuinely
+        # knows nothing else. `143` kept it for exactly that reason — it is
+        # the honest thing to say when nothing is known.
+        #
+        # What the owner's screen then showed is that honest and identical are
+        # not the same as useful. In `140`'s stack, which keeps every line, an
+        # unchanging sentence every lap of the tool loop was **half the
+        # panel** — the "cries wolf" shape `143`'s own ticket warned about,
+        # with the real lines pushed apart by a heartbeat nobody reads.
+        #
+        # Silence here is covered on both sides and neither cover is new:
+        #
+        # - the **opening** silence, before anything has a voice, is
+        #   `141`'s waiting line (`src/view/ask/waitingLine.ts`), which is
+        #   confined to exactly that window and is retired by the first frame
+        #   with a voice of its own;
+        # - the silence **between** lines, while a model call is in flight, is
+        #   `110`'s pulsing marker on the newest line of the stack — a surface
+        #   that already says "this is still happening" without authoring a
+        #   sentence to say it.
+        #
+        # So the parameter stays and a caller passing a string still gets its
+        # line: "nothing here narrates" is a decision on record, exactly as
+        # `quiet` is, rather than a hook somebody deleted.
         self._before_text = before_text
         # `launch-readiness/143`: **declared silence, not a deleted line.**
         # This defaulted to `"Finished thinking."`, authored for `104`'s
@@ -207,7 +243,7 @@ class NarrationMiddleware(AgentMiddleware):
         self._findings: dict[str, dict[tuple[str, str], Any]] = {}
 
     def before_model(self, state: AgentState[Any], runtime: Runtime[Any]) -> dict[str, Any] | None:
-        if not self._quiet:
+        if not self._quiet and self._before_text:
             report_progress(self._before_text)
         return None
 
@@ -298,7 +334,7 @@ class NarrationMiddleware(AgentMiddleware):
                 if not self._quiet:
                     report_progress(_REUSE_TEXT)
                 return cache_key, thread_id, bucket[cache_key]
-        if not self._quiet:
+        if not self._quiet and not _narrates_itself(request):
             report_progress(self._before_tool_text(request))
         return cache_key, thread_id, _MISS
 
@@ -449,6 +485,31 @@ class NarrationMiddleware(AgentMiddleware):
                 return "No rows."
             return None
         return None
+
+
+def _narrates_itself(request: ToolCallRequest) -> bool:
+    """Whether this tool already said what it is doing (`launch-readiness/145`).
+
+    A tool that reports its own start declares it in `metadata` under
+    `openstategraph.progress.NARRATES_ITSELF`, and the before-line here stands
+    down — one call, one narrator. Only the before-line: the finding after the
+    call stays this middleware's, because it is the one place in the loop
+    holding the result.
+
+    **Not a duplicate filter**, and the distinction is the ticket's. A filter
+    cannot tell "the same call announced twice" from "the same call made
+    twice", and collapsing the second is `launch-readiness/146`'s evidence
+    disappearing exactly when it matters. A declaration can tell them apart,
+    because it is made per tool rather than per line.
+
+    Never raises: a tool object of an unexpected shape costs nothing but the
+    stand-down, which fails towards *saying* the line rather than swallowing it.
+    """
+    try:
+        metadata = getattr(request.tool, "metadata", None)
+    except Exception:  # noqa: BLE001 — narration must never fail a run
+        return False
+    return bool(isinstance(metadata, dict) and metadata.get(NARRATES_ITSELF))
 
 
 def _is_block_list(content: list[Any]) -> bool:

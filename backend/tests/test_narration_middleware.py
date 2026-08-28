@@ -11,6 +11,8 @@ the declared slot position, and it can be silenced without deleting it.
 
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
 from typing import Any
 
 from langchain.agents.middleware.types import ToolCallRequest
@@ -47,31 +49,36 @@ def _drive_hooks_through_a_real_graph(middleware: NarrationMiddleware) -> list[d
 
 
 class TestNarrationMiddleware:
-    def test_the_model_hooks_speak_once_where_they_know_something(self) -> None:
-        # `launch-readiness/143`. Two lines became one, deliberately.
-        # `before_model` genuinely has something to say — a model call is
-        # about to take forty seconds. `after_model` does not: it knew only
-        # that the line above it had stopped being true, which in `140`'s
-        # stack the next line already says.
-        events = _drive_hooks_through_a_real_graph(NarrationMiddleware())
-        assert len(events) == 1
+    def test_the_model_hooks_say_nothing_because_neither_knows_anything(self) -> None:
+        # `launch-readiness/143` then `145`. Two lines became one, and then
+        # none. `after_model` knew only that the line above it had stopped
+        # being true, which in `140`'s stack the next line already says;
+        # `before_model` knew nothing at all, and said so identically every
+        # lap until it was half the panel. Both are silent by default and
+        # both are still *declarable* — see the two tests below.
+        assert _drive_hooks_through_a_real_graph(NarrationMiddleware()) == []
 
-    def test_lands_on_the_streamed_channel_not_only_the_final_message(self) -> None:
-        events = _drive_hooks_through_a_real_graph(NarrationMiddleware())
+    def test_the_before_line_is_declared_silence_not_deleted_code(self) -> None:
+        # `launch-readiness/145`. The hook is intact and a caller who wants a
+        # line still gets one; what changed is the default. "Nothing here
+        # narrates" stays a decision on record rather than a hook somebody
+        # removed — the `quiet` argument's own rule, applied to one line.
+        events = _drive_hooks_through_a_real_graph(
+            NarrationMiddleware(before_text="Thinking about the next step.")
+        )
         reports = [progress_report(e) for e in events]
         assert all(r is not None for r in reports)
         assert [r.message for r in reports] == ["Thinking about the next step."]
 
     def test_the_after_line_is_declared_silence_not_deleted_code(self) -> None:
-        # The `quiet` argument's own rule, applied to one line: a caller who
-        # wants an after-line still gets one, so "nothing here narrates" stays
-        # a decision on record rather than a hook somebody removed.
         events = _drive_hooks_through_a_real_graph(NarrationMiddleware(after_text="Done."))
         reports = [progress_report(e) for e in events]
-        assert [r.message for r in reports if r] == ["Thinking about the next step.", "Done."]
+        assert [r.message for r in reports if r] == ["Done."]
 
     def test_uses_the_existing_progress_envelope_not_a_second_channel(self) -> None:
-        events = _drive_hooks_through_a_real_graph(NarrationMiddleware())
+        events = _drive_hooks_through_a_real_graph(
+            NarrationMiddleware(before_text="Thinking about the next step.")
+        )
         assert all(PROGRESS_KEY in e for e in events)
 
     def test_text_carries_no_tool_id_or_internals(self) -> None:
@@ -490,14 +497,23 @@ def _drive_tool_hook_through_an_async_graph(
 
 class TestNarrationOnTheAsyncPath:
     def test_the_model_hooks_still_reach_the_custom_channel(self) -> None:
-        events = _drive_hooks_through_an_async_graph(NarrationMiddleware())
+        events = _drive_hooks_through_an_async_graph(
+            NarrationMiddleware(before_text="Thinking about the next step.")
+        )
         reports = [progress_report(e) for e in events]
         assert [r.message for r in reports if r] == ["Thinking about the next step."]
+
+    def test_the_two_defaults_are_silent_on_the_async_path_too(self) -> None:
+        # `launch-readiness/145`. The async twins delegate to the sync hooks,
+        # so this cannot drift — but it went silent once before with both
+        # suites green (`110`), and the async default is the half nobody
+        # watches.
+        assert _drive_hooks_through_an_async_graph(NarrationMiddleware()) == []
 
     def test_the_after_line_stays_available_on_the_async_path_too(self) -> None:
         events = _drive_hooks_through_an_async_graph(NarrationMiddleware(after_text="Done."))
         reports = [progress_report(e) for e in events]
-        assert [r.message for r in reports if r] == ["Thinking about the next step.", "Done."]
+        assert [r.message for r in reports if r] == ["Done."]
 
     def test_quiet_is_still_quiet(self) -> None:
         assert _drive_hooks_through_an_async_graph(NarrationMiddleware(quiet=True)) == []
@@ -554,3 +570,102 @@ class TestNarrationOnTheAsyncPath:
         # store the first one wrote.
         assert calls == ["sync"]
         assert middleware.findings_inventory("one-thread") == ["mcp_list_lenses"]
+
+
+class TestOneCallHasOneNarrator:
+    """`launch-readiness/145`: the same sentence was being said twice.
+
+    `prebuilt_mcp._wrap_async_tool` reports an MCP call's start from *inside*
+    the tool, and this middleware reported it from *around* the tool — the
+    identical line, composed from the identical table in
+    `abc/tool_sentences.py`. Nobody saw it because every surface collapsed a
+    line repeated back to back. `145` stopped the panel doing that, because a
+    repeat is evidence (`146`), and a live `cpl-mcp` run then read
+    `"Looking up which views of the data are available."` twice in a row.
+
+    The fix is a declaration rather than a filter: a filter cannot tell one
+    call announced twice from two calls, which is the whole reason collapsing
+    was the wrong answer in the view.
+    """
+
+    @staticmethod
+    def _drive(*, metadata: Any, result: ToolMessage) -> list[str]:
+        request = ToolCallRequest(
+            tool_call={"name": "mcp_list_lenses", "args": {}, "id": "call_abc123"},
+            tool=SimpleNamespace(metadata=metadata),
+            state={},
+            runtime=None,
+        )
+        middleware = build_narration_middleware()
+
+        def handler(_req: ToolCallRequest) -> ToolMessage:
+            return result
+
+        def node(state: _State, runtime=None):
+            middleware.wrap_tool_call(request, handler)
+            return {"step": 1}
+
+        graph = (
+            StateGraph(_State)
+            .add_node("node", node)
+            .add_edge(START, "node")
+            .add_edge("node", END)
+            .compile()
+        )
+        events = list(graph.stream({"step": 0}, stream_mode="custom"))
+        return [r.message for r in (progress_report(e) for e in events) if r]
+
+    def test_a_tool_that_speaks_for_itself_is_not_announced_twice(self) -> None:
+        from openstategraph.progress import NARRATES_ITSELF
+
+        lines = self._drive(
+            metadata={NARRATES_ITSELF: True},
+            result=ToolMessage(
+                content=json.dumps({"ok": True, "data": {"lenses": [1, 2, 3]}}),
+                tool_call_id="call_abc123",
+            ),
+        )
+        # The finding survives — it is the one thing only this middleware
+        # holds, because only it sees the result.
+        assert lines == ["Found 3 views of the data."]
+
+    def test_a_tool_that_says_nothing_is_still_announced(self) -> None:
+        lines = self._drive(
+            metadata=None,
+            result=ToolMessage(
+                content=json.dumps({"ok": True, "data": {"lenses": [1, 2, 3]}}),
+                tool_call_id="call_abc123",
+            ),
+        )
+        assert lines == [
+            "Looking up which views of the data are available.",
+            "Found 3 views of the data.",
+        ]
+
+    def test_the_declaration_is_one_constant_shared_by_both_sides(self) -> None:
+        # A literal in two files is the drift this key exists to prevent.
+        from pydantic import BaseModel
+
+        from openstategraph.prebuilt_mcp import _wrap_async_tool
+        from openstategraph.progress import NARRATES_ITSELF
+
+        class _Args(BaseModel):
+            q: str = ""
+
+        async def _coroutine(**_kwargs: Any) -> Any:
+            return ("ok", None)
+
+        wrapped = _wrap_async_tool(
+            SimpleNamespace(
+                name="mcp_list_lenses",
+                description="",
+                args_schema=_Args,
+                coroutine=_coroutine,
+                response_format="content_and_artifact",
+                metadata={"server": "cpl"},
+            ),
+            "cpl",
+        )
+        assert wrapped.metadata[NARRATES_ITSELF] is True
+        # Whatever the original carried is kept, never replaced.
+        assert wrapped.metadata["server"] == "cpl"

@@ -83,7 +83,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 from openstategraph.abc.tool_sentences import describe_tool_call
-from openstategraph.progress import report_progress
+from openstategraph.progress import NARRATES_ITSELF, report_progress
 
 logger = logging.getLogger(__name__)
 
@@ -642,10 +642,15 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:  # noqa: ARG001 — see bel
     because the answer can depend on the arguments. Two consequences worth
     knowing:
 
-    - It is the **same** sentence `NarrationMiddleware` emits around the same
-      call, deliberately. Both surfaces collapse a line repeated back to back,
-      so one call reads as one line instead of two — which is what folding a
-      second vocabulary in here would have cost.
+    - It is the **same** sentence `NarrationMiddleware` composes for the same
+      call, out of the same table — deliberately, so a reader never meets two
+      vocabularies for one action. Until `launch-readiness/145` both were
+      *emitted* and the duplicate was hidden by every surface collapsing a
+      repeat, which is a plaster over a line nobody should have authored
+      twice. The wrapper now marks itself `NARRATES_ITSELF` in `metadata` and
+      the middleware stands down for the before-line; the finding after the
+      call is still the middleware's, because that is the only place holding
+      the result.
     - A tool the table has never met falls back to a line that still names
       nothing. `server` is dropped rather than softened: there is no phrasing
       of a URL that is not an internal. The parameter is **kept** rather than
@@ -686,7 +691,15 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:  # noqa: ARG001 — see bel
         func=_call,
         coroutine=_coroutine,
         response_format=getattr(tool, "response_format", "content"),
-        metadata=getattr(tool, "metadata", None),
+        # `launch-readiness/145`: the declaration that stops the same sentence
+        # being said twice. `NarrationMiddleware` narrates every tool call it
+        # wraps, and for an MCP tool that is the *identical* line out of the
+        # *identical* table — a duplicate that was invisible only because every
+        # surface collapsed a repeat. The line here is kept rather than the
+        # middleware's because it is the one that survives where the middleware
+        # is absent (a subagent's stack is assembled by `create_deep_agent`),
+        # and the middleware stands down for the before-line when it sees this.
+        metadata={**(getattr(tool, "metadata", None) or {}), NARRATES_ITSELF: True},
     )
 
 
