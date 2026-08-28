@@ -476,9 +476,27 @@ class TestNoShippedToolWasAsked:
     def test_not_one_shipped_tool_declares_aexecute(self) -> None:
         """The additive claim, checked rather than asserted.
 
-        The day one of them *should* — `McpTool` is the candidate, its session
-        work already being async and already paired `func`/`coroutine` at the
-        `StructuredTool` it builds — this test is where that is recorded.
+        **`McpTool` was the candidate, and it was examined and needs none**
+        (`async-first/11`, 2026-08-28). The reasoning that nominated it was
+        sound about the file and wrong about the ladder: the awaitable work —
+        one pooled session per server, a call over it — never passes through
+        `_execute` at all. It reaches an agent as
+        `StructuredTool(func=_call, coroutine=_coroutine)` from
+        `_wrap_async_tool`, whose async half already awaits
+        `run_on_mcp_loop_async`. What *does* reach `_execute` is
+        `McpTool._execute`, a refusal sentence with no I/O in it — an MCP
+        server node contributes its server's tools rather than being one.
+
+        Measured, not reasoned: `tests/test_the_mcp_tool_is_already_awaitable.py`
+        runs the map's two arms against the seam that carries the work, and
+        the native `coroutine` is genuinely cancelled where the same call
+        through a thread runs to completion. Writing `McpTool._aexecute`
+        would buy that cancellation for a constant string — surface with
+        nothing behind it, which is `05`'s finding about `AbstractAgent.build`
+        one layer down.
+
+        So this census still reads `{}`, and the day a shipped tool earns an
+        `_aexecute` this is still where it is recorded.
         """
         declaring = {
             node_type: type(tool).__name__
