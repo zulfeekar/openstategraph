@@ -86,6 +86,8 @@ from openstategraph.abc.tool_notes import (
     SourceChoice,
     Substitution,
     ToolFailure,
+    UncoveredWindow,
+    UnverifiedAnswer,
 )
 # Not a ladder — the one thing a tool does *while* it runs. It lives here
 # because this is the import line a tool author is given, and a second
@@ -133,6 +135,8 @@ __all__ = [
     "Subtask",
     "SystemPrompt",
     "ToolField",
+    "UncoveredWindow",
+    "UnverifiedAnswer",
     "ToolResult",
     "Verdict",
     "agent_node_for_tier",

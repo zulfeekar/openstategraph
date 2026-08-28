@@ -77,11 +77,13 @@ export const guardCheckNode: INodeDefinition = defineNode(
         hint:
           'The package function to run, named the way `function.<name>` names it — this ' +
           'node calls that same function, not a model. It returns "" for pass or a ' +
-          'non-empty string for the feedback sent back on `revise`. Two checks need no ' +
+          'non-empty string for the feedback sent back on `revise`. Three checks need no ' +
           'function behind them: `numbers_in_prose` (every figure in the answer came ' +
-          'from something this run retrieved) and `row_counts_in_prose` (a figure that ' +
-          'came from a bare COUNT(*) is published as rows, not as things). A package ' +
-          'function of the same name still wins.',
+          'from something this run retrieved), `row_counts_in_prose` (a figure that ' +
+          'came from a bare COUNT(*) is published as rows, not as things) and ' +
+          '`zero_outside_coverage` (an answer reporting none of something asked about a ' +
+          'period the table says it does not hold — so the zero is not a measurement). ' +
+          'A package function of the same name still wins.',
         defaultValue: '',
         onCard: true,
       },

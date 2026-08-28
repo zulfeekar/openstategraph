@@ -154,7 +154,7 @@ _OK = "ok"
 _PARSE_CAP = 200_000
 
 
-def _payloads(result: str) -> list[Any]:
+def payloads_of(result: str) -> list[Any]:
     """Whatever structured objects this tool answer actually carries.
 
     Three layers are live in one string on the measured MCP path, and reading
@@ -203,7 +203,7 @@ def cells_of(result: str) -> str:
     unsuccessful contributes nothing at all.
     """
     parts: list[str] = []
-    for payload in _payloads(result):
+    for payload in payloads_of(result):
         if not isinstance(payload, dict):
             parts.append(str(payload))
             continue
@@ -220,22 +220,94 @@ def cells_of(result: str) -> str:
     return "\n".join(parts)
 
 
-def _table_of(sql: str) -> str:
+#: Every table a statement names, not only the first. A join reaches two, and
+#: a check that read only `FROM` would judge a two-table statement by the one
+#: that happened to be written first (`launch-readiness/166`, found on a live
+#: run whose `FROM sm.cargoflow_latest ... EXISTS (SELECT 1 FROM
+#: sm.area_counts_dark_v1r0 ...)` put the table under suspicion in second
+#: place).
+_FROM_OR_JOIN = re.compile(r"\b(?:from|join)\s+([A-Za-z_][\w.]*)", re.IGNORECASE)
+
+
+def tables_in(sql: str) -> list[str]:
+    """Every table this statement reads, in the order it names them."""
+    found: list[str] = []
+    for match in _FROM_OR_JOIN.finditer(str(sql or "")):
+        name = match.group(1)
+        if name not in found:
+            found.append(name)
+    return found
+
+
+def table_of(sql: str) -> str:
     match = _FROM.search(str(sql or ""))
     return match.group(1) if match else ""
 
 
-def row_counts_retrieved(state: Mapping[str, Any]) -> list[tuple[Decimal, str]]:
-    """Every `(value, table)` this run obtained from a statement counting rows.
+def exchanges_in(state: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Every `(statement, result)` pair this run actually executed.
 
-    Read off the run's own record by pairing a tool call's SQL argument with
-    the `ToolMessage` answering it, by `tool_call_id` — the same pairing
-    `_tool_usage` already makes for `production-ready/100`, and for the same
-    reason: the answer arrives after the call that has to be judged by it.
+    **Two rails, and the second is the one that carries a live run.** `_agent`
+    returns no messages at all, so a guard downstream of an agent sees an empty
+    `messages` and the whole of what the agent retrieved sits in
+    `tool_use[node]["queries"]` instead (`launch-readiness` 165,
+    `tool_report`). The message rail still matters for a graph whose SQL is run
+    by a node rather than inside a loop.
 
     The SQL is found by **shape, not by tool name** (`looks_like_sql_query`,
-    `production-ready/95`), so a tool called `warehouse` is read exactly as
-    well as one called `mcp_execute_sql`.
+    `production-ready/95`), so a tool called `warehouse` is read exactly as well
+    as one called `mcp_execute_sql`, and the call is paired with its answer by
+    `tool_call_id` because the answer arrives after the call it has to be
+    judged by (`production-ready/100`'s pairing).
+
+    Extracted from `row_counts_retrieved` when `launch-readiness/166` became
+    its second reader. Two walks over one record drift; `165` already paid for
+    that once, when the message rail was the only one and every gate behind an
+    agent was blind.
+    """
+    from openstategraph.compile.workflow_compiler import looks_like_sql_query
+
+    asked: dict[str, str] = {}
+    for message in state.get("messages") or []:
+        for call in getattr(message, "tool_calls", None) or []:
+            args = call.get("args") if isinstance(call, dict) else None
+            if not isinstance(args, dict):
+                continue
+            sql = next((str(v) for v in args.values() if looks_like_sql_query(v)), "")
+            if not sql:
+                continue
+            call_id = str(call.get("id") or "")
+            if call_id:
+                asked[call_id] = sql
+
+    pairs: list[tuple[str, str]] = []
+
+    def add(sql: str, result: str) -> None:
+        if sql and (sql, result) not in pairs:
+            pairs.append((sql, result))
+
+    for row in (state.get("tool_use") or {}).values():
+        for exchange in (row or {}).get("queries") or []:
+            add(
+                str((exchange or {}).get("sql") or ""),
+                str((exchange or {}).get("result") or ""),
+            )
+
+    for message in state.get("messages") or []:
+        if getattr(message, "type", "") != "tool":
+            continue
+        # A refused or failed call returned nothing anybody could publish.
+        if getattr(message, "status", None) == "error":
+            continue
+        recorded = asked.get(str(getattr(message, "tool_call_id", "") or ""))
+        if recorded is None:
+            continue
+        add(recorded, str(getattr(message, "content", "")))
+    return pairs
+
+
+def row_counts_retrieved(state: Mapping[str, Any]) -> list[tuple[Decimal, str]]:
+    """Every `(value, table)` this run obtained from a statement counting rows.
 
     Every number in the result is taken, not one. A bare `COUNT(*)` with no
     `GROUP BY` returns a single cell, but the envelope around it carries its
@@ -244,55 +316,18 @@ def row_counts_retrieved(state: Mapping[str, Any]) -> list[tuple[Decimal, str]]:
     below is what keeps that widening harmless: an envelope's `1` cannot be
     published as *"1 vessels"*.
     """
-    from openstategraph.compile.workflow_compiler import looks_like_sql_query
-
-    counting: dict[str, str] = {}
-    for message in state.get("messages") or []:
-        for call in getattr(message, "tool_calls", None) or []:
-            args = call.get("args") if isinstance(call, dict) else None
-            if not isinstance(args, dict):
-                continue
-            for value in args.values():
-                if not looks_like_sql_query(value) or not counts_rows_only(str(value)):
-                    continue
-                call_id = str(call.get("id") or "")
-                if call_id:
-                    counting[call_id] = str(value)
-
     found: list[tuple[Decimal, str]] = []
-
-    def record(sql: str, result: str) -> None:
-        table = _table_of(sql)
+    for sql, result in exchanges_in(state):
+        if not counts_rows_only(sql):
+            continue
+        table = table_of(sql)
         for value in numbers_in(cells_of(result)):
             if (value, table) not in found:
                 found.append((value, table))
-
-    # **Two rails, and the second is the one that carries a live run.**
-    # `_agent` returns no messages at all, so a guard downstream of an agent
-    # sees an empty `messages` and the whole of what the agent retrieved sits
-    # in `tool_use[node]["queries"]` instead (`launch-readiness` 165,
-    # `tool_report`). The message rail still matters for a graph whose SQL is
-    # run by a node rather than inside a loop.
-    for row in (state.get("tool_use") or {}).values():
-        for exchange in (row or {}).get("queries") or []:
-            sql = str((exchange or {}).get("sql") or "")
-            if counts_rows_only(sql):
-                record(sql, str((exchange or {}).get("result") or ""))
-
-    for message in state.get("messages") or []:
-        if getattr(message, "type", "") != "tool":
-            continue
-        # A refused or failed call returned nothing anybody could publish.
-        if getattr(message, "status", None) == "error":
-            continue
-        recorded = counting.get(str(getattr(message, "tool_call_id", "") or ""))
-        if recorded is None:
-            continue
-        record(recorded, str(getattr(message, "content", "")))
     return found
 
 
-def _label_after(prose: str, end: int) -> str:
+def label_after(prose: str, end: int) -> str:
     """The plural entity noun this number is presented as counting, or ``""``.
 
     A row-noun anywhere in the window answers the check's question, so it wins
@@ -328,7 +363,7 @@ def mislabelled_row_counts(
     for literal, value, end in quantities_in(prose or ""):
         if literal in seen or value not in by_value:
             continue
-        label = _label_after(prose or "", end)
+        label = label_after(prose or "", end)
         if not label:
             continue
         seen.add(literal)
@@ -349,7 +384,19 @@ def check_row_counts_in_prose(
     The reason is developer- and model-facing — it travels the `feedback`
     channel to the node being corrected — so `launch-readiness/143`'s
     sentence-shape rule for customer copy does not reach it.
+
+    **Two sentences, and which one is said depends on a declaration**
+    (`launch-readiness/166`). Without one this check says what it has always
+    said and all it can honestly say: *a row is one of these only if the table
+    holds one row per one of them, and this run never established that.* Where
+    the table has declared a row key of more than one column, a row provably is
+    **not** one of anything, so the doubt becomes a statement of fact and the
+    repair stops being a suggestion. That is the whole of what `row_key` buys,
+    and it buys it without this module ever deciding which column identifies a
+    vessel — a key of length > 1 settles the question on its own.
     """
+    from openstategraph.table_coverage import declarations_in
+
     counts = row_counts_retrieved(state)
     if not counts:
         return ""
@@ -359,17 +406,30 @@ def check_row_counts_in_prose(
     reported = mislabelled_row_counts(candidate, counts)
     if not reported:
         return ""
+    declarations = declarations_in(state)
 
     lines = []
     for literal, label in reported:
         table = by_value.get(Decimal(literal.replace(",", "")), "")
-        lines.append(
-            f"The answer reports {literal} {label}. That figure came from a bare "
-            f"COUNT(*) over {table or 'a table'}, which counts rows of "
-            f"{table or 'that table'} and nothing else. A row is a {label[:-1] or label} "
-            f"only if {table or 'the table'} holds exactly one row per {label[:-1] or label}, "
-            "and this run never established that."
-        )
+        singular = label[:-1] or label
+        declaration = declarations.get(table.casefold()) if table else None
+        if declaration is not None and declaration.a_row_is_not_one_thing():
+            key = ", ".join(declaration.row_key)
+            lines.append(
+                f"The answer reports {literal} {label}. That figure came from a bare "
+                f"COUNT(*) over {table or 'a table'}, and {table or 'that table'} declares "
+                f"its row key as ({key}) — so one row is one of those combinations and not "
+                f"one {singular}. {literal} is a count of rows, and the count of {label} is "
+                "a different and smaller number."
+            )
+        else:
+            lines.append(
+                f"The answer reports {literal} {label}. That figure came from a bare "
+                f"COUNT(*) over {table or 'a table'}, which counts rows of "
+                f"{table or 'that table'} and nothing else. A row is a {singular} "
+                f"only if {table or 'the table'} holds exactly one row per {singular}, "
+                "and this run never established that."
+            )
     lines.append(
         "Either count the entity itself — COUNT(DISTINCT <the column that identifies "
         "it>) — or say what was actually counted."

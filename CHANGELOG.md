@@ -3,6 +3,37 @@
 ## Unreleased
 
 ### Added
+- **A table can declare what one of its rows is, and which period it covers**
+  (`launch-readiness/166`) — `openstategraph.table_coverage`, plus a fifth
+  note kind `UncoveredWindow` exported from `openstategraph.abc`. `165`
+  shipped everything the platform can know *without* a declaration; this is
+  the half that needed one. Two fields, stated by the data source beside its
+  schema — `row_key` (the columns that identify one row) and `coverage`
+  (`column`/`min`/`max`) — read off the run's own record by a new built-in
+  guard check, `zero_outside_coverage`. Measured live on 2026-08-29:
+  `sm.area_counts_dark_v1r0` runs `2026-01-01 → 2026-05-12` while its sibling
+  runs to two days ago, so *"0 dark vessels last month"* over it is right by
+  accident and reads exactly like a run that looked. Four states and no toggle
+  between them: a window entirely outside a **declared** coverage is sent back
+  to say which of the two it means; a window running past a declared end, and
+  a table that declares nothing at all, each get their own sentence on the
+  reader's rail; and a zero over a period the table demonstrably holds is
+  silent, because a gate that fires on correct work is a gate people route
+  around. **No window is ever guessed** — not from the rows a statement
+  returned, not from a `grain:` word — and `row_counts_in_prose` reads
+  `row_key` on the same rail to turn its doubt into a statement of fact.
+  Contract: `docs/declaring-a-table.md`.
+- **A sixth note kind, `UnverifiedAnswer`** (`launch-readiness/167`), exported
+  from `openstategraph.abc`. A `guard.check` that hits either ceiling —
+  `maxAttempts` or the step-budget floor — forces `pass` and publishes the
+  candidate, which is correct and unchanged; until now it did so **silently**,
+  so the customer met the very figure the gate had refused and nothing
+  distinguished it from an answer that passed. The forced pass now reports
+  itself on both channels: `forced` / `budget_stops` for the developer (the
+  keys a grader already wrote), and one internals-free sentence on the reader
+  rail. The check's own `reason` never travels — it is developer text written
+  for a model to act on.
+
 - **An MCP tool can say what it did, on both note rails**
   (`launch-readiness/157`). `record_notes` is called from `BaseTool.run`, and
   `prebuilt_mcp._wrap_async_tool` re-wraps every remote tool as a plain
@@ -220,6 +251,13 @@
   none was rejected, so both of that family's actions are the wrong advice.
   Raised through the same node error path every other provider failure takes,
   so a run degrades rather than crashing (`providers-and-credentials` 08).
+
+### Changed
+- `forced_pass_warnings` and `step_budget_warnings` now say `The review at
+  "<node>"` rather than `Grader "<node>"`. Both keys are written by
+  `guard.check` as well as `route.grader` (`launch-readiness/167`), and a
+  guard calls a package function and never a model, so the old subject was
+  false every time a guard reached a ceiling.
 
 ### Fixed
 - **A flattened `$ref` still calls the tool** (`launch-readiness/158`). The

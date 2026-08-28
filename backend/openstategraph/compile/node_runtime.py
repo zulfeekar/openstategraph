@@ -50,7 +50,12 @@ from openstategraph.step_budget import (
 )
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router
-from openstategraph.abc.tool_notes import notes_for_reader, record_notes, take_notes
+from openstategraph.abc.tool_notes import (
+    UnverifiedAnswer,
+    notes_for_reader,
+    record_notes,
+    take_notes,
+)
 from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCapabilities
 from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.node_families import discovered_node_families
@@ -81,6 +86,10 @@ from openstategraph.compile.grounding import (
     reaches_without_passing,
 )
 from openstategraph.counted_rows import check_row_counts_in_prose
+from openstategraph.table_coverage import (
+    check_zero_outside_coverage,
+    declarations_in_result,
+)
 from openstategraph.grounded_numbers import MODEL_AUTHORED, check_numbers_in_prose
 from openstategraph.compile.reducers import RESET as _RESET  # noqa: F401
 from openstategraph.validation import MOUNT_NODE_TYPES
@@ -198,9 +207,15 @@ _PRODUCES_CONTENT: tuple[str, ...] = ("agent.", "orchestrate.", "function.", "wo
 #: cell.
 QUERY_RESULT_RECORD_CAP = 2000
 
+#: How many table declarations one node's row may carry. A lens's bulk schema
+#: dump is a handful of tables; past this a payload is not declaring, it is
+#: enumerating, and the state key is not the place for it.
+DECLARATION_RECORD_CAP = 32
+
 _BUILT_IN_CHECKS: dict[str, Any] = {
     "numbers_in_prose": check_numbers_in_prose,
     "row_counts_in_prose": check_row_counts_in_prose,
+    "zero_outside_coverage": check_zero_outside_coverage,
 }
 
 #: Node types whose streamed text is machinery, not the reply.
@@ -625,6 +640,8 @@ def tool_report(
     #: `state["messages"]` sees nothing an agent retrieved.
     asked: dict[str, str] = {}
     queries: list[dict[str, str]] = []
+    #: Table declarations this node's loop was shown (`launch-readiness/166`).
+    declares: list[dict[str, Any]] = []
     for message in messages or []:
         for call in getattr(message, "tool_calls", None) or []:
             args = call.get("args") if isinstance(call, dict) else None
@@ -650,6 +667,31 @@ def tool_report(
                 }
                 if exchange not in queries:
                     queries.append(exchange)
+            # And the other thing a tool answer can carry that outlives it: a
+            # table's own declaration of what one of its rows is and which
+            # period it holds (`launch-readiness/166`). Same argument as
+            # `queries` one line up — an agent's loop is where this arrives and
+            # `_agent` returns no messages, so a gate downstream of it would
+            # never see the declaration that makes it able to say anything.
+            #
+            # **Only a recognised declaration is kept**, never the result it
+            # rode in on: `declarations_in_result` prefilters on two marker
+            # words and returns nothing for every other answer there is, so a
+            # run whose tools declare nothing pays a substring scan and this
+            # key stays absent — which is what `queried` and `queries` already
+            # mean by absent rather than empty.
+            for declaration in declarations_in_result(getattr(message, "content", "")):
+                entry: dict[str, Any] = {
+                    "table": declaration.table,
+                    "row_key": list(declaration.row_key),
+                    "coverage": {
+                        "column": declaration.coverage_column,
+                        "min": str(declaration.coverage_min or ""),
+                        "max": str(declaration.coverage_max or ""),
+                    },
+                }
+                if entry not in declares and len(declares) < DECLARATION_RECORD_CAP:
+                    declares.append(entry)
         names = rejected_tool_names(getattr(message, "content", None))
         for name in names:
             if name not in refused:
@@ -681,6 +723,11 @@ def tool_report(
     # Absent rather than empty, for the same reason `queried` is.
     if queries:
         row["queries"] = queries
+    # Same again: a node shown no declaration and a node whose tools declare
+    # nothing must not look the same to a gate. `table_coverage` reads absence
+    # as *undeclared* and says so to the reader, which is the whole of 166.
+    if declares:
+        row["declares"] = declares
     update: dict[str, Any] = {"tool_use": {node_id: row}}
     if refused:
         update["unmet_tools"] = {node_id: refused}
@@ -4096,7 +4143,7 @@ class NodeRuntime:
             passed = not reason
             branch = "pass" if passed or exhausted else "revise"
 
-            return {
+            update: dict[str, Any] = {
                 "decisions": {node_id: branch},
                 "revisions": {node_id: judged},
                 "feedback": "" if branch == "pass" else reason,
@@ -4109,6 +4156,50 @@ class NodeRuntime:
                     }
                 },
             }
+
+            # `launch-readiness/167`. A ceiling that forces `pass` while the
+            # objection still stands publishes **the very figure the check
+            # refused**, and nothing anywhere says so: the verdict is recorded,
+            # the branch is `pass`, and the customer meets an answer that reads
+            # exactly like one that cleared the gate. Measured live on
+            # 2026-08-28 — lap 2 rejected *"1,454,449 vessels"* and the output
+            # node published it.
+            #
+            # **The pass is correct and is not changed.** `_grader` argues it
+            # and the argument holds harder here, because a mechanical lap is
+            # cheaper than a model lap and a runaway is more likely: a loop
+            # that cannot finish is worse than a mediocre answer, and refusing
+            # to publish turns a ceiling into a dead run, which is what
+            # `Grader.normalise` warns against. Only the silence was the
+            # defect, and it was silent on **both** channels.
+            #
+            # Two ceilings, two keys, exactly as on `_grader` — a `maxAttempts`
+            # cap is a number on this card and the step budget is a number on
+            # the workflow, so a reader's next move differs and one sentence
+            # for both would be false about one of them.
+            if branch == "pass" and not passed:
+                if starved:
+                    update["budget_stops"] = {node_id: remaining}
+                else:
+                    update["forced"] = {node_id: reason}
+                # And the reader's own rail, because the developer channel is
+                # not where the customer is. `record_notes` renders through
+                # `_output` whether or not the model mentions it — the same
+                # mechanism `127` built and `103` reused, and the reason both
+                # exist: a model asked to disclose discloses most of the time.
+                #
+                # The check's `reason` is deliberately **not** carried. It is
+                # developer text written for a model to act on and it names
+                # tables and statements; `143`'s sentence-shape rule binds
+                # anything reaching a customer. What travels is the one fact
+                # the machinery can state honestly about itself.
+                record_notes([UnverifiedAnswer(check=check_name, starved=bool(starved))])
+            # A verdict with nowhere to go — the same fallback `_grader`
+            # records, and only on `revise`: at the ceiling the branch is
+            # `pass` and the two keys above are already the sentence for that.
+            if branch == "revise" and not revise_wired:
+                update["unrouted"] = {node_id: branch}
+            return update
 
         return run
 

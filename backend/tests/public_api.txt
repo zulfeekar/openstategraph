@@ -53,7 +53,9 @@ openstategraph.abc.Subtask = class(BaseModel)(*, id: str, instruction: str, arch
 openstategraph.abc.SystemPrompt = dataclass(object) fields(preamble,output_contract,context,default_rules,rules,replace_defaults,skill)
 openstategraph.abc.ToolFailure = class(BaseModel)(*, kind: Literal['tool_failure'] = 'tool_failure', tool: str = '', detail: str = '', looked_like_authorisation: bool = False) -> None
 openstategraph.abc.ToolField = dataclass(object) fields(key,label,kind,default_value,placeholder,hint,options)
-openstategraph.abc.ToolResult = class(BaseModel)(*, ok: bool = True, content: str = '', error: str | None = None, notes: tuple[typing.Union[openstategraph.abc.tool_notes.Correction, openstategraph.abc.tool_notes.Substitution, openstategraph.abc.tool_notes.SourceChoice, openstategraph.abc.tool_notes.ToolFailure], ...] = ()) -> None
+openstategraph.abc.ToolResult = class(BaseModel)(*, ok: bool = True, content: str = '', error: str | None = None, notes: tuple[typing.Union[openstategraph.abc.tool_notes.Correction, openstategraph.abc.tool_notes.Substitution, openstategraph.abc.tool_notes.SourceChoice, openstategraph.abc.tool_notes.ToolFailure, openstategraph.abc.tool_notes.UncoveredWindow, openstategraph.abc.tool_notes.UnverifiedAnswer], ...] = ()) -> None
+openstategraph.abc.UncoveredWindow = class(BaseModel)(*, kind: Literal['uncovered_window'] = 'uncovered_window', subject: str = '', table: str = '', declared_max: str = '') -> None
+openstategraph.abc.UnverifiedAnswer = class(BaseModel)(*, kind: Literal['unverified_answer'] = 'unverified_answer', check: str = '', starved: bool = False) -> None
 openstategraph.abc.Verdict = class(BaseModel)(*, passed: bool, reason: str = '', feedback: str = '', failed_check: str = '') -> None
 openstategraph.abc.agent_node_for_tier = def(tier: 'str') -> 'type[BaseAgentNode]'
 openstategraph.abc.report_progress = def(message: 'str', *, current: 'int | None' = None, total: 'int | None' = None, detail: 'str | None' = None) -> 'bool'

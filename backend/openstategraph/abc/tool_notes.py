@@ -244,6 +244,76 @@ class ToolFailure(BaseModel):
     looked_like_authorisation: bool = False
 
 
+class UncoveredWindow(BaseModel):
+    """`launch-readiness/166`: a zero the data could not have contradicted.
+
+    The fifth kind, and the second that arrives from the platform rather than
+    from a tool author. It shares the key, the holder and the lifecycle every
+    other note has — *this run's statements*, known at the one moment a check
+    holds both the window asked about and what the table says it covers — so it
+    belongs on this carrier rather than on a channel of its own.
+
+    **Why a reader is told this and a model is not asked to fix it.** Where the
+    window lies entirely outside a *declared* coverage, the answer is repairable
+    in one lap and `table_coverage.check_zero_outside_coverage` sends it back.
+    These two states are not repairable by anybody: no revision makes a table
+    declare a window it has never declared, and none moves the last date it
+    holds. A guard that objected forever and then published anyway is
+    `launch-readiness/167` in person, so this travels the rail that renders
+    whether or not the model mentions it.
+
+    Measured, never asserted — the same property `ToolFailure` carries.
+    `declared_max` is a date somebody wrote down; empty means nobody did, and
+    the two render as different sentences with no toggle between them.
+    """
+
+    kind: Literal["uncovered_window"] = "uncovered_window"
+    #: What the answer reported none of, in the answer's own word — *"vessels"*.
+    subject: str = ""
+    #: Which table. Internal, for the record and for a grader: `abc/narration.py`'s
+    #: rule is that the machinery is never named aloud.
+    table: str = ""
+    #: The last date the table **declares** it holds, ISO. Empty when the table
+    #: declares nothing, which is a different sentence and not a missing value.
+    declared_max: str = ""
+
+
+class UnverifiedAnswer(BaseModel):
+    """`launch-readiness/167`: the run published what its own check refused.
+
+    A guard has two ceilings and both are right — `maxAttempts` and the step
+    budget floor, either of which forces `pass` so a cycle can always end. When
+    the ceiling arrives while an objection is still standing, the candidate is
+    published **with the check's own rejection of it sitting in the run's state,
+    unread**. Measured live on 2026-08-28: lap 2's guard said *"the answer
+    reports 1,454,449 vessels…"* and the output node published *"…there are
+    1,454,449 dark vessels."*
+
+    **The pass is correct and is not changed here.** `_grader`'s own argument
+    holds: a loop that cannot finish is worse than a mediocre answer, and
+    refusing to publish turns a ceiling into a dead run, which is what
+    `Grader.normalise` warns against. Only the silence is the defect.
+
+    **The guard's `reason` is never rendered.** It is developer-facing text
+    written for a model to act on — it names tables, statements and column
+    expressions — and `launch-readiness/143`'s sentence-shape rule binds
+    anything reaching a customer. What a reader gets is the one fact the
+    machinery can state about itself honestly: this answer did not clear the
+    workflow's own check on it. Which check, and what it said, is
+    `verdicts[node]` on the developer channel, where it already was.
+    """
+
+    kind: Literal["unverified_answer"] = "unverified_answer"
+    #: The check that was still objecting. Internal — never rendered, for the
+    #: same reason `ToolFailure.tool` is not.
+    check: str = ""
+    #: Whether the ceiling reached was the workflow's step budget rather than
+    #: this node's own attempts cap. Two ceilings, and a reader's next move
+    #: differs — the same split `forced` and `budget_stops` already make on the
+    #: developer channel.
+    starved: bool = False
+
+
 #: The carrier's payload. A fourth kind (`one-chinook-honest/30`'s executed
 #: statement) is an addition here, never a second field on `ToolResult`.
 #:
@@ -253,7 +323,9 @@ class ToolFailure(BaseModel):
 #: and the explicit discriminator bought nothing except a `FieldInfo` repr
 #: inside `ToolResult`'s signature, which is the line
 #: `backend/tests/public_api.txt` pins across three interpreters.
-ToolNote = Union[Correction, Substitution, SourceChoice, ToolFailure]
+ToolNote = Union[
+    Correction, Substitution, SourceChoice, ToolFailure, UncoveredWindow, UnverifiedAnswer
+]
 
 
 def _normalise(value: str) -> str:
@@ -334,6 +406,12 @@ def notes_for_reader(notes: tuple[ToolNote, ...] | list[ToolNote]) -> str:
         if isinstance(note, ToolFailure):
             lines.append(_tool_failure_for_reader(note))
             continue
+        if isinstance(note, UncoveredWindow):
+            lines.append(_uncovered_window_for_reader(note))
+            continue
+        if isinstance(note, UnverifiedAnswer):
+            lines.append(_unverified_answer_for_reader(note))
+            continue
         if not isinstance(note, Substitution) or not note.changed_the_question():
             continue
         lines.append(
@@ -362,6 +440,49 @@ def _tool_failure_for_reader(note: ToolFailure) -> str:
         "One request to a connected service was rejected before it ran, so the answer above "
         "was produced without it. The service's own message says nothing about credentials "
         "or access."
+    )
+
+
+def _uncovered_window_for_reader(note: UncoveredWindow) -> str:
+    """Two sentences, and which one is said is a declaration rather than a guess.
+
+    Neither names the table, the statement or the column — the reader is told
+    what the zero above is worth, never in whose words. The clause carrying the
+    ticket is the second half of each: *"cannot be told apart from"* for a table
+    that declares nothing, and the date itself for one that does.
+    """
+    subject = note.subject.strip() or "results"
+    if note.declared_max:
+        return (
+            f"The answer above reports no {subject}. This data's records stop on "
+            f"{note.declared_max}, and the period asked about runs past that date, so any "
+            f"{subject} after it could not have appeared here whether or not there were any."
+        )
+    return (
+        f"The answer above reports no {subject} for the period asked about. This data does "
+        f"not state which period it covers, so \"none\" here cannot be told apart from "
+        "\"this data does not reach that period\"."
+    )
+
+
+def _unverified_answer_for_reader(note: UnverifiedAnswer) -> str:
+    """The sentence a forced pass owes the person reading it.
+
+    Says that a check objected and that the run ran out of room to satisfy it —
+    and **not** what the check said, which is developer text written for a model
+    (`launch-readiness/143`). Which ceiling was reached changes a reader's next
+    move, so the two are different sentences: an attempts cap is a number on one
+    card, the step budget is a number on the workflow.
+    """
+    if note.starved:
+        return (
+            "The answer above did not pass this workflow's own check on it, and the "
+            "workflow ran out of steps before the check could be satisfied. Treat what it "
+            "states as unverified."
+        )
+    return (
+        "The answer above did not pass this workflow's own check on it, and the check ran "
+        "out of attempts before it could be satisfied. Treat what it states as unverified."
     )
 
 
@@ -481,7 +602,11 @@ def record_notes(
     `report_progress`.
     """
     keepable = [
-        note for note in notes if isinstance(note, (Substitution, SourceChoice, ToolFailure))
+        note
+        for note in notes
+        if isinstance(
+            note, (Substitution, SourceChoice, ToolFailure, UncoveredWindow, UnverifiedAnswer)
+        )
     ]
     if not keepable:
         return False
@@ -520,6 +645,8 @@ __all__ = [
     "Substitution",
     "ToolFailure",
     "ToolNote",
+    "UncoveredWindow",
+    "UnverifiedAnswer",
     "notes_for_model",
     "notes_for_reader",
     "record_notes",

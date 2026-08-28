@@ -1035,6 +1035,13 @@ def forced_pass_warnings(forced: Mapping[str, Any]) -> list[str]:
     merely disliked is still what the workflow produced. Only the silence is
     the defect.
 
+    **"The review at", not "Grader"** (`launch-readiness/167`). A `guard.check`
+    hits the identical ceiling and now writes this identical key, and it is not
+    a grader — it calls a package function and never a model. One sentence that
+    names one of the two families would be false about the other every time it
+    fired, which is the defect this whole map is about. `route.grader` and
+    `guard.check` both *review* a candidate, so that is the word.
+
     Not carried on `decisions`, because the compiler routes on that exact label
     and a new value there would change control flow. Hence its own state key,
     and this function beside `silent_node_warnings` — same channel, same
@@ -1042,7 +1049,7 @@ def forced_pass_warnings(forced: Mapping[str, Any]) -> list[str]:
     feeds `cli.run_exit_code`. A force-pass is a report, not a failed run.
     """
     return [
-        f'Grader "{node}" ran out of attempts and published an answer it had '
+        f'The review at "{node}" ran out of attempts and published an answer it had '
         f"rejected. Its last reason: {str(reason).strip() or 'none given'}"
         for node, reason in forced.items()
     ]
@@ -1082,7 +1089,7 @@ def step_budget_warnings(budget_stops: Mapping[str, Any]) -> list[str]:
     for node, value in budget_stops.items():
         remaining, records = read_budget_stop(value)
         lines.append(
-            f'Grader "{node}" stopped revising because the workflow\'s step budget '
+            f'The review at "{node}" stopped revising because the workflow\'s step budget '
             f"was nearly spent ({remaining} supersteps left), and published the "
             "answer it had. A cycle costs one superstep per node on it, so this "
             "loop could not run to its own attempts cap."
