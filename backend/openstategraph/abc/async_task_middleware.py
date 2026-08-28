@@ -79,7 +79,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Annotated, Any, Literal, NotRequired, Sequence, cast
+from typing import Annotated, Any, Literal, NotRequired, Sequence, cast, get_type_hints
 
 from langchain.agents.middleware.types import AgentMiddleware, AgentState
 from langchain.tools import ToolRuntime
@@ -172,6 +172,53 @@ Usage notes:
 4. Several workers can run at once — launch them and let them run.
 5. A worker never sees this conversation. Everything it needs goes in `description`.
 6. A task outlives this turn: you can start one now and collect it in a later message."""
+
+
+def _async_task_tool(
+    *,
+    name: str,
+    func: Callable[..., Any],
+    description: str,
+    args_schema: type[BaseModel],
+) -> StructuredTool:
+    """One tool, with its `runtime: ToolRuntime` argument still injectable.
+
+    `async-first/16`, and the one line of this module that exists purely because
+    of how the library reads a signature. The runtime is injected across a seam
+    **two** objects wide, and the two halves disagree about strings:
+
+    - `ToolNode._get_all_injected_args` decides *whether* to inject, and reads
+      the signature through `typing.get_type_hints`, which resolves a string
+      annotation back to the class.
+    - `StructuredTool._injected_args_keys` then decides whether to *keep* what
+      was injected, and reads the same signature through `inspect.signature`,
+      which does not resolve anything.
+
+    This module carries `from __future__ import annotations`, so every
+    annotation in it is a string at runtime and the second read sees
+    `"ToolRuntime"` rather than `ToolRuntime`. The runtime was therefore
+    injected into the call and dropped again on the way to the function, and
+    every real tool call died with *missing 1 required positional argument*
+    while a suite that passed `runtime=` by hand stayed green.
+
+    So the hints are resolved **once, here**, onto the function object both
+    halves read. Nothing about the model-facing schema changes: `args_schema`
+    still describes only what a model may fill in, and the runtime still appears
+    in no JSON schema anywhere.
+
+    `infer_schema=False` was the ticket's first suspect and is not the cause —
+    an explicit `args_schema` skips inference either way — so it stays, saying
+    what it says: the schema below is the contract, not a guess from a
+    signature.
+    """
+    func.__annotations__ = get_type_hints(func)
+    return StructuredTool.from_function(
+        name=name,
+        func=func,
+        description=description,
+        infer_schema=False,
+        args_schema=args_schema,
+    )
 
 
 def async_task_status_line(records: Sequence[TaskRecord]) -> str:
@@ -302,11 +349,10 @@ class AsyncTaskMiddleware(AgentMiddleware):
                 runtime,
             )
 
-        return StructuredTool.from_function(
+        return _async_task_tool(
             name="start_async_task",
             func=start_async_task,
             description=description,
-            infer_schema=False,
             args_schema=_StartSchema,
         )
 
@@ -334,14 +380,13 @@ class AsyncTaskMiddleware(AgentMiddleware):
                 )
             return self._command(json.dumps(result), self._touched(tracked, status), runtime)
 
-        return StructuredTool.from_function(
+        return _async_task_tool(
             name="check_async_task",
             func=check_async_task,
             description=(
                 "Check one background task. Returns its current status and, once it has "
                 "finished, its answer. A status you were told earlier is always stale."
             ),
-            infer_schema=False,
             args_schema=_TaskIdSchema,
         )
 
@@ -362,7 +407,7 @@ class AsyncTaskMiddleware(AgentMiddleware):
                 runtime,
             )
 
-        return StructuredTool.from_function(
+        return _async_task_tool(
             name="update_async_task",
             func=update_async_task,
             description=(
@@ -370,7 +415,6 @@ class AsyncTaskMiddleware(AgentMiddleware):
                 "delivered as its next turn once its current turn ends — this does not "
                 "interrupt it mid-thought."
             ),
-            infer_schema=False,
             args_schema=_UpdateSchema,
         )
 
@@ -390,11 +434,10 @@ class AsyncTaskMiddleware(AgentMiddleware):
                 runtime,
             )
 
-        return StructuredTool.from_function(
+        return _async_task_tool(
             name="cancel_async_task",
             func=cancel_async_task,
             description="Stop a background task that is no longer needed.",
-            infer_schema=False,
             args_schema=_TaskIdSchema,
         )
 
@@ -427,14 +470,13 @@ class AsyncTaskMiddleware(AgentMiddleware):
                 }
             )
 
-        return StructuredTool.from_function(
+        return _async_task_tool(
             name="list_async_tasks",
             func=list_async_tasks,
             description=(
                 "List every background task and where it stands right now. Statuses you "
                 "were shown earlier in this conversation are stale — read them here."
             ),
-            infer_schema=False,
             args_schema=_ListSchema,
         )
 
