@@ -21,6 +21,13 @@
   knows and validate against that member of the union in full, so a `notes`
   **column** in a result set, a `"notes": "no remarks"` field, and a
   `Substitution` with no `how_matched` are all left alone.
+- **A fourth note kind, `ToolFailure`** (`launch-readiness/156`), exported
+  from `openstategraph.abc` and added to `ToolResult.notes`' union: a call
+  that was refused and never ran. It carries the service's own words for the
+  record and for a grader, and a **measured** `looked_like_authorisation`
+  read off that message rather than an assertion in either direction. Only
+  two internals-free sentences reach a reader, and neither names the tool,
+  the service or the message.
 - **A run says which store answered, and what else could have.** A new node
   type, `resolve.source` (`launch-readiness/150`), and the engine behind it,
   `openstategraph.sources`. It is the sibling of `resolve.vocabulary`:
@@ -215,6 +222,27 @@
   so a run degrades rather than crashing (`providers-and-credentials` 08).
 
 ### Fixed
+- **An MCP tool error no longer kills the run, and the run says so itself**
+  (`launch-readiness/156`). Live, `cpl-mcp` answered a real question with
+  *"unable to retrieve … due to an authentication issue with the data
+  source"*. There was no authentication issue: two tools nest their arguments
+  under a field named `inp`, the model sent them flat, the server refused, and
+  `_MCPToolExecutionError` **raised out of our wrapper and was caught nowhere**
+  — so the agent produced nothing and then composed a cause for its own
+  silence. `langchain_mcp_adapters` already answers this correctly, setting
+  `handle_tool_error` on the tool it builds; `_wrap_async_tool` rebuilt the
+  `StructuredTool` from six fields and did not carry that one across, which
+  made us **strictly worse than no wrapper**. It is carried now, so a refusal
+  reaches the model as a `ToolMessage` with `status="error"` that it can read
+  and correct. Where the tool's own JSON schema declares exactly one required
+  property and that property is an object, the refusal also names the shape it
+  wanted — the information was in hand at bind time and nobody was telling the
+  model. The library's boundary is unchanged in both directions: a transport
+  or session failure still propagates, because a model cannot correct a dead
+  session and hiding one behind its prose would be this defect again. And
+  because a model's account of its own silence is exactly what may not be
+  relied on (`127`'s argument, applied to a failure), the run records the
+  rejection and the output node renders it whatever the answer above claims.
 - **`openstategraph providers` reports only what it measured, and `--check`
   is how you find out the rest.** Every row said `ready` and the header said
   *"3 integrations installed and configured"* on the strength of

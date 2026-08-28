@@ -83,7 +83,12 @@ from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
 from openstategraph.abc.tool_findings import result_envelope
-from openstategraph.abc.tool_notes import ToolNote, notes_for_model, record_notes
+from openstategraph.abc.tool_notes import (
+    ToolFailure,
+    ToolNote,
+    notes_for_model,
+    record_notes,
+)
 from openstategraph.abc.tool_sentences import describe_tool_call
 from openstategraph.progress import NARRATES_ITSELF, report_progress
 
@@ -740,6 +745,151 @@ def _append_text(content: Any, addendum: str) -> Any:
     return content
 
 
+#: Where the argument-shape hint is parked on the exception on its way past.
+#:
+#: An attribute rather than a rebuilt exception: `_MCPToolExecutionError` is
+#: private to `langchain_mcp_adapters`, and its own docstring says its message
+#: is a snapshot of `tool_content` taken at construction — so reconstructing it
+#: or mutating that list is how the two fall out of step. The hint is composed
+#: where the arguments are (the shim) and read where the content is composed
+#: (`_error_content`), and nothing in between has to know about it.
+_HINT_ATTR = "_openstategraph_argument_hint"
+
+#: What a service's own words look like when the refusal really *was* about
+#: credentials. Read rather than assumed, because `156` is the case where
+#: asserting the negative sent the owner to check a token that was fine — and
+#: asserting it the other way would be the same defect pointing the other way.
+_AUTHORISATION_MARKERS = (
+    "401",
+    "403",
+    "unauthor",
+    "authenticat",
+    "authoriz",
+    "authoris",
+    "forbidden",
+    "credential",
+    "access denied",
+    "permission denied",
+    "api key",
+)
+
+
+def _looks_like_authorisation(detail: str) -> bool:
+    lowered = detail.casefold()
+    return any(marker in lowered for marker in _AUTHORISATION_MARKERS)
+
+
+def _argument_shape_hint(schema: Any, sent: Mapping[str, Any]) -> str | None:
+    """The shape this tool actually wants, when its own schema says so.
+
+    `156`'s live case in one sentence: `mcp_resolve_lens` and `mcp_prepare`
+    declare `{"properties": {"inp": {"$ref": …}}, "required": ["inp"]}`, the
+    model sent `{"question": …}` — the obvious move for a field named
+    `document` — and the server refused. The agent then guessed
+    `departure_port`, `departure_date` and `loading_port` for three turns
+    against a table whose columns are `load_port` and `load_date`, because the
+    two tools that would have told it were the two it could not call.
+
+    **The schema is ours to read and was already in hand at bind time.** The
+    mismatch itself is the service's; saying which shape it wants is not.
+
+    Strict in trusting, and narrowly so: a hint is offered only where the
+    schema declares **exactly one** required property, that property is an
+    object, and the caller sent something other than it. Every other failure
+    gets the service's own message and nothing invented on top — a hint
+    produced because a call failed would be this map's own defect wearing a
+    helpful face.
+    """
+    if not isinstance(schema, Mapping):
+        return None
+    required = schema.get("required")
+    if not isinstance(required, list) or len(required) != 1:
+        return None
+    wrapper = required[0]
+    if not isinstance(wrapper, str) or wrapper in sent:
+        return None
+    properties = schema.get("properties")
+    if not isinstance(properties, Mapping):
+        return None
+    declared = properties.get(wrapper)
+    if not isinstance(declared, Mapping):
+        return None
+    if "$ref" not in declared and declared.get("type") != "object":
+        return None
+    flat = ", ".join(sorted(str(key) for key in sent)) or "no arguments"
+    return (
+        f'Argument shape: this tool takes a single object nested under "{wrapper}". '
+        f"You sent {flat} at the top level. Retry with "
+        f'{{"{wrapper}": {{ … the fields you just sent … }}}}.'
+    )
+
+
+def _text_block(text: str) -> dict[str, Any]:
+    return {"type": "text", "text": text}
+
+
+#: The hint's own block opens with a blank line, because a provider that
+#: concatenates content blocks bare does exist — the live 2026-08-28 re-run
+#: read `…/v/missingArgument shape: this tool takes…`, one word running into
+#: the next. A block boundary is not a line break anywhere it matters.
+_HINT_LEAD = "\n\n"
+
+
+def _error_content(error: Any) -> Any:
+    """`handle_tool_error`: a refusal the model can read and act on.
+
+    **This is the whole of `156`, and it is a restoration rather than an
+    invention.** `convert_mcp_tool_to_langchain_tool` already sets
+    `handle_tool_error=_handle_mcp_tool_error` on the tool it builds, so a
+    bare MCP client hands an `isError=True` result to the model as a
+    `ToolMessage` with `status="error"`. `_wrap_async_tool` rebuilt the
+    `StructuredTool` from six fields and did not carry that one across — so a
+    `ToolException` raised out of the shim, was caught nowhere in
+    `openstategraph/`, and `agent1` died on an argument mistake it could
+    trivially have corrected. **We were strictly worse than no wrapper.**
+
+    The library's boundary is kept exactly where the library puts it: only a
+    `ToolException` reaches here at all, so a transport or session failure
+    still propagates. That parity is deliberate in both directions — a refused
+    call is something a model can fix, and a dead session is not, and hiding
+    the second behind a model's prose would be `156` again with a different
+    cause.
+    """
+    content = getattr(error, "tool_content", None)
+    hint = getattr(error, _HINT_ATTR, "")
+    if isinstance(content, list) and content:
+        blocks = list(content)
+        return [*blocks, _text_block(_HINT_LEAD + hint)] if hint else blocks
+    body = str(error) or "The service refused this call and returned no message."
+    return [_text_block(body)] + ([_text_block(_HINT_LEAD + hint)] if hint else [])
+
+
+def _record_the_refusal(name: str, error: Any, schema: Any, sent: Mapping[str, Any]) -> None:
+    """Park the hint on the exception, and put the refusal on the run.
+
+    Tolerant is not silent. The model is about to be handed the service's own
+    message and may well correct itself — but *may well* is precisely what
+    `127` established cannot be the disclosure, and here the model did worse
+    than forget: it invented a cause specific enough to send the owner
+    checking credentials that were never wrong. So the run records the
+    rejection, and `compile/node_runtime._output` renders it whatever the
+    answer above says.
+    """
+    hint = _argument_shape_hint(schema, sent)
+    if hint:
+        setattr(error, _HINT_ATTR, hint)
+    detail = str(error)
+    record_notes(
+        (
+            ToolFailure(
+                tool=name,
+                detail=detail,
+                looked_like_authorisation=_looks_like_authorisation(detail),
+            ),
+        )
+    )
+
+
 def _wrap_async_tool(tool: Any, server: str) -> Any:  # noqa: ARG001 — see below
     """The sync shim: the original `coroutine`, plus a `func` that runs it.
 
@@ -790,12 +940,15 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:  # noqa: ARG001 — see bel
       audiences), and deleting it would make restoring that a signature
       change at the one call site.
     """
-    from langchain_core.tools import StructuredTool
+    from langchain_core.tools import StructuredTool, ToolException
 
     from openstategraph.mcp_sessions import run_on_mcp_loop, run_on_mcp_loop_async
 
     inner = tool.coroutine
     name = getattr(tool, "name", "") or ""
+    # The tool's own declaration of the arguments it wants, held here so the
+    # shim can say which shape a refused call should have had (`156`).
+    schema = getattr(tool, "args_schema", None)
 
     def _line(kwargs: dict[str, Any]) -> str:
         return describe_tool_call(name, kwargs) or _UNKNOWN_REMOTE_CALL
@@ -807,13 +960,23 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:  # noqa: ARG001 — see bel
         # loop on an ordinary future while the work happens over there — no
         # thread is blocked, which is what makes an async agent running four
         # of these at once still concurrent.
-        return _with_declared_notes(await run_on_mcp_loop_async(inner(**kwargs)))
+        try:
+            answer = await run_on_mcp_loop_async(inner(**kwargs))
+        except ToolException as refused:
+            _record_the_refusal(name, refused, schema, kwargs)
+            raise
+        return _with_declared_notes(answer)
 
     def _call(**kwargs: Any) -> Any:
         report_progress(_line(kwargs))
         # Not `asyncio.run`: that opened a loop per call, and a loop per call
         # is a session per call, which is the handshake this seam removes.
-        return _with_declared_notes(run_on_mcp_loop(inner(**kwargs)))
+        try:
+            answer = run_on_mcp_loop(inner(**kwargs))
+        except ToolException as refused:
+            _record_the_refusal(name, refused, schema, kwargs)
+            raise
+        return _with_declared_notes(answer)
 
     return StructuredTool(
         name=tool.name,
@@ -822,6 +985,10 @@ def _wrap_async_tool(tool: Any, server: str) -> Any:  # noqa: ARG001 — see bel
         func=_call,
         coroutine=_coroutine,
         response_format=getattr(tool, "response_format", "content"),
+        # `launch-readiness/156`. Carried across rather than defaulted away:
+        # the tool this re-wraps already had one, and dropping it is what
+        # turned a self-describing refusal into a dead run.
+        handle_tool_error=_error_content,
         # `launch-readiness/145`: the declaration that stops the same sentence
         # being said twice. `NarrationMiddleware` narrates every tool call it
         # wraps, and for an MCP tool that is the *identical* line out of the

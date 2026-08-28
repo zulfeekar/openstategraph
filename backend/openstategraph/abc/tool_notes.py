@@ -206,6 +206,44 @@ class SourceChoice(BaseModel):
     how_chosen: Literal["named_in_question", "declared_default", "only_source"]
 
 
+class ToolFailure(BaseModel):
+    """`launch-readiness/156`: a call that was refused and never ran.
+
+    The fourth kind, and the one that arrives from the platform rather than
+    from a tool author. It shares the key, the holder and the lifecycle every
+    other note has — *this call*, known at the one moment it is known,
+    travelling with the result — so it belongs on this carrier rather than on a
+    channel of its own.
+
+    **Why the run records this at all**, when the model is already handed the
+    error as content: because the model's account of its own silence is exactly
+    what may not be relied on. Live, `cpl-mcp` answered *"an authentication
+    issue with the data source"* for a call the server had rejected on an
+    argument name, and sent the owner to check a credential that was never
+    wrong. `127` made that argument about a substitution; this is the same
+    argument about a failure.
+
+    **`looked_like_authorisation` is measured, not asserted.** Saying "this was
+    not an access problem" would be a guess in the one case where it matters
+    most, so the claim is read off the service's own message. Two situations
+    rendering identically is this map's standing theme, and it has two
+    directions.
+    """
+
+    kind: Literal["tool_failure"] = "tool_failure"
+    #: Which capability was refused. Internal: `abc/narration.py`'s rule is
+    #: that a tool is never named aloud, so this is for the record and for a
+    #: grader, never for the sentence a reader gets.
+    tool: str = ""
+    #: The service's own words. Never rendered to a reader — a result payload
+    #: is the richest leak surface there is (a driver message, a request id, a
+    #: user's own search term), which is why `tool_findings` speaks only
+    #: integers.
+    detail: str = ""
+    #: Whether the service said this was about credentials or access.
+    looked_like_authorisation: bool = False
+
+
 #: The carrier's payload. A fourth kind (`one-chinook-honest/30`'s executed
 #: statement) is an addition here, never a second field on `ToolResult`.
 #:
@@ -215,7 +253,7 @@ class SourceChoice(BaseModel):
 #: and the explicit discriminator bought nothing except a `FieldInfo` repr
 #: inside `ToolResult`'s signature, which is the line
 #: `backend/tests/public_api.txt` pins across three interpreters.
-ToolNote = Union[Correction, Substitution, SourceChoice]
+ToolNote = Union[Correction, Substitution, SourceChoice, ToolFailure]
 
 
 def _normalise(value: str) -> str:
@@ -293,6 +331,9 @@ def notes_for_reader(notes: tuple[ToolNote, ...] | list[ToolNote]) -> str:
         if isinstance(note, SourceChoice):
             lines.append(_source_choice_for_reader(note))
             continue
+        if isinstance(note, ToolFailure):
+            lines.append(_tool_failure_for_reader(note))
+            continue
         if not isinstance(note, Substitution) or not note.changed_the_question():
             continue
         lines.append(
@@ -301,6 +342,27 @@ def notes_for_reader(notes: tuple[ToolNote, ...] | list[ToolNote]) -> str:
             f"{_HOW_MATCHED_FOR_READER[note.how_matched]}."
         )
     return "\n".join(_dedup(lines))
+
+
+def _tool_failure_for_reader(note: ToolFailure) -> str:
+    """Two sentences, and which one is said is a measurement.
+
+    Neither names the tool, the service or the message — the reader is told
+    that a request was refused, never in whose words. The clause that carries
+    the whole ticket is the second half of the first sentence: it is what the
+    owner needed and did not get, and it is only ever said when the service's
+    own message supports it.
+    """
+    if note.looked_like_authorisation:
+        return (
+            "One request to a connected service was refused as unauthorised, so the answer "
+            "above was produced without it."
+        )
+    return (
+        "One request to a connected service was rejected before it ran, so the answer above "
+        "was produced without it. The service's own message says nothing about credentials "
+        "or access."
+    )
 
 
 def _source_choice_for_reader(note: SourceChoice) -> str:
@@ -418,7 +480,9 @@ def record_notes(
     unit test would make that claim false. Same contract, and same reason, as
     `report_progress`.
     """
-    keepable = [note for note in notes if isinstance(note, (Substitution, SourceChoice))]
+    keepable = [
+        note for note in notes if isinstance(note, (Substitution, SourceChoice, ToolFailure))
+    ]
     if not keepable:
         return False
     thread = thread_id if thread_id is not None else _current_thread()
@@ -454,6 +518,7 @@ __all__ = [
     "Correction",
     "SourceChoice",
     "Substitution",
+    "ToolFailure",
     "ToolNote",
     "notes_for_model",
     "notes_for_reader",

@@ -51,8 +51,9 @@ openstategraph.abc.SourceChoice = class(BaseModel)(*, kind: Literal['source_choi
 openstategraph.abc.Substitution = class(BaseModel)(*, kind: Literal['substitution'] = 'substitution', user_term: str, axis: str, canonical_value: str, how_matched: Literal['exact', 'declared_synonym', 'model_inference'], confidence: Annotated[float | None, Ge(ge=0.0), Le(le=1.0)] = None) -> None
 openstategraph.abc.Subtask = class(BaseModel)(*, id: str, instruction: str, archetype: str = '') -> None
 openstategraph.abc.SystemPrompt = dataclass(object) fields(preamble,output_contract,context,default_rules,rules,replace_defaults,skill)
+openstategraph.abc.ToolFailure = class(BaseModel)(*, kind: Literal['tool_failure'] = 'tool_failure', tool: str = '', detail: str = '', looked_like_authorisation: bool = False) -> None
 openstategraph.abc.ToolField = dataclass(object) fields(key,label,kind,default_value,placeholder,hint,options)
-openstategraph.abc.ToolResult = class(BaseModel)(*, ok: bool = True, content: str = '', error: str | None = None, notes: tuple[typing.Union[openstategraph.abc.tool_notes.Correction, openstategraph.abc.tool_notes.Substitution, openstategraph.abc.tool_notes.SourceChoice], ...] = ()) -> None
+openstategraph.abc.ToolResult = class(BaseModel)(*, ok: bool = True, content: str = '', error: str | None = None, notes: tuple[typing.Union[openstategraph.abc.tool_notes.Correction, openstategraph.abc.tool_notes.Substitution, openstategraph.abc.tool_notes.SourceChoice, openstategraph.abc.tool_notes.ToolFailure], ...] = ()) -> None
 openstategraph.abc.Verdict = class(BaseModel)(*, passed: bool, reason: str = '', feedback: str = '', failed_check: str = '') -> None
 openstategraph.abc.agent_node_for_tier = def(tier: 'str') -> 'type[BaseAgentNode]'
 openstategraph.abc.report_progress = def(message: 'str', *, current: 'int | None' = None, total: 'int | None' = None) -> 'bool'

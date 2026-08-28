@@ -270,10 +270,11 @@ story in its module docstring.
 ### A result can say what to do next, and what it swapped for the user's word
 
 `ToolResult.notes` carries what a tool has to say *about* the call, beside the
-result itself. Three kinds — `Correction`, `Substitution` and `SourceChoice`
-— all optional, all empty by default, so a tool that attaches nothing behaves
-exactly as it did before the field existed. The two below are the ones a tool
-author writes by hand; `SourceChoice` is minted by `resolve.source`.
+result itself. Four kinds — `Correction`, `Substitution`, `SourceChoice` and
+`ToolFailure` — all optional, all empty by default, so a tool that attaches
+nothing behaves exactly as it did before the field existed. The two below are
+the ones a tool author writes by hand; `SourceChoice` is minted by
+`resolve.source` and `ToolFailure` by the platform, when a call is refused.
 
 ```python
 from openstategraph.abc import Correction, Substitution, ToolResult
