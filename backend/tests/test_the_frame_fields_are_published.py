@@ -31,9 +31,15 @@ GUIDE = ROOT / "docs" / "api.md"
 #: every frame, and the `done` frame's `developer` block is assembled by
 #: `audience.py` — which is the boundary owning what a customer may not see, and
 #: deliberately not something `streaming.py` decides for itself.
+#:
+#: A third since `memory-and-replay` 46: `frame_clock.py` mints `seq` and
+#: `elapsedMs` for every frame, so it is where those two keys are written. It
+#: is an emitter by the same test this list serves — a declared field has to be
+#: a key some module actually puts on the wire.
 EMITTERS = (
     ROOT / "backend" / "openstategraph" / "api" / "streaming.py",
     ROOT / "backend" / "openstategraph" / "api" / "audience.py",
+    ROOT / "backend" / "openstategraph" / "api" / "frame_clock.py",
 )
 
 

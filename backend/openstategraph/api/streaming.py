@@ -14,6 +14,11 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from openstategraph.api.diagram import workflow_mermaid  # noqa: E402
+from openstategraph.api.frame_clock import (  # noqa: E402
+    FRAME_CLOCK_FIELDS,
+    frame_stamp,
+    open_frame_clock,
+)
 from openstategraph.api.audience import (  # noqa: E402
     AnswerChannel,
     Audience,
@@ -761,14 +766,35 @@ def _stream_part(chunk: Any) -> tuple[Any, str, Any] | None:
     return None
 
 
-def _sse(event: str, data: dict[str, Any]) -> str:
-    """One Server-Sent Event frame: an `event:` line, a `data:` line, blank line.
+def _frame_bytes(event: str, data: dict[str, Any]) -> str:
+    """The serialiser: an `event:` line, a `data:` line, a blank line.
 
     `json.dumps` rather than string interpolation, because a node's output can
     contain newlines and quotes, and SSE's `data:` line is newline-delimited —
     an unescaped newline would silently split one event into two.
+
+    Split from `_sse` so that *building* a frame and *formatting* one are
+    separable (`memory-and-replay` 46). Building mints the clock stamp, which
+    advances a counter; a caller that only wants to re-render a payload it
+    already has — the wire-format golden does exactly that — must not mint a
+    second one. Nothing in the running server calls this directly.
     """
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+def _sse(event: str, data: dict[str, Any]) -> str:
+    """One Server-Sent Event frame, dated (`memory-and-replay` 46).
+
+    The one place a frame is built, and therefore the one place the clock is
+    minted: `seq` and `elapsedMs` are appended here rather than at ~ten call
+    sites, so a frame kind added tomorrow is stamped without anybody
+    remembering to. `frame_stamp` is empty outside a stream, which is how the
+    catalogue feed keeps the payload it always had.
+
+    Appended last, so the ordering of every field the wire already carried is
+    untouched — see `test_the_sse_wire_format_is_unchanged`.
+    """
+    return _frame_bytes(event, {**data, **frame_stamp()})
 
 
 #: The event names that report progress. A client must keep waiting after
@@ -793,7 +819,10 @@ TERMINAL_EVENTS: tuple[str, ...] = ("done", "interrupt", "error")
 #: the contract and a drift there is a broken client, not a typo.
 RUN_EVENTS: tuple[str, ...] = PROGRESS_EVENTS + TERMINAL_EVENTS
 
-#: What each frame carries — the vocabulary one level below the names.
+#: What each frame carries **of its own** — the vocabulary one level below the
+#: names. `FRAME_FIELDS` below is this plus the clock every frame gets from
+#: `_sse`; that is the one a consumer reads, and this is the one an emitter
+#: edits.
 #:
 #: **Why this exists** (framework-packaging ticket 10). `RUN_EVENTS` was
 #: published, pinned in both languages and read by a drift test; the ~30 field
@@ -814,7 +843,7 @@ RUN_EVENTS: tuple[str, ...] = PROGRESS_EVENTS + TERMINAL_EVENTS
 #: Optional fields are included: `withheld` rides only a frame that was
 #: emptied, and `developer` only a developer run, but a client has to know
 #: they exist to handle them. Absence is a value here, not a gap.
-FRAME_FIELDS: dict[str, tuple[str, ...]] = {
+_PAYLOAD_FIELDS: dict[str, tuple[str, ...]] = {
     "update": (
         "node", "namespace", "taskId", "internal",
         "activeNode", "path", "pathSlugs", "output",
@@ -851,6 +880,20 @@ FRAME_FIELDS: dict[str, tuple[str, ...]] = {
         "nested", "attempts", "mermaid", "developer", "publishedRejected",
     ),
     "error": ("threadId", "detail"),
+}
+
+#: What each frame **actually carries** — the payload table above plus the two
+#: fields `_sse` mints for every one of them (`memory-and-replay` 46).
+#:
+#: Composed rather than typed into each row, and that is the structural half of
+#: the ticket's "a frame kind cannot be added without one": a new row in the
+#: table above inherits `seq` and `elapsedMs` because this expression gives
+#: them to it, not because a contributor remembered. `sse_responses` writes
+#: this into the OpenAPI description, `docs/openapi.json` publishes it, and
+#: `contractDrift.test.ts` reads it back — so the clock is a published field on
+#: every frame, in both languages, from one declaration.
+FRAME_FIELDS: dict[str, tuple[str, ...]] = {
+    name: fields + FRAME_CLOCK_FIELDS for name, fields in _PAYLOAD_FIELDS.items()
 }
 
 
@@ -1019,6 +1062,15 @@ async def _stream_run(
     # protocol guarantee in the docstring above, and re-indenting it under a
     # context manager would bury the one thing it exists to make obvious.
     turn_stack = ExitStack()
+    # **The clock this stream's frames are dated by** (`memory-and-replay` 46).
+    #
+    # Opened here, beside the turn and for the same reason: this is the one
+    # wrapper every run stream goes through — `/api/runs/stream` and
+    # `/api/runs/resume` both — so a clock opened here belongs to exactly one
+    # run and is released whichever way the stream ends. `_sse` reads it; no
+    # call site passes it, which is what makes a new frame kind dated by
+    # default rather than by attention.
+    turn_stack.enter_context(open_frame_clock())
     identity = run_identity(config)
     turn = turn_stack.enter_context(
         run_turn(

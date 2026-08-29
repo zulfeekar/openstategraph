@@ -59,6 +59,34 @@ export interface ProviderStatus {
 }
 
 /**
+ * When the server produced a frame, and where it falls in the recorded order
+ * (`memory-and-replay` 46). Carried by every one of the seven run frames.
+ *
+ * **A server clock, and this is the field that says so.** `elapsedMs` is
+ * milliseconds since the run's stream opened, measured on the backend as it
+ * built the frame, from a monotonic clock. It is *not* when this tab received
+ * it: `ExecutionEngine` measures arrival with `performance.now()` and that
+ * number includes a stalled network, which is a real question about the user's
+ * experience and a different one from how long the run took. A surface showing
+ * one must not label it as the other.
+ *
+ * Relative rather than absolute, deliberately: an offset is what a scrubber
+ * needs, and a recorded stream can be replayed without disclosing when the run
+ * happened. The wall time a run belongs to is `PastRun.updatedAt`, which is
+ * where it agrees with the checkpoints.
+ *
+ * `seq` is dense from `0`, so order survives two frames sharing a millisecond
+ * and a gap reads as a dropped frame.
+ *
+ * Both are `null` against a backend that predates the fields — never `0`,
+ * which would be a claim that the frame was first and instant.
+ */
+export interface RunFrameStamp {
+  readonly seq: number | null;
+  readonly elapsedMs: number | null;
+}
+
+/**
  * `GET /api/providers`'s whole answer — the rows, plus which environment
  * this server read to produce them.
  *
@@ -129,7 +157,7 @@ export interface RunRequest {
   readonly threadId?: string;
 }
 
-export interface RunResult {
+export interface RunResult extends RunFrameStamp {
   /**
    * The thread this run happened in — send it as `threadId` on the next
    * question to make that question a follow-up.
@@ -289,7 +317,7 @@ export interface GuardrailRedaction {
  * LangGraph resumes by replaying the same checkpointed thread, not by
  * resending the original request.
  */
-export interface RunInterrupted {
+export interface RunInterrupted extends RunFrameStamp {
   readonly interrupted: true;
   readonly threadId: string;
   readonly message: string;
@@ -412,7 +440,7 @@ export interface TokenUsage {
  * node type.
  */
 export type RunStreamEvent =
-  | {
+  | ({
       readonly type: 'update';
       readonly node: string;
       readonly namespace: readonly string[];
@@ -491,8 +519,8 @@ export type RunStreamEvent =
       readonly check: string;
       /** The grader's sentence for `check`. `''` alongside it. */
       readonly reason: string;
-    }
-  | {
+    } & RunFrameStamp)
+  | ({
       readonly type: 'token';
       readonly node: string;
       readonly namespace: readonly string[];
@@ -616,8 +644,8 @@ export type RunStreamEvent =
        * covers both "there was text" and a backend that predates the field.
        */
       readonly withheld: boolean;
-    }
-  | {
+    } & RunFrameStamp)
+  | ({
       /**
        * A step said something about itself **while still working**.
        *
@@ -677,8 +705,8 @@ export type RunStreamEvent =
        * variant, where the ambiguity it removes is spelled out. */
       readonly path: readonly string[];
       readonly pathSlugs: readonly string[];
-    }
-  | {
+    } & RunFrameStamp)
+  | ({
       /** A run created a child worker or subagent — the spawn *moment*,
        * emitted before the frame that revealed it. Four shapes of the same
        * event: an orchestrator's fan-out plan (`fanout`), a deep agent's
@@ -700,8 +728,8 @@ export type RunStreamEvent =
       readonly instruction: string;
       readonly taskId: string | null;
       readonly namespace: readonly string[];
-    }
-  | {
+    } & RunFrameStamp)
+  | ({
       readonly type: 'error';
       readonly detail: string;
       /**
@@ -712,7 +740,7 @@ export type RunStreamEvent =
        * next send. Empty against a backend that predates the field.
        */
       readonly threadId: string;
-    };
+    } & RunFrameStamp);
 
 /**
  * One past run, as the backend recorded it.
@@ -1007,6 +1035,11 @@ export class RuntimeClient implements IRuntimeClient {
       const payload = (await response.json()) as Record<string, unknown>;
       const developer = asDeveloperChannel(payload['developer']);
       return Ok({
+        // `POST /api/runs` sends no frames, so there is no cadence to report
+        // and `null` is the true answer rather than a missing one — the same
+        // distinction `RunFrameStamp` draws for a backend that predates it.
+        seq: null,
+        elapsedMs: null,
         // `RunResponse` does not carry one today; see `RunResult.threadId`.
         threadId: asString(payload['thread_id']),
         answer: asString(payload['answer']),
@@ -1121,6 +1154,7 @@ export class RuntimeClient implements IRuntimeClient {
 
       if (eventName === 'update') {
         onEvent({
+          ...asFrameStamp(payload),
           type: 'update',
           node: asString(payload['node']),
           namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
@@ -1138,6 +1172,7 @@ export class RuntimeClient implements IRuntimeClient {
         });
       } else if (eventName === 'progress') {
         onEvent({
+          ...asFrameStamp(payload),
           type: 'progress',
           node: asString(payload['node']),
           namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
@@ -1158,6 +1193,7 @@ export class RuntimeClient implements IRuntimeClient {
       } else if (eventName === 'spawn') {
         const kind = asString(payload['kind']);
         onEvent({
+          ...asFrameStamp(payload),
           type: 'spawn',
           kind: kind === 'fanout' || kind === 'subagent' || kind === 'async' ? kind : 'subgraph',
           parent: asString(payload['parent']),
@@ -1170,6 +1206,7 @@ export class RuntimeClient implements IRuntimeClient {
         const tool = asRecord(payload['tool']);
         const usage = payload['usage'];
         onEvent({
+          ...asFrameStamp(payload),
           type: 'token',
           node: asString(payload['node']),
           namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
@@ -1193,9 +1230,15 @@ export class RuntimeClient implements IRuntimeClient {
         });
       } else if (eventName === 'error') {
         failure = asString(payload['detail']) || 'The workflow failed while streaming.';
-        onEvent({ type: 'error', detail: failure, threadId: asString(payload['threadId']) });
+        onEvent({
+          ...asFrameStamp(payload),
+          type: 'error',
+          detail: failure,
+          threadId: asString(payload['threadId']),
+        });
       } else if (eventName === 'interrupt') {
         outcome = {
+          ...asFrameStamp(payload),
           interrupted: true,
           threadId: asString(payload['threadId']),
           message: asString(payload['message']),
@@ -1208,6 +1251,10 @@ export class RuntimeClient implements IRuntimeClient {
       } else if (eventName === 'done') {
         const developer = asDeveloperChannel(payload['developer']);
         outcome = {
+          // On the terminal frame this is the whole run, as the *server*
+          // measured it — the number a duration line should quote, and the
+          // end a scrubber needs.
+          ...asFrameStamp(payload),
           threadId: asString(payload['threadId']),
           answer: asString(payload['answer']),
           decisions: asRecord(payload['decisions']),
@@ -1445,6 +1492,21 @@ export class RuntimeClient implements IRuntimeClient {
 
 function asRecordOfUnknown(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+/**
+ * The clock the server put on a frame — see `RunFrameStamp`.
+ *
+ * Read once, here, and spread into every variant, so a frame kind added to
+ * the parser below cannot arrive at a consumer undated. `null` unless the
+ * backend sent an actual number: a fabricated `0` would say "first, and
+ * instant", which is a claim rather than an absence.
+ */
+function asFrameStamp(payload: Record<string, unknown>): RunFrameStamp {
+  return {
+    seq: typeof payload['seq'] === 'number' ? payload['seq'] : null,
+    elapsedMs: typeof payload['elapsedMs'] === 'number' ? payload['elapsedMs'] : null,
+  };
 }
 
 /** A `token` frame's `usage` object, with a missing count read as zero. */

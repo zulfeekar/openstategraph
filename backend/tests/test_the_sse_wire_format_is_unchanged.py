@@ -49,7 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import ScriptedGraph, drive_fold  # noqa: E402
 
 from openstategraph.api.audience import Audience  # noqa: E402
-from openstategraph.api.streaming import _stream_run  # noqa: E402
+from openstategraph.api.streaming import RUN_EVENTS, _stream_run  # noqa: E402
 from openstategraph.compile.diagnostics import CompileDiagnostics  # noqa: E402
 
 GOLDEN = Path(__file__).parent / "data" / "sse_wire_format_golden.json"
@@ -165,6 +165,12 @@ def _golden() -> dict[str, list[str]]:
 #: addition to `progress`.
 ADDED_SINCE_THE_GOLDEN = {
     "interruptible": ("update", "token", "progress"),
+    # `memory-and-replay` 46: when the frame was built and where it falls in
+    # the recorded order. On **every** kind, because `_sse` mints them — which
+    # is the property that ticket exists to establish, so listing the kinds by
+    # hand here would be a second place to keep in step.
+    "seq": RUN_EVENTS,
+    "elapsedMs": RUN_EVENTS,
     # `launch-readiness/163`: the tool's own error text, developer-only, so a
     # developer watching a failing MCP call can read what the customer
     # sentence is written never to say.
@@ -192,11 +198,18 @@ ADDED_TO_THE_DEVELOPER_CHANNEL = {
 def _without_additions(frames: list[str]) -> list[str]:
     """`frames`, with the named additions removed and everything else intact.
 
-    Key order is preserved by rebuilding through `_sse`, so this still
-    compares the `event:` line, the `data:` line, the blank line, the order
-    `json.dumps` produced and every escape — for every field the golden knows.
+    Key order is preserved by rebuilding through the real serialiser, so this
+    still compares the `event:` line, the `data:` line, the blank line, the
+    order `json.dumps` produced and every escape — for every field the golden
+    knows.
+
+    `_frame_bytes` rather than `_sse`: since `memory-and-replay` 46, *building*
+    a frame mints a clock stamp and advances a counter, so rebuilding a payload
+    through the builder would date it a second time and renumber it. The
+    formatter is the half this needs, and it is the same code the server's
+    frames go through.
     """
-    from openstategraph.api.streaming import _sse
+    from openstategraph.api.streaming import _frame_bytes
 
     trimmed = []
     for frame in frames:
@@ -213,7 +226,7 @@ def _without_additions(frames: list[str]) -> list[str]:
         if isinstance(channel, dict):
             for field in ADDED_TO_THE_DEVELOPER_CHANNEL:
                 channel.pop(field, None)
-        trimmed.append(_sse(name, payload))
+        trimmed.append(_frame_bytes(name, payload))
     return trimmed
 
 
