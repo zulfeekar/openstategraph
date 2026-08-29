@@ -1,7 +1,7 @@
 import { CANVAS } from '@design/tokens';
 import { IS_APPLE } from '@design/primitives';
 import { PaperFeature, type PaperFeatureContext } from './IPaperFeature';
-import { isTextEntry } from './PanZoomFeature';
+import { hasTextSelection, isTextEntry } from './textClaim';
 
 /** One binding, in the same declarative form the shortcuts drawer renders. */
 export interface Shortcut {
@@ -12,6 +12,18 @@ export interface Shortcut {
   readonly run: (ctx: PaperFeatureContext) => void;
   /** Allow while a text field has focus. Off by default. */
   readonly allowInTextEntry?: boolean;
+  /**
+   * Stand down while text is selected anywhere in the document.
+   *
+   * For the three bindings that collide with the browser's own text
+   * shortcuts — copy, cut, select-all — which mean something different to a
+   * reader with a sentence highlighted than to an author with a node picked.
+   * It is a property of the binding rather than a condition in the handler
+   * because it is true of three rows and false of the other twenty: undo,
+   * the nudges and the zooms mean the same thing either way, and a blanket
+   * rule would take them all down with it.
+   */
+  readonly yieldsToTextSelection?: boolean;
 }
 
 /**
@@ -23,6 +35,14 @@ export interface Shortcut {
  *
  * Bindings are ignored while a text field has focus unless they opt in.
  * Without that, typing "a" in a prompt would select every node.
+ *
+ * A handler on `window` that calls `preventDefault` is a decision to own a
+ * key for the whole document, so two questions have to be asked before it
+ * fires and not one: *is the user typing* (focus) and *is the user reading*
+ * (a selection). The second arrived with `launch-readiness` 187 — see
+ * `textClaim.ts`, and the instrument in
+ * `textSelectionOutranksTheCanvas.test.ts` that fails when a new binding
+ * claims the pasteboard without declaring it.
  */
 export class KeyboardFeature extends PaperFeature {
   readonly id = 'keyboard';
@@ -34,9 +54,14 @@ export class KeyboardFeature extends PaperFeature {
   protected onInstall(ctx: PaperFeatureContext): void {
     this.onDom(window, 'keydown', ((event: KeyboardEvent) => {
       const inText = isTextEntry(event.target);
+      // Asked at most once per event, and only for a binding that cares:
+      // stringifying the selection on every keystroke would charge the whole
+      // table for three rows.
+      let selectedText: boolean | undefined;
       for (const shortcut of this.shortcuts) {
         if (!matches(shortcut.keys, event)) continue;
         if (inText && !shortcut.allowInTextEntry) continue;
+        if (shortcut.yieldsToTextSelection && (selectedText ??= hasTextSelection())) continue;
         event.preventDefault();
         shortcut.run(ctx);
         return;
@@ -81,18 +106,21 @@ export function createDefaultShortcuts(extra: readonly Shortcut[] = []): readonl
       keys: 'Mod+A',
       label: 'Select all',
       group: 'Edit',
+      yieldsToTextSelection: true,
       run: (ctx) => ctx.controller.selectionActions.selectAll(),
     },
     {
       keys: 'Mod+C',
       label: 'Copy',
       group: 'Edit',
+      yieldsToTextSelection: true,
       run: (ctx) => ctx.controller.clipboard.copy(),
     },
     {
       keys: 'Mod+X',
       label: 'Cut',
       group: 'Edit',
+      yieldsToTextSelection: true,
       run: (ctx) => ctx.controller.clipboard.cut(),
     },
     {

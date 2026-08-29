@@ -1,4 +1,5 @@
 import { PaperFeature, type PaperFeatureContext } from './IPaperFeature';
+import { isTextEntry } from './textClaim';
 
 /** Middle mouse button, per the DOM `PointerEvent.button` numbering. */
 const MIDDLE_BUTTON = 1;
@@ -118,10 +119,4 @@ export class PanZoomFeature extends PaperFeature {
   get isPanning(): boolean {
     return this.panning || this.spaceHeld;
   }
-}
-
-export function isTextEntry(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
 }
