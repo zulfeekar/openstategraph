@@ -40,7 +40,7 @@ The alternatives were priced and rejected:
   file in `src/` is not a measure.
 - **Top-level definitions.** Ranks `api/schemas.py` (55 declarations, 425 code
   lines, entirely declarative Pydantic) above `mcp_server.py` (7 definitions,
-  652 code lines). It counts the thing that is cheap to add and misses the
+  654 code lines). It counts the thing that is cheap to add and misses the
   thing that grows.
 - **Public names exported.** That is the class census's measure raised a level,
   and it already has a file. A module's problem is not always its surface —
@@ -255,7 +255,7 @@ here to catch it growing for a different reason.
 STREAMING = """
 SSE framing and the stream fold — itself the product of a split
 (reviews-2026-08-14 ticket 72), which is why its docstring is one line while
-the file is 846 code lines. It already has four collaborators beside it that
+the file is 858 code lines. It already has four collaborators beside it that
 used to be inside it: `burst_recorder.py`, `frame_clock.py`, `audience.py` and
 `diagram.py`.
 
@@ -308,7 +308,7 @@ it, so prose here is contract rather than commentary.
 That makes this the entry where the measure is most obviously the right one and
 still charges too much. The docstrings on module, class and function are free
 under `code_lines`, but the argument tables and `Literal` unions the tool
-schemas are built from are not, and this file is 652 code lines against 1,179
+schemas are built from are not, and this file is 654 code lines against 1,179
 physical.
 
 Structurally it already obeys the rule against god classes: four small
@@ -370,12 +370,12 @@ number is here to make that visible when a fourth one lands.
 #: hand-picked pins were found to cover only the classes somebody had already
 #: worried about.
 RECORDED: dict[str, Recorded] = {
-    "compile/node_runtime.py": Recorded(2039, NODE_RUNTIME),
-    "cli.py": Recorded(1097, CLI),
+    "compile/node_runtime.py": Recorded(2035, NODE_RUNTIME),
+    "cli.py": Recorded(1099, CLI),
     "compile/workflow_compiler.py": Recorded(890, WORKFLOW_COMPILER),
-    "api/streaming.py": Recorded(846, STREAMING),
+    "api/streaming.py": Recorded(858, STREAMING),
     "prebuilt_mcp.py": Recorded(750, PREBUILT_MCP),
-    "mcp_server.py": Recorded(652, MCP_SERVER),
+    "mcp_server.py": Recorded(654, MCP_SERVER),
     "api/routes/workflows.py": Recorded(546, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(524, RUN_SINKS),
 }
