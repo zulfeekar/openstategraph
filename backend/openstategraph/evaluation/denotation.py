@@ -47,6 +47,13 @@ reproducible number:**
 **Predicted SQL is executed read-only at the driver level** (`mode=ro`), the
 same boundary the Chinook tools use: the string comes from a model, and a
 substring check for `DROP` is not a security control.
+
+That sentence is why this module is **not** exempt from
+`the-boundary-nobody-checked/06`. Grading is offline and a dataset's *gold*
+SQL is the operator's, but the *predicted* query is the model's — the same
+trust as a tool call, executed against the same connection shape — so it goes
+through `openstategraph.readonly_sqlite` with every other read-only open, and
+`ATTACH`/`VACUUM INTO` cannot write a file from inside a scorecard either.
 """
 
 from __future__ import annotations
@@ -58,6 +65,12 @@ from dataclasses import dataclass, field
 from itertools import product
 from pathlib import Path
 from typing import Any, Iterable, Sequence
+
+from openstategraph.readonly_sqlite import (
+    ReadOnlyConnection,
+    readonly_connection,
+    sql_error_text,
+)
 
 Row = tuple[Any, ...]
 
@@ -96,11 +109,11 @@ def order_matters_for(gold_sql: str) -> bool:
     return bool(_ORDER_BY.search(gold_sql or ""))
 
 
-def connect_readonly(database: Path) -> sqlite3.Connection:
-    """`mode=ro`, enforced by SQLite itself rather than by string inspection."""
+def connect_readonly(database: Path) -> ReadOnlyConnection:
+    """`mode=ro` and one file, enforced by SQLite rather than by inspection."""
     if not Path(database).exists():
         raise FileNotFoundError(f"no database at {database}")
-    connection = sqlite3.connect(f"file:{Path(database)}?mode=ro", uri=True)
+    connection = readonly_connection(Path(database))
     # Chinook holds a few rows whose bytes are not clean UTF-8. Upstream does
     # the same: a decoding error in one artist name must not fail an eval.
     connection.text_factory = lambda b: b.decode(errors="ignore")
@@ -130,9 +143,15 @@ def execute_query(
             ok=True, columns=columns, rows=rows, seconds=time.monotonic() - started
         )
     except Exception as exc:  # sqlite3 raises half a dozen distinct classes
-        return QueryOutcome(
-            ok=False, error=f"{type(exc).__name__}: {exc}", seconds=time.monotonic() - started
+        # A refused second file reports as `not authorized`, which would land
+        # in the scorecard as an unexplained failure rather than as a finding.
+        refused = connection.refused_second_file
+        text = (
+            sql_error_text(connection, exc)
+            if refused
+            else f"{type(exc).__name__}: {exc}"
         )
+        return QueryOutcome(ok=False, error=text, seconds=time.monotonic() - started)
     finally:
         connection.close()
 

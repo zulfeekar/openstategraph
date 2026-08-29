@@ -157,6 +157,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, field_serializer, field_validator
 
+from openstategraph.readonly_sqlite import readonly_connection
 from openstategraph.run_identity import RUN_IDENTITY_KEYS
 
 logger = logging.getLogger(__name__)
@@ -1032,7 +1033,7 @@ def read_runs(
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
 
     try:
-        connection = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        connection = readonly_connection(target)
     except sqlite3.Error as exc:
         logger.warning("Could not open the run store at %s: %s", target, exc)
         return []
@@ -1203,7 +1204,7 @@ def read_run_bursts(
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
 
     try:
-        connection = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        connection = readonly_connection(target)
     except sqlite3.Error as exc:
         logger.warning("Could not open the run store at %s: %s", target, exc)
         return []

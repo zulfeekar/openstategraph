@@ -18,6 +18,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.readonly_sqlite import ReadOnlyConnection, readonly_connection
 
 #: Ships with the workflow, beside the tools that read it.
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "Chinook_Sqlite.sqlite"
@@ -26,7 +27,7 @@ DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "Chinook_Sql
 DEFAULT_MAX_ROWS = 200
 
 
-def connect_readonly(path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
+def connect_readonly(path: Path = DEFAULT_DB_PATH) -> ReadOnlyConnection:
     """Opens the database **read-only at the driver level**.
 
     This is the actual safety boundary, and it is worth being precise about why.
@@ -37,13 +38,21 @@ def connect_readonly(path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
     ``mode=ro`` is enforced by SQLite itself: a write attempt fails with
     ``OperationalError`` no matter how the statement is spelled. String checks
     elsewhere in this file exist to give *clear errors*, not to provide security.
+
+    ``mode=ro`` is about **one file**, though, and the URI form it needs is
+    also what lets ``ATTACH``/``VACUUM INTO`` open a second one for writing.
+    So the connection comes from ``openstategraph.readonly_sqlite``, which
+    denies that family at the same driver level
+    (`the-boundary-nobody-checked/06`). The ``SELECT``-prefix check below
+    already refused those two spellings — for clear errors, as it says — and
+    the boundary must not depend on it.
     """
     if not path.exists():
         raise FileNotFoundError(
             f"Chinook database not found at {path}. "
             "Run scripts/fetch_chinook.sh to download it."
         )
-    return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    return readonly_connection(path)
 
 
 def _rows_to_markdown(columns: list[str], rows: list[tuple], truncated: bool) -> str:

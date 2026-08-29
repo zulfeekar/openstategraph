@@ -478,6 +478,12 @@ Three of the four map onto tools already in `backend/openstategraph/prebuilt_sql
 where the doc's opens a read-write connection and relies on a prompt line to stay
 read-only. Only `sql_db_query_checker` is absent.
 
+> Corrected 2026-08-29 (`the-boundary-nobody-checked/06`): that connection is
+> now `readonly_sqlite.readonly_connection(path)`. The comparison holds and the
+> line does not — `mode=ro` is about one file, and the `uri=True` it needs also
+> lets `ATTACH`/`VACUUM INTO` open a second one for writing. The seam denies
+> that family at the driver.
+
 **On `sql_db_query_checker` — deliberately declined for now.** It is an LLM call
 wrapped as a tool, so the agent self-checks *inside* the ReAct loop; a
 `GraderNode` cannot express it. As an atom it is cheap and non-structural. **But
