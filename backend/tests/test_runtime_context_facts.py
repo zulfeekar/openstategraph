@@ -99,6 +99,36 @@ class ScriptedModel(GenericFakeChatModel):
         return self.bind(tools=tools, tool_choice=tool_choice, **kwargs)
 
 
+#: `create_agent`'s invoke path emits a Pydantic serializer warning when the
+#: context is a **dataclass instance** — the shape the docs endorse and the
+#: shape `context_schema=Ctx` asks for:
+#:
+#:     PydanticSerializationUnexpectedValue(Expected `none` … field_name='context',
+#:     input_type=Ctx)
+#:
+#: The plain `StateGraph` door does not
+#: (`test_a_node_reads_it_from_its_second_parameter` passes the same value and
+#: is silent), so this is an asymmetry between two doors onto one documented
+#: API, not something this repository does wrong. Nothing is serialized
+#: incorrectly — the value arrives intact, which every assertion below proves.
+#:
+#: Caught here rather than filtered globally, and asserted rather than
+#: tolerated, for this file's own stated reason: it pins the libraries **as
+#: installed**. A blanket filter would hide the day this stops happening, and
+#: four warnings printed on every run of the whole suite is four warnings
+#: nobody reads — which is how a fifth, real one would arrive unnoticed.
+_AGENT_CONTEXT_SERIALIZER_WARNING = "PydanticSerializationUnexpectedValue"
+
+
+def _invoking_an_agent_with_a_dataclass_context() -> Any:
+    """`pytest.warns` for the library warning above, so the suite stays quiet.
+
+    Returns a context manager. If LangChain stops warning, this goes red and
+    somebody deletes it — which is the point.
+    """
+    return pytest.warns(UserWarning, match=_AGENT_CONTEXT_SERIALIZER_WARNING)
+
+
 class TestTheThreeReadDoors:
     """A node, a middleware and a tool each reach the same per-run values.
 
@@ -134,10 +164,11 @@ class TestTheThreeReadDoors:
             middleware=[spy],
             context_schema=Ctx,
         )
-        agent.invoke(
-            {"messages": [{"role": "user", "content": "go"}]},
-            context=Ctx(tenant=TENANT, user_id=USER),
-        )
+        with _invoking_an_agent_with_a_dataclass_context():
+            agent.invoke(
+                {"messages": [{"role": "user", "content": "go"}]},
+                context=Ctx(tenant=TENANT, user_id=USER),
+            )
 
         assert seen["middleware"] == Ctx(tenant=TENANT, user_id=USER)
         assert seen["tool"] == Ctx(tenant=TENANT, user_id=USER)
@@ -270,10 +301,11 @@ class TestSubagentsAreNotIsolatedFromIt:
             ],
             context_schema=Ctx,
         )
-        agent.invoke(
-            {"messages": [{"role": "user", "content": "go"}]},
-            context=Ctx(tenant=TENANT, user_id=USER),
-        )
+        with _invoking_an_agent_with_a_dataclass_context():
+            agent.invoke(
+                {"messages": [{"role": "user", "content": "go"}]},
+                context=Ctx(tenant=TENANT, user_id=USER),
+            )
 
         assert seen["subagent_tool"] == Ctx(tenant=TENANT, user_id=USER)
 
