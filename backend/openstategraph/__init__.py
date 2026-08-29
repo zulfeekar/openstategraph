@@ -58,6 +58,7 @@ from openstategraph.errors import (
     PackageNotFound,
     RunProducedNothing,
     SchemaVersionError,
+    StepBudgetExhausted,
     ThreadNotResumable,
     WorkflowPackageError,
 )
@@ -101,6 +102,7 @@ __all__ = [
     "RunProducedNothing",
     "RunResult",
     "SchemaVersionError",
+    "StepBudgetExhausted",
     "ThreadNotResumable",
     "WorkflowInfo",
     "WorkflowPackageError",

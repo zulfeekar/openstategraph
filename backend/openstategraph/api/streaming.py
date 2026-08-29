@@ -28,8 +28,22 @@ from openstategraph.executed_statements import statements_executed  # noqa: E402
 from openstategraph.progress import progress_report  # noqa: E402
 from openstategraph.api.registries import runtime_warnings  # noqa: E402
 from openstategraph.compile.node_doors import interruptible_nodes  # noqa: E402
-from openstategraph.run_journal import RunTurn, STOPPED_KIND, run_turn  # noqa: E402
+from openstategraph.run_journal import (  # noqa: E402
+    RunTurn,
+    STOPPED_KIND,
+    budget_exhausted,
+    run_turn,
+)
 from openstategraph.run_identity import run_identity  # noqa: E402
+
+# Named here and in three other modules only — `run_doors` (the blocking
+# driver), `compile/node_runtime` (the mount boundary) and `run_journal` (the
+# translation). A fifth surface deciding for itself what LangGraph's
+# exhaustion meant is the defect `launch-readiness/176` closed, and
+# `tests/test_a_budget_overrun_speaks_our_words.py` walks the package for one.
+from langgraph.errors import GraphRecursionError  # noqa: E402
+
+from openstategraph.errors import StepBudgetExhausted  # noqa: E402
 
 
 def customer_task_id(task_id: Any, audience: Any) -> Any:
@@ -1909,6 +1923,32 @@ async def _run_frames(
                     # above and stays dropped.
                     if text or shown_usage or (withheld and content):
                         yield _token_frame(common, "text", text, shown_usage)
+    except (GraphRecursionError, StepBudgetExhausted) as exc:
+        # **The one door that does not go through the blocking driver**
+        # (`launch-readiness/176`). Every other door reaches the graph through
+        # `run_doors.invoke_run`, where the same translation lives; this one
+        # drives `astream` itself, so LangGraph's exhaustion surfaces here or
+        # nowhere — and until this it surfaced whole, `describe_failure` in
+        # `_stream_run` handing a developer `GraphRecursionError:` plus a
+        # vendor URL.
+        #
+        # The row is written from the fold's own accumulators, exactly as the
+        # stop handler below writes its own: this door has no returned state,
+        # and what it *does* have is more than the blocking driver ever sees —
+        # the answer a candidate node had already produced, and the laps the
+        # grader had already taken.
+        #
+        # Re-raised rather than turned into a frame here: `_stream_run` owns
+        # the one place an exception becomes an `error` frame, and it already
+        # renders our own errors as the copy for a developer and the generic
+        # sentence for a customer.
+        raise budget_exhausted(
+            exc,
+            budget=(config or {}).get("recursion_limit"),
+            workflow=str(run_identity(config).get("workflow_slug") or ""),
+            state=dict(folded, attempts=attempts, answer=answer),
+            turn=turn,
+        ) from exc
     except (GeneratorExit, asyncio.CancelledError):
         # **Stop, or a closed tab — and it is still a row** (`44`).
         #

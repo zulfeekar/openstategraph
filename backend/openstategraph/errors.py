@@ -216,9 +216,32 @@ class ProviderUnreachable(OpenStateGraphError):
 
 
 class StepBudgetExhausted(OpenStateGraphError):
-    """A mounted workflow spent the run's whole step budget without answering.
+    """A run spent its whole step budget without reaching an answer.
 
-    `organisms-first-class` 60. A mount is *"another workflow run as one
+    **Two events, one class, and the reason they share it is that the fix for
+    the second was to stop them differing** (`launch-readiness/176`). Until
+    that ticket this said *a mounted workflow*, and it was accurate: the mount
+    boundary translated LangGraph's exhaustion and the **top-level** case — the
+    common one, every document without a mount — reached `ask()`, the CLI,
+    `POST /api/runs`, MCP and the SSE `error` frame verbatim.
+
+    They were weighed as siblings and kept as one. The candidate distinction
+    was *the mount produced nothing, while a parent may have had a draft on
+    `answer` that never reached an output node* — but a blocking door has no
+    returned state at all when `ainvoke` raises, so that draft is not
+    recoverable at three of the four doors and the difference cannot be acted
+    on. What both events **are** is the same: the ceiling stopped a graph that
+    was still running, there is no answer to publish, and the reader's next
+    move is the drawing rather than a retry. Two classes would have given an
+    adopter two `except` clauses for one condition.
+
+    The *sentences* still differ, because the mount has one more thing to say
+    — which package, and whether its own saved budget was overruled — and
+    `run_journal.budget_exhausted` leaves an error that is already ours alone
+    for exactly that reason. The top-level wording lives in
+    `step_budget.step_budget_exhausted_message`, beside the vocabulary.
+
+    `organisms-first-class` 60, on the mount. A mount is *"another workflow run as one
     isolated step — task in, answer out"*, and the child is a separate
     `invoke` with its own superstep counter but the **run's** number: a
     mount inherits the budget of the run that mounted it. When the child's
@@ -245,6 +268,13 @@ class StepBudgetExhausted(OpenStateGraphError):
     budget stop: there the graph had a candidate to publish, and here the
     step produced nothing at all. A mount that quietly answered nothing
     would be the silence `production-ready` 96 exists to name.
+
+    **And it is written down.** Neither event used to leave a row in the run
+    store, so the two runs that cost the most and returned nothing were the
+    ones a reader asking *what has this machine run, and what did it cost* was
+    never told about. Both now record `kind="exhausted"`
+    (`run_journal.EXHAUSTED_KIND`), which is deliberately neither `failed` —
+    no node wrote the failure sentinel — nor a finished `run`.
     """
 
 

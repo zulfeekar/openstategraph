@@ -88,13 +88,23 @@ import contextvars
 import logging
 import time
 from contextlib import contextmanager
-from typing import Any, Iterator, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Iterator, Mapping, Sequence
 
 from openstategraph.run_sinks import RunRecord, RunSinkRegistry, now, publish
 
+if TYPE_CHECKING:  # pragma: no cover - import cycle at runtime only
+    from openstategraph.errors import StepBudgetExhausted
+
 logger = logging.getLogger(__name__)
 
-__all__ = ["RunTurn", "RUN_KIND", "STOPPED_KIND", "run_turn"]
+__all__ = [
+    "RunTurn",
+    "RUN_KIND",
+    "STOPPED_KIND",
+    "EXHAUSTED_KIND",
+    "budget_exhausted",
+    "run_turn",
+]
 
 #: A finished turn. The default, and what every consumer of `43` reads.
 RUN_KIND = "run"
@@ -102,6 +112,22 @@ RUN_KIND = "run"
 #: A turn the reader walked away from — Stop, or a closed tab. See the module
 #: docstring for why it is a kind rather than a `failed` run or nothing at all.
 STOPPED_KIND = "stopped"
+
+#: A turn that spent the whole step budget and reached no answer
+#: (`launch-readiness/176`). The third kind, by the same argument as the
+#: second and with more force behind it: a stopped run is billed for the one
+#: provider call in flight, and this one is billed for the whole budget.
+#:
+#: It is **not** `failed`. `RunRecord.failed` means a node wrote the failure
+#: sentinel, and none did — the graph was still running perfectly well when
+#: the ceiling stopped it, which is a different fact and belongs in a
+#: different column, or every failure rate read out of this table starts
+#: counting runaway loops as broken nodes.
+#:
+#: It is **not** `kind="run"` either, for `stopped`'s reason: its answer is
+#: empty, and `launch-readiness/99` mining this table for patterns would be
+#: learning from a blank.
+EXHAUSTED_KIND = "exhausted"
 
 #: The turn this context is inside, if any. See "Exactly one row per turn".
 _open_turn: contextvars.ContextVar["RunTurn | None"] = contextvars.ContextVar(
@@ -319,3 +345,58 @@ def run_turn(
             _open_turn.reset(token)
         except ValueError:  # pragma: no cover - depends on the ASGI driver
             _open_turn.set(None)
+
+
+def budget_exhausted(
+    exc: BaseException,
+    *,
+    budget: int | None = None,
+    workflow: str = "",
+    state: Mapping[str, Any] | None = None,
+    turn: "RunTurn | None" = None,
+) -> "StepBudgetExhausted":
+    """Write an overrun down on whatever turn is open, and word it in ours.
+
+    `launch-readiness/176`, and it is deliberately **one function doing two
+    things**, because the two were the same defect: a top-level overrun was
+    reported in LangGraph's words *and* left no row, so the run that cost the
+    most and returned nothing was both unreadable and invisible.
+
+    Called from the two places that drive a graph — `run_doors.invoke_run`,
+    which every blocking door goes through, and `api/streaming._run_frames`,
+    the one door that drives `astream` itself. That is the same *one assembly,
+    two callers* shape `api/diagram.workflow_mermaid` has, and it is why
+    nothing else in the package may name `GraphRecursionError`
+    (`tests/test_a_budget_overrun_speaks_our_words.py` walks the modules).
+
+    **Why the row is written here rather than by each door.** `44` put the
+    seam at `run_turn` and not at `invoke_run` because a driver has no business
+    assembling a `RunRecord` — that argument still holds, and this is the shape
+    that respects it: the assembly stays in this module, and the driver calls
+    one function. The turn is found on the `ContextVar` rather than passed,
+    because the driver genuinely does not have it and the variable exists for
+    exactly this — a nested turn is silent, so a run reached through `ask()`
+    inside `POST /api/runs` still writes one row, the outer door's. A caller
+    that *does* hold the turn passes it: the streaming door's fold is handed
+    one as an argument, and looking up a variable when a reference is in scope
+    is a chance to find the wrong one.
+
+    It also covers the **mount** boundary's own `StepBudgetExhausted`, which
+    has been worded since `organisms-first-class` 60 and has never left a row
+    either. An error that is already ours keeps its sentence — the mount case
+    is a different event with a different thing to say — and only gains the
+    row.
+
+    Returns the error rather than raising it, so the caller writes
+    `raise budget_exhausted(...) from exc` and the vendor's traceback is kept
+    as the cause.
+    """
+    from openstategraph.errors import StepBudgetExhausted
+    from openstategraph.step_budget import step_budget_exhausted_message
+
+    open_turn = turn if turn is not None else _open_turn.get()
+    if open_turn is not None:
+        open_turn.record(state or {}, kind=EXHAUSTED_KIND)
+    if isinstance(exc, StepBudgetExhausted):
+        return exc
+    return StepBudgetExhausted(step_budget_exhausted_message(budget, workflow=workflow))

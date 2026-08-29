@@ -2,7 +2,25 @@
 
 ## Unreleased
 
+### Added
+- `StepBudgetExhausted` is exported from the top-level package, beside
+  `RunProducedNothing`. It is now raised by the **library** door as well as at
+  a mount boundary, so a caller of `.ask()` has a name to catch
+  (`launch-readiness/176`).
+
 ### Fixed
+- **A run that spends its whole step budget says so in this product's words,
+  and leaves a row** (`launch-readiness/176`). Only the mount boundary
+  translated LangGraph's `GraphRecursionError`; the top-level case — every
+  document without a mount — reached `ask()`, the CLI, `POST /api/runs`, MCP
+  and the SSE `error` frame verbatim, advising the reader to *increase the
+  limit* and linking a vendor troubleshooting page. It is translated at the
+  two places a graph is actually driven — `run_doors.invoke_run` for the four
+  blocking doors, `api/streaming` for the one that drives its own stream — and
+  the sentence names the workflow, the budget and what a superstep costs.
+  Neither overrun used to appear in `openstategraph runs list` either; both
+  now write a row of `kind="exhausted"`, which is neither `failed` (no node
+  wrote the failure sentinel) nor a finished `run`.
 - **The second `ask` through the library door answers, and a run that produced
   nothing is never a blank line** (`launch-readiness/171`). A stranger
   installing the wheel and running the README's headline shape got
