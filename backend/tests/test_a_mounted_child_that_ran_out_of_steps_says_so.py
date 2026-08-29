@@ -63,7 +63,7 @@ from typing import Any
 
 import pytest
 
-from conftest import RespondingModel
+from conftest import RespondingModel, whatever_it_produced
 from openstategraph.cli import run_exit_code
 from openstategraph.loader import load_workflow
 
@@ -162,7 +162,10 @@ def _packages(root: Path, child_budget: int | None = None) -> Path:
 
 def _run(root: Path, model: Any, budget: int, child_budget: int | None = None) -> Any:
     parent = _packages(root, child_budget)
-    return load_workflow(parent, model=model).ask("Describe the export fix.", recursion_limit=budget)
+    workflow = load_workflow(parent, model=model)
+    return whatever_it_produced(
+        lambda: workflow.ask("Describe the export fix.", recursion_limit=budget)
+    )
 
 
 def _everything_a_caller_reads(result: Any) -> str:

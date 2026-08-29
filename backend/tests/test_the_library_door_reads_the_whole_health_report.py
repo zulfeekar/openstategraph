@@ -33,6 +33,9 @@ from openstategraph.compile.workflow_compiler import (
     run_health,
     run_health_from_state,
 )
+import pytest
+
+from openstategraph.errors import RunProducedNothing
 from openstategraph.loader import CompiledWorkflow
 
 
@@ -126,9 +129,15 @@ class TestOnlyTheFailureHalfIsAClaimThatTheRunFailed:
             assert not any(report in w for w in result.failures), report
 
     def test_a_compile_finding_stays_a_failure(self) -> None:
-        """Ticket 53 — a mount that could not be loaded leaves no marker."""
-        result = _workflow(_RecordingState(answer="", outputs={}), ["mount missing"]).ask("q")
-        assert result.failures == ["mount missing"]
+        """Ticket 53 — a mount that could not be loaded leaves no marker.
+
+        The door **raises** here since `launch-readiness/171`: no answer and a
+        reason is the one shape that must never come back as a blank string.
+        The report it was returning is on the error, and that is what this
+        asserts — the raise is the delivery, not a replacement."""
+        with pytest.raises(RunProducedNothing) as raised:
+            _workflow(_RecordingState(answer="", outputs={}), ["mount missing"]).ask("q")
+        assert raised.value.result.failures == ["mount missing"]
 
     def test_a_report_only_finding_does_not(self) -> None:
         """Ticket 89's other side, at this door: a finding on `warnings` and
@@ -156,7 +165,11 @@ class TestOnlyTheFailureHalfIsAClaimThatTheRunFailed:
         from openstategraph.cli import EXIT_FAILURE, run_exit_code
 
         state = _RecordingState(answer="", outputs={"a1": failure_marker("a1", "boom")})
-        assert run_exit_code(_workflow(state).ask("q")) == EXIT_FAILURE
+        with pytest.raises(RunProducedNothing) as raised:
+            _workflow(state).ask("q")
+        # The exit code and the raise read one predicate
+        # (`results.produced_nothing`), so this pins that they agree.
+        assert run_exit_code(raised.value.result) == EXIT_FAILURE
 
 
 class TestAFifthSourceCannotGoMissing:

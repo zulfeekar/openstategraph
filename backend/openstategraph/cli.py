@@ -48,7 +48,7 @@ import sys
 import textwrap
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence, cast
 
 # The one import this module makes eagerly, and it is stdlib-only: `--template`
 # uses argparse `choices`, so the catalogue has to exist while the parser is
@@ -192,6 +192,26 @@ def split_context_flags(pairs: Sequence[str]) -> tuple[dict[str, str], str]:
     return values, ""
 
 
+def _ask(call: "Callable[[], RunResult]") -> "RunResult":
+    """One run, whichever way it ended — the report is the same either way.
+
+    `launch-readiness/171` made the library door **raise** when a run produced
+    no answer and something went wrong, because a blank line is a silent
+    failure for the reader who prints it. This command is the reader who does
+    not print it blindly: it has printed `error:` lines and exited 1 on exactly
+    that condition since `workflow-gallery` 53, and `run_exit_code` reads the
+    same predicate the raise does. So the terminal keeps the report it had, and
+    the exception is unwrapped rather than shown as a traceback — the run is on
+    the error, undamaged.
+    """
+    from openstategraph.errors import RunProducedNothing
+
+    try:
+        return call()
+    except RunProducedNothing as nothing:
+        return cast("RunResult", nothing.result)
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     """`load_workflow(pkg).ask(question)`, and nothing else."""
     workflow = _load(args)
@@ -211,7 +231,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     # conversation they just had, and an id generated inside the run and thrown
     # away is an id they can never continue.
     thread_id = args.thread_id or f"openstategraph-cli-{uuid.uuid4().hex}"
-    result = workflow.ask(args.question, thread_id=thread_id, context=context or None)
+    result = _ask(
+        lambda: workflow.ask(args.question, thread_id=thread_id, context=context or None)
+    )
 
     if args.json:
         print(
@@ -360,7 +382,9 @@ def cmd_resume(args: argparse.Namespace) -> int:
         print(f"  asked by: {asked_by}", file=sys.stderr)
     print("  this runs the rest of the workflow and cannot be undone", file=sys.stderr)
 
-    result = workflow.resume(args.thread_id, decision=decision, feedback=args.feedback)
+    result = _ask(
+        lambda: workflow.resume(args.thread_id, decision=decision, feedback=args.feedback)
+    )
 
     if args.json:
         print(
@@ -469,8 +493,7 @@ def run_exit_code(result: "RunResult") -> int:
     function ever wanted, so `outputs` is now belt to its braces rather than
     the only strap.
     """
-    from openstategraph.compile.node_runtime import NO_ANSWER_PRODUCED
-    from openstategraph.compile.workflow_compiler import node_failure_warnings
+    from openstategraph.results import produced_nothing
 
     # **A pause is checked before the answer, and it is the one condition that
     # does not need "and something went wrong"** (`workflow-gallery` 24). A run
@@ -481,15 +504,13 @@ def run_exit_code(result: "RunResult") -> int:
     # refusal's exit code.
     if result.pause:
         return EXIT_FAILURE
-    answer = str(result).strip()
-    if answer and answer != NO_ANSWER_PRODUCED:
-        return EXIT_OK
-    # `outputs` is still read directly, even though `failures` already carries
-    # what is in it, because a `RunResult` can be built by hand — a resumed
-    # run, a test — and a failure marker sitting in `outputs` is a failed run
-    # whoever assembled the object.
-    went_wrong = bool(node_failure_warnings(result.outputs)) or bool(result.failures)
-    return EXIT_FAILURE if went_wrong else EXIT_OK
+    # The rest of the rule moved to `results.produced_nothing` when the library
+    # door began raising on it (`launch-readiness/171`). It is the same
+    # condition, argued in the same words, read from one place so an exit code
+    # and a raise cannot disagree about what a failed run is. The pause line
+    # above stays here: a *command* that did not finish is not a success, while
+    # a library caller gets the pause on `.pause` and decides for itself.
+    return EXIT_FAILURE if produced_nothing(result) else EXIT_OK
 
 
 def cmd_eval(args: argparse.Namespace) -> int:

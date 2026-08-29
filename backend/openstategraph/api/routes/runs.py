@@ -233,7 +233,7 @@ def run_workflow(
             store=services.memory_store,
         )
         # `None` means *pass no argument at all* — see `validate_run_context`.
-        supplied = {"context": run_context} if run_context is not None else {}
+        supplied: dict[str, Any] = {"context": run_context} if run_context is not None else {}
         final = invoke_run(
             graph,
             {"question": request.question, "attempts": 0, "decisions": {}, "outputs": {}},

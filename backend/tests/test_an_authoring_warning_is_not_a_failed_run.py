@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import whatever_it_produced
 
 from openstategraph import cli
 from openstategraph.compile.diagnostics import REPORT_ONLY, Finding
@@ -146,9 +147,12 @@ def _exit_code_of_an_empty_run(workflow: CompiledWorkflow) -> int:
     repository has paid for twice — because the target of this ticket is an
     exit code, not a set.
     """
-    return cli.run_exit_code(
-        dataclasses.replace(workflow, graph=_EmptyAnswerGraph()).ask("anything")
-    )
+    empty = dataclasses.replace(workflow, graph=_EmptyAnswerGraph())
+    # The door raises on exactly this shape since `launch-readiness/171` — no
+    # answer and a reason — and the run it would have returned is on the error.
+    # This helper is about the *exit code* that shape earns, which is read from
+    # the same predicate the raise is, so unwrapping loses nothing.
+    return cli.run_exit_code(whatever_it_produced(lambda: empty.ask("anything")))
 
 
 class TestADrawingWarningDoesNotFailTheRun:

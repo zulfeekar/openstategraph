@@ -283,4 +283,46 @@ def _rebuild(
     )
 
 
-__all__ = ["RunResult"]
+def produced_nothing(result: RunResult) -> bool:
+    """Did this run finish with no answer **and** a reason? The failed-run rule.
+
+    **One rule, one place** (`launch-readiness/171`). It was written down once
+    already, inside `cli.run_exit_code`, and the library door did not read it:
+    `ask()` returned an empty `RunResult` and put the reason on `.warnings`, so
+    the terminal exited 1 on a run the library reported as an answer. That
+    disagreement is what let the second `ask` of every session render as a
+    blank line for as long as it did.
+
+    The condition is deliberately **both halves**, and the argument is
+    `run_exit_code`'s own, unchanged:
+
+    - *A step failed but there is still an answer* is a degrade, which this
+      project prefers to a crash.
+    - *An empty answer with nothing wrong* is legal; a workflow may answer with
+      nothing.
+
+    A **pause** is neither, and is checked first: a run stopped at a
+    `human.approval` gate has not failed and has not answered — it is waiting,
+    and the caller's move is to resume it, not to handle an error.
+    `run_exit_code` still calls that a non-zero exit, because a *command* that
+    did not finish is not a success; a library caller gets the pause on
+    `.pause` and decides for itself. That is the one place the two surfaces
+    part, and it is a difference in what each of them is for.
+
+    `outputs` is read directly as well as `failures`, for the reason
+    `run_exit_code` gives: a `RunResult` can be assembled by hand — a resumed
+    run, a test — and a failure marker sitting in `outputs` is a failed run
+    whoever assembled the object.
+    """
+    from openstategraph.compile.node_runtime import NO_ANSWER_PRODUCED
+    from openstategraph.compile.workflow_compiler import node_failure_warnings
+
+    if result.pause:
+        return False
+    answer = str(result).strip()
+    if answer and answer != NO_ANSWER_PRODUCED:
+        return False
+    return bool(node_failure_warnings(result.outputs)) or bool(result.failures)
+
+
+__all__ = ["RunResult", "produced_nothing"]

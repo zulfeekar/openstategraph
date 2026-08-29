@@ -29,6 +29,8 @@ still answer the questions it can.
 
 from __future__ import annotations
 
+from typing import Any
+
 
 #: What someone who cannot fix it is told, whatever went wrong.
 #:
@@ -320,6 +322,71 @@ class ProviderRefusedCredential(CredentialError):
     """
 
 
+class RunProducedNothing(OpenStateGraphError):
+    """A run finished with no answer, and something went wrong on the way.
+
+    **The silent half of `launch-readiness/171`, and fixed independently of
+    its cause.** `CompiledWorkflow.ask` returned a `RunResult` that *is* an
+    empty string, with the reason on `.warnings` — a field the README's own
+    example never mentions. A reader who followed the published shape
+
+        print(workflow.ask("Say the word banana."))
+
+    got a blank line and no way to know a node had died. Whatever the next
+    cause turns out to be, that shape must not come back, so the door raises
+    rather than returning nothing.
+
+    **Only the pair raises, never either half.** An empty answer with nothing
+    wrong is legal — a workflow may answer with nothing — and a step that
+    failed while another node still answered is a *degrade*, which this project
+    prefers to a crash. The predicate is `results.produced_nothing`, which is
+    the same rule `cli.run_exit_code` has gated on since `workflow-gallery` 53,
+    read from one place so an exit code and a raise cannot disagree about what
+    a failed run is. A run paused at a `human.approval` gate is not a failure
+    either: it is waiting, and it returns.
+
+    **Nothing is lost by raising.** `async-first/13`'s rule for a diagnosis is
+    that it is chained and never substituted; there is no live exception to
+    chain here — the node failure was already recorded and swallowed by the
+    retry recorder — so the whole `RunResult` rides on `.result` instead.
+    Every field a caller could have read is still readable:
+
+        try:
+            answer = workflow.ask(question)
+        except RunProducedNothing as nothing:
+            print(nothing.result.warnings)
+    """
+
+    #: The run that produced no answer, exactly as it would have been returned.
+    result: Any
+
+    def __init__(self, message: str, result: Any = None) -> None:
+        super().__init__(message)
+        self.result = result
+
+    @classmethod
+    def of(cls, result: Any) -> "RunProducedNothing":
+        """The one sentence, built from the run's own report.
+
+        A classmethod rather than a formatted string at the call site because
+        `ask` and `resume` both raise this, and two spellings of one sentence
+        is the duplication rule failing where a reader would notice it least.
+        """
+        reasons = list(getattr(result, "failures", None) or []) or list(
+            getattr(result, "warnings", None) or []
+        )
+        first = reasons[0].rstrip(". ") if reasons else ""
+        more = f", and {len(reasons) - 1} more" if len(reasons) > 1 else ""
+        detail = f" {first}{more}." if first else ""
+        return cls(
+            "The workflow ran and produced no answer."
+            + detail
+            + " The whole run — warnings, outputs, decisions — is on this "
+            "error's `.result`.",
+            result,
+        )
+
+
 __all__ = [
     "GENERIC_FAILURE_MESSAGE",
     "CredentialError",
@@ -333,6 +400,7 @@ __all__ = [
     "ProviderRefusedCredential",
     "ProviderUnreachable",
     "RunContextError",
+    "RunProducedNothing",
     "SchemaVersionError",
     "StepBudgetExhausted",
     "ThreadNotResumable",

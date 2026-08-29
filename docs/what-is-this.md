@@ -248,6 +248,14 @@ graph = workflow.graph      # a plain compiled LangGraph StateGraph
   is only about driving `.graph` yourself. If you hit it anyway, the
   exception says this rather than naming a closed loop; the graph is still
   unwrapped, and nothing that works today is refused.
+
+  The same fact has a second dimension, and this paragraph was silent about
+  it until `launch-readiness/171` measured it: a loop has to outlive not only
+  the *node* but anything cached **across runs**. `load_workflow` builds the
+  provider client once and holds it, so `workflow.ask()` drives every run on
+  one loop belonging to the workflow, released by `workflow.close()`. Nothing
+  about `.graph` changes; if you drive it yourself and keep a client between
+  calls, keep a loop between them too.
 - **`workflow.json` is documented, versioned and migrated**, and it is yours —
   it lives in your repository, not in a database we control.
 - **`.warnings` tells you what did not wire**, so a degraded workflow is a

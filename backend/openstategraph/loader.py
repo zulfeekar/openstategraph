@@ -39,7 +39,7 @@ from openstategraph.compile.run_context import validate_run_context
 from openstategraph.errors import InvalidPackageName, PackageNotFound, ThreadNotResumable
 from openstategraph.executed_statements import statements_executed
 from openstategraph.results import RunResult
-from openstategraph.run_doors import invoke_run
+from openstategraph.run_doors import RunLoop, invoke_run
 from openstategraph.schema import normalize_document
 from openstategraph.step_budget import DEFAULT_STEP_BUDGET, resolve_step_budget
 
@@ -139,6 +139,16 @@ class CompiledWorkflow:
     _mounts: Mapping[str, Any] = field(
         default_factory=dict, repr=False, compare=False
     )
+    #: The loop every run through this object is driven on, and the fix for
+    #: `launch-readiness/171`. **It is here because the model is here**: the
+    #: provider client is built once by `load_workflow` and held for this
+    #: object's whole life, and a client's pooled sockets belong to the loop
+    #: that opened them. A loop that died with each run left the second `ask`
+    #: reaching a closed one — `RuntimeError: Event loop is closed`, on every
+    #: second call, silently. `run_doors.py` carries the rule and the table of
+    #: which door owns what. Lazy: the thread starts on the first run, so a
+    #: workflow that is loaded and never asked costs nothing.
+    _loop: RunLoop = field(default_factory=RunLoop, repr=False, compare=False)
 
     def close(self) -> None:
         """Release the sqlite handles this load opened. Idempotent.
@@ -157,6 +167,9 @@ class CompiledWorkflow:
         """
         from openstategraph.memory import close_resource
 
+        # Before the handles, because stopping the loop is what makes it true
+        # that nothing else is still running against them.
+        self._loop.close()
         for resource in self._owned:
             closer = getattr(resource, "close", None)
             if callable(closer):
@@ -257,6 +270,16 @@ class CompiledWorkflow:
         wrong, and reaching them used to mean dropping to `.graph.invoke()`
         with hand-seeded state, which is the ceremony this function replaces.
 
+        **Raises `RunProducedNothing` when the run produced no answer and
+        something went wrong.** It never used to, and that was
+        `launch-readiness/171`'s worse half: a run whose only answering node
+        died came back as a `RunResult` that *is* an empty string, so the
+        published example above printed a blank line and the reason sat on
+        `.warnings` where nobody was looking. Both halves are required — a
+        legally empty answer still returns, and so does a run paused at a gate
+        — and the whole `RunResult` rides on the error's `.result`, so nothing
+        a caller could have read is lost by the raise.
+
         The initial state is not arbitrary — `attempts`/`decisions`/`outputs`
         must be seeded or a grader loop reads `None` where it expects a
         counter. Getting that wrong is silent, so it is done here rather than
@@ -340,13 +363,14 @@ class CompiledWorkflow:
                 self.graph,
                 {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
                 config,
+                loop=self._loop,
                 **extra,
             )
             # Read inside the block: the manager clears the variable on exit.
             spent = dict(usage.usage_metadata)
         result = self._result(final, spent, thread)
         self._append_trace(question, result, time.monotonic() - started)
-        return result
+        return self._answered(result)
 
     def pause(self, thread_id: str) -> dict[str, Any] | None:
         """What a paused thread is waiting to be told — or `None` if it is not
@@ -456,11 +480,13 @@ class CompiledWorkflow:
             resume_value["feedback"] = feedback
         config = self._config(thread_id, user_email, session_id, recursion_limit)
         with get_usage_metadata_callback() as usage:
-            final = invoke_run(self.graph, Command(resume=resume_value), config)
+            final = invoke_run(
+                self.graph, Command(resume=resume_value), config, loop=self._loop
+            )
             spent = dict(usage.usage_metadata)
         result = self._result(final, spent, thread_id)
         self._append_trace(f"resume:{decision}", result, time.monotonic() - started)
-        return result
+        return self._answered(result)
 
     def _config(
         self,
@@ -553,6 +579,33 @@ class CompiledWorkflow:
             # empty answer, no warnings and every appearance of success.
             pause=self._with_mount(_interrupt_payload(final), thread_id),
         )
+
+    def _answered(self, result: RunResult) -> RunResult:
+        """`result`, unless the run produced nothing and something went wrong.
+
+        **The one shape that must never be returned** (`launch-readiness/171`).
+        Before this, a run whose only answering node died came back as a
+        `RunResult` that *is* an empty string, with the reason on `.warnings` —
+        so the README's own headline example printed a blank line and said
+        nothing at all. The cause that made it happen every second call is
+        fixed in `run_doors.py`; this is here so that whatever the *next* cause
+        turns out to be, the symptom cannot come back.
+
+        The predicate is `results.produced_nothing`, which is the rule
+        `cli.run_exit_code` has gated on since `workflow-gallery` 53 rather
+        than a second one invented here — an exit code and a raise disagreeing
+        about what a failed run is would be the same defect one surface along.
+        A legally empty answer still returns, and so does a paused run.
+
+        Raised **after** `_append_trace`, deliberately: a failed run is the one
+        most worth having in the trace file.
+        """
+        from openstategraph.errors import RunProducedNothing
+        from openstategraph.results import produced_nothing
+
+        if produced_nothing(result):
+            raise RunProducedNothing.of(result)
+        return result
 
     def _with_mount(
         self, payload: dict[str, Any] | None, thread_id: str | None

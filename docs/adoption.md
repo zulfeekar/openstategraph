@@ -571,6 +571,27 @@ hand-seeded state:
 | `.pause` | the gate this run stopped at — `{"message", "candidate"}` — or **`None`** for a run that finished. A pause is not a failure and not a warning: nothing went wrong, the run is *waiting*, and the answer is `workflow.resume(thread_id, decision=…)` rather than a retry |
 | `.total_tokens` | every model's `total_tokens` added up, or **`None`** when nothing reported. `None`, never `0` — a run nobody metered did not cost nothing. There is deliberately no dollar figure: tokens are a fact, money is a claim about a vendor's price sheet, and no price table lives in this project. Multiply by your own |
 
+**A run that produced nothing raises, and does not come back as `''`.** If
+the run has no answer *and* something went wrong, `.ask()` raises
+`RunProducedNothing` rather than handing you an empty string with the reason
+on `.warnings`. That was a real defect and the shape it took is the argument:
+the published example above is `print(workflow.ask(...))`, and a reader who
+ran it got a blank line and nothing else. Both halves are required — a
+workflow may legally answer with nothing, and that still returns; a step that
+failed while another node answered is a degrade, and that still returns too.
+A run **paused** at a gate returns as well, with `.pause` set. The whole
+`RunResult` is on the error, so nothing is lost:
+
+```python
+from openstategraph import RunProducedNothing
+
+try:
+    answer = workflow.ask("How many invoices are there?")
+except RunProducedNothing as nothing:
+    for node, reason in nothing.result.failed_nodes.items():
+        print(f"{node} did not run: {reason}")
+```
+
 **The split is the point, and it is why `.warnings` is not what a script
 should test.** A node that produced nothing is a report about *how* the answer
 was reached, not a claim the run failed — a workflow may legally answer with

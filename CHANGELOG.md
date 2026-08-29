@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### Fixed
+- **The second `ask` through the library door answers, and a run that produced
+  nothing is never a blank line** (`launch-readiness/171`). A stranger
+  installing the wheel and running the README's headline shape got
+  `lap0: 'banana'  lap1: ''  lap2: 'banana'  lap3: ''` — **every second call
+  empty, silently**, 5 of 10 on two independent ten-lap trials and identical on
+  three packages and two providers. `async-first/12` had moved the event
+  loop's owner up to the run; the **provider client** is built once by
+  `load_workflow` and held for the workflow's whole life, so run 2 reached a
+  keep-alive connection pool bound to the loop run 1 closed on its way out. The
+  rule is now stated where it can be checked (`run_doors.py`): *the loop is
+  owned by whatever owns the transport*. `CompiledWorkflow` holds a `RunLoop`,
+  released by its `close()`; the three doors that build a model per call keep
+  the run-scoped loop they already had, and the connection pool `777e829`
+  measured (1.21 s → 0.54 s) is kept rather than traded away.
+
+### Added
+- **`RunProducedNothing`**, exported from `openstategraph` and
+  `openstategraph.errors`. `CompiledWorkflow.ask` / `resume` now **raise** it
+  when a run produced no answer *and* something went wrong, instead of
+  returning a `RunResult` that is an empty string with the reason on
+  `.warnings`. Both halves are required — a legally empty answer still
+  returns, and so does a paused run — and the predicate is
+  `openstategraph.results.produced_nothing`, the same rule
+  `cli.run_exit_code` has gated on since `workflow-gallery/53`, so an exit code
+  and a raise cannot disagree about what a failed run is. The whole
+  `RunResult` rides on the error's `.result`, so nothing a caller could have
+  read is lost. `openstategraph run`, `resume` and `eval` unwrap it and report
+  exactly as they did before.
+
 ### Added
 - **A table can declare what one of its rows is, and which period it covers**
   (`launch-readiness/166`) — `openstategraph.table_coverage`, plus a fifth

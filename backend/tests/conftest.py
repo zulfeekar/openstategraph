@@ -473,3 +473,26 @@ def tiny_db(tmp_path: Path) -> Path:
     conn.commit()
     conn.close()
     return path
+
+
+def whatever_it_produced(call: Callable[[], Any]) -> Any:
+    """The run `call` produced, whether the door returned it or raised it.
+
+    `launch-readiness/171`: `CompiledWorkflow.ask` now **raises**
+    `RunProducedNothing` when a run produced no answer *and* something went
+    wrong, because a `RunResult` that is an empty string with the reason on
+    `.warnings` is a silent failure for the reader who prints it — which is
+    exactly what the README's headline example did.
+
+    A test whose subject *is* one of those failed runs wants the report rather
+    than the raise, and loses nothing by unwrapping: the whole `RunResult`
+    rides on the error's `.result`. Used only by such tests — a test that
+    wraps an ordinary run in this is a test that has stopped asserting the
+    door answers.
+    """
+    from openstategraph.errors import RunProducedNothing
+
+    try:
+        return call()
+    except RunProducedNothing as nothing:
+        return nothing.result

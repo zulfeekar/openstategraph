@@ -31,7 +31,7 @@ from openstategraph import (
     DEFAULT_RECURSION_LIMIT, __version__,
     OpenStateGraphError, WorkflowPackageError, PackageNotFound,
     InvalidPackageName, DocumentError, SchemaVersionError,
-    ThreadNotResumable,
+    ThreadNotResumable, RunProducedNothing,
     run_context,
 )
 from openstategraph.abc import (
@@ -53,7 +53,7 @@ from openstategraph.errors import (
     InvalidPackageName, DocumentError, SchemaVersionError,
     ThreadNotResumable, CredentialError, MissingProviderKey, MissingProviderPackage,
     NoProviderInstalled, ProviderRefusedCredential, ProviderUnreachable, UnknownProvider,
-    StepBudgetExhausted, RunContextError,
+    StepBudgetExhausted, RunContextError, RunProducedNothing,
     GENERIC_FAILURE_MESSAGE,
 )
 from openstategraph.schema import (

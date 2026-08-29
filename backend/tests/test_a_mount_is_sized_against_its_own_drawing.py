@@ -63,7 +63,7 @@ from typing import Any
 
 import pytest
 
-from conftest import RespondingModel
+from conftest import RespondingModel, whatever_it_produced
 from openstategraph.cli import run_exit_code
 from openstategraph.loader import load_workflow
 from openstategraph.step_budget import MIN_STEP_BUDGET, mount_step_budget
@@ -146,7 +146,10 @@ def _mounter(root: Path, slug: str, target: str, budget: int | None = None) -> P
 def _run_one_level(root: Path, child_budget: int | None, ceiling: int) -> Any:
     _loop_package(root, "sized-child", child_budget)
     parent = _mounter(root, "sized-parent", "sized-child")
-    return load_workflow(parent, model=_NeverRelents()).ask("Describe it.", recursion_limit=ceiling)
+    workflow = load_workflow(parent, model=_NeverRelents())
+    return whatever_it_produced(
+        lambda: workflow.ask("Describe it.", recursion_limit=ceiling)
+    )
 
 
 def _laps(result: Any) -> int:
@@ -260,7 +263,8 @@ class TestThreeLevelsDeep:
         _loop_package(root, "deep-grandchild", SMALL)
         _mounter(root, "deep-mid", "deep-grandchild")
         top = _mounter(root, "deep-top", "deep-mid")
-        return load_workflow(top, model=_NeverRelents()).ask("Go.", recursion_limit=ROOMY)
+        workflow = load_workflow(top, model=_NeverRelents())
+        return whatever_it_produced(lambda: workflow.ask("Go.", recursion_limit=ROOMY))
 
     @pytest.fixture(scope="class")
     def baseline(self, tmp_path_factory: pytest.TempPathFactory) -> Any:
@@ -268,7 +272,8 @@ class TestThreeLevelsDeep:
         _loop_package(root, "deep-grandchild", None)
         _mounter(root, "deep-mid", "deep-grandchild")
         top = _mounter(root, "deep-top", "deep-mid")
-        return load_workflow(top, model=_NeverRelents()).ask("Go.", recursion_limit=ROOMY)
+        workflow = load_workflow(top, model=_NeverRelents())
+        return whatever_it_produced(lambda: workflow.ask("Go.", recursion_limit=ROOMY))
 
     def test_the_grandchilds_own_number_reaches_it(self, result: Any, baseline: Any) -> None:
         assert _laps(result) < _laps(baseline), (_laps(result), _laps(baseline))

@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from openstategraph.errors import RunProducedNothing
 from openstategraph.evaluation.dataset import EvalCase, EvalDataset, load_dataset
 from openstategraph.evaluation.denotation import compare, execute_query, result_eq
 from openstategraph.evaluation.recovery import recover_from_run
@@ -439,7 +440,17 @@ def package_asker(workflow: Any) -> Asker:
         # Lap 1 keeps the id it has always had, so a `repeat=1` run — every run
         # until this flag is passed — reads and checkpoints exactly as before.
         thread_id = f"eval-{case.id}" if lap == 1 else f"eval-{case.id}-lap{lap}"
-        result = workflow.ask(case.question, thread_id=thread_id)
+        try:
+            result = workflow.ask(case.question, thread_id=thread_id)
+        except RunProducedNothing as nothing:
+            # **A case that answered nothing is a case that scored zero, never
+            # an eval that stopped** (`launch-readiness/171`). The library door
+            # now raises rather than returning a blank string, because a
+            # blank string is a silent failure for the reader who prints it —
+            # but a harness whose whole job is to grade wrong answers has a
+            # correct thing to do with one, and it is not to abandon the other
+            # nineteen cases. Everything the run produced is on the error.
+            result = nothing.result
         return AskOutcome(
             answer=str(result),
             outputs=dict(result.outputs),
