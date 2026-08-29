@@ -187,8 +187,8 @@ The file this ticket found, and the entry whose split is now being executed
 against this number rather than beside it. `docs-and-gaps/03` had a recommended
 order — `mount_overrides.py`, then `reporting.py`, then the `compile/nodes/`
 rewrite last — and every step of it has re-recorded here on the way past:
-2,039 code lines, then 1,944, 1,829, 1,750, 1,434, and now 1,343 with nine node
-families living in their own modules under `compile/nodes/`.
+2,039 code lines, then 1,944, 1,829, 1,750, 1,434, 1,343, and now 1,194 with
+fourteen node families living in their own modules under `compile/nodes/`.
 
 What the number was for is the growth, and it is worth restating now that it is
 being used the other way. The split of 2026-08-22 moved 401 lines out; the week
@@ -380,7 +380,7 @@ number is here to make that visible when a fourth one lands.
 #: hand-picked pins were found to cover only the classes somebody had already
 #: worried about.
 RECORDED: dict[str, Recorded] = {
-    "compile/node_runtime.py": Recorded(1343, NODE_RUNTIME),
+    "compile/node_runtime.py": Recorded(1194, NODE_RUNTIME),
     "cli.py": Recorded(1099, CLI),
     "compile/workflow_compiler.py": Recorded(890, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(959, STREAMING),

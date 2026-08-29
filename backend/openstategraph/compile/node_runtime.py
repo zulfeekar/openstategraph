@@ -56,9 +56,6 @@ from openstategraph.step_budget import (
 )
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router  # noqa: F401
-from openstategraph.abc.tool_notes import (
-    record_notes,
-)
 from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCapabilities
 from openstategraph.compile.graph_names import GraphNames
 from openstategraph.compile.node_families import discovered_node_families
@@ -115,17 +112,6 @@ from openstategraph.compile.subagents import async_subagent_specs, subagent_spec
 from openstategraph import injection
 from openstategraph.run_identity import run_identity
 from openstategraph.memory import MemorySettings
-from openstategraph.vocabulary import (
-    DEFAULT_MAX_ENTRIES,
-    DEFAULT_WHEN_UNCOVERED,
-    resolve_vocabulary,
-    unresolved_source,
-)
-from openstategraph.sources import (
-    DEFAULT_WHEN_UNDECIDED,
-    resolve_source,
-    unresolved_catalogue,
-)
 from openstategraph.reasoning import REASONING_EFFORT_KEY, apply_reasoning_effort
 
 # Re-exported for the same reason `context.py`'s names are: `state.py` was
@@ -189,7 +175,16 @@ from openstategraph.compile.mount_overrides import (  # noqa: F401
     _merge_override_maps,
     apply_mount_overrides,
 )
-from openstategraph.compile.nodes import approval, grader, guard, io, router
+from openstategraph.compile.nodes import (
+    approval,
+    functions,
+    grader,
+    guard,
+    io,
+    memory,
+    resolvers,
+    router,
+)
 from openstategraph.compile.static_source import (
     STATIC_TEXT_NODE_TYPES,
     StaticSource,
@@ -616,6 +611,11 @@ class NodeRuntime:
     _static_text = io._static_text
     _output = io._output
     _passthrough = io._passthrough
+    _resolve_vocabulary = resolvers._resolve_vocabulary
+    _resolve_source = resolvers._resolve_source
+    _memory_segment = memory._memory_segment
+    _format_report_function = functions._format_report_function
+    _discovered_function = functions._discovered_function
 
     def _register_node_types(self) -> NodeTypeRegistry:
         """One registration point per node type this build implements.
@@ -2364,372 +2364,11 @@ class NodeRuntime:
 
         return run
 
-    def _memory_segment(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """A tollbooth: what crosses is furnished, recorded and passed onward.
-
-        A **real state-transforming graph node**, and the deterministic half of
-        memory. The other half — a write the *model* decides to make — is
-        `save_memory`, bound to every agent when a store is present, and the
-        atom-forge interview's first redirect is what keeps the two apart. A
-        node whose position on the canvas implies a guarantee the model was
-        free to ignore is the drawn thing that lies.
-
-        ## What makes it a node and not configuration
-
-        It reads and appends a workflow-scoped Store namespace **at a drawn
-        position**, which nothing else in the catalogue does. Everything about
-        the ledger itself lives in `openstategraph.memory_segment`; this
-        factory is state plumbing and nothing else.
-
-        ## The store is fetched at run time, not held from compile time
-
-        `get_store()` reads the store the compiled graph was built with, which
-        is what makes one implementation work identically in a parent and in a
-        mounted child — and a child resolves its *own* `workflow_slug`, so a
-        mount's segments are the mount's, exactly as isolation implies.
-
-        `self.services.memory_store` is deliberately not used: it is the parent's
-        object, and reading it here would make a subgraph's tollbooth write to
-        the wrong ledger in the one case nobody tests by hand.
-
-        ## What it cannot reach, stated rather than implied
-
-        An outbound Guardrail scrubs `outputs`; it does not reach the Store. A
-        segment placed downstream of unredacted content records that content
-        durably, and the redaction that happens later cannot retrieve it. This
-        is the guardrail work's own "a node cannot act on what left before it
-        ran", pointed the other way, and the card says so.
-        """
-        from openstategraph.memory_segment import MemorySegment, parse_retention
-
-        data = node.get("data") or {}
-        segment = MemorySegment(
-            name=_text(data, "segment"),
-            retention=parse_retention(data.get("retention")),
-        )
-        upstream = [src for src, dst in plan.edges if dst == node_id]
-        # A tollbooth placed after a grader, an approval or a guardrail is
-        # reached over a *conditional* edge, which `plan.edges` does not
-        # carry — the same gap `_agent`, `_output` and `_guardrail` close.
-        conditional_upstream = [
-            src for src, dests in plan.conditional.items() if node_id in dests.values()
-        ]
-
-        def run(state: RunState) -> dict[str, Any]:
-            from langgraph.config import get_store
-
-            from openstategraph.memory import UNSAVED_SLUG, workflow_scope_slug
-
-            text = _upstream_text(state, upstream + conditional_upstream) or state.get(
-                "question", ""
-            )
-            try:
-                store = get_store()
-            except Exception:
-                # No store configured for this run. `MemorySegment.cross`
-                # owns what that means and says it in the one sentence a
-                # model can act on; taking the run down instead would make a
-                # missing optional backend into an outage.
-                store = None
-            # A ledger key, not a memory namespace, so the fallback is spelled
-            # here (2026-08-16). `workflow_scope_slug()` answers None for a run
-            # that does not know its workflow, and `("workflow-memory", ...)`
-            # now refuses rather than bucketing such a run — but a placed
-            # segment card must still record what crossed it on an unsaved
-            # canvas, which is the case the editor exercises most. So this one
-            # keeps the shared bucket, visibly and on purpose. It is the last
-            # place a nameless run shares a key.
-            slug = workflow_scope_slug() or UNSAVED_SLUG
-            crossing = segment.cross(store, slug, text=text, node=node_id)
-            # `outputs` only. The node introduces no state key, so there is no
-            # multi-writer question to answer and no reducer to name — the
-            # cheapest way to satisfy that rule is not to need it.
-            return {"outputs": {node_id: crossing.text}}
-
-        return run
-
-    def _format_report_function(
-        self, node_id: str, node: dict[str, Any], plan: CompiledPlan
-    ) -> Any:
-        """A deterministic **function** node — distinct from a *tool*.
-
-        The distinction the cookbook (ticket 27) drew and this makes concrete: a
-        *tool* is model-callable, chosen by an agent mid-loop; a *function* is a
-        graph step the compiler always runs, with no model in the decision. This
-        one has nothing to decide — it joins whatever worker results exist into
-        one report, in task-id order, with no LLM call and therefore no
-        variance. Determinism here is a feature: the same worker results always
-        produce the same report text, which is what makes the graph-engineering
-        proof below assertable byte-for-byte.
-        """
-        # The TS field schema (`FormatReportNode.ts`) calls this key
-        # `reportTitle`, not `title` — found via a TS-schema-vs-Python-factory
-        # diff, not live: a canvas-authored document could never have reached
-        # this field at all, since every real document produces `reportTitle`
-        # and this read silently fell through to the "Report" default every
-        # time.
-        title = (node.get("data") or {}).get("reportTitle") or "Report"
-
-        def run(state: RunState) -> dict[str, Any]:
-            results = state.get("worker_results") or {}
-            # Scoped to ids the *current* plan(s) declared, not every id ever
-            # written across every past attempt. `subtasks[orchestrator_id]` is
-            # overwritten (not accumulated) on each replan, so this discards
-            # stale results from a rejected attempt rather than silently
-            # blending them into a report about the latest one.
-            current_ids = {
-                task["id"]
-                for plan_list in (state.get("subtasks") or {}).values()
-                for task in plan_list
-            }
-            scoped = {k: v for k, v in results.items() if k in current_ids}
-            # No worker fan-out reached this join — so gather what its own
-            # upstream nodes produced instead (`every-workflow-green` 27).
-            #
-            # This is the shape the `empty` message below has always described
-            # and refused: "an edge into `candidate` from anything else
-            # sequences this step without carrying data". It is now the shape a
-            # classifier in `matchMode: "all"` produces on every compound
-            # question, so refusing it would mean two desks running in parallel
-            # and one of them being thrown away by `answer`'s LATEST_NONEMPTY —
-            # the same silent loss the mode exists to end, moved one node
-            # along.
-            #
-            # A fallback rather than a merge, and preferred in that order: an
-            # orchestrator fan-out and a classifier fan-out do not share a join
-            # in practice, and reading `worker_results` first keeps every
-            # shipped report byte-identical.
-            if not scoped:
-                outputs = state.get("outputs") or {}
-                scoped = {
-                    src: str(outputs[src])
-                    for src, dst in plan.edges
-                    if dst == node_id and str(outputs.get(src) or "").strip()
-                }
-            # A task that died (retries exhausted → error handler wrote to
-            # outputs, which carries no task identity) must appear as a
-            # named gap, not vanish from the join (ticket 61 residual #2).
-            for missing in sorted(current_ids - scoped.keys()):
-                scoped[missing] = "_(this task failed before reporting a result)_" 
-            body = "\n\n".join(
-                # An empty member result renders as an explicit gap — a blank
-                # section reads like formatting, and the grader (and the
-                # human) must see the miss to act on it (ticket 61).
-                f"### {task_id}\n{text or _silent_member_note(task_id, state)}"
-                for task_id, text in sorted(scoped.items())
-            )
-            # An empty body means the *plan* was empty, not that the workers
-            # were quiet: a dispatched task that died is filled in above as a
-            # named gap. So the only way to get here is that nothing ever
-            # dispatched to this join — the shape `docs/patterns.md` §4 warns
-            # about, where agents are wired straight into `candidate` and the
-            # edges sequence the join without carrying anything. Saying which
-            # of the two happened is the difference between a debuggable run
-            # and a shrug (production-ready ticket 31).
-            empty = (
-                "_No results — nothing was dispatched to this join. It reports the "
-                "worker results of a supervisor's fan-out; an edge into `candidate` "
-                "from anything else sequences this step without carrying data "
-                "(docs/patterns.md §4)._"
-            )
-            report = f"# {title}\n\n{body}" if body else f"# {title}\n\n{empty}"
-            return {"outputs": {node_id: report}, "answer": report}
-
-        return run
-
-    def _discovered_function(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """A workflow-discovered function as a deterministic graph step.
-
-        The signature contract is `fn(text: str) -> str` — a transform of the
-        node's upstream text, no model, no state access (ticket 35: code is
-        referenced by name, never given the raw state to hide control flow
-        in). A raised exception becomes readable output — the same
-        errors-are-data rule `BaseTool.run` applies: retrying a deterministic
-        function reproduces the same failure, so the useful move is to carry
-        the message downstream where a grader or a person can read it.
-        """
-        node_type = str(node.get("type", ""))
-        fn = self.services.functions.get(node_type)
-        if fn is None:
-            self.diagnostics.record(Finding.UNRESOLVED_FUNCTION, node_type)
-            return self._passthrough(node_id, node, plan)
-
-        upstream = [src for src, dst in plan.edges if dst == node_id]
-        # A function node fed by a grader's `pass` (or a guard's `pass`, or an
-        # approval's `approved`) arrives over a *conditional* edge, which
-        # `plan.edges` does not carry — `_agent`, `_output`, `_guardrail` and
-        # `_subgraph` already close this gap; this handler was the one left
-        # open (`launch-readiness` 66). Without it, a function node placed
-        # behind a routed edge silently read the turn's original question
-        # instead of its wired upstream — found live, with `execute_sql`
-        # reading a natural-language question where SQL should have been, and
-        # nothing reporting it.
-        conditional_upstream = [
-            src for src, dests in plan.conditional.items() if node_id in dests.values()
-        ]
-
-        def run(state: RunState) -> dict[str, Any]:
-            text = _upstream_text(state, upstream + conditional_upstream) or state.get(
-                "question", ""
-            )
-            try:
-                result = fn(text)
-            except Exception as exc:
-                return {"outputs": {node_id: f"[{node_id} failed: {type(exc).__name__}: {exc}]"}}
-            output = result if isinstance(result, str) else str(result)
-            return {"outputs": {node_id: output}, "answer": output}
-
-        return run
 
 
-    def _resolve_vocabulary(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """*What is this word called here?* — answered before the model runs.
 
-        `launch-readiness/135`. The engine is `openstategraph.vocabulary`;
-        this builder is the seam between it and a drawn node — which source,
-        how many entries, and what the run carries downstream when nothing
-        was covered.
 
-        Three properties are the point of the node and are asserted by
-        `tests/test_a_resolver_that_covers_nothing_says_so.py`:
 
-        - **It is a step, not a tool.** Vocabulary must not be a choice: when
-          the model picked which source told it what a term meant, it picked
-          differently on every run.
-        - **Rank, then cap** (`launch-readiness/130`), with the searches still
-          concurrent — the ranking is what stopped thread scheduling choosing
-          the axis, not serialising.
-        - **It reports what it covered, not only what it found.** A resolver
-          that found nothing and said nothing is indistinguishable from a term
-          that was never ambiguous, which is the shape behind six defects on
-          this map. So there is no silent path out of here — an unresolved
-          source is *reported*, never passed through (`unresolved_source`).
-
-        `answer` is deliberately not written. This is an intermediate step,
-        and a resolution that landed in `answer` would let a run whose model
-        never spoke end with a metadata block presented as its answer.
-        """
-        data = node.get("data") or {}
-        source_name = _text(data, "source").strip()
-        key = f"function.{source_name}" if source_name else ""
-        source = self.services.functions.get(key) if key else None
-        try:
-            max_entries = int(data.get("maxEntries") or DEFAULT_MAX_ENTRIES)
-        except (TypeError, ValueError):
-            max_entries = DEFAULT_MAX_ENTRIES
-        when_uncovered = _text(data, "whenUncovered").strip() or DEFAULT_WHEN_UNCOVERED
-
-        upstream = [src for src, dst in plan.edges if dst == node_id]
-        # A resolver placed behind a routed edge reads its wired upstream, not
-        # the turn's original question — the same gap `launch-readiness` 66
-        # closed on `_discovered_function`.
-        conditional_upstream = [
-            src for src, dests in plan.conditional.items() if node_id in dests.values()
-        ]
-
-        def run(state: RunState) -> dict[str, Any]:
-            question = _upstream_text(state, upstream + conditional_upstream) or state.get(
-                "question", ""
-            )
-            if source is None:
-                self.diagnostics.record(
-                    Finding.UNRESOLVED_FUNCTION, f"resolve.vocabulary:{source_name}"
-                )
-                block = unresolved_source(key or source_name, when_uncovered)
-            else:
-                resolution = resolve_vocabulary(
-                    question,
-                    source,
-                    max_entries=max_entries,
-                    source_name=key,
-                    when_uncovered=when_uncovered,
-                )
-                # `launch-readiness/127`'s tuple, on the run's own rail: the
-                # output node discloses the substitution whether or not the
-                # model mentions it.
-                record_notes(resolution.substitutions)
-                block = resolution.render()
-
-            output = f"{question}\n\n---\n{block}" if question else block
-            return {"outputs": {node_id: output}}
-
-        return run
-
-    def _resolve_source(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """*Which store is answering this, and what else could have?*
-
-        `launch-readiness/150`. The engine is `openstategraph.sources`; this
-        builder is the seam between it and a drawn node — which catalogue,
-        what the figures are called, and what the run carries downstream when
-        several systems of record are live and nothing settles which.
-
-        The user's complaint it exists for was *"in the may number 1664 is
-        given in the table. I do not understand where this number comes from"*
-        — three of seven complaints in one round were this shape. A number
-        with no stated source and a number from the wrong source look
-        identical, and that is this project's most expensive failure attached
-        to the thing a user trusts most.
-
-        Four properties are asserted by
-        `tests/test_a_run_names_the_source_it_used.py`:
-
-        - **It is a step, not a tool**, for the same measured reason
-          `resolve.vocabulary` is: a source the model picks is a source that
-          changes between runs.
-        - **The alternatives are the payload.** `Substitution` maps one term
-          to another; this is one choice among several declared alternatives,
-          so it mints its own note kind (`SourceChoice`) on the run's rail and
-          `_output` discloses it whether or not the model mentions it.
-        - **Nothing to choose is not the same as could not tell.** A catalogue
-          declaring one source and a catalogue declaring none render
-          differently, by construction, with no toggle between them.
-        - **It settles nothing it was not told.** Where several sources are
-          live and none is named or default, no choice is recorded — that is
-          `guardrails/06`'s abstain, which is open and unbuilt, and this step
-          leaves the seam rather than inventing a second way to ask.
-
-        `answer` is deliberately not written, exactly as for the vocabulary
-        resolver: an intermediate step whose block landed in `answer` would
-        let a run whose model never spoke end with metadata as its answer.
-        """
-        data = node.get("data") or {}
-        catalogue_name = _text(data, "catalogue").strip()
-        key = f"function.{catalogue_name}" if catalogue_name else ""
-        catalogue = self.services.functions.get(key) if key else None
-        quantity = _text(data, "quantity").strip()
-        when_undecided = _text(data, "whenUndecided").strip() or DEFAULT_WHEN_UNDECIDED
-
-        upstream = [src for src, dst in plan.edges if dst == node_id]
-        conditional_upstream = [
-            src for src, dests in plan.conditional.items() if node_id in dests.values()
-        ]
-
-        def run(state: RunState) -> dict[str, Any]:
-            question = _upstream_text(state, upstream + conditional_upstream) or state.get(
-                "question", ""
-            )
-            if catalogue is None:
-                self.diagnostics.record(
-                    Finding.UNRESOLVED_FUNCTION, f"resolve.source:{catalogue_name}"
-                )
-                block = unresolved_catalogue(key or catalogue_name, when_undecided)
-            else:
-                selection = resolve_source(
-                    question,
-                    catalogue,
-                    quantity=quantity,
-                    catalogue_name=key,
-                    when_undecided=when_undecided,
-                )
-                # The run's own rail: the output node names the source whether
-                # or not the model remembered to.
-                record_notes(selection.notes)
-                block = selection.render()
-
-            output = f"{question}\n\n---\n{block}" if question else block
-            return {"outputs": {node_id: output}}
-
-        return run
 
     @staticmethod
     def _closes_a_loop_impl(document: dict[str, Any]) -> bool:
