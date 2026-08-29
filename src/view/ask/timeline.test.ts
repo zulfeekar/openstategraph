@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   barOffsetPercent,
@@ -200,5 +202,37 @@ describe('spawn rows', () => {
       row({ node: 'node:a', namespace: ['wf_music:abc123'], durationMs: 20 }),
     ]);
     expect(steps[0]!.label).toBe('wf_music:abc123');
+  });
+});
+
+/**
+ * The header states whose limitation the inferred clock is, and the answer
+ * changed (`memory-and-replay` 48).
+ *
+ * Until 2026-08-29 the docstring above `buildTimeline`'s module attributed
+ * the missing start event to LangGraph. LangGraph emits one — `TasksStreamPart`
+ * carries a task **start** and a task **finish**, and the start is minted
+ * before the node runs. The backend asks for three of the seven stream modes
+ * and has never asked for that one, which makes the gap a subscription we did
+ * not make rather than a library that cannot help.
+ *
+ * A comment cannot fail on its own, and this one was wrong for as long as it
+ * existed, so the corrected version is pinned here — the same move
+ * `backend/tests/test_a_library_default_is_never_literalised.py` makes for
+ * every other library claim this repository states.
+ */
+describe('the timeline header, on whose limitation this is', () => {
+  const header = readFileSync(fileURLToPath(new URL('./timeline.ts', import.meta.url)), 'utf8');
+
+  it('does not claim the library reports no start event', () => {
+    expect(header).not.toMatch(/there is no start event to subtract/);
+  });
+
+  it('names the mode that does carry one, so the correction is actionable', () => {
+    expect(header).toMatch(/stream_mode="tasks"/);
+  });
+
+  it('says the start event carries no clock, so 46 is not made unnecessary', () => {
+    expect(header).toMatch(/does \*not\* carry is a clock/);
   });
 });

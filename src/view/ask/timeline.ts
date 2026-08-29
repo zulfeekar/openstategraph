@@ -11,12 +11,29 @@
  * folding rules below, and they are unit-tested directly rather than through
  * a rendered component.
  *
- * Honest about its numbers. `durationMs` is the wall-clock gap since the
- * previous frame, the same approximation the Inspector's badge and the trace
- * tree already use, because LangGraph's `updates` stream reports a node only
- * *after* it finishes — there is no start event to subtract. For a sequential
- * chain that is close; for concurrently dispatched workers it attributes one
- * shared gap to whichever frame arrived, and the UI must not claim otherwise.
+ * Honest about its numbers, and — since `memory-and-replay` 48 — about whose
+ * limitation they are. `durationMs` is the wall-clock gap since the previous
+ * frame, the same approximation the Inspector's badge and the trace tree
+ * already use: the `updates` stream reports a node only *after* it finishes,
+ * so nothing on **this wire** marks a beginning. For a sequential chain that
+ * is close; for concurrently dispatched workers it attributes one shared gap
+ * to whichever frame arrived, and the UI must not claim otherwise.
+ *
+ * Until 2026-08-29 this paragraph blamed the library for that, and the blame
+ * was misplaced. LangGraph publishes seven stream modes and the backend asks
+ * for three (`api/streaming.py`: `["updates", "messages", "custom"]`).
+ * `stream_mode="tasks"` emits a task **start** event before a node runs and a
+ * **finish** event after it, both carrying a runtime-minted `id` that is
+ * distinct for every `Send`-dispatched worker — which is exactly the identity
+ * this fold is reduced to guessing. So the missing start is a subscription
+ * nobody made, not a library that cannot help.
+ *
+ * What `tasks` does *not* carry is a clock: no field of either payload holds a
+ * time, so subscribing alone still leaves the stamping to whoever receives the
+ * frame. That is ticket 46's question, and the two land together or not at
+ * all. Both claims are pinned, against the installed LangGraph rather than
+ * against a page, by
+ * `backend/tests/test_the_tasks_stream_mode_is_a_start_event.py`.
  */
 
 /** What the timeline needs from one stream frame. */
