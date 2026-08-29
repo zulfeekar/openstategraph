@@ -11,11 +11,12 @@ this seam.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated, Any, TypedDict
 
 from langgraph.managed import RemainingSteps
 
-from openstategraph.compile.fields import _text
+
 from openstategraph.compile.reducers import RESET as _RESET
 from openstategraph.compile.reducers import Reducer, reducer_for
 
@@ -431,7 +432,9 @@ def _upstream_verdict(state: RunState, node_ids: list[str]) -> dict[str, str]:
 
 
 def _wired_skill(
-    state: RunState, node_ids: list[str], nodes: dict[str, Any] | None = None
+    state: RunState,
+    node_ids: list[str],
+    sources: Mapping[str, Any] | None = None,
 ) -> str:
     """The prompt contribution of whatever is wired to a node's `skill` port.
 
@@ -439,19 +442,28 @@ def _wired_skill(
     arrive from a picked `SKILL.md`, from a pasted instruction, or from a file
     an upstream node loaded, and only one of those has ever heard of YAML.
 
-    **State first, then the document — and the document is the half that was
-    missing.** A skill source is `bound_only`: it is deliberately kept out of
-    `plan.nodes`, because it is configuration hanging off a port rather than a
-    step in the graph. It therefore never runs, never writes `outputs`, and
-    this function — reading only state — returned `""` for every wired skill on
-    every node type, always. The shipped `sql-analyst.md` never reached the
-    analyst; the whole layer was decorative at runtime.
+    **State first, then the compiler's resolved sources — and the second half
+    was the one that was missing.** A skill source is `bound_only`: it is
+    deliberately kept out of `plan.nodes`, because it is configuration hanging
+    off a port rather than a step in the graph. It therefore never runs, never
+    writes `outputs`, and this function — reading only state — returned `""`
+    for every wired skill on every node type, always. The shipped
+    `sql-analyst.md` never reached the analyst; the whole layer was decorative
+    at runtime.
 
-    Reading the document is not a fallback bolted on, it is the correct source
+    Reading configuration is not a fallback bolted on, it is the correct source
     for this kind of node: `_static_text`'s output does not depend on state at
     all, and the `skill` port type is produced only by `input.markdown` and
     `input.skill`, both static. State is still consulted first, so a future
     dynamic producer keeps working without another change here.
+
+    **`sources` is `NodeRuntime.static_sources`, not the document's nodes**
+    (`launch-readiness` 94). This function used to read `instruction` →
+    `instructions` → `content` off each node's `data` itself, which made it the
+    *second* module implementing that precedence — and neither of the two knew
+    `filename` existed, so a skill node pointing at a file on disk was shown to
+    the model as whatever stale copy happened to be pasted beside it. One
+    module decides now, at compile time, and this one reads what it decided.
     """
     from openstategraph.skills import skill_text
 
@@ -459,15 +471,12 @@ def _wired_skill(
     if live.strip():
         return skill_text(live)
 
-    if not nodes:
+    if not sources:
         return ""
     configured = "\n".join(
         text
         for text in (
-            _text(nodes.get(node_id, {}).get("data") or {}, "instruction")
-            or _text(nodes.get(node_id, {}).get("data") or {}, "instructions")
-            or _text(nodes.get(node_id, {}).get("data") or {}, "content")
-            for node_id in node_ids
+            getattr(sources.get(node_id), "text", "") for node_id in node_ids
         )
         if text
     )

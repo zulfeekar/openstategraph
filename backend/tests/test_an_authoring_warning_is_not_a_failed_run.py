@@ -303,6 +303,19 @@ class TestEveryProducerHasASide:
             Finding.REPEATED_SIDE_EFFECT,
             Finding.APPROVAL_COMES_TOO_LATE,
             Finding.UNDECLARED_FALLBACK,
+            # The eighth, ninth and tenth (`launch-readiness` 94) are the
+            # first reports about a run that used a *better* source than the
+            # document records: a skill node's file on disk beats the copy
+            # stored beside it, so the run is right and the document is stale.
+            # `SKILL_FROM_SNAPSHOT` is the one that would hurt most on the
+            # other side — `mcp_server.compile_workflow` is stateless and has
+            # no package to read from, so every stateless compile of a
+            # document naming a file records it, and exiting 1 there would
+            # fail a correct run through a supported door for a condition that
+            # door can never not be in.
+            Finding.SKILL_SOURCE_DRIFTED,
+            Finding.SKILL_FROM_SNAPSHOT,
+            Finding.SKILL_FILE_UNUSED,
         }
     )
 

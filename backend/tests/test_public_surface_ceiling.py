@@ -186,6 +186,13 @@ def test_the_runtimes_members_are_each_nameable_without_and() -> None:
         # cannot be drawn at all (`workflow-gallery` 28). Drawing only; no run
         # path reads it.
         "mounted_graphs",
+        # The ninth, the same kind again: which of a skill node's two sources
+        # this compile actually used — the file on disk, or the copy stored
+        # beside it in the document (`launch-readiness` 94). Public because it
+        # is a *seam*: `_static_text` and `state._wired_skill` both read it,
+        # and while each resolved the fields for itself one of them was
+        # reading a stale copy with nothing able to notice.
+        "static_sources",
     }
 
 
@@ -571,7 +578,19 @@ FINDING_KINDS = """**An enum of seventeen, and the ceiling is asking the wrong q
     Both are `REPORT_ONLY`, and the reason there is a new one: their condition
     is a conservative default about a tool nobody declared, and a guess may not
     move an exit code. Still the same reason to change — the ways a graph can
-    come out other than it was drawn — so still a table entry, not a split."""
+    come out other than it was drawn — so still a table entry, not a split.
+
+    The nineteenth, twentieth and twenty-first (`SKILL_SOURCE_DRIFTED`,
+    `SKILL_FROM_SNAPSHOT`, `SKILL_FILE_UNUSED`, `launch-readiness` 94) arrive
+    as three for the sixteenth-and-seventeenth's reason: three conditions with
+    three different fixes — re-save the document, accept that this door has no
+    package to read from, or clear the instruction box — and one member would
+    name none of them. They are the first entries describing a graph that came
+    out *more* capable than the document records rather than less: the file on
+    disk wins, so the run is right and the stored copy is stale. That is not a
+    new drawer either, because the split by meaning already exists and is
+    `REPORT_ONLY`, which is where all three sit. The reason to change is
+    unchanged — the ways a compiled graph differs from the drawing."""
 
 #: Every class in the shipped package over the ceiling, with the reasoning that
 #: makes each number a decision rather than an oversight. Derived list, hand
@@ -700,7 +719,7 @@ RUN_RESULT = (
 )
 
 RECORDED: dict[str, Recorded] = {
-    "compile.diagnostics.Finding": Recorded(18, FINDING_KINDS),
+    "compile.diagnostics.Finding": Recorded(21, FINDING_KINDS),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.DeepAgentNode": Recorded(13, NARRATE_TOGGLE),

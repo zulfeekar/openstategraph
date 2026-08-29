@@ -328,6 +328,66 @@ Markdown File gains identity fields, the two have converged and this decision is
 wrong — merge them then, with the mode. Until then the duplication left between
 them is one shared data key, which is the point of decision 7.
 
+### 9. The file on disk is the skill's authority; the stored copy is a cache that announces itself (`launch-readiness` 94)
+
+Decision 7 above settled the precedence *among the typed fields* and left the
+one field nothing read at all. `input.markdown` carries `filename` — what the
+editor's picker wrote — beside `content`, the copy it pasted in, and until this
+ticket **`filename` was never read at run time by anything**. Two descriptions
+of one text, and nothing comparing them.
+
+Found by running a shipped NL2SQL package rather than by reading it: its SQL
+validator loads `skills/lenses/*.md` from disk while its agent read the
+embedded copy, and **seven of twelve had drifted**. A commit declaring four
+lenses, two routing rules and the "ask, don't guess" guidance reached the
+validator and never reached the model. The traces looked like an agent ignoring
+its rules; it had never been shown them.
+
+**One rule, at every door**, in `backend/openstategraph/compile/static_source.py`:
+
+| the document says | the run uses | and reports |
+| --- | --- | --- |
+| inline `instruction` text | that text | `SKILL_FILE_UNUSED`, if a file was also named and readable |
+| a `filename` this run can read | **the file** | `SKILL_SOURCE_DRIFTED`, if the stored copy differs |
+| a `filename` this run cannot read | the stored copy | `SKILL_FROM_SNAPSHOT` |
+| no `filename` at all | the stored copy | nothing — there is one source |
+
+Read that table for `mcp_server.compile_workflow` and every one of its runs
+lands on row three: it is stateless and has no package on disk. **That is the
+same rule reaching a different answer, not a different rule** — and it is why
+row three has a sentence. A caller who cannot see the difference cannot know
+their edit did not apply.
+
+Three things were deliberately not done. **`content` is not dropped**: that
+door needs it, and a document that cannot carry its own text stops being
+self-contained. **A divergence does not refuse**: exiting 1 would fail a
+correct run through a supported door for a condition that door can never not be
+in, and would fail every package in the window between editing a skill file and
+re-saving the workflow — so all three findings are `REPORT_ONLY`. **The editor
+does not silently rewrite `content` on save**: that narrows the window without
+closing it and makes the file authoritative in practice while the document
+still claims otherwise.
+
+Decision 7's precedence survives intact — a typed `instruction` still beats a
+loaded file, because the card exists to let someone load a file and then tweak
+it. What changed is that the file it leaves unread is now named.
+
+`filename` addresses the package and nothing above it: a candidate resolving
+outside the package directory is not read, since a document is data from
+wherever it came from. Two candidates are tried, the path as written and the
+same name under `skills/`, because the picker stores a basename while `skills/`
+is where a skill file lives. This costs no portability — `skills/` travels
+beside `workflow.json`, so a file reference is exactly as portable as the
+package.
+
+**The comparison lives at one seam**, `NodeRuntime.static_sources`, resolved
+once in `factory()` before any node is built. There were two readers of the
+field chain — `_static_text` in `node_runtime.py` and `_wired_skill` in
+`state.py` — and the second is the one that decides what an agent is shown, so
+a third would have been the natural way to add a feature and neither of the two
+would have failed. `test_a_skill_has_one_source.py` parses every module under
+`openstategraph/` and fails on any that names two or more of the four fields.
+
 ## Alternatives rejected
 
 **A skill file carries its own `mode:` in frontmatter.** Tempting — a skill

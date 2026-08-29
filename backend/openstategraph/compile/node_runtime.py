@@ -157,6 +157,12 @@ from openstategraph.compile.state import (  # noqa: F401
     keep_max,
     merge_decisions,
 )
+from openstategraph.compile.static_source import (
+    STATIC_TEXT_NODE_TYPES,
+    StaticSource,
+    resolve_static_source,
+    resolve_static_sources,
+)
 
 #: What the output node says when it reached the end with nothing to say.
 #:
@@ -1223,6 +1229,18 @@ class NodeRuntime:
         #: until then, so a runtime built and never handed a document reads
         #: as "asked for nothing" rather than raising.
         self._settings: dict[str, Any] = {}
+        #: node id -> the resolved text of every static-text node, populated
+        #: by `factory()`. The ninth public member and the same kind of thing
+        #: as `machinery_nodes`: a fact this compile established that only the
+        #: compiler knows — *which* of a skill's two sources this run actually
+        #: used (`launch-readiness` 94, `compile/static_source.py`).
+        #:
+        #: Public because it is the seam. Two readers consult it —
+        #: `_static_text`, building a graph node, and `state._wired_skill`,
+        #: inside an agent's closure — and before this map existed both
+        #: open-coded the field precedence in two modules, which is how one of
+        #: them came to read a stale copy for as long as it did.
+        self.static_sources: dict[str, StaticSource] = {}
         self._prompt_context: tuple[Any, ...] = ()
         #: What the compiler noticed and could not resolve — unresolved
         #: tools and functions, unknown node types, mounts whose outcome
@@ -1380,9 +1398,13 @@ class NodeRuntime:
         registry = NodeTypeRegistry()
         registry.register("input.text", self._input)
         # NOT `_input`. A skill source is a *static text source*, not the
-        # run's entry point — see `_static_text`.
-        registry.register("input.markdown", self._static_text)
-        registry.register("input.skill", self._static_text)
+        # run's entry point — see `_static_text`. Registered from
+        # `STATIC_TEXT_NODE_TYPES` rather than from literals here, so the
+        # types that build through `_static_text` and the types
+        # `resolve_static_sources` resolves a file for cannot drift apart —
+        # which is the subject of `launch-readiness` 94 one level down.
+        for static_type in sorted(STATIC_TEXT_NODE_TYPES):
+            registry.register(static_type, self._static_text)
         registry.register("agent.llm", self._agent)
         registry.register("route.classifier", self._router)
         registry.register("route.grader", self._grader)
@@ -1438,6 +1460,18 @@ class NodeRuntime:
             n["id"]: str(n.get("type", "")) for n in document.get("nodes", [])
         }
         self._nodes = {n["id"]: n for n in document.get("nodes", [])}
+        # Where a skill's text comes from, decided **once**, here, before any
+        # node is built and before any closure runs. Resolving it in the
+        # closure instead would re-read the file mid-run and report the same
+        # disagreement once per lap; resolving it per builder would miss the
+        # node entirely, because a node wired to a `skill` port is bound-only
+        # and never reaches a builder at all.
+        self.static_sources = resolve_static_sources(
+            document, self.services.skills_package_dir
+        )
+        for source in self.static_sources.values():
+            for finding, subjects in source.findings:
+                self.diagnostics.record(finding, *subjects)
         #: The document's own settings — graph-assembly concerns, not node
         #: ones. `injectionScreening` reads from here for the same reason the
         #: checkpointer and the memory settings do.
@@ -1756,11 +1790,15 @@ class NodeRuntime:
         two roles are two builders, and this one holds still: no question, no
         reset, no message, just the text it was configured with.
         """
-        configured = (
-            _text(node.get("data") or {}, "instruction")
-            or _text(node.get("data") or {}, "instructions")
-            or _text(node.get("data") or {}, "content")
+        # One seam, never the fields. `factory()` resolved this already, file
+        # against stored copy, and recorded whatever they disagreed about
+        # (`launch-readiness` 94). The fallback is for a runtime handed a node
+        # without a document — a direct unit call — and goes through the same
+        # function, so there is still exactly one precedence in the codebase.
+        source = self.static_sources.get(node_id) or resolve_static_source(
+            node_id, node.get("data") or {}, self.services.skills_package_dir
         )
+        configured = source.text
 
         def run(_state: RunState) -> dict[str, Any]:
             # The author's own text, so the author's own `{{key}}` slots are
@@ -2559,7 +2597,7 @@ class NodeRuntime:
             prompt = _upstream_text(state, upstream + conditional_upstream) or state.get(
                 "question", ""
             )
-            skill = _wired_skill(state, skills, self._nodes)
+            skill = _wired_skill(state, skills, self.static_sources)
             decisions = state.get("decisions") or {}
             feedback = state.get("feedback", "")
             if not any(decisions.get(src) in ("revise", "rejected") for src in feedback_sources):
@@ -2877,7 +2915,7 @@ class NodeRuntime:
             classified = (
                 _thread_question(state) if turn == state.get("question", "") else turn
             )
-            skill = _wired_skill(state, skills, self._nodes)
+            skill = _wired_skill(state, skills, self.static_sources)
             # `prebuilt` is the compile-time construction, kept for the common
             # case where nothing varies per run. A wired skill or a run-context
             # block does vary, so either one forces a rebuild.
@@ -3046,7 +3084,7 @@ class NodeRuntime:
                 notes_for_grader(seen, unsent_values=_values_never_sent(state, seen)),
             )
             grader = grader_for(
-                _wired_skill(state, skills, self._nodes),
+                _wired_skill(state, skills, self.static_sources),
                 "\n\n".join(part for part in sections if part),
             )
 
@@ -3575,7 +3613,7 @@ class NodeRuntime:
             ):
                 feedback = ""
             generation = state.get("attempts", 0)
-            skill = _wired_skill(state, skills, self._nodes)
+            skill = _wired_skill(state, skills, self.static_sources)
             # Rebuilt per run rather than once at compile time: the wired skill
             # text can vary by run, and `notes` below is a per-run sink that
             # must not be shared between two concurrent runs of one graph.
@@ -3818,7 +3856,7 @@ class NodeRuntime:
                 model=model,
                 tools=lc_tools,
                 default_rules=default_prompt,
-                skill=_wired_skill(state, skills, self._nodes),
+                skill=_wired_skill(state, skills, self.static_sources),
                 replace_rules=_replaces_rules(data),
                 context="\n\n".join(
                     part

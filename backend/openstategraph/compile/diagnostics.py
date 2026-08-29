@@ -308,6 +308,52 @@ class Finding(str, Enum):
     #:
     #: A **report**, not a failure — see `REPORT_ONLY`.
     UNDECLARED_FALLBACK = "undeclared_fallback"
+    #: A skill node whose stored copy no longer matches the file it names, as
+    #: `(node id, filename)` — `launch-readiness` 94.
+    #:
+    #: `input.markdown` carries `filename` and `content`, and until 94 the
+    #: compiler read only the second while nothing read the first. Found by
+    #: running a shipped NL2SQL package: its SQL validator loads
+    #: `skills/lenses/*.md` from disk, its agent read the embedded copy, and
+    #: **seven of twelve had drifted** — a commit declaring four lenses, two
+    #: routing rules and the "ask, don't guess" guidance reached the validator
+    #: and never reached the model. The traces looked like an agent ignoring
+    #: its rules.
+    #:
+    #: The file is the authority now (`compile/static_source.py` carries the
+    #: table), so this sentence is about a document that is behind rather than
+    #: about a run that lost anything: the run used the file, and it is the
+    #: *stored copy* that is stale. Said anyway, and loudly, because the whole
+    #: defect was that nothing compared the two.
+    #:
+    #: A **report**, not a failure — see `REPORT_ONLY`.
+    SKILL_SOURCE_DRIFTED = "skill_source_drifted"
+    #: A skill node that ran from its stored copy because the file it names
+    #: could not be read, as `(node id, filename)` — `launch-readiness` 94.
+    #:
+    #: Two situations, one sentence, because the sentence a reader needs is
+    #: the same in both: the run did not use the source the document names.
+    #: `mcp_server.compile_workflow` is stateless and has no package on disk,
+    #: so every one of its runs is this; a package whose file was renamed or
+    #: deleted is the other. The inline copy is what makes the first work at
+    #: all and is deliberately kept — a document that cannot carry its own
+    #: text stops being self-contained — so this reports the *cost* of that
+    #: rather than asking for it to be removed.
+    #:
+    #: A **report**, not a failure — see `REPORT_ONLY`.
+    SKILL_FROM_SNAPSHOT = "skill_from_snapshot"
+    #: A skill node with its own typed instruction, over a file it also names
+    #: and this run can read, as `(node id, filename)` — `launch-readiness` 94.
+    #:
+    #: The typed text still wins, deliberately: the editor's Markdown card
+    #: lets a developer load a file and then tweak it, and a load that
+    #: discarded the tweak would be 94's defect pointing the other way. What
+    #: is not acceptable is doing it silently — a whole lens hiding behind one
+    #: typed sentence is the same shape one field over, and a package-local
+    #: gate in the wild had already grown a check for exactly it.
+    #:
+    #: A **report**, not a failure — see `REPORT_ONLY`.
+    SKILL_FILE_UNUSED = "skill_file_unused"
 
 
 #: What each finding says, and how many subjects it takes.
@@ -413,6 +459,22 @@ _SENTENCES: dict[Finding, str] = {
         "nothing downstream can tell them apart. Put a guard.check between that step and "
         "this Output, or unbind that capability from the step that writes the answer."
     ),
+    Finding.SKILL_SOURCE_DRIFTED: (
+        'Skill "{0}" stores a copy of "{1}" that no longer matches that file — the run '
+        "used the file, so what this document says the skill contains is out of date. "
+        "Re-save the workflow to store the current text, or clear the file reference to "
+        "make the stored copy the source."
+    ),
+    Finding.SKILL_FROM_SNAPSHOT: (
+        'Skill "{0}" names the file "{1}", which this run could not read — it ran from '
+        "the copy stored in the document instead, so any edit to that file since the "
+        "copy was stored did not reach the model."
+    ),
+    Finding.SKILL_FILE_UNUSED: (
+        'Skill "{0}" has instruction text of its own, so the file "{1}" it names never '
+        "reached the model. Clear that text to use the file, or clear the file "
+        "reference so the document stops naming a source it does not use."
+    ),
 }
 
 
@@ -494,6 +556,21 @@ _SENTENCES: dict[Finding, str] = {
 #: runs, answers, and loses no capability is not one `validate` should exit 1
 #: on — and the fix it asks for is a node the author may deliberately not want.
 #:
+#: The three `SKILL_*` members joined it together in `launch-readiness` 94, and
+#: the argument is `121`'s second one plus a door. Two of them describe a run
+#: that used a *better* source than the document recorded, or the only source
+#: available: nothing was skipped and no capability was lost, and the document
+#: is what is stale. The third describes a deliberate act — typing into the
+#: instruction box over a loaded file is a reasonable thing to author.
+#:
+#: The door is what settles it. `mcp_server.compile_workflow` is stateless and
+#: has no package on disk, so **every** stateless compile of a document that
+#: names a file records `SKILL_FROM_SNAPSHOT`; putting it on the failure side
+#: would exit 1 on a correct run through a supported door, for a condition that
+#: door can never not be in. And a stale stored copy is the ordinary state of a
+#: package between an edit to a skill file and the next save — failing there
+#: would fail a package mid-edit, in CI, over a copy the run did not use.
+#:
 REPORT_ONLY: frozenset[Finding] = frozenset(
     {
         Finding.UNENFORCED_OUTCOME,
@@ -505,6 +582,9 @@ REPORT_ONLY: frozenset[Finding] = frozenset(
         Finding.REPEATED_SIDE_EFFECT,
         Finding.APPROVAL_COMES_TOO_LATE,
         Finding.UNDECLARED_FALLBACK,
+        Finding.SKILL_SOURCE_DRIFTED,
+        Finding.SKILL_FROM_SNAPSHOT,
+        Finding.SKILL_FILE_UNUSED,
     }
 )
 

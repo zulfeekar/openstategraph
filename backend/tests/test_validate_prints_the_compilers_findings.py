@@ -187,4 +187,4 @@ class TestTheClassificationIsReadFromOnePlace:
         """The command derives its two headings from `REPORT_ONLY`, so a new
         member is classified once, in `diagnostics.py`, and not again here."""
         assert REPORT_ONLY < set(Finding)
-        assert len(set(Finding)) == 18
+        assert len(set(Finding)) == 21
