@@ -87,24 +87,27 @@ itself.
 
 ### `POST /api/runs/stream` and `POST /api/runs/resume`
 
-Eight event names. A resumed run is not a different kind of thing from a
-client's point of view — it is the same stream picking back up — so both
-endpoints emit the identical vocabulary and one parser handles both.
+Ten event names, and `started` is always the first. A resumed run is not a
+different kind of thing from a client's point of view — it is the same stream
+picking back up — so both endpoints emit the identical vocabulary and one
+parser handles both.
 
 | Event | Meaning | Payload |
 | --- | --- | --- |
+| `started` | **first** — the run has begun | `threadId`, plus `seq` (always `0`) and `elapsedMs` |
 | `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `interruptible`, `path`, `pathSlugs`, `output`, and `check` with `reason` **only when a grader rejected the candidate without invoking a model**, plus `seq` and `elapsedMs` |
 | `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `block` (`text`/`reasoning`), `usage` (`{inputTokens, outputTokens, totalTokens}` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply**, plus `seq` and `elapsedMs` |
 | `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `detail` (developer only, else `null`), `current`, `total` (both `int` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs`, plus `seq` and `elapsedMs` |
 | `spawn` | the run created a child worker or subagent | `spawnId`, `kind` (`fanout`/`subagent`/`async`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace`, plus `seq` and `elapsedMs` |
+| `invoked` | a node asked an ordinary tool to do something | `node`, `namespace`, `name`, `callId`, `activeNode`, `path`, `pathSlugs`, and `withheld: true` **only when the tool's identity was withheld**, plus `seq` and `elapsedMs` |
 | `settled` | a child the run announced has ended | `spawnId`, `outcome` (`ok`/`error`/`detached`/`unknown`), and `kind`, `parent`, `label`, `taskId`, `namespace` echoed from the `spawn` it closes, plus `seq` and `elapsedMs` |
-| `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate**, plus `check` when that verdict cost no model call, plus `seq` and `elapsedMs` |
-| `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `routes`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run**, plus `seq` and `elapsedMs` |
-| `error` | **terminal** — the run failed | `threadId`, `detail`, plus `seq` and `elapsedMs` |
+| `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate**, plus `check` when that verdict cost no model call, plus `usage`, `seq` and `elapsedMs` |
+| `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `routes`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run**, plus `usage`, `seq` and `elapsedMs` |
+| `error` | **terminal** — the run failed | `threadId`, `detail`, plus `usage`, `seq` and `elapsedMs` |
 
 #### Every frame says when it happened — `seq` and `elapsedMs`
 
-Two fields on all seven, minted by the server as it builds the frame.
+Two fields on all ten, minted by the server as it builds the frame.
 
 `seq` counts from `0` and is dense, so recorded order is recoverable without
 trusting a clock, and a gap is a dropped frame rather than a quiet run.
@@ -125,6 +128,81 @@ opened**, taken from a monotonic clock. Three things it deliberately is not:
 
 Both fields are identical for a customer and a developer: a cadence is not a
 disclosure.
+
+#### The run opens with `started`, and that is where `threadId` comes from
+
+`started` is the first frame of every stream, always `seq: 0`, and it carries
+one thing: the id of the thread this run is happening in.
+
+Take it there rather than waiting for the ending. The three terminal frames
+name the thread too, but a client that only reads it from them learns the id at
+the same moment it learns there is nothing left to watch — and a client whose
+connection drops mid-run never learns it at all, so it cannot reconnect, cannot
+`POST /api/runs/resume` into the same conversation, and cannot look the run up
+in `GET /api/threads`. The server invents a `thread_id` for a request that
+omits one, so the server owes it back at the start.
+
+It carries no separate run id. This runtime identifies a **turn**, not a run,
+and a second identifier beside `threadId` would be a second name for one thing.
+
+It is also the origin `elapsedMs` counts from. Before it existed, the offset
+every other frame carried was measured from an event no client could observe.
+
+#### `invoked` — a tool was asked for, before its answer comes back
+
+A `token` frame with `kind: "tool"` is a tool's **result**. `invoked` is the
+question that produced it, and it arrives when the call is made rather than
+when it returns.
+
+That gap is the whole point. Measured on a workflow whose tool takes eight
+seconds: the six longest silences of a 91-second run were all the same shape —
+a `progress` line, eight seconds of nothing, then a burst of result text.
+Nothing on the wire distinguished that from a model still thinking, a network
+that had stalled, or a run that had hung.
+
+`callId` is the join. The `token` frame carrying that tool's result repeats it
+in `tool.callId`, so a client can pair the two and time the call; there is no
+separate closing frame because that one already exists.
+
+Two things it deliberately never carries:
+
+- **The tool's arguments**, in any form. An argument is routinely an internal
+  id, a path this platform invented, or a credential.
+- **Anything for the four spawning tools.** A `task` or `start_async_task` call
+  is announced as a `spawn`, not here — one tool call never appears twice under
+  two different words.
+
+**A customer's copy is blanked, not withheld.** `name` and `callId` read `""`
+and `withheld: true` rides the frame, exactly as a tool's identity is already
+blanked on a customer's `token` frames. A frame that simply did not exist for a
+customer would make "this audience does not get it" and "no tool ran" the same
+wire shape.
+
+#### `usage` — what the run cost, on every terminal frame
+
+`done`, `interrupt` and `error` all carry `usage`. It is the **whole run's**
+cost, not one message's — a separate question from the `usage` on a `token`
+frame, which is why it is a separate shape: a list with one row per model.
+
+```json
+"usage": [
+  { "model": "gpt-oss:120b-cloud", "inputTokens": 1436, "outputTokens": 86, "totalTokens": 1522 }
+]
+```
+
+A list rather than one number because a run can use more than one model — a
+grader on one provider and an agent on another have two prices, and a single
+total hides that. The numbers are the providers' own, metered across the whole
+turn, so they include model calls whose chunks produced no `token` frame at
+all; a client must not compute this by summing the frames it happened to see.
+
+`error` carries it too, and that is the half most easily skipped: the tokens a
+failed run burned are the ones a reader most wants counted.
+
+**Developer only.** A customer's terminal frame reads `usage: null`, exactly as
+`usage` is `null` on a customer's `token` frames and as `tokens` is `null` on a
+customer's stored run. `[]` is a different answer and a real one — the run
+called no model.
 
 #### `spawn.parent` is a hint, not an address
 

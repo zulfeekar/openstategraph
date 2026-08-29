@@ -140,7 +140,7 @@ class TestTheDecoderReadsBothShapes:
         # over what it cannot read instead of raising through the whole stream.
         events, _ = _frames([{"nonsense": 1}, ((), "updates", {"in1": {}})])
 
-        assert [name for name, _ in events] == ["update", "done"]
+        assert [name for name, _ in events] == ["started", "update", "done"]
 
     def test_the_normaliser_reports_each_shape_the_same_way(self) -> None:
         assert list(_stream_parts(iter([((), "updates", {"a": 1})]))) == [

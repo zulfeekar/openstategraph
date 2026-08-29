@@ -28,6 +28,7 @@ from openstategraph.api.audience import (  # noqa: E402
     DeveloperChannel,
     clean_output as _clean_output,
     redaction_report,
+    run_usage,
     split_suggestion,
     with_capability_notice,
 )
@@ -554,6 +555,65 @@ class SpawnWatcher:
         }
 
 
+class ToolWatcher:
+    """Turns raw `updates` frames into *invocation* events — the moment a node
+    asks an ordinary tool to do something (`memory-and-replay` 55).
+
+    `SpawnWatcher` above reads the same `messages` list for the two tool names
+    in `_SPAWNING_TOOLS`; this reads it for every other one. The two are
+    deliberately disjoint and each other's complement: a `task` call is
+    announced as a *child*, and announcing it here as well would put one tool
+    call on the wire twice under two different words.
+
+    A separate class rather than four more lines inside `SpawnWatcher` because
+    they are separate reasons to change: that one owns the four shapes a run
+    makes a child in, and closes each one; this one owns "a tool was asked for"
+    and closes nothing, because the close already exists — a tool's result
+    arrives as a `token` frame carrying the `callId` this watcher reports.
+
+    ## What it is worth, measured
+
+    `stress-review` on `ollama:gpt-oss:120b-cloud` with `service_registry`
+    slowed to 8 s (2026-08-29): 680 frames, and the six longest silences of the
+    91-second run were all the same shape — the agent's narration line, **8.0
+    seconds of nothing**, then the result. The `updates` frame this reads
+    arrives at the *start* of that window, because it is the agent's internal
+    `model` step completing with the tool call in its message. On the same
+    workflow with the tool at its real speed the window is ~5 ms, which is the
+    honest answer there and costs one frame.
+
+    Stateful only in the "have I announced this call before" sense — LangGraph
+    replays a node's message list on more than one update frame, and an agent
+    that loops sees its own earlier calls again — so one instance lives exactly
+    as long as one run.
+    """
+
+    def __init__(self) -> None:
+        self._announced: set[str] = set()
+
+    def inspect(self, update: dict[str, Any]) -> list[tuple[str, str]]:
+        """`(name, call_id)` for every ordinary tool call this frame reveals.
+
+        Tolerant in reading, strict in trusting: any message shape
+        `_tool_calls_of` can decode is accepted, and a call with no name is
+        still dropped — a frame announcing a tool nobody can name is a row a
+        reader cannot act on.
+        """
+        found: list[tuple[str, str]] = []
+        for message in update.get("messages") or []:
+            for call in _tool_calls_of(message):
+                name = str(call.get("name") or "")
+                if not name or name in _SPAWNING_TOOLS:
+                    continue
+                call_id = str(call.get("id") or "")
+                if call_id:
+                    if call_id in self._announced:
+                        continue
+                    self._announced.add(call_id)
+                found.append((name, call_id))
+        return found
+
+
 class ActiveNodeResolver:
     """Which **canvas** node is honestly executing, frame by frame.
 
@@ -1047,7 +1107,24 @@ def _sse(event: str, data: dict[str, Any]) -> str:
 #: `settled` sits beside `spawn` for the same reason `progress` sits beside
 #: `token`: it is the *other* end of a child, and a run whose last frame was a
 #: child finishing is a run still going.
-PROGRESS_EVENTS: tuple[str, ...] = ("update", "token", "progress", "spawn", "settled")
+#: `invoked` sits beside them for the third time, and a measurement is the
+#: argument rather than a symmetry: on `stress-review` with its tool slowed to
+#: 8 s, the six longest silences in a 91-second run were all one shape — a
+#: narration line, eight seconds of nothing, then a burst of result text. This
+#: is the frame that opens that window (`memory-and-replay` 55).
+PROGRESS_EVENTS: tuple[str, ...] = (
+    "update", "token", "progress", "spawn", "settled", "invoked",
+)
+
+#: The event name that **opens** a stream — its own category, not a third
+#: reading of one of the two beside it (`memory-and-replay` 53).
+#:
+#: It is not progress: the tuple above says *"the event names that report
+#: progress"*, and an announcement that a run has begun reports none. It is
+#: obviously not terminal. Folding it into either would have been the cheaper
+#: move and would have left one of those two docstrings a rule with an
+#: exception in it — the shape `54` refused for `settled`.
+OPENING_EVENTS: tuple[str, ...] = ("started",)
 
 #: The event names that *end* a stream. Exactly one of these is the last
 #: frame of every stream that lives long enough to send one — see
@@ -1060,7 +1137,7 @@ TERMINAL_EVENTS: tuple[str, ...] = ("done", "interrupt", "error")
 #: prove the page still describes every frame this code can emit. OpenAPI
 #: cannot express any of it (see `api/openapi_document.py`), so the prose is
 #: the contract and a drift there is a broken client, not a typo.
-RUN_EVENTS: tuple[str, ...] = PROGRESS_EVENTS + TERMINAL_EVENTS
+RUN_EVENTS: tuple[str, ...] = OPENING_EVENTS + PROGRESS_EVENTS + TERMINAL_EVENTS
 
 #: What each frame carries **of its own** — the vocabulary one level below the
 #: names. `FRAME_FIELDS` below is this plus the clock every frame gets from
@@ -1087,6 +1164,12 @@ RUN_EVENTS: tuple[str, ...] = PROGRESS_EVENTS + TERMINAL_EVENTS
 #: emptied, and `developer` only a developer run, but a client has to know
 #: they exist to handle them. Absence is a value here, not a gap.
 _PAYLOAD_FIELDS: dict[str, tuple[str, ...]] = {
+    # The run has begun (`memory-and-replay` 53). First on the wire, `seq: 0`,
+    # and `threadId` is the whole payload: this installation identifies a
+    # *turn*, not a run (`run_identity.py`), so there is no `runId` to carry
+    # and inventing one is how `taskId` nearly became this map's third
+    # homonym. A field is easy to add later and impossible to remove.
+    "started": ("threadId",),
     "update": (
         "node", "namespace", "taskId", "internal",
         "activeNode", "path", "pathSlugs", "output",
@@ -1119,6 +1202,31 @@ _PAYLOAD_FIELDS: dict[str, tuple[str, ...]] = {
     "spawn": (
         "spawnId", "kind", "parent", "label", "instruction", "taskId", "namespace",
     ),
+    # An ordinary tool was called (`memory-and-replay` 55) — the invocation
+    # vocabulary this stream had no word for, next to the *result* vocabulary
+    # it always had (`token` with `kind: "tool"`).
+    #
+    # **Its own kind rather than `spawn` with `kind: "tool"`.** That would have
+    # been cheaper — no new name, and `settled` would have closed it for free —
+    # and it would have made "the run created a child worker or subagent"
+    # describe a SQL query. `loop`, `template` and `taskId` are three words
+    # this repository has had to un-collide; a fourth bought for one saved enum
+    # value is not a saving.
+    #
+    # **And no close frame, because the other end is already on the wire.**
+    # `54` needed `settled` because a `subagent` and an `async` child produce
+    # no frames at all; a tool's result arrives as a `token` frame carrying the
+    # very `callId` this one mints. A second ending would be the duplication
+    # `54` refused and would double the frames measured on the live run.
+    #
+    # **Never an argument.** AG-UI streams `TOOL_CALL_ARGS` deltas; an argument
+    # here is a lens id the reader never met, a path this platform invented, or
+    # a credential — `abc/tool_sentences.py` reaches the same conclusion from
+    # the other side and states the rule outright.
+    "invoked": (
+        "node", "namespace", "name", "callId",
+        "activeNode", "path", "pathSlugs", "withheld",
+    ),
     # The other end of the bar (`memory-and-replay` 54). `spawnId` joins it to
     # the `spawn` frame; `outcome` is one of `SPAWN_OUTCOMES`; the rest is
     # echoed from the open frame so a reader that does not join can still
@@ -1126,12 +1234,23 @@ _PAYLOAD_FIELDS: dict[str, tuple[str, ...]] = {
     "settled": (
         "spawnId", "kind", "parent", "label", "taskId", "namespace", "outcome",
     ),
-    "interrupt": ("threadId", "node", "message", "candidate", "verdict", "reason", "check"),
+    # `usage` rides all three terminal frames and not two (`memory-and-replay`
+    # 56). AG-UI puts it on `RUN_FINISHED` and `RUN_ERROR`; we have a third,
+    # because a paused run is a real checkpoint here and not a finished run —
+    # and it has been paid for like the other two. "The terminal frame carries
+    # the cost, except that one" is the rule with an exception in it that `54`
+    # refused. `null` for a customer, `[]` for a run that called no model, one
+    # row per model otherwise — see `audience.run_usage`.
+    "interrupt": (
+        "threadId", "node", "message", "candidate", "verdict", "reason", "check",
+        "usage",
+    ),
     "done": (
         "threadId", "answer", "decisions", "routes", "outputs",
         "nested", "attempts", "mermaid", "developer", "publishedRejected",
+        "usage",
     ),
-    "error": ("threadId", "detail"),
+    "error": ("threadId", "detail", "usage"),
 }
 
 #: What each frame **actually carries** — the payload table above plus the two
@@ -1413,6 +1532,31 @@ async def _stream_run(
     # sentence in the browser cannot disagree — they are the same field.
     cancellable = False
     stream = frames.__aiter__()
+    # **The run has begun** (`memory-and-replay` 53). `seq: 0`, and the first
+    # thing any client receives: `threadId` used to reach a reader only on a
+    # *terminal* frame — measured live on `stress-review`, frame **377 of
+    # 377** — so a connection that dropped at 300 lost the id of the thread it
+    # was watching and could neither resume it nor look it up.
+    #
+    # **Minted here and yielded below, which is not a style choice.**
+    # Everything before an async generator's first `yield` runs in the task
+    # that made the first pull, and `run_turn` above binds LangChain's token
+    # meter with a `ContextVar` in exactly that task — while `graph.astream`
+    # is created on whichever resumption first reaches it. Suspending here to
+    # yield put those two in *different* tasks, and a task runs on a copy of
+    # the context that created it, so the meter was invisible to every model
+    # call the run made. Caught on a live `stress-review` run rather than by a
+    # test: `done.usage` came back `[]` beside 247 token frames, and the run
+    # row recorded `{}` where the two runs before this ticket recorded 23,664
+    # and 25,445 tokens. It is `launch-readiness/108`'s finding one floor up —
+    # same mechanism, a different `ContextVar` — and the cure is to mint the
+    # frame without suspending and hand it over on the far side of the first
+    # pull.
+    #
+    # Minting here is also what makes it `seq: 0`, which is what finally gives
+    # `46`'s relative clock an origin somebody can observe.
+    bind_frame_clock(clock)
+    opening: str | None = _sse("started", {"threadId": thread_id})
     try:
         while True:
             # This resumption's context is not the previous one's — see
@@ -1426,6 +1570,14 @@ async def _stream_run(
                 frame = await stream.__anext__()
             except StopAsyncIteration:
                 break
+            if opening is not None:
+                # Still before every other frame, and now on the far side of
+                # the pull that started the graph. One of three places this is
+                # done — the error handler and the no-terminal-frame fallback
+                # are the others, because a run that produced nothing at all
+                # still has to say which thread it was.
+                yield opening
+                opening = None
             if _is_terminal(frame):
                 # Before the ending, never after it: a client that stops
                 # reading at the terminal frame — which the protocol entitles
@@ -1585,9 +1737,28 @@ async def _stream_run(
             # after a yield is built in somebody else's context.
             bind_frame_clock(clock)
             closes = [_sse("settled", close) for close in spawns.abandoned()]
+            if opening is not None:
+                # A run that died before producing one frame still says which
+                # thread it died in — the sharpest form of the gap 53 closes.
+                yield opening
+                opening = None
             for close in closes:
                 yield close
-            yield _sse("error", {"threadId": thread_id, "detail": detail})
+            # What the run had already spent when it died (`memory-and-replay`
+            # 56), and this is the half of that ticket most easily skipped: an
+            # `error` frame carried `threadId` and `detail` and nothing else,
+            # so the tokens a failed run burned — the ones a reader most wants
+            # counted — were unrecoverable from the wire. Read off the turn
+            # while it is still open; `turn_stack.close()` is in the `finally`
+            # below, and LangChain's callback clears its context on exit.
+            yield _sse(
+                "error",
+                {
+                    "threadId": thread_id,
+                    "detail": detail,
+                    "usage": run_usage(turn.spent(), audience),
+                },
+            )
         return
     finally:
         # Not left to refcounting: under a stop the checkpointer/DB handles
@@ -1615,11 +1786,20 @@ async def _stream_run(
         logger.error(
             "run stream for thread_id=%s ended without a terminal frame", thread_id
         )
+        if opening is not None:
+            yield opening
+            opening = None
         yield _sse(
             "error",
             {
                 "threadId": thread_id,
                 "detail": "The run ended without reporting a result.",
+                # Unreachable by design, and still priced: a client reading
+                # `usage` unconditionally off a terminal frame must not meet
+                # the one terminal frame that omits it (`memory-and-replay`
+                # 56). The turn is closed by now, so `spent()` reads empty —
+                # which is the honest answer for a run nobody can account for.
+                "usage": run_usage({}, audience),
             },
         )
 
@@ -1697,6 +1877,13 @@ async def _run_frames(
     # terminal path, and it is the one that has to close the lanes this fold
     # left open. A caller driving the fold directly gets its own.
     spawns = spawns if spawns is not None else SpawnWatcher(node_ids_by_name)
+    # The ordinary tool calls this run announces (`memory-and-replay` 55).
+    # Owned **here** and not by `_stream_run`, unlike the spawn watcher above,
+    # and the difference is the reason that one had to move: a lane left open
+    # has to be closed on every terminal path, and this watcher opens no lane.
+    # A tool's ending is already on the wire — the `token` frame carrying the
+    # `callId` this mints — so there is nothing for a sweep to do.
+    tools = ToolWatcher()
     active = ActiveNodeResolver(node_ids_by_name)
     # Which of this graph's nodes a stop actually cancels, in canvas ids,
     # resolved once per run rather than per frame (`async-first/07`). Asked of
@@ -2119,6 +2306,43 @@ async def _run_frames(
                             or "",
                         }
                     update_active = active.resolve(node_id, namespace)
+                    # A tool was asked for (`memory-and-replay` 55). Before the
+                    # `update` frame, like the spawn moment above and for the
+                    # same reason: the call happened *during* the step this
+                    # frame reports, so a reader that renders in arrival order
+                    # sees the ask before the answer.
+                    #
+                    # A customer's copy is blanked rather than withheld. A
+                    # tool's NAME is its own leak (ticket 25 — QA read
+                    # `music_store` on the customer surface), and its arguments
+                    # are worse, so neither crosses; but a frame that simply
+                    # did not exist for a customer would make "this audience
+                    # does not get it" and "no tool ran" one wire shape, and
+                    # would break `46`'s pin that a customer's frames are
+                    # numbered exactly as a developer's. `withheld` is the word
+                    # this stream already uses for the difference, on the
+                    # `token` frame that carries the same tool's result.
+                    tool_withheld = audience is not Audience.DEVELOPER
+                    for tool_name, call_id in tools.inspect(update):
+                        yield _sse(
+                            "invoked",
+                            {
+                                "node": node_id,
+                                "namespace": list(namespace),
+                                "name": "" if tool_withheld else tool_name,
+                                "callId": "" if tool_withheld else call_id,
+                                # Carried for the reason a `token` frame
+                                # carries them: this is a frame that arrives
+                                # while a node is still working, so it is one
+                                # of the few that can move a canvas highlight
+                                # — and an editor showing a mounted child
+                                # needs the whole path to place it.
+                                "activeNode": update_active,
+                                "path": update_path,
+                                "pathSlugs": update_slugs,
+                                **({"withheld": True} if tool_withheld else {}),
+                            },
+                        )
                     yield _sse(
                         "update",
                         {
@@ -2459,6 +2683,13 @@ async def _run_frames(
         yield _sse(
             "interrupt",
             {
+                # A paused run has been paid for too (`memory-and-replay` 56).
+                # AG-UI names the cost on `RUN_FINISHED` and `RUN_ERROR` and
+                # has no third terminal event; we do, because `interrupt` is a
+                # real LangGraph checkpoint here rather than a finished run —
+                # and "the terminal frame carries the cost, except that one" is
+                # a rule with an exception in it.
+                "usage": run_usage(turn.spent(), audience),
                 "threadId": thread_id,
                 "node": paused[0] if paused else "",
                 "message": (payload_value or {}).get("message", "Approval needed"),
@@ -2636,6 +2867,22 @@ async def _run_frames(
             # The grader's reason stays inside `channel.payload`'s
             # `developer` block; this is only whether it happened.
             "publishedRejected": health.published_rejected,
+            # What the run cost, per model (`memory-and-replay` 56). A
+            # **measurement**, not a sum of the `token` frames a client
+            # happened to see: `run_turn` has been inside LangChain's
+            # `get_usage_metadata_callback` for the whole turn, so these are
+            # the provider's own numbers and they include model calls whose
+            # chunks never produced a frame at all.
+            #
+            # A top-level key rather than one more entry in `developer`, even
+            # though that block is already gated and would have cost nothing.
+            # `error` has no such block and cannot grow one there — it is built
+            # in an exception handler with no `DeveloperChannel` in scope — so
+            # `developer.usage` here would have meant two spellings of one fact
+            # on the two terminal frames, which is exactly the shape `54`
+            # refused when it declined to copy a child's result. One key, three
+            # frames, `null` for a customer, read unconditionally.
+            "usage": run_usage(turn.spent(), audience),
             **channel.payload(audience),
         },
     )

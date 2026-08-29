@@ -272,9 +272,35 @@ here to catch it growing for a different reason.
 STREAMING = """
 SSE framing and the stream fold — itself the product of a split
 (reviews-2026-08-14 ticket 72), which is why its docstring is one line while
-the file is 959 code lines. It already has four collaborators beside it that
+the file is 1026 code lines. It already has four collaborators beside it that
 used to be inside it: `burst_recorder.py`, `frame_clock.py`, `audience.py` and
 `diagram.py`.
+
+**959 → 1026 (`memory-and-replay` 53/55/56), and the growth was spent on the
+vocabulary rather than on the fold.** Two frame kinds joined it — `started`,
+which opens every stream, and `invoked`, which says an ordinary tool was asked
+for — and `usage` joined the three terminal frames. Roughly half of the
+addition is the declaration and its argument in `_PAYLOAD_FIELDS`, which is
+where a frame's contract is supposed to be written down; the executable half is
+`ToolWatcher` (35 lines) and three emitters of a dozen lines each.
+
+Nine of those lines are the opening frame being handed over on the *far side*
+of the first pull rather than before it, in three places — the loop, the error
+handler and the no-terminal-frame fallback. It reads like ceremony and is not:
+everything before an async generator's first `yield` runs in the task that made
+the first pull, so suspending earlier moved the turn's token meter into a
+different task from `graph.astream` and stopped the run's cost being counted at
+all. Caught live, and pinned twice in
+`test_a_run_says_when_it_starts.py`.
+
+**`ToolWatcher` is where a split was available and was taken.** It reads the
+same `messages` list `SpawnWatcher` does, and four more lines inside that class
+would have been the cheaper edit; they are separate reasons to change — one
+owns the four shapes a run makes a child in and closes each of them, the other
+owns "a tool was asked for" and closes nothing — so it is a second class rather
+than a second responsibility. The audience-gated half went to `audience.py`
+(`run_usage`) for the same reason: that module is the seam that owns what a
+customer may not see.
 
 The bulk that remains is the fold: one long walk over LangGraph's event stream
 turning astream events into our frames, plus the per-frame branching that
@@ -458,7 +484,7 @@ RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(569, NODE_RUNTIME),
     "cli.py": Recorded(1102, CLI),
     "compile/workflow_compiler.py": Recorded(890, WORKFLOW_COMPILER),
-    "api/streaming.py": Recorded(959, STREAMING),
+    "api/streaming.py": Recorded(1026, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(698, MCP_SERVER),
     "api/routes/workflows.py": Recorded(551, ROUTES_WORKFLOWS),

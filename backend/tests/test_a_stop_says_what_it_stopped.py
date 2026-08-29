@@ -193,6 +193,11 @@ def _stop_after_one(chunks, caplog):
             "t1",
         )
     )
+    # Two pulls. The first hands over the `started` frame
+    # (`memory-and-replay` 53) — the fold suspends there, before the frame it
+    # just pulled has been read for `interruptible`, so the log line this
+    # helper is about is only decided on the second.
+    frames.next()
     frames.next()
     with caplog.at_level("INFO", logger="openstategraph.api.streaming"):
         frames.close()

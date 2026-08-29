@@ -1402,7 +1402,21 @@ async function stream(path, body, el, signal) {
         else if (line.startsWith("data: ")) {
           const d = JSON.parse(line.slice(6));
           if (d && typeof d.interruptible === "boolean") cancellable = d.interruptible;
-          if (event === "update") {
+          if (event === "started") {
+            // The run has begun, and it names the thread it is in
+            // (`memory-and-replay` 53). This page mints its own thread id and
+            // sends it, so most of the time this is an echo — but not always:
+            // a resume sends whatever the `interrupt` frame named, and a
+            // request that omits the id gets one the *server* invents. Before
+            // this frame the only place that id was ever disclosed was a
+            // terminal frame, so a run that dropped halfway took the
+            // conversation with it. The server is authoritative; take its
+            // answer at the start rather than hoping to reach the end.
+            if (d.threadId && state.workflow) {
+              state.threads[state.workflow] = d.threadId;
+              localStorage.setItem("openstategraph.threads", JSON.stringify(state.threads));
+            }
+          } else if (event === "update") {
             const now = performance.now();
             tlRows.push({ node: d.node, taskId: d.taskId ?? null, internal: !!d.internal, namespace: d.namespace || [], owner: frameOwner(d), ms: now - lastFrameAt });
             lastFrameAt = now;
@@ -1519,6 +1533,20 @@ async function stream(path, body, el, signal) {
             // a double marker — caught on a live `cpl-mcp` run.
             liveLine((d.message || displayName(d.node)) + count);
             el.scrollIntoView({ block: "end" });
+          } else if (event === "invoked") {
+            // A tool was asked for and has not answered yet
+            // (`memory-and-replay` 55). It moves the flow marker for the same
+            // reason `progress` above does — it is one of the frames that
+            // arrive while a node is still running, and on a slow tool it is
+            // the one at the front of the silence.
+            //
+            // No row of its own. `name` and `callId` are blank for this
+            // page's audience by design (a tool's name is its own
+            // disclosure), so a row here could only ever say "a tool" — which
+            // is what the narration line above already says, in better words.
+            // What the tool returns arrives as a `token` frame carrying the
+            // same `callId`, and that is what a reader actually reads.
+            highlightFlow(d.activeNode || d.node);
           } else if (event === "spawn") {
             // The moment the run created a child worker or subagent. A row of
             // its own, never a tick on the previous step's internal counter:

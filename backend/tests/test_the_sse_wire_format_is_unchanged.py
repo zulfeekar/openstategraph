@@ -49,7 +49,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import ScriptedGraph, drive_fold  # noqa: E402
 
 from openstategraph.api.audience import Audience  # noqa: E402
-from openstategraph.api.streaming import RUN_EVENTS, _stream_run  # noqa: E402
+from openstategraph.api.streaming import (  # noqa: E402
+    RUN_EVENTS,
+    TERMINAL_EVENTS,
+    _stream_run,
+)
 from openstategraph.compile.diagnostics import CompileDiagnostics  # noqa: E402
 
 GOLDEN = Path(__file__).parent / "data" / "sse_wire_format_golden.json"
@@ -179,7 +183,31 @@ ADDED_SINCE_THE_GOLDEN = {
     # terminal frame alone, beside `decisions`, which could only ever carry
     # the one label the graph dispatched on.
     "routes": ("done",),
+    # `memory-and-replay` 56: what the whole run cost, per model. Scoped to the
+    # three terminal frames and not named bare, because `token` has carried a
+    # `usage` of its own — one message's cost — since before the golden, and
+    # this table exists precisely so one word on two frames cannot be stripped
+    # from both by accident.
+    "usage": TERMINAL_EVENTS,
 }
+
+#: Whole frame *kinds* added since the golden was captured — a different claim
+#: from the field table above, and it needs its own one.
+#:
+#: A field arrives on a frame the golden already holds, so stripping it leaves
+#: a frame to compare. A new kind arrives as a frame the golden has no row for
+#: at all, and nothing in `ADDED_SINCE_THE_GOLDEN` could express that: the
+#: golden would simply be short by one, with no way to say which one or why.
+#:
+#: `memory-and-replay` 53 is the first. `started` opens every stream and
+#: carries the thread id at the beginning of a run rather than at the end,
+#: which is a frame no capture taken before it could contain.
+#:
+#: `invoked` (`memory-and-replay` 55) is deliberately **absent**: this run
+#: scripts no tool call, so it emits none, and listing a kind that never
+#: appears would make this table a wish list rather than a record. A future
+#: edit that scripts one fails here, which is the correct place to decide it.
+ADDED_FRAMES_SINCE_THE_GOLDEN = ("started",)
 
 #: The same table, one level down — keys added to the `done` frame's
 #: **`developer` object** since the golden was captured.
@@ -218,6 +246,8 @@ def _without_additions(frames: list[str]) -> list[str]:
     trimmed = []
     for frame in frames:
         head, _, body = frame.partition("\ndata: ")
+        if head[len("event: ") :] in ADDED_FRAMES_SINCE_THE_GOLDEN:
+            continue
         if not body:
             trimmed.append(frame)
             continue
@@ -242,20 +272,47 @@ def test_a_customers_stream_is_byte_for_byte_what_it_was() -> None:
     assert _without_additions(_frames(Audience.CUSTOMER)) == _golden()["customer"]
 
 
+def _fields_by_frame(frames: list[str]) -> set[tuple[str, str]]:
+    """Every `(frame kind, field)` pair across `frames`.
+
+    **Pairs, not bare names**, and `memory-and-replay` 56 is why. The stripper
+    above has been frame-scoped since `launch-readiness/163` for exactly this
+    reason — *"a bare name is ambiguous the moment two frames use the same
+    word"* — and this guard was not, so it could only see a field that was new
+    to the *whole wire*. `usage` is the counter-example that found it: it has
+    ridden `token` since before the golden, so its arrival on the terminal
+    frames subtracted to nothing and would have passed unnamed, which is the
+    single thing this test exists to prevent.
+    """
+    found: set[tuple[str, str]] = set()
+    for frame in frames:
+        head, _, body = frame.partition("\ndata: ")
+        kind = head[len("event: ") :]
+        for field in json.loads(body.rstrip("\n")):
+            found.add((kind, field))
+    return found
+
+
 def test_the_only_addition_since_the_golden_is_named() -> None:
     """Nothing may join the wire without a line in `ADDED_SINCE_THE_GOLDEN`."""
-    golden_fields = {
-        field
-        for frame in _golden()["developer"] + _golden()["customer"]
-        for field in json.loads(frame.partition("\ndata: ")[2].rstrip("\n"))
+    golden = _fields_by_frame(_golden()["developer"] + _golden()["customer"])
+    live = {
+        pair
+        for pair in _fields_by_frame(_frames(Audience.DEVELOPER) + _frames(Audience.CUSTOMER))
+        if pair[0] not in ADDED_FRAMES_SINCE_THE_GOLDEN
     }
-    live_fields = {
-        field
-        for frame in _frames(Audience.DEVELOPER) + _frames(Audience.CUSTOMER)
-        for field in json.loads(frame.partition("\ndata: ")[2].rstrip("\n"))
+    # The table, read as pairs and narrowed to the kinds this scripted run
+    # actually emits: a field declared for `interrupt` says nothing here,
+    # because this run finishes.
+    kinds_seen = {kind for kind, _ in live}
+    named = {
+        (kind, field)
+        for field, kinds in ADDED_SINCE_THE_GOLDEN.items()
+        for kind in kinds
+        if kind in kinds_seen
     }
 
-    assert live_fields - golden_fields == set(ADDED_SINCE_THE_GOLDEN)
+    assert live - golden == named
 
     golden_channel = _channel_fields(_golden()["developer"] + _golden()["customer"])
     live_channel = _channel_fields(_frames(Audience.DEVELOPER) + _frames(Audience.CUSTOMER))

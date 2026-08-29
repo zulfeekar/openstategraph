@@ -86,7 +86,7 @@ interface Recorded {
 
 const RECORDED: Readonly<Record<string, Recorded>> = {
   'view/ask/AskPanel.tsx': {
-    lines: 914,
+    lines: 922,
     reason: `The largest module under \`src/\` and the one the ticket named: the counterpart
       of \`node_runtime.py\` with no split ticket behind it at all. Eight hundred and
       eighty-nine code lines out of 2,237 physical — the rest is JSX structure, imports and
@@ -112,10 +112,20 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       one-line row update became a six-line object literal, because a closed
       spawn row now carries \`settledMs\` as well as \`outcome\` — the other end
       of a child lane's bar. No new reason to change: it is the same handler
-      writing one more field of the same frame.`,
+      writing one more field of the same frame.
+
+      **914 -> 922** (\`memory-and-replay/53\` and \`/55\`). Two branches on the
+      same \`onEvent\` chain this module already owns. \`started\` calls the
+      \`remember\` this file already had — every other call to it sits on a
+      terminal path, so a run that dropped halfway took the conversation with
+      it — and \`invoked\` moves the glow exactly as the \`progress\` branch
+      three lines below it does, for the reason written there: it is one of the
+      frames that arrive while a node is still working. Neither adds a reason to
+      change; both are the transcript seam this entry has been asking somebody
+      to take.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 649,
+    lines: 700,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -145,7 +155,17 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       query through \`URLSearchParams\` and names \`audience=developer\`, because
       \`GET /api/threads/{id}\` now defaults to a customer's view of a stored
       run. Two lines, and no behaviour: it is the same request, saying who is
-      making it.`,
+      making it.
+
+      **649 -> 700** (\`memory-and-replay/53\`, \`/55\`, \`/56\`), and this is the
+      entry's own argument arriving as a bill. Two frame kinds joined the
+      published vocabulary — \`started\` and \`invoked\` — and \`usage\` joined the
+      three terminal shapes; almost all fifty-one lines are **declared members
+      of the union and their documentation**, which is precisely the practice
+      the paragraph above says this measure charges for. The behaviour added is
+      two \`else if\` branches in \`consumeFrame\` and one \`asRunUsage\` reader,
+      and the physical count moved by more than the code count, which is the
+      shape this number exists to distinguish from behaviour arriving.`,
   },
 };
 

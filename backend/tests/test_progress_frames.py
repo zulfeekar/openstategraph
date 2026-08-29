@@ -163,7 +163,7 @@ class TestTheChannelIsShared:
     def test_someone_elses_custom_data_produces_no_frame(self) -> None:
         events, _ = _frames([_custom({"deepagents": {"todo": "…"}}), _custom("a bare string")])
 
-        assert [n for n, _ in events] == ["done"]
+        assert [n for n, _ in events] == ["started", "done"]
 
     def test_a_malformed_report_is_skipped_rather_than_fatal(self) -> None:
         # A tool is third-party code; a bad payload costs its own frame and
@@ -175,7 +175,7 @@ class TestTheChannelIsShared:
             ]
         )
 
-        assert [n for n, _ in events] == ["progress", "done"]
+        assert [n for n, _ in events] == ["started", "progress", "done"]
 
     def test_reading_a_report_off_a_payload_is_total(self) -> None:
         assert progress_report({PROGRESS_KEY: {"message": "hi"}}).message == "hi"
