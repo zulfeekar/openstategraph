@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "name": "Ghost Mount",
+  "published": false,
+  "savedAt": "2026-08-29T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Ghost Mount",
+    "settings": {
+      "purpose": "Smallest document in which a matchMode:all router opens two desks that each answer. What reaches the caller, and what does the caller learn about the other one?"
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Question",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 300
+        }
+      },
+      {
+        "id": "router",
+        "type": "route.classifier",
+        "title": "Two desks",
+        "data": {
+          "matchMode": "all",
+          "fallback": "cost",
+          "branches": [
+            {
+              "id": "b1",
+              "name": "cost"
+            },
+            {
+              "id": "b2",
+              "name": "risk"
+            }
+          ],
+          "rules": "Send anything about money, price or budget to 'cost'. Send anything about danger, failure or safety to 'risk'. A question about both must go to both.",
+          "rulesMode": "extend"
+        },
+        "position": {
+          "x": 340,
+          "y": 300
+        }
+      },
+      {
+        "id": "costdesk",
+        "type": "agent.llm",
+        "title": "Cost desk",
+        "data": {
+          "systemPrompt": "Answer only the cost side of the question, in exactly one sentence beginning 'COST:'. Ignore every other aspect."
+        },
+        "position": {
+          "x": 660,
+          "y": 180
+        }
+      },
+      {
+        "id": "riskdesk",
+        "type": "agent.llm",
+        "title": "Risk desk",
+        "data": {
+          "systemPrompt": "Answer only the risk side of the question, in exactly one sentence beginning 'RISK:'. Ignore every other aspect."
+        },
+        "position": {
+          "x": 660,
+          "y": 420
+        }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Cost answer",
+        "data": {},
+        "position": {
+          "x": 1000,
+          "y": 180
+        }
+      },
+      {
+        "id": "out2",
+        "type": "output.formatted",
+        "title": "Risk answer",
+        "data": {},
+        "position": {
+          "x": 1000,
+          "y": 420
+        }
+      },
+      {
+        "id": "m1",
+        "type": "workflow.subgraph",
+        "title": "Ghost",
+        "data": {
+          "workflow": "no-such-package"
+        },
+        "position": {
+          "x": 1300,
+          "y": 180
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "router",
+          "portId": "question"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router",
+          "portId": "branch:b1"
+        },
+        "target": {
+          "nodeId": "costdesk",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router",
+          "portId": "branch:b2"
+        },
+        "target": {
+          "nodeId": "riskdesk",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "riskdesk",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out2",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "costdesk",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "m1",
+          "portId": "input"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "m1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      }
+    ]
+  }
+}

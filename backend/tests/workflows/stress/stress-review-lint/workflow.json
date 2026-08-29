@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "name": "Change Policy Lint",
+  "published": false,
+  "savedAt": "2026-08-29T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Change Policy Lint",
+    "settings": {
+      "purpose": "The innermost level. One agent reads the written change policy through a package tool and reports which clauses a proposed change trips."
+    },
+    "nodes": [
+      { "id": "in1", "type": "input.text", "title": "Change", "data": {}, "position": { "x": 40, "y": 200 } },
+      { "id": "policy", "type": "tool.change-policy", "title": "Change policy", "data": {}, "position": { "x": 340, "y": 380 } },
+      {
+        "id": "linter",
+        "type": "agent.llm",
+        "title": "Policy linter",
+        "data": {
+          "systemPrompt": "You check a proposed production change against the written change policy.\n\nAlways call the change_policy tool with 'all' before answering. Never quote a clause you have not read from the tool, and never invent a clause id.\n\nAnswer as a list. One line per clause that the change trips, in the form 'CP-n: <why, in one sentence, naming the fact in the change that trips it>'. If no clause is tripped, answer exactly 'No clause tripped.' and nothing else. Do not summarise the change and do not give advice."
+        },
+        "position": { "x": 340, "y": 200 }
+      },
+      { "id": "out1", "type": "output.formatted", "title": "Findings", "data": {}, "position": { "x": 700, "y": 200 } }
+    ],
+    "edges": [
+      { "source": { "nodeId": "in1", "portId": "text" }, "target": { "nodeId": "linter", "portId": "prompt" } },
+      { "source": { "nodeId": "policy", "portId": "tool" }, "target": { "nodeId": "linter", "portId": "tools" } },
+      { "source": { "nodeId": "linter", "portId": "result" }, "target": { "nodeId": "out1", "portId": "result" } }
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "name": "Change Audit",
+  "published": false,
+  "savedAt": "2026-08-29T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Change Audit",
+    "settings": {
+      "purpose": "The middle level. It mounts the policy lint and turns its clause list into an audit verdict, so the top document is three levels above a tool call."
+    },
+    "nodes": [
+      { "id": "in1", "type": "input.text", "title": "Report", "data": {}, "position": { "x": 40, "y": 200 } },
+      {
+        "id": "mount-lint",
+        "type": "workflow.subgraph",
+        "title": "Policy lint",
+        "data": { "workflow": "stress-review-lint" },
+        "position": { "x": 360, "y": 200 }
+      },
+      {
+        "id": "auditor",
+        "type": "agent.llm",
+        "title": "Auditor",
+        "data": {
+          "systemPrompt": "You are given a list of change-policy clauses that a proposed change trips, produced by a policy linter.\n\nWrite a verdict of at most four lines:\nLine 1 must be exactly one of 'VERDICT: block', 'VERDICT: proceed with conditions', 'VERDICT: proceed'.\nThe remaining lines name each clause id you were given and, for each, the one condition that would clear it.\n\nNever introduce a clause id that was not given to you. If you were given 'No clause tripped.', answer 'VERDICT: proceed' and nothing else."
+        },
+        "position": { "x": 700, "y": 200 }
+      },
+      { "id": "out1", "type": "output.formatted", "title": "Verdict", "data": {}, "position": { "x": 1040, "y": 200 } }
+    ],
+    "edges": [
+      { "source": { "nodeId": "in1", "portId": "text" }, "target": { "nodeId": "mount-lint", "portId": "input" } },
+      { "source": { "nodeId": "mount-lint", "portId": "result" }, "target": { "nodeId": "auditor", "portId": "prompt" } },
+      { "source": { "nodeId": "auditor", "portId": "result" }, "target": { "nodeId": "out1", "portId": "result" } }
+    ]
+  }
+}
