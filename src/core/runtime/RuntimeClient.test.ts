@@ -1214,7 +1214,7 @@ describe('RuntimeClient — past runs', () => {
       }),
     );
     const result = await new RuntimeClient('', stub.fetch).pastRun('t-1');
-    expect(stub.calls[0]).toBe('/api/threads/t-1');
+    expect(stub.calls[0]).toBe('/api/threads/t-1?audience=developer');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.run.threadId).toBe('t-1');
@@ -1222,10 +1222,20 @@ describe('RuntimeClient — past runs', () => {
     expect(result.value.steps[1]?.values['answer']).toBe('x');
   });
 
+  it('asks for the developer view, because the editor is the author', async () => {
+    // `the-boundary-nobody-checked/02`: the endpoint defaults to `customer`,
+    // and a History lane with no tool calls and no token counts is an empty
+    // lane. Asked for explicitly; the server's ceiling still decides.
+    const stub = stubFetch(jsonResponse({ thread: ROW, steps: [] }));
+    await new RuntimeClient('', stub.fetch).pastRun('t-1', 'chinook-assistant');
+    expect(stub.calls[0]).toContain('audience=developer');
+    expect(stub.calls[0]).toContain('workflow_slug=chinook-assistant');
+  });
+
   it('escapes a thread id rather than pasting it into a URL', async () => {
     const stub = stubFetch(jsonResponse({ thread: ROW, steps: [] }));
     await new RuntimeClient('', stub.fetch).pastRun('a/b?c');
-    expect(stub.calls[0]).toBe('/api/threads/a%2Fb%3Fc');
+    expect(stub.calls[0]).toBe('/api/threads/a%2Fb%3Fc?audience=developer');
   });
 
   it('says plainly when a thread is not stored', async () => {

@@ -45,6 +45,7 @@ from typing import Any, Iterable
 from openstategraph.developer_channel import transcript_text
 from openstategraph.compile.workflow_compiler import node_failure_warnings
 from openstategraph.compile.state import published_answer
+from openstategraph.api.audience import Audience, visible_channel_names, visible_state
 from openstategraph.api.schemas import (
     ThreadHistoryResponse,
     ThreadStep,
@@ -115,9 +116,30 @@ def list_threads(
 
 
 def read_thread(
-    savers: Iterable[Any], thread_id: str, *, limit: int = 200
+    savers: Iterable[Any],
+    thread_id: str,
+    *,
+    audience: Audience = Audience.CUSTOMER,
+    limit: int = 200,
 ) -> ThreadHistoryResponse | None:
-    """One past run, oldest checkpoint first — or `None` if no saver holds it."""
+    """One past run, oldest checkpoint first — or `None` if no saver holds it.
+
+    **Who is reading is a parameter, and its default is the closed one**
+    (`the-boundary-nobody-checked/02`). A customer gets their own turn — the
+    question, the answer, the decisions, the outputs — and none of the
+    machinery that produced it: no tool name, no arguments, no result, no
+    usage, and only the state channels `compile/state.py` marks
+    `CUSTOMER_VISIBLE`. A developer gets the whole run, exactly as this door
+    has always returned it.
+
+    The alternative was to declare the door developer-only and be done. It was
+    rejected on the product question rather than on cost: a customer-facing
+    history panel — *"what did I ask yesterday"* — is an obvious thing to build
+    on a product whose own front page says a third client is supported
+    (`api/main.py`), and a door that refuses one forecloses it. So the door
+    takes an audience, and a customer's history is the same shape as a
+    customer's live run.
+    """
     config = {"configurable": {"thread_id": thread_id}}
     for saver in _distinct(savers):
         tuples = list(_safe_list(saver, config, limit))
@@ -131,7 +153,7 @@ def read_thread(
         tools = _ToolCallReader(oldest_first)
         clock = _ClockReader()
         usage = _UsageReader()
-        steps = [_step(tuple_, tools, clock, usage) for tuple_ in oldest_first]
+        steps = [_step(tuple_, tools, clock, usage, audience) for tuple_ in oldest_first]
         return ThreadHistoryResponse(thread=summary, steps=steps)
     return None
 
@@ -459,9 +481,28 @@ def _step(
     tools: _ToolCallReader | None = None,
     clock: _ClockReader | None = None,
     usage: _UsageReader | None = None,
+    audience: Audience = Audience.CUSTOMER,
 ) -> ThreadStep:
+    """One checkpoint as a row, holding back what this audience may not read.
+
+    Three of the four withholdings are the live stream's, applied to the same
+    facts one surface later: `streaming.py` blanks a tool call, withholds
+    usage, and `DeveloperChannel.payload` drops `redactions` — a stored run
+    must not answer a question the live one refused.
+
+    **A customer's tool calls are dropped, not blanked.** The stream empties a
+    withheld `token` frame and keeps it because the frame is the only thing
+    saying a run is mid-node; here the *step row* already says that, so an
+    emptied call would add a shape with nothing in it. The step is still
+    listed, still timed, and still names the node that ran.
+
+    `duration_ms` stays on both audiences, for `api/frame_clock.py`'s recorded
+    reason: elapsed time is a property of the deployment, not of the content,
+    and `docs/api.md` already argues why a clock is not a disclosure.
+    """
     namespace = _namespace(tuple_)
     metadata = _metadata(tuple_)
+    developer = audience is Audience.DEVELOPER
     return ThreadStep(
         checkpoint_id=str((tuple_.checkpoint or {}).get("id") or ""),
         step=int(metadata.get("step") or 0),
@@ -469,19 +510,21 @@ def _step(
         source=str(metadata.get("source") or ""),
         values={
             key: _text(value)
-            for key, value in sorted(_values(tuple_).items())
+            for key, value in sorted(visible_state(_values(tuple_), audience).items())
             if not key.startswith(_PRIVATE_PREFIXES)
         },
         namespace=namespace,
         node=namespace[-1] if namespace else "",
         wrote=[
             str(channel)
-            for channel in ((tuple_.checkpoint or {}).get("updated_channels") or [])
+            for channel in visible_channel_names(
+                (tuple_.checkpoint or {}).get("updated_channels") or [], audience
+            )
             if not str(channel).startswith(_PRIVATE_PREFIXES)
         ],
-        tool_calls=tools.at(tuple_) if tools is not None else [],
+        tool_calls=tools.at(tuple_) if tools is not None and developer else [],
         duration_ms=clock.at(tuple_) if clock is not None else None,
-        tokens=usage.at(tuple_) if usage is not None else None,
+        tokens=usage.at(tuple_) if usage is not None and developer else None,
     )
 
 
@@ -509,7 +552,13 @@ def _pause_payload(tuple_: Any) -> dict[str, str] | None:
     Every value is rendered through `_text`, the same tolerant, fence-scrubbed
     rendering every other channel value gets here — a candidate is exactly the
     kind of thing `workflow-architect` might have made an entire document, and
-    this is a customer-facing surface.
+    a customer may be reading.
+
+    **Not audience-filtered, and the reason is what the payload is**: an
+    interrupt's value is the question the run is asking *the person*, written
+    by the node's own author for them to answer. Withholding it from a
+    customer would leave a paused thread with nothing to approve — the gate's
+    message is the one piece of machinery that is addressed to the reader.
     """
     for _, channel, value in tuple_.pending_writes or []:
         if channel != "__interrupt__":
@@ -566,13 +615,22 @@ def _text(value: Any) -> str:
     list of LangChain objects whose `repr` is unreadable and whose `content`
     is the entire point.
 
-    **Every string passes `transcript_text` first, and before `_cap`.** This is
-    a customer surface, and the checkpointed `answer` keeps its ```suggestion
-    fence on purpose — the live seam splits it, this door read it raw and
-    published the machinery to History and to `GET /api/threads`
-    (`memory-and-replay` 38). Stripping before capping matters on its own: a
-    truncated fence cannot be parsed by anything, so it is worse than a whole
-    one.
+    **Every string passes `transcript_text` first, and before `_cap`.** The
+    checkpointed `answer` keeps its ```suggestion fence on purpose — the live
+    seam splits it, this door read it raw and published the machinery to
+    History and to `GET /api/threads` (`memory-and-replay` 38). Stripping
+    before capping matters on its own: a truncated fence cannot be parsed by
+    anything, so it is worse than a whole one.
+
+    That sentence used to open *"this is a customer surface"*, and the door it
+    described took no audience at all — so it was a claim about a payload that
+    also carried tool names, arguments, results, usage and `redactions`
+    (`the-boundary-nobody-checked/02`). The door **serves** a customer now,
+    which is a different sentence: `read_thread` takes the audience and
+    `visible_state` decides the channels, and this function stays what it
+    always was — the rendering, applied to whatever survived that decision.
+    Unconditional on purpose: a developer has no more use for a half-parsed
+    fence than a customer does.
 
     `split_suggestion` beneath it is narrow by design — both `nodeType` and
     `attachTo`, or nothing — which is what makes it safe over arbitrary channel

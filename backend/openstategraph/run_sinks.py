@@ -1150,6 +1150,7 @@ def _burst(row: tuple[Any, ...]) -> RunBurst:
 def read_run_bursts(
     path: Path | str | None = None,
     *,
+    audience: str,
     thread_id: str | None = None,
     workflow_slug: str | None = None,
     session_id: str | None = None,
@@ -1160,6 +1161,22 @@ def read_run_bursts(
     Joined back through `runs.rowid`, so the filters are the ones a caller
     already knows: a thread, a workflow, a session. Ordered by the run row and
     then by position within it, which is the order the chunks were produced in.
+
+    **`audience` is required, and it is the refusal `RunBurst.audience` was
+    stored for** (`the-boundary-nobody-checked/02`). That column says *"a
+    developer run's bursts carry developer content"* and this reader had no
+    parameter to act on it and no caller in `openstategraph/` to notice — so
+    the first replay door built on it would have inherited a refusal nothing
+    told it about. A keyword with no default is what makes that impossible:
+    the question is asked at the call site or the call does not compile.
+
+    `"developer"` reads everything, exactly as the ceiling model does
+    elsewhere. Anything else is read as a customer and takes only bursts a
+    **customer's own stream** produced — never a developer run's, and never a
+    row whose audience was not recorded at all, because an unknown provenance
+    is not a customer's. That last clause costs a customer the cadence of runs
+    stored before the column existed, which is the direction a boundary has to
+    fail in.
 
     **A store with no cadence is not an error and not a zero.** A fresh
     install, a workflow with no model in it, and every run recorded before this
@@ -1180,6 +1197,9 @@ def read_run_bursts(
         if wanted:
             clauses.append(f"runs.{column} = ?")
             values.append(wanted)
+    if audience != "developer":
+        clauses.append("run_bursts.audience = ?")
+        values.append("customer")
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
 
     try:

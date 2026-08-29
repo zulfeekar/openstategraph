@@ -92,7 +92,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from enum import Enum
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 # The fence grammar itself lives one layer down, in
@@ -102,6 +102,7 @@ from typing import Any
 # here (rather than left to each caller to find) because this module is where
 # every *transport* caller already reaches for the split.
 from openstategraph.compile.reducers import RESET
+from openstategraph.compile.state import customer_visible_channels
 from openstategraph.developer_channel import capability_gap as capability_gap
 from openstategraph.developer_channel import split_suggestion as split_suggestion
 
@@ -169,6 +170,44 @@ def clean_output(value: Any) -> Any:
         return value
     prose, _ = split_suggestion(value)
     return prose
+
+
+def visible_state(values: Mapping[str, Any], audience: Audience) -> dict[str, Any]:
+    """The state channels this audience may read, out of a run's own state.
+
+    **The seam for every door that publishes raw state**, and the third of its
+    kind here for the reason the other two give: `clean_output` and
+    `redaction_report` exist because a rule applied at one door and not at the
+    next is not a rule (ticket 15). `the-boundary-nobody-checked/02` found the
+    same shape one surface further out — `GET /api/threads/{id}` published
+    every checkpointed channel, including `tool_use` and `redactions`, to
+    whoever asked.
+
+    A developer gets what is there. A customer gets only the channels
+    `compile/state.py` marks `CUSTOMER_VISIBLE` — **the declaration lives on
+    the channel**, so this function holds no list of its own and cannot drift
+    from one. A channel this build has never heard of (a mounted child's, an
+    older checkpoint's, a future release's) is unmarked and therefore refused,
+    which is the direction a boundary has to fail in.
+    """
+    if audience is Audience.DEVELOPER:
+        return dict(values)
+    allowed = customer_visible_channels()
+    return {key: value for key, value in values.items() if key in allowed}
+
+
+def visible_channel_names(names: Iterable[str], audience: Audience) -> list[str]:
+    """`visible_state` for a list of channel *names*, order preserved.
+
+    A checkpoint's `updated_channels` is names without values, and a name is
+    the disclosure there — *this step wrote `redactions`* tells a customer the
+    machinery rewrote their answer, which is precisely what
+    `DeveloperChannel.redactions` exists to keep on the other side.
+    """
+    if audience is Audience.DEVELOPER:
+        return [str(name) for name in names]
+    allowed = customer_visible_channels()
+    return [str(name) for name in names if str(name) in allowed]
 
 
 def redaction_report(state_value: Any) -> list[dict[str, Any]]:

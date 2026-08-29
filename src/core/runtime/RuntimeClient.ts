@@ -1452,7 +1452,18 @@ export class RuntimeClient implements IRuntimeClient {
   }
 
   async pastRun(threadId: string, workflowSlug?: string): Promise<Result<PastRunHistory, string>> {
-    const suffix = workflowSlug ? `?workflow_slug=${encodeURIComponent(workflowSlug)}` : '';
+    // `audience=developer`, always, and not a parameter: this client is the
+    // **editor's**, and the editor is the workflow's author. Since
+    // `the-boundary-nobody-checked/02` the endpoint defaults to `customer` —
+    // no tool calls, no token counts, no machinery channels — which is the
+    // right default for a door anyone may build a client on and the wrong
+    // view for the History lane, whose whole content is what each superstep
+    // ran and what it cost. The server still caps it: a deployment with
+    // `OPENSTATEGRAPH_AUDIENCE=customer` answers as a customer whatever is
+    // asked here.
+    const params = new URLSearchParams({ audience: 'developer' });
+    if (workflowSlug) params.set('workflow_slug', workflowSlug);
+    const suffix = `?${params.toString()}`;
     let response: Response;
     try {
       response = await this.fetchImpl(

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from openstategraph.api.audience import Audience, resolve
 from openstategraph.api.deps import Services
 from openstategraph.api.schemas import ThreadHistoryResponse, ThreadListResponse
 
@@ -58,7 +59,10 @@ def list_threads_endpoint(
     tags=["Runs"],
 )
 def read_thread_endpoint(
-    services: Services, thread_id: str, workflow_slug: str | None = None
+    services: Services,
+    thread_id: str,
+    workflow_slug: str | None = None,
+    audience: Audience = Audience.CUSTOMER,
 ) -> ThreadHistoryResponse:
     """A recorded run played back as text. **Nothing is re-executed.**
 
@@ -67,11 +71,20 @@ def read_thread_endpoint(
     send it again. The endpoint that *does* execute is
     `POST /api/runs/resume`, which continues a `paused` thread from its
     interrupt — a different verb on purpose.
+
+    `audience` is the same parameter the run doors take, capped by the same
+    `resolve()` — a deployment that sets `OPENSTATEGRAPH_AUDIENCE=customer`
+    cannot be talked into a run's machinery through its history either
+    (`the-boundary-nobody-checked/02`). It defaults to `customer`, so a client
+    written before this parameter existed reads a customer's history rather
+    than a developer's; a developer surface asks for what it needs.
     """
     from openstategraph.api import threads as thread_queries
 
     history = thread_queries.read_thread(
-        thread_queries.savers_for(services, workflow_slug), thread_id
+        thread_queries.savers_for(services, workflow_slug),
+        thread_id,
+        audience=resolve(audience),
     )
     if history is None:
         raise HTTPException(
