@@ -198,16 +198,49 @@ Read the list the way a sceptic does: of those 36, essentially all are
 LangChain's and LangGraph's own closure — which you would have installed anyway,
 because the alternative to using us is writing the `StateGraph` by hand.
 
-**Our own wheel is 2.9 MB, and 2.7 MB of that is the editor.** *(Measured once on one machine, 2026-08-10; nothing in the repository regenerates it, so read it as an order of magnitude rather than a fact you can check.)* The Python is
-276 KiB compressed; the built canvas is 1,553 KiB and the `/chat` flow view's
-Mermaid is 952 KiB. That weight rides in the main wheel rather than a separate
+**Most of our own wheel is the browser, and none of it is the argument for a
+second package.** Here is the whole thing, every file in exactly one row, so
+the shares add up rather than being sampled:
+
+<!-- wheel-footprint:begin — generated; see scripts/measure_wheel_footprint.py -->
+```
+openstategraph-0.3.0rc7-py3-none-any.whl  —  4.45 MB, measured 2026-08-29
+
+     1,608 KiB   110 files   the built canvas
+       952 KiB     1 files   vendored Mermaid, for /chat's flow view
+       113 KiB     5 files   the served HTML shells
+     1,037 KiB   177 files   our own Python
+       530 KiB    63 files   the shipped gallery
+        22 KiB     5 files   wheel metadata
+        18 KiB    11 files   the rest of the package data
+
+  the browser payload is 62% of the download
+
+  regenerate: npm run build && python3 -m build backend --wheel
+              && python3 scripts/measure_wheel_footprint.py --write
+```
+<!-- wheel-footprint:end -->
+
+That weight rides in the main wheel rather than a separate
 `openstategraph-editor` distribution, deliberately: against the ~72 MB a
-`[server]` install puts in `site-packages`, 2.7 MB does not justify a second
-package name, a second version to keep in lockstep and a second clean-install
-proof — and a `pip install openstategraph && openstategraph serve` that opens
-the real product is the whole reason anyone tries this in the first place.
-Sourcemaps (another 18 MB) are excluded; they are a debugging aid for people
-working on *this* repository.
+`[server]` install puts in `site-packages`, the browser payload does not
+justify a second package name, a second version to keep in lockstep and a
+second clean-install proof — and a `pip install openstategraph &&
+openstategraph serve` that opens the real product is the whole reason anyone
+tries this in the first place. The conclusion does not turn on the ratio in
+any case: **pip extras add dependencies and cannot remove package data**, so a
+real split is two distributions, not an extra. Sourcemaps (another 18 MB) are
+excluded; they are a debugging aid for people working on *this* repository.
+
+The block above used to be three figures in a sentence, hedged as *measured
+once on one machine, 2026-08-10, and nothing regenerates it*. It then drifted
+exactly as the hedge said it would — the wheel grew by half, our Python nearly
+quadrupled, and the browser's share fell from 93% to under two thirds, which
+inverted what the paragraph was arguing about while every word of it stayed
+defensible. An honest hedge is not a fix, so the block is generated and
+`backend/tests/test_the_wheel_argument_is_regenerable.py` goes red when the
+page and `docs/wheel-footprint.json` disagree, or when that file stops
+describing the version this repository ships.
 
 **A test keeps this honest.** `backend/tests/test_distribution_metadata.py`
 asserts the unconditional requirements are exactly those four and that every
