@@ -75,11 +75,15 @@ export function RunTimeline({
         ))}
       </ol>
 
-      {/* Said plainly, once, rather than implied by a precise-looking number:
-          the backend reports a node only after it finishes, so these are gaps
-          between frames, not measured spans. */}
+      {/* Said plainly, once, rather than implied by a precise-looking number.
+          Two claims, and both matter: the clock is the server's own
+          (`memory-and-replay` 46), and the backend reports a node only after
+          it finishes, so a bar is a span between frames rather than a measured
+          start and end. */}
       <p className="timeline__caveat">
-        Durations are gaps between stream frames, not measured spans.
+        {totalMs === null
+          ? 'This run reported no clock, so its steps have no durations.'
+          : 'Server time, measured between stream frames — not a measured start and end.'}
       </p>
     </div>
   );
@@ -104,6 +108,8 @@ function describe(step: {
   return parts.join(' · ');
 }
 
-function formatMs(ms: number): string {
+/** A dash, never a zero, for a span nobody measured — `launch-readiness` 108. */
+function formatMs(ms: number | null): string {
+  if (ms === null) return '—';
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }

@@ -286,6 +286,14 @@ mode it exists to prevent is a run that looks stalled while five workers are
 busy. Spawns appear in the chat trace only; there is no canvas animation for
 them.
 
+The **timeline** beside the trace draws one bar per step, on the **server's**
+clock: every run frame carries how many milliseconds into the run the backend
+produced it, so the bars add up to the run's own wall clock rather than to how
+long your browser waited. A bar is still a span *between frames* — the runtime
+reports a node only once it has finished, so nothing marks a beginning — and
+for workers running at once, one shared span is split between whichever frames
+arrived. A step whose run reported no clock at all reads `—`, never `0 ms`.
+
 The **Run** button becomes **Stop** while a run is streaming (so does the
 composer's Send). Stop is honest about where it can and cannot reach:
 

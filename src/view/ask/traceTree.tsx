@@ -25,9 +25,22 @@ export interface ActivityRow {
    * to canvas ids by the server (see `traceOwner`); until ticket 72 it read
    * neither and nested by arrival order instead. */
   readonly namespace?: readonly string[];
-  /** Wall-clock gap since the previous frame — the same honest
-   * approximation the Inspector's duration badge uses. */
+  /** Wall-clock gap since the previous frame *arrived in this tab* — the same
+   * honest approximation the Inspector's duration badge uses. Not what the
+   * timeline draws: see `elapsedMs`. */
   readonly durationMs: number;
+  /**
+   * The server's own offset for this frame, ms since the run's stream opened
+   * (`memory-and-replay` 46's `elapsedMs`).
+   *
+   * A different clock from `durationMs` above, answering a different question,
+   * and the timeline is built from this one — `launch-readiness` 108. The
+   * arrival clock is measured after `RuntimeClient` has drained a whole TCP
+   * chunk, so several frames share one gap and one frame absorbs it; the
+   * server's is measured where the frame was built. `null` against a backend
+   * that sends none, never `0`.
+   */
+  readonly elapsedMs?: number | null;
   readonly output: string | null;
   /**
    * Where this frame was, on every canvas it touched (ticket 34) — see the

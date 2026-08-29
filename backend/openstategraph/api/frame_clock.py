@@ -30,6 +30,24 @@ through, so the counter belongs to one run. A module-level counter would make
 the second run of a server's life start at forty. The catalogue stream
 (`GET /api/events`) opens no clock and its frames carry no stamp: it is not a
 run, its frames are not run frames, and it publishes no field list to widen.
+
+**And re-bound on every resumption, which is the part that was missing**
+(`launch-readiness` 108). A `ContextVar.set` inside a generator belongs to the
+context of whoever resumed it, and the transport resumes this generator from a
+*different* context every time: `stop_when_client_leaves` races each frame
+against the disconnect, so each frame is pulled inside its own
+`asyncio.ensure_future(stream.__anext__())`, and a Task runs on a **copy** of
+the context that created it. The `set` performed while the first task drove the
+generator therefore died with that task, and every frame after it was built with
+no clock open. Measured on a live run before the fix: **1 of 282 frames carried
+a stamp.**
+
+So `open_frame_clock()` returns the clock and `bind_frame_clock()` re-attaches
+it, once per resumption, from inside the generator being resumed — which is the
+only place that runs in the context the frame will be built in. Pinned by
+`backend/tests/test_the_frame_clock_survives_the_transport.py`, which drives the
+fold *through* the transport rather than around it, because that is the whole
+finding: the fold was never wrong, the driver was.
 """
 
 from __future__ import annotations
@@ -94,6 +112,17 @@ def open_frame_clock() -> Iterator[FrameClock]:
             _open_clock.reset(token)
         except ValueError:  # pragma: no cover - depends on the ASGI driver
             _open_clock.set(None)
+
+
+def bind_frame_clock(clock: FrameClock) -> None:
+    """Attach `clock` to *this* context, so frames built here are stamped.
+
+    Called once per resumption of the streaming generator rather than once per
+    stream — see the module docstring for why once is not enough. Idempotent
+    and cheap: it re-sets a context variable to a value it may already hold,
+    and it never starts a second clock, so the sequence stays dense.
+    """
+    _open_clock.set(clock)
 
 
 def frame_stamp() -> dict[str, int]:

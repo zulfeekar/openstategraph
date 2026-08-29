@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 from openstategraph.api.diagram import workflow_mermaid  # noqa: E402
 from openstategraph.api.frame_clock import (  # noqa: E402
     FRAME_CLOCK_FIELDS,
+    bind_frame_clock,
     frame_stamp,
     open_frame_clock,
 )
@@ -1070,7 +1071,14 @@ async def _stream_run(
     # run and is released whichever way the stream ends. `_sse` reads it; no
     # call site passes it, which is what makes a new frame kind dated by
     # default rather than by attention.
-    turn_stack.enter_context(open_frame_clock())
+    #
+    # **Held as a value, and re-bound below on every resumption**
+    # (`launch-readiness` 108). Entering it here binds it in the context of
+    # whoever pulls the *first* frame, and the transport pulls every frame from
+    # a fresh task — so that binding died with that task, and 281 of 282 frames
+    # on a live run arrived undated. `frame_clock`'s own docstring carries the
+    # mechanism.
+    clock = turn_stack.enter_context(open_frame_clock())
     identity = run_identity(config)
     turn = turn_stack.enter_context(
         run_turn(
@@ -1101,8 +1109,20 @@ async def _stream_run(
     # frames rather than recomputed here, so the sentence in the log and the
     # sentence in the browser cannot disagree — they are the same field.
     cancellable = False
+    stream = frames.__aiter__()
     try:
-        async for frame in frames:
+        while True:
+            # This resumption's context is not the previous one's — see
+            # `clock` above. Bound *before* the pull, because the frame is
+            # built inside it: `_run_frames` is resumed by this very `await`,
+            # and `_sse` reads the clock from whatever context it finds itself
+            # in. An `async for` cannot express "do this before each pull",
+            # which is the only reason the loop is spelled out.
+            bind_frame_clock(clock)
+            try:
+                frame = await stream.__anext__()
+            except StopAsyncIteration:
+                break
             ended = ended or _is_terminal(frame)
             cancellable = _frame_interruptible(frame, cancellable)
             yield frame

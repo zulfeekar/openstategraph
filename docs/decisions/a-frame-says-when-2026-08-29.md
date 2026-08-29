@@ -115,6 +115,24 @@ and that no value in either is large enough to be a wall clock in disguise.
   clock is a change to what the UI *claims*, and belongs with the play button
   (52) that will make the claim visible. The wire now supports it; the header
   comment there is still accurate about what it does today.
+
+  **Superseded the same day, by `launch-readiness` 108**, which could not wait
+  for 52: the panel was showing `agent1 0 ms` beside `in1 21.4 s`, and the
+  arrival clock is measured after `RuntimeClient` has drained a whole TCP chunk
+  (`launch-readiness/105`), so it could not be the basis of a truthful bar.
+  `timeline.ts` reads `elapsedMs` now, its total *is* the last frame's own
+  offset, and a frame with no clock produces a bar reading `—` rather than
+  `0 ms`. The arrival clock is untouched and still answers its own question on
+  the Inspector's badge — which is decision 1 working exactly as written.
+
+  108 also found that the clock reached **one frame in 282** on a live run.
+  `open_frame_clock()`'s `ContextVar.set` ran inside the task that pulled the
+  first frame, and the transport pulls every frame from a fresh task, so the
+  binding died with it. Nothing above is wrong about *what* is minted; the
+  fix is that `_stream_run` re-binds the clock on every resumption, pinned by
+  `backend/tests/test_the_frame_clock_survives_the_transport.py` — which
+  drives the fold **through** the transport, the thing 46's own tests did not
+  do.
 - **The catalogue stream (`GET /api/events`) is not stamped.** It opens no
   frame clock. It is not a run, its frames are not run frames, and it publishes
   no field list to widen — the same reason `test_the_frame_fields_are_published`
