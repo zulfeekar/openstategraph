@@ -58,20 +58,42 @@ Recorded 2026-08-15 on `ollama:gpt-oss:120b-cloud`, ~4s:
 openstategraph eval workflows/sql-qa
 ```
 
-Recorded 2026-08-15 on `ollama:gpt-oss:120b-cloud`, five cases, 23.9s total:
+Recorded 2026-08-29 on `ollama:gpt-oss:120b-cloud`, six cases, 34.2s total:
 
 | | |
 | --- | --- |
-| execution accuracy | **100.0%** (4/4 answerable) |
+| execution accuracy | **100.0%** (5/5 answerable) |
 | exact set match | 100.0% |
 | refusal accuracy | 100.0% (1 unanswerable) |
 | **overall** | **100.0%** — the CI gate |
 | sql recovered | 100.0% |
-| latency p50 / p95 | 5.04s / 5.91s |
-| cost | not available — `RunResult` carries no token usage |
+| latency p50 / p95 | 5.23s / 8.18s |
+| cost | 39,719 tokens across 1 model — no dollar figure is owned here |
 
-Verdicts: `correct=4`, `refused_correctly=1`. The hard case (`s04`, two joins
+Verdicts: `correct=5`, `refused_correctly=1`. The hard case (`s04`, two joins
 and a rounded sum) came back `USA, 523.06`, which is the gold query's own row.
+
+### The third category: an answerable question whose answer is none
+
+`s06` — *"How many customers are from Antarctica?"* — is neither of the other
+two. `Country` is a real column, `Antarctica` is a value it could hold and does
+not, so the query is right and the count is zero; `s05` is the other thing, a
+column that does not exist, where querying at all is the failure.
+
+It was added by `launch-readiness/172`, which found the shipped example
+answering it with the digit `0` and nothing else. Two clauses of the prompt
+produced that together: *"give the number, not a description of the number"*
+read, on the zero path, as a rule against the noun, and the clause written to
+catch it — *"if the query returned no rows, say so"* — never fires for a count,
+because `COUNT(*)` with no matches returns one row holding zero. The prompt now
+names zero as a case of its own, and the answer is a sentence:
+
+> No customers in the Customer table are from Antarctica.
+
+Phrasing is not what the scorecard grades — `not measured` says so on every
+card — so what `s06` adds to the *fixture* is the graded half: a suite with no
+zero case cannot catch a zero defect. The sentence itself is pinned in
+`tests/`, where a document assertion belongs.
 
 ### The query is evidence, not decoration
 

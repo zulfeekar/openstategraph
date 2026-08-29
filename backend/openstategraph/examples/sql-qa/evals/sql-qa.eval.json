@@ -1,7 +1,7 @@
 {
   "name": "sql-qa",
   "database": "../data/Chinook_Sqlite.sqlite",
-  "description": "Five questions over the package's own Chinook copy, graded by execution accuracy: two single-table counts, one one-join aggregation, one two-join revenue question, and one the database cannot answer. The point of the fixture is that this is the only example in the twenty whose expectation is a machine's, not a reader's — the answer is graded by re-executing the SQL the run stated, not by matching its prose. Expected rows come from scripts/refresh_eval_expectations.py, never from a hand.",
+  "description": "Six questions over the package's own Chinook copy, graded by execution accuracy: two single-table counts, one one-join aggregation, one two-join revenue question, one whose true answer is zero, and one the database cannot answer. The zero case is a third category beside answerable and refusal — the database can answer it, and the answer is none (launch-readiness/172). The point of the fixture is that this is the only example in the twenty whose expectation is a machine's, not a reader's — the answer is graded by re-executing the SQL the run stated, not by matching its prose. Expected rows come from scripts/refresh_eval_expectations.py, never from a hand.",
   "cases": [
     {
       "id": "s01",
@@ -80,6 +80,25 @@
           [
             "USA",
             523.06
+          ]
+        ],
+        "row_count": 1
+      }
+    },
+    {
+      "id": "s06",
+      "question": "How many customers are from Antarctica?",
+      "difficulty": "easy",
+      "expects": "answer",
+      "gold_sql": "SELECT COUNT(*) AS CustomerCount FROM Customer WHERE Country = 'Antarctica'",
+      "notes": "An answerable question whose answer is none. Country is a real column with real values and Antarctica is not one of them, so this is neither a refusal (s05, a column that does not exist) nor a miss — the query is right and the count is zero. Added by launch-readiness/172: the shipped example answered this with the digit 0 and no noun, and a dataset with no zero case had nothing to fail against on the path a new user runs first.",
+      "expected": {
+        "columns": [
+          "CustomerCount"
+        ],
+        "rows": [
+          [
+            0
           ]
         ],
         "row_count": 1

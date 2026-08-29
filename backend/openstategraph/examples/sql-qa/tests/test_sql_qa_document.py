@@ -167,3 +167,71 @@ class TestTheFixtureMatchesTheDatabase:
         assert len(refusals) == 1
         assert refusals[0].gold_sql is None
         assert refusals[0].forbidden_patterns
+
+
+class TestATrueZeroIsAnAnswer:
+    """`launch-readiness/172`: the shipped example answered a genuine zero
+    with the digit `0` and nothing else.
+
+    The question was *"How many customers are from Antarctica?"*, whose honest
+    answer is none, and the run got it right — the timeline shows it listing
+    tables, reading the `Customer` schema and running a filtered count. What
+    reached `RunResult.answer`, and therefore the CLI, a package's `tests/`
+    and anything embedding the library, was `0`.
+
+    Two sentences of the prompt produced it together. *"Give the number, not a
+    description of the number"* is a rule against hedging that reads, on the
+    zero path, as a rule against the noun; and *"If the query returned no rows,
+    say so"* never fires for a count, because `SELECT COUNT(*)` returns one row
+    holding zero. So the one clause that could have caught this was written for
+    a case that cannot happen.
+
+    Phrasing is not what the scorecard grades — `scoring.NOT_MEASURED` says so
+    in as many words, and widening the eval to grade prose would contradict a
+    recorded boundary. This is a document assertion, which is what a package's
+    `tests/` are for. The dataset's job is the other half: a suite with no zero
+    case cannot catch a zero defect on the path that *is* graded.
+    """
+
+    def _prompt(self, doc: dict) -> str:
+        return next(n for n in doc["nodes"] if n["id"] == "answer1")["data"]["systemPrompt"]
+
+    def test_the_prompt_names_zero_as_a_case_of_its_own(self, doc: dict) -> None:
+        assert "zero" in self._prompt(doc).lower()
+
+    def test_the_prompt_forbids_the_bare_number(self, doc: dict) -> None:
+        """The contract 165 asks for, stated where the node can obey it: the
+        sentence names what was counted, never the figure alone."""
+        prompt = self._prompt(doc)
+        assert "never the number alone" in prompt
+
+    def test_the_no_rows_clause_covers_a_count_of_none(self, doc: dict) -> None:
+        """A count of zero is not "no rows", and the prompt must not conflate
+        them — that conflation is the defect."""
+        prompt = self._prompt(doc)
+        assert "COUNT(*)" in prompt
+
+    def test_the_fixture_carries_a_true_zero_case(self, dataset) -> None:
+        """An answerable question whose answer is none — a third category
+        beside *answerable* and *refusal*, and the one the five shipped cases
+        did not have."""
+        zeros = [
+            case
+            for case in dataset.answerable()
+            if case.expected is not None and case.expected.rows == [[0]]
+        ]
+        assert zeros, "no case in the dataset has a true zero for its answer"
+
+    def test_the_zero_case_is_not_a_refusal(self, dataset) -> None:
+        """The distinction the dataset exists to hold: Antarctica is a country
+        `Customer` can record and does not, so the database *can* answer and
+        the answer is none. `s05` is the other thing — a column that does not
+        exist, where querying at all is the failure."""
+        zeros = [
+            case
+            for case in dataset.answerable()
+            if case.expected is not None and case.expected.rows == [[0]]
+        ]
+        for case in zeros:
+            assert case.expects == "answer"
+            assert (case.gold_sql or "").strip()
