@@ -106,11 +106,50 @@ was rejected.
 Two things the editor does for you here:
 
 - **You cannot draw a loop by accident.** A cycle is only legal when it closes
-  on a `feedback` port, and `revise` is the only output that produces one. Any
+  on a `feedback` port, and only three outputs produce one — a Grader's or a
+  Guard's `revise`, and a Human approval's `rejected` (the table below). Any
   other backward edge is refused, with a message pointing you at the grader.
 - **A loop always has a way out.** `revise` is a grader's *conditional* branch,
   so the cycle contains a decision by construction — it cannot spin forever
-  because nothing is choosing.
+  because nothing is choosing. A loop with nothing deciding on it is reported
+  by the compiler, not only refused by the canvas, because a document can
+  arrive without ever being drawn.
+
+**Three nodes can close a loop, and only one of them costs a model call.** The
+`revise`-shaped output is a port type, not a node type, so anything that
+declares one is a way out of a cycle:
+
+| Node | Decides by | Its way out |
+| --- | --- | --- |
+| **Grader** (`route.grader`) | a model's judgement | `revise` |
+| **Guard** (`guard.check`) | **code** — a package function, no model | `revise` |
+| **Human approval** (`human.approval`) | a person, at a pause | `rejected` |
+
+**A Guard is a Grader's mechanical sibling.** It asks the same pass-or-revise
+question and answers it by running one of your package's `functions/` against
+the candidate — the function returns an empty string to pass, or the sentence
+that goes back over `revise`. Same two ceilings as a grader (*Max attempts*,
+and the step budget below), same feedback port, same loop.
+
+Reach for it whenever the check is **decidable without judgement**: a schema
+rule, a lookup against a known set, a format. Routing a deterministic check
+through a model is not merely wasteful — the model relays what it was told, so
+internal check names have leaked into a customer's answer that way here before.
+
+Three checks need no `functions/` file at all; type the name into *Check* and
+the Guard is wired:
+
+| `check:` | Passes when |
+| --- | --- |
+| `numbers_in_prose` | every figure in the answer traces to something this run retrieved |
+| `row_counts_in_prose` | a count of rows is published as rows, not as the things they describe |
+| `zero_outside_coverage` | a reported *none* is not really a period the data says it never held |
+
+A package function of the same name still wins. And a Guard on the path is
+what silences the compiler's *this answer could carry an ungrounded number*
+finding — the finding reports the **absence** of a gate, never the adequacy of
+one, because judging a check's contents from the compiler is how a checker
+starts reporting success on a wrong answer.
 
 The safety net underneath is the **step budget**. It is counted in
 *supersteps*, not laps: with a fan-out, one lap can cost several. Do not read
@@ -431,6 +470,7 @@ The words this product uses, and what each one must not be mistaken for.
 | **instance** | one mount of a package, with its own overrides | a second copy of the package |
 | **override** | a per-instance setting, stored on the **parent** | an edit to the package |
 | **revision loop** | grader `revise` → agent `feedback`; ends when the grader passes or the budget runs out | an agent's internal tool-calling |
+| **guard** | `guard.check` — the same pass-or-revise verdict a grader reaches, decided by one of your package's functions instead of a model | a permission check; something that only blocks |
 | **step budget** | supersteps a run may take | "max retries" or "iterations" |
 | **cache result for** | seconds a node's answer is reused when its input repeats | a speed setting; a memory |
 | **template** | a starting document; produces a workflow and stops existing | a node type; a live link |

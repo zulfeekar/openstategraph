@@ -29,9 +29,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 
-# Every markdown file a reader plausibly lands on first.
+# Every markdown file a reader plausibly lands on first. `backend/README.md`
+# joined the list with docs-and-gaps/18, which put the two-index command into
+# its opening block — the one page in the tree whose first line is an install.
 DOC_FILES = [
     REPO / "README.md",
+    REPO / "backend" / "README.md",
     *sorted((REPO / "docs").glob("*.md")),
 ]
 
