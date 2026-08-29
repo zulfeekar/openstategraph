@@ -232,8 +232,14 @@ export const capacityRule: IConnectionRule = {
     // (`workflow-gallery/64`). A router's branches are mutually exclusive, so
     // three of them converging on one `prompt` are three links and one value;
     // two unrelated agents are two of both, and that is the ambiguity the cap
-    // is for. Only asked once the port is nominally full, so the graph walk
-    // never runs on the ordinary pointer-move.
+    // is for. Only asked once the port is nominally full — which, on a
+    // `maxConnections: 1` input, is *one* link, so this is the swap gesture
+    // and the walk does run on the ordinary pointer-move, on every frame the
+    // pointer hovers the port. That claim used to be written here as a reason
+    // the cost did not matter, and it cost 153 ms per pointer-event on a
+    // 516-node document (`the-cost-of-one-more/03`). The walk is now resolved
+    // once per branching node rather than once per branching node per edge,
+    // and only for branching nodes that can actually reach a producer.
     const arriving = concurrentProducerCount(model, registry, [...occupying, { source }]);
     if (arriving <= inMax) return null;
 
