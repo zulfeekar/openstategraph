@@ -105,6 +105,53 @@ argument with no way to fail is a story. A forty-fourth member is a red
 test, which is exactly what "do not add new behavior onto `WorkflowModel`"
 was always asking for.
 
+### And a module has one, measured in code lines
+
+A class had a ceiling and a module had none, which is an asymmetry a reader
+trips on: an eleven-member class needs a recorded exception, and
+`compile/node_runtime.py` at **5,331 physical lines** needed nothing. It passes
+every rule stated in words above — one-sentence description, one reason to
+change (it is the node builders), and `NodeRuntime` the class is under the class
+ceiling at 8 members. Passing all of that at that size is evidence the rules
+were incomplete, not evidence that length is fine.
+
+**Ceiling: 500 code lines.** A *code line* is a physical line carrying at least
+one token that is not a comment and not a docstring. Physical lines are the
+wrong measure **here specifically**: this repository writes long argued
+docstrings on purpose — this file is one — and a physical-line ceiling would tax
+the practice the rules most want and reward deleting the reasoning. Sixty-two
+percent of `node_runtime.py` is prose and blank space and none of it is charged
+for; it is **2,039 code lines**. A multi-line string that is *not* a docstring
+does count, because a prompt is content somebody has to read.
+
+**The recorded number is exact, which makes it a ratchet as well as a ceiling,
+and the two are one mechanism.** The ceiling decides which modules must be
+argued for; the exact number fires when one grows. No file is asked to shrink to
+500. A bare ceiling would be red on day one for ten files, which is how a pin
+acquires a suppression and dies; a bare ratchet would put a number on all 434
+modules, which is a config file nobody reads. The escape hatch — bump the
+recorded number — is one keystroke, and that is stated rather than dressed up:
+what stops it being a formality is that the number sits in the same table as the
+argument, so raising it lands in review beside a paragraph that has to still be
+true.
+
+Eight Python modules and two TypeScript ones are over it today, each carrying
+its number and its argument in
+`backend/tests/test_module_size_ceiling.py` and `src/moduleSizeCeiling.test.ts`
+— derived censuses, not hand-picked lists, for the reason the class censuses
+learned: pins chosen by hand cover the files somebody already worried about,
+which are the ones least likely to drift.
+
+Splitting `node_runtime.py` is **not** what this ceiling asks for and is not
+settled by it. That is `docs-and-gaps/03`, open and `partially` resolved, with a
+recommended order already written. What the ceiling adds is that the next
+fifteen hundred lines cannot arrive unannounced, which is exactly how they
+arrived last time: the ticket was charted at 1,639, found *"stale by 2.5x"* at
+4,127 when somebody finally looked, split down to 3,751, and was back over 5,300
+within the week — because nothing was watching the number. Or, in the sentence
+`test_public_surface_ceiling.py` opens with and this section is an application
+of: **a ceiling nobody measures is a preference.**
+
 ### Interface → Abstract → Base → Concrete
 
 Every entity family declares this ladder, and every layer earns its place:
