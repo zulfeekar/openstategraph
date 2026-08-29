@@ -178,7 +178,14 @@ class TestAFactSavedOverHttpLandsInThatStore:
             response = client.post(
                 "/api/runs",
                 json={"workflow": document, "question": "remember that"},
-                headers={"x-user": "ada@example.com"},
+                # `X-OpenStateGraph-Proxy` is the proxy's signature
+                # (the-boundary-nobody-checked 01): without it the app
+                # treats the identity header as something a client typed
+                # and names nobody. Every shipped proxy config sets it.
+                headers={
+                    "x-user": "ada@example.com",
+                    "X-OpenStateGraph-Proxy": "1",
+                },
             )
         assert response.status_code == 200, response.text
 

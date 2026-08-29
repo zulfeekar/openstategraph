@@ -142,6 +142,14 @@ slug** (`node_runtime._subgraph`) while everything else crosses untouched.
 > (`OPENSTATEGRAPH_PRINCIPAL_HEADER`); a library caller passes
 > `ask(..., user_email=…)` directly, because there the caller *is* the server.
 >
+> **And naming the header is no longer enough on its own**
+> (the-boundary-nobody-checked 01). A header a proxy sets is a header a client
+> can also set, and the shipped proxy configs did not strip it — so the
+> resolver now also requires `X-OpenStateGraph-Proxy`, one header whose name is
+> ours and which every config in `deploy/` overwrites on the way through. A
+> request carrying an identity header and no assertion identifies nobody and
+> says so once. See `docs/deploying.md` §1b.
+>
 > **A client may not assert it.** `user_email` was a field on `RunRequest` and
 > is gone — `RunRequest` forbids extras, so sending it is a `422`. Who a run is
 > for is the server's to determine. `configurable` still carries the value; it

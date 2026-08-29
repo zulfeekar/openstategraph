@@ -50,6 +50,27 @@ osg.example.com {
 		-Server
 	}
 
+	# --- identity ----------------------------------------------------------
+	#
+	# `header_up X-OpenStateGraph-Proxy 1` below is not decoration and is not
+	# optional. It is this file's half of the boundary `principal.py` states:
+	# *who a run is for is decided by the server, never asserted by the
+	# client*.
+	#
+	# If you set OPENSTATEGRAPH_PRINCIPAL_HEADER, the app keys per-person
+	# long-term memory on the header you named — so a request that reached the
+	# app carrying a forged copy of that header would read and write somebody
+	# else's memories. Caddy forwards every inbound header unchanged, so the
+	# app refuses to read the identity header at all unless this one is
+	# present, and `header_up Field value` REPLACES any copy a client sent.
+	# That is the strip: this file cannot strip a header you named and we did
+	# not, but it can always overwrite the one we did.
+	#
+	# Your authenticating proxy sets the identity header itself. If it sits in
+	# front of Caddy rather than behind a `forward_auth` here, make sure IT is
+	# the outermost hop and that it overwrites the identity header rather than
+	# passing a client's through. Full argument: docs/deploying.md section 1b.
+
 	# --- the three Server-Sent Event streams -------------------------------
 	#
 	# These are matched FIRST and proxied differently, and every line here is
@@ -68,6 +89,7 @@ osg.example.com {
 	@sse path /api/events /api/runs/stream /api/runs/resume
 	handle @sse {
 		reverse_proxy 127.0.0.1:8000 {
+			header_up X-OpenStateGraph-Proxy 1
 			flush_interval -1
 			transport http {
 				read_timeout 24h
@@ -85,7 +107,9 @@ osg.example.com {
 	# carry the session cookie without CORS entering the picture at all.
 	handle {
 		encode zstd gzip
-		reverse_proxy 127.0.0.1:8000
+		reverse_proxy 127.0.0.1:8000 {
+			header_up X-OpenStateGraph-Proxy 1
+		}
 	}
 
 	# --- limits ------------------------------------------------------------

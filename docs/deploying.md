@@ -70,8 +70,50 @@ the verified identity as a header.
 
 > **The proxy must strip any client-supplied copy of that header.** A header a
 > client can also set is not identity — it is the same defect one layer out.
-> Only you can guarantee this, which is why the variable names one header
-> explicitly instead of this code guessing at the usual suspects.
+
+Until 2026-08-29 that sentence was the whole answer, and §2 four sections below
+handed you a committed, CI-tested proxy config that did not do it. A deployer
+who followed both sections of this page got exactly the arrangement the
+sentence warns about. Both halves are fixed, and the fix is not a strip
+directive — because it could not be one.
+
+**Why not.** The header being stripped is named by *you*. Cloudflare Access
+says `X-Forwarded-Email`, oauth2-proxy says `X-Auth-Request-Email`, an ALB says
+whatever you configured. A config we ship can only strip a literal it knows, so
+it would be wrong — silently — for everybody who chose a different name.
+
+**So the strip is inverted.** Every proxy config here now *sets* one header
+whose name is ours:
+
+```
+X-OpenStateGraph-Proxy: 1
+```
+
+- `deploy/nginx.conf` — `proxy_set_header X-OpenStateGraph-Proxy 1;` in **every**
+  `location` that proxies (nginx does not inherit `proxy_set_header` into a
+  location that sets its own, so it is written twice on purpose).
+- `deploy/Caddyfile` — `header_up X-OpenStateGraph-Proxy 1` in **every**
+  `reverse_proxy` block.
+
+Setting overwrites, in both proxies, so a client's copy cannot survive the hop.
+And **the app refuses to read the identity header unless that assertion is
+present** — so the forged-identity request is refused whatever your header is
+called, and the one thing you must get right is a line we wrote for you rather
+than a string only you know.
+`backend/tests/test_reverse_proxy.py::TestTheIdentityHeaderCannotBeClientSupplied`
+fails if either file loses it.
+
+**If your proxy is not one of ours**, add the equivalent line to it: one hop
+must set `X-OpenStateGraph-Proxy` on every request it forwards, and — because
+it is the outermost hop — it must be the one overwriting your identity header
+too. Whatever terminates authentication is the only thing that can do that;
+this application cannot see it, which is why it asks to be told.
+
+**What a wrong configuration looks like.** Not silence. A request arriving with
+your identity header and no assertion is a client naming itself, and the app
+logs it once per process — naming your header, the assertion, and this
+section — then identifies nobody. "The proxy stripped it" and "the client sent
+it" used to be one indistinguishable output; they are two now.
 
 ### What happens when you do not set it
 
@@ -109,6 +151,11 @@ until a customer hits them:
 | Buffering off on the SSE routes | Otherwise a run's `update` frames pile up in the proxy and the editor's live node highlighting arrives in one lump at the end — indistinguishable from a frozen canvas. |
 | A 24-hour read timeout on those routes | nginx's default is 60 seconds. A `human.approval` waits on a person; a run waits on a model. Sixty seconds severs both. |
 | No compression on those routes | A compressor is a buffer. |
+
+They also carry the identity assertion §1b describes — `X-OpenStateGraph-Proxy`,
+set in every proxying block of both files. It costs nothing when you have not
+set `OPENSTATEGRAPH_PRINCIPAL_HEADER`, and it is what makes per-person memory
+safe when you have. Do not delete it as noise.
 
 **Bind the app to loopback.** A proxy in front of a process listening on
 `0.0.0.0` is decoration — the port is reachable around it. `serve` defaults to

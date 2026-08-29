@@ -34,15 +34,36 @@ that already owns the store, the checkpointer, the tools and the middleware.
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+logger = logging.getLogger(__name__)
+
 #: The environment's opt-in. Named after what it holds — the header a *trusted
 #: proxy* sets — because the danger is precise: reading a header the client
 #: can also set is the bug this module exists to remove.
 PRINCIPAL_HEADER_ENV = "OPENSTATEGRAPH_PRINCIPAL_HEADER"
+
+#: The proxy's signature on a request it forwarded — a header whose name is
+#: **ours**, which is the whole of the idea.
+#:
+#: the-boundary-nobody-checked 01. The requirement `docs/deploying.md` states
+#: — *the proxy must strip any client-supplied copy of that header* — cannot
+#: be shipped as a strip directive, because the header being stripped is named
+#: by the deployer: `X-Forwarded-Email` for Cloudflare Access,
+#: `X-Auth-Request-Email` for oauth2-proxy, anything at all for an ALB. A
+#: config that strips one literal is wrong for everybody who chose another,
+#: and silently so.
+#:
+#: So the strip is inverted. A blocklist we cannot write becomes an allowlist
+#: we can: every proxy config this repository ships **sets** this one header,
+#: and setting overwrites — `proxy_set_header` in nginx, `header_up` in Caddy
+#: — so a client's copy cannot survive the hop whatever the identity header is
+#: called. One name, ours, in every config, forever.
+PROXY_ASSERTION_HEADER = "X-OpenStateGraph-Proxy"
 
 
 @dataclass(frozen=True)
@@ -94,6 +115,21 @@ class TrustedHeaderPrincipals:
     opt-in by name rather than a list of headers we guess at. Guessing would
     reintroduce the defect: a header we read speculatively is a header a
     client can set.
+
+    Which is why the identity header is not read on its own. A request also
+    has to carry `PROXY_ASSERTION_HEADER`, the one header whose name this
+    project owns and every config it ships overwrites. That does not make this
+    class able to see the proxy — nothing in an application can — but it moves
+    what the deployment must get right from *a string only they know* to *a
+    line we wrote for them*, in `deploy/Caddyfile` and `deploy/nginx.conf`,
+    checked by `backend/tests/test_reverse_proxy.py` on every run.
+
+    And it separates two states that used to have one output. A request with
+    no identity is now either *the proxy stripped it* — silent, ordinary — or
+    *a client sent one and no proxy vouched for it*, which is logged once,
+    naming both headers and the document that fixes it. This project's named
+    recurring defect is two states producing one indistinguishable output; an
+    identity boundary is the last place to leave one.
     """
 
     def __init__(self, header: str) -> None:
@@ -104,15 +140,46 @@ class TrustedHeaderPrincipals:
             # treats as worse than a failure.
             raise ValueError(f"{PRINCIPAL_HEADER_ENV} needs a header name")
         self._header = cleaned.lower()
+        self._header_display = cleaned
+        self._assertion = PROXY_ASSERTION_HEADER.lower()
+        # Once per process, not per request: an attacker replaying a forged
+        # header must not be able to write our log to a full disk, and a line
+        # printed on every request is wallpaper (`auth.exposure_warning`).
+        self._unvouched_reported = False
 
     def resolve(self, headers: Mapping[str, str]) -> Principal | None:
+        claimed = ""
+        vouched = False
         # HTTP header names are case-insensitive; a Mapping's keys are not.
         for name, value in headers.items():
-            if name.lower() != self._header:
-                continue
-            cleaned = value.strip().lower()
-            return Principal(id=cleaned, label=value.strip()) if cleaned else None
-        return None
+            lowered = name.lower()
+            if lowered == self._header:
+                claimed = value.strip()
+            elif lowered == self._assertion and value.strip():
+                vouched = True
+        if not claimed:
+            return None
+        if not vouched:
+            self._report_unvouched()
+            return None
+        return Principal(id=claimed.lower(), label=claimed)
+
+    def _report_unvouched(self) -> None:
+        if self._unvouched_reported:
+            return
+        self._unvouched_reported = True
+        logger.warning(
+            "Ignoring %s: the request carries no %s, so it did not come "
+            "through a reverse proxy configured for this deployment and the "
+            "identity in it is whatever the client typed. Nobody is "
+            "identified and user-scoped memory will not bind. Either add the "
+            "assertion line to your proxy (deploy/Caddyfile and "
+            "deploy/nginx.conf carry it) or unset %s. See docs/deploying.md "
+            "section 1b. This is said once per process.",
+            self._header_display,
+            PROXY_ASSERTION_HEADER,
+            PRINCIPAL_HEADER_ENV,
+        )
 
 
 def principals_from_env() -> IPrincipals:

@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from openstategraph.principal import PROXY_ASSERTION_HEADER
+
 REPO = Path(__file__).resolve().parents[2]
 CADDYFILE = REPO / "deploy" / "Caddyfile"
 NGINX = REPO / "deploy" / "nginx.conf"
@@ -154,6 +156,85 @@ class TestBothProxiesCoverTheStreams:
         if config is CADDYFILE:
             assert "request>headers>Authorization delete" in text
             assert "request>headers>Cookie delete" in text
+
+
+class TestTheIdentityHeaderCannotBeClientSupplied:
+    """the-boundary-nobody-checked 01 — the boundary `principal.py` states.
+
+    `principal.py:1`: *"Who a run is for — decided by the server, never
+    asserted by the client."* `docs/deploying.md` §1b: *"The proxy must strip
+    any client-supplied copy of that header."* Until this test, neither
+    shipped config contained the string `PRINCIPAL`, `X-Forwarded-Email` or
+    any strip directive at all — so a deployer who followed both sections of
+    one document got forged-identity read and write of another person's
+    long-term memory.
+
+    A config cannot strip the identity header by name: the name is the
+    deployer's, out of `OPENSTATEGRAPH_PRINCIPAL_HEADER`, and
+    `X-Auth-Request-Email` is as likely as `X-Forwarded-Email`. So the strip is
+    inverted — every block that proxies to the app **sets** one header whose
+    name is ours, and `TrustedHeaderPrincipals` reads identity only when it is
+    present. Setting overwrites, in both proxies, so a client copy of the
+    assertion cannot survive whatever the identity header is called.
+
+    Parsed rather than string-searched for the same reason the streaming
+    assertions are: a directive present in one block and absent from the other
+    is exactly the shape this file exists to catch, and the SSE block is the
+    one a reader forgets.
+    """
+
+    def test_caddy_stamps_the_assertion_on_every_reverse_proxy(self) -> None:
+        import re
+
+        text = CADDYFILE.read_text()
+        blocks = re.findall(r"reverse_proxy[^\n]*\{(.*?)\n\t\t\}", text, re.DOTALL)
+        bare = re.findall(r"^\s*reverse_proxy\s+\S+\s*$", text, re.MULTILINE)
+        assert not bare, (
+            "a bare `reverse_proxy` forwards every inbound header unchanged, "
+            f"including a client's copy of {PROXY_ASSERTION_HEADER}"
+        )
+        assert blocks, "deploy/Caddyfile proxies nothing"
+        for block in blocks:
+            assert f"header_up {PROXY_ASSERTION_HEADER} " in block, (
+                "every reverse_proxy block must set "
+                f"{PROXY_ASSERTION_HEADER} — `header_up Field value` replaces "
+                "any inbound copy, which is the strip"
+            )
+
+    def test_nginx_stamps_the_assertion_in_every_location(self) -> None:
+        import re
+
+        text = NGINX.read_text()
+        # `proxy_set_header` does not inherit into a `location` that sets any
+        # of its own, so the directive has to be repeated in each one — which
+        # is precisely the mistake this asserts against.
+        locations = re.findall(r"location [^\n]*\{(.*?)\n    \}", text, re.DOTALL)
+        proxying = [b for b in locations if "proxy_pass" in b]
+        assert len(proxying) >= 2, "expected the streaming block and the catch-all"
+        for block in proxying:
+            assert f"proxy_set_header {PROXY_ASSERTION_HEADER} " in block, (
+                f"every proxying location must set {PROXY_ASSERTION_HEADER}; "
+                "proxy_set_header does not inherit into a location that sets "
+                "its own, so a missing line here silently forwards the "
+                "client's copy"
+            )
+
+    @pytest.mark.parametrize("config", [CADDYFILE, NGINX], ids=["caddy", "nginx"])
+    def test_the_file_explains_the_identity_header_it_cannot_name(
+        self, config: Path
+    ) -> None:
+        """The half a directive cannot carry: a deployer who sets
+        `OPENSTATEGRAPH_PRINCIPAL_HEADER` has to know why this line is here and
+        what their auth block owes it."""
+        text = config.read_text()
+        assert "OPENSTATEGRAPH_PRINCIPAL_HEADER" in text
+        assert "docs/deploying.md" in text
+
+    def test_the_app_and_the_configs_agree_on_the_name(self) -> None:
+        """One string, one place. A config stamping `X-OSG-Proxy` while the app
+        reads `X-OpenStateGraph-Proxy` is two states with one output again."""
+        for config in (CADDYFILE, NGINX):
+            assert PROXY_ASSERTION_HEADER in config.read_text()
 
 
 class TestTheDeployingGuide:
