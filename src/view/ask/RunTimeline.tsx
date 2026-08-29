@@ -79,14 +79,27 @@ export function RunTimeline({
           Two claims, and both matter: the clock is the server's own
           (`memory-and-replay` 46), and the backend reports a node only after
           it finishes, so a bar is a span between frames rather than a measured
-          start and end. */}
-      <p className="timeline__caveat">
-        {totalMs === null
-          ? 'This run reported no clock, so its steps have no durations.'
-          : 'Server time, measured between stream frames — not a measured start and end.'}
-      </p>
+          start and end — except where the run dated both ends, which it does
+          for a mount (`memory-and-replay` 57). */}
+      <p className="timeline__caveat">{caveatFor(steps, totalMs)}</p>
     </div>
   );
+}
+
+/**
+ * The line under the bars, which has to be true of every bar above it.
+ *
+ * Three states rather than two (`memory-and-replay` 57). A mount's bar is a
+ * measured start and end — its `spawn` and its `settled`, both dated — so a
+ * flat "not a measured start and end" became false about part of the chart
+ * the moment rule 6 landed. Pure and exported so the claim is pinned by a
+ * test rather than by a reader noticing.
+ */
+export function caveatFor(steps: readonly { measured: boolean }[], totalMs: number | null): string {
+  if (totalMs === null) return 'This run reported no clock, so its steps have no durations.';
+  return steps.some((step) => step.measured)
+    ? 'Server time. A bar is a span between stream frames, except where the run dated both ends — those are marked measured.'
+    : 'Server time, measured between stream frames — not a measured start and end.';
 }
 
 /** Everything about a bar that the row itself has no room to say. */
@@ -97,9 +110,18 @@ function describe(step: {
   count: number;
   internalSteps: number;
   taskId: string | null;
+  measured: boolean;
+  concurrent: readonly string[];
 }): string {
   const parts = [step.label];
   if (step.visit > 1) parts.push(`visit ${step.visit}`);
+  // The two facts 57 added, and the order they matter in: whether this bar's
+  // ends were dated at all, and then what it is known to have run beside.
+  if (step.measured) parts.push('measured start and end');
+  if (step.concurrent.length > 0) {
+    const others = step.concurrent.length;
+    parts.push(`ran alongside ${others} other step${others === 1 ? '' : 's'}`);
+  }
   // "mount", not "subgraph": the settled lexicon, and the compiler emits no
   // LangGraph subgraph anyway (consistency-sweep ticket 10).
   if (step.namespace) parts.push(`${step.count} steps inside this mount`);

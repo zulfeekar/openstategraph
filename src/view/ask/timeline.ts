@@ -33,11 +33,19 @@
  * makes, for the same reason: `0 ms` beside a ten-second bar is a claim, and a
  * visibly false number invalidates every honest number beside it.
  *
- * **It is still a span between frames, not a measured start and end.** The
- * `updates` stream reports a node only *after* it finishes, so nothing on this
- * wire marks a beginning, and for concurrently dispatched workers one shared
- * span is attributed to whichever frames arrived. The UI says so in a line
- * under the bars rather than implying otherwise with a precise-looking number.
+ * **It is still a span between frames, not a measured start and end** — for
+ * every bar except one. The `updates` stream reports a node only *after* it
+ * finishes, so nothing on this wire marks a beginning, and for concurrently
+ * dispatched workers one shared span is attributed to whichever frames
+ * arrived. The UI says so in a line under the bars rather than implying
+ * otherwise with a precise-looking number.
+ *
+ * The exception is a **mount** (`memory-and-replay` 57). A mounted workflow is
+ * announced by a `spawn` frame of kind `subgraph` and closed by a `settled` —
+ * the same dated pair 54 gave a dispatched child and 50 built a child lane's
+ * bar from — so a mount's bar is a measured start and end even though it sits
+ * in the run's own lane. `TimelineStep.measured` is which of the two a bar is,
+ * per bar, rather than a caveat said about all of them at once.
  *
  * That admission used to end here, with the sentence *"the UI must not claim
  * otherwise"* — and a column of bars read top to bottom claims otherwise
@@ -137,6 +145,28 @@ export interface TimelineStep {
   readonly namespace: string | null;
   /** Which visit to this label this is — >1 marks a revise-loop lap. */
   readonly visit: number;
+  /**
+   * Both ends of this bar were dated by the run, rather than inferred from
+   * the gap between whichever frames arrived (`memory-and-replay` 57).
+   *
+   * True for a **mount**, and today for nothing else in the run's lane: a
+   * `subgraph` spawn frame opens it and a `settled` frame closes it, the same
+   * dated pair 50 built a child lane's bar from. Every other bar here is a
+   * span, and says so by being `false` — which is the distinction the panel's
+   * one-line caveat could only make about all of them at once.
+   */
+  readonly measured: boolean;
+  /**
+   * The keys of the bars whose windows this bar's window overlaps — the run
+   * ran them at the same time.
+   *
+   * Empty is the ordinary case and is not a promise: two span-attributed bars
+   * are laid end to end by construction, so they can never be found to
+   * overlap even when they did. What is here is therefore always true and
+   * never complete, and the honest reading is "these definitely overlapped",
+   * never "everything else definitely did not".
+   */
+  readonly concurrent: readonly string[];
 }
 
 export interface Timeline {
@@ -174,7 +204,9 @@ function add(a: number | null, b: number | null): number | null {
  *    checkpoint namespace is, on the canvas, a single mounted node — showing
  *    its internals as peers of the parent graph's nodes would misrepresent
  *    the drawing the developer is looking at. Checked before rule 1, so an
- *    internal frame from inside a mount stays in the mount's lane.
+ *    internal frame from inside a mount stays in the mount's lane — and, by
+ *    rule 6, stays in it even when a node on another branch reports in the
+ *    middle of the mount's work.
  * 3. **A repeated node gets a repeated bar.** This is the whole reason to
  *    build a timeline for an evaluator-optimizer graph: a second bar for the
  *    same agent *is* the revise lap, and merging them would erase it.
@@ -187,6 +219,21 @@ function add(a: number | null, b: number | null): number | null {
  * 5. **The total is the run's, not the bars'.** `totalMs` is the last frame's
  *    own `elapsedMs`, so "do these bars account for the run?" is a question a
  *    reader can answer by looking.
+ * 6. **A mount's bar is its own two dated frames, and one interruption does
+ *    not make it two bars** (`memory-and-replay` 57). A classifier router may
+ *    open several branches in one superstep, and then the run's lane is not a
+ *    sequence: in the recorded run `lead`'s completion frame landed in the
+ *    middle of the `deep` mount, so rules 2 and 3 between them drew the mount
+ *    as `deep ×1` and `deep ×2` — a node that ran once, badged as a node that
+ *    ran twice, which is what `visit` means. A mount is bound to its bar from
+ *    its `spawn` frame until its `settled`, so an interleaving sibling cannot
+ *    split it, and the bar takes its start and length from that pair rather
+ *    than from the spans charged to it.
+ *
+ *    That is also the whole of what this wire announces about a parallel
+ *    branch. A branch made only of ordinary nodes still has no start — see
+ *    `buildLanes` for why a branch is not a lane and what the missing half
+ *    would cost.
  */
 export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
   type Draft = { -readonly [K in keyof TimelineStep]: TimelineStep[K] };
@@ -195,6 +242,19 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
   const spawnNames = new Map<string, string>();
   /** The last frame's server offset — where the next span is measured from. */
   let clock: number | null = null;
+  /**
+   * The mounts the run has announced, by checkpoint namespace, each with the
+   * window its own two dated frames give it and the bar its frames land on.
+   *
+   * This is rule 6 (`memory-and-replay` 57). A mount is the one thing in the
+   * run's own lane whose start *is* on the wire, so its bar does not have to
+   * be a span between arrivals and must not be cut in two when a node on
+   * another branch reports in the middle of it.
+   */
+  const mounts = new Map<
+    string,
+    { readonly startMs: number | null; readonly endMs: number | null; bar: Draft | null }
+  >();
   /** A bar opened by internal frames and still awaiting its own node frame. */
   let pending: Draft | null = null;
   /** Whose work opened it — the `activeNode` those frames named. */
@@ -221,6 +281,8 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
       internalSteps: 0,
       namespace,
       visit,
+      measured: false,
+      concurrent: [],
     };
     steps.push(draft);
     return draft;
@@ -256,6 +318,11 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
     if (elapsed !== null) clock = elapsed;
 
     const namespace = row.namespace?.[0] ?? null;
+    // The mount this frame belongs to, if the run had not yet closed it. A
+    // frame arriving after the `settled` is outside the window and claims
+    // nothing — that is how one namespace reused by a second lap of a fan-out
+    // stays two bars.
+    const mount = namespace === null ? undefined : openMountAt(mounts, namespace, elapsed);
 
     if (row.spawn) {
       // Keyed by whichever handle the child's own frames will carry: a
@@ -263,6 +330,17 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
       // subgraph by its namespace head.
       if (row.taskId) spawnNames.set(`task:${row.taskId}`, row.spawn.label);
       if (namespace) spawnNames.set(`ns:${namespace}`, row.spawn.label);
+      // A `subgraph` spawn is not an announcement of a child that will get a
+      // lane of its own (`buildLanes` skips this kind for that reason) — it is
+      // this graph's own mounted node beginning work, and the `settled` frame
+      // written back onto this row is it ending. Two dated ends, so the bar is
+      // measured rather than inferred.
+      if (namespace !== null && row.spawn.kind === 'subgraph') {
+        const settled = Number.isFinite(row.spawn.settledMs as number)
+          ? (row.spawn.settledMs as number)
+          : null;
+        mounts.set(namespace, { startMs: elapsed, endMs: settled, bar: null });
+      }
       // No bar — but the time up to the announcement was somebody's, and it
       // was the bar in progress (rule 4).
       const last: Draft | undefined = pending ?? mutable();
@@ -275,9 +353,10 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
       // Rule 2 first: a frame from inside a mount belongs to the mount's
       // lane, whatever the run resolved its top-level owner to be.
       const insideTheOpenLane =
-        last !== undefined && namespace !== null && last.namespace === namespace;
+        (mount?.bar ?? null) !== null ||
+        (last !== undefined && namespace !== null && last.namespace === namespace);
       const owner = row.activeNode ? stepLabel(row.activeNode) : null;
-      let bar: Draft | undefined = last;
+      let bar: Draft | undefined = mount?.bar ?? last;
       if (!insideTheOpenLane && owner !== null && (bar === undefined || bar.label !== owner)) {
         // The run has named a node whose own frame has not arrived yet: this
         // is that node working, so its bar opens here rather than at the end
@@ -291,6 +370,15 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
       if (bar) {
         bar.internalSteps += 1;
         bar.durationMs = add(bar.durationMs, duration);
+        if (mount) {
+          // The mount's frames have a bar now, and keep it until the run says
+          // the mount closed. Re-arming `pending` is what lets the mount's own
+          // completion frame close this bar rather than open a second one
+          // after a sibling branch reported in between.
+          mount.bar ??= bar;
+          pending = bar;
+          pendingOwner = bar.label;
+        }
       }
       continue;
     }
@@ -320,6 +408,18 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
     pending = null;
     pendingOwner = null;
 
+    // A node *inside* an open mount reporting: it belongs to the mount's bar,
+    // wherever that bar now sits in the list. The `last`-only form of this
+    // check is what let `lead` cut `deep` in two (`memory-and-replay` 57).
+    const bound = mount?.bar ?? null;
+    if (bound !== null) {
+      bound.count += 1;
+      bound.durationMs = add(bound.durationMs, duration);
+      pending = bound;
+      pendingOwner = bound.label;
+      continue;
+    }
+
     const last = mutable();
     if (namespace !== null && last && last.namespace === namespace && last.taskId === row.taskId) {
       last.count += 1;
@@ -331,7 +431,63 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
     draft.durationMs = duration;
   }
 
+  // Rule 6, second half: a mount's bar is its own two dated frames, not the
+  // spans that happened to be charged to it. The two agree whenever nothing
+  // interleaved, and where something did the pair is the one that is right.
+  for (const mount of mounts.values()) {
+    if (mount.bar === null || mount.startMs === null) continue;
+    mount.bar.startMs = mount.startMs;
+    if (mount.endMs === null) continue;
+    mount.bar.durationMs = Math.max(0, mount.endMs - mount.startMs);
+    mount.bar.measured = true;
+  }
+  assignConcurrency(steps);
+
   return { steps, totalMs: clock };
+}
+
+/** The mount this namespace names, if the run had not yet closed it at `at`. */
+function openMountAt<T extends { endMs: number | null }>(
+  mounts: ReadonlyMap<string, T>,
+  namespace: string,
+  at: number | null,
+): T | undefined {
+  const mount = mounts.get(namespace);
+  if (mount === undefined) return undefined;
+  if (mount.endMs !== null && at !== null && at > mount.endMs) return undefined;
+  return mount;
+}
+
+/**
+ * Names, on each bar, the bars it overlapped in time.
+ *
+ * Strictly overlapped: a bar that begins exactly where another ends is a
+ * sequence, and the span model produces a great many of those. So the only
+ * pairs this can find are ones where at least one end came from a dated frame
+ * rather than from an arrival — which is the point. It is a floor on the
+ * concurrency in a run and never a ceiling, and `TimelineStep.concurrent`
+ * says so where a reader will meet it.
+ */
+function assignConcurrency(
+  steps: readonly { -readonly [K in keyof TimelineStep]: TimelineStep[K] }[],
+): void {
+  const found = steps.map((): string[] => []);
+  const endOf = (step: TimelineStep): number => (step.startMs ?? 0) + (step.durationMs ?? 0);
+  for (let i = 0; i < steps.length; i += 1) {
+    const a = steps[i]!;
+    if (a.startMs === null) continue;
+    for (let j = i + 1; j < steps.length; j += 1) {
+      const b = steps[j]!;
+      if (b.startMs === null) continue;
+      if (a.startMs < endOf(b) && b.startMs < endOf(a)) {
+        found[i]!.push(b.key);
+        found[j]!.push(a.key);
+      }
+    }
+  }
+  steps.forEach((step, index) => {
+    step.concurrent = found[index]!;
+  });
 }
 
 /** A bar's width as a percentage of the run, floored so a fast step is still visible. */
@@ -439,7 +595,7 @@ const RUN_LANE = 'The workflow';
  * | | what says so |
  * | --- | --- |
  * | a fan-out child | a `spawn` frame with `kind: "fanout"`, minted from an entry in the orchestrator's own `subtasks` plan. Siblings arrive on one frame carrying one `elapsedMs`, so their overlap is recorded rather than inferred |
- * | a mounted workflow | a `spawn` frame with `kind: "subgraph"`, minted from a checkpoint namespace appearing for the first time. **Not a lane**: it is one node on the canvas and its parent blocks inside it, so it folds into the parent's bar exactly as `buildTimeline`'s rule 2 already folds it. That also settles the collapse depth — `nested-mounts` is three documents and yields one lane, because the rule is about what a mount *is* rather than about how deep a reader can bear to look |
+ * | a mounted workflow | a `spawn` frame with `kind: "subgraph"`, minted from a checkpoint namespace appearing for the first time. **Not a lane**: it is one node on the canvas, so it folds into that node's bar exactly as `buildTimeline`'s rules 2 and 6 fold it. That also settles the collapse depth — `nested-mounts` is three documents and yields one lane, because the rule is about what a mount *is* rather than about how deep a reader can bear to look. Its pair is not wasted for being a bar rather than a row: it is what makes that bar a **measured** one (57) |
  * | a revise lap | **no spawn frame at all** — the same top-level node reporting again. It keeps its `visit` counter and stays a second bar in the run's lane |
  *
  * # Where a lane's name comes from
@@ -477,15 +633,36 @@ const RUN_LANE = 'The workflow';
  * simply not finished yet. None of them is given a number, because the run
  * measured none.
  *
- * ## What this fold still does not model
+ * ## Two top-level branches running in parallel — and why neither is a lane
  *
- * **Two top-level branches running in parallel.** In the recorded run the
- * router opened both desks in one superstep, so the `deep` mount ran
- * alongside the whole supervisor branch — and neither has a `spawn` frame
- * saying they are concurrent with *each other*, because a branch is not a
- * child. They stay bars in the run's lane, span-attributed, with the caveat
- * that lane already carries. Named here rather than left for a reader to
- * discover.
+ * `memory-and-replay` 57, and the answer is *not* a row. A dispatched child
+ * is an actor: it is announced, it is closed, it has an owner and an end, and
+ * a row is what that shape wants. A **branch is a path through this same
+ * graph** — the nodes on it are this graph's own nodes, drawn on this canvas,
+ * belonging to this run. Giving `deep` a row and `lead` a row would say the
+ * workflow had two actors in it, which is a claim about the document rather
+ * than about the run, and it would be made afresh on every branching
+ * classifier. So a branch stays bars in the run's lane, and what a bar owes a
+ * reader is an honest **position**, not a row of its own.
+ *
+ * Half of that position was already on the wire and simply not read.
+ * `stress-review`'s router opened both desks in one superstep and the `deep`
+ * mount ran from 2 775 ms to 13 317 ms alongside the supervisor branch —
+ * dated at both ends by its `subgraph` `spawn`/`settled` pair, exactly as a
+ * child lane is. `buildTimeline`'s rule 6 now reads it, so that mount draws
+ * once, in the right place, at its real length, and `TimelineStep.concurrent`
+ * names the bar it overlapped.
+ *
+ * **The half that is still missing is a start for an ordinary node.** A
+ * branch of plain agent nodes carries no pair, so its bars remain spans laid
+ * end to end and two of them can never be *found* to overlap even when they
+ * did. That is 48's finding, priced and deliberately not shipped:
+ * `stream_mode="tasks"` emits a per-task start, and putting it on the wire is
+ * a new frame kind — a Pydantic model, a regenerated `docs/openapi.json`, the
+ * hand-written mirror in `RuntimeClient.ts` and `contractDrift.test.ts`.
+ * Inferring those starts here instead would be the guess 46 exists to stop,
+ * so nothing here invents one. `concurrent` is therefore a floor and never a
+ * ceiling, and its own doc comment says so where a reader will meet it.
  */
 export function buildLanes(rows: readonly TimelineRow[]): RunLanes {
   const { steps, totalMs } = buildTimeline(rows);
