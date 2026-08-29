@@ -689,9 +689,12 @@ _COLUMN_TYPES: dict[str, str] = {
 #: which no finished state holds, so this reverses that conclusion out loud.
 #:
 #: `run_rowid` is `runs.rowid`, read back from the insert in the same
-#: transaction. No column is added to `runs`, deliberately: this module has no
-#: migration machinery and `CREATE TABLE IF NOT EXISTS` would leave every
-#: existing store unable to take a row.
+#: transaction — a join, rather than a column on `runs`, because a run has many
+#: bursts. This comment used to end *"no column is added to `runs`,
+#: deliberately: this module has no migration machinery"*, which was true of
+#: that decision and was the whole statement of the problem for the next one:
+#: see `_reconcile` below, which is now the migration machinery, and
+#: `the-boundary-nobody-checked/07` for what it does not cover.
 _BURST_COLUMNS: tuple[str, ...] = (
     "run_rowid",
     "ord",
@@ -725,6 +728,65 @@ _BURST_TYPES: dict[str, str] = {
     "cadence": "BLOB",
     "capped": "INTEGER",
 }
+
+
+def _table_columns(connection: sqlite3.Connection, table: str) -> tuple[str, ...]:
+    """What this file actually holds for `table`, in its own order.
+
+    The one question both halves of the schema answer ask. `table` is a module
+    constant at every call site and never a value from anywhere.
+    """
+    return tuple(row[1] for row in connection.execute(f"PRAGMA table_info({table})"))
+
+
+def _reconcile(
+    connection: sqlite3.Connection,
+    table: str,
+    columns: tuple[str, ...],
+    types: dict[str, str],
+) -> None:
+    """Give `table` any column `columns` names and the file lacks. Nothing else.
+
+    **Reflection, not a version ledger** (`the-boundary-nobody-checked/07`).
+    `PRAGMA user_version` plus an ordered list of steps is the conventional
+    answer and it restates the schema a second time — which is the defect
+    `_COLUMNS`' own comment names, *"two spellings of a schema is how a store
+    starts answering a question with a column that no longer means what it
+    did"*. Reading the file and comparing it against the one declaration cannot
+    drift from it, needs no number to be bumped by somebody who remembers, and
+    is idempotent, so a downgrade and an upgrade and a fresh install are one
+    path. What it costs is history: nothing records *when* a column arrived, so
+    no future step can be conditioned on the version a store was written by.
+    That is affordable here because this store holds only what a run reported —
+    there is no derived value a backfill would have to recompute.
+
+    **What this does not survive, stated rather than implied.** It is additive
+    and only additive:
+
+    - a **renamed** column arrives as a new empty one, and the old one keeps the
+      data with nothing to move it;
+    - a **changed type** is not applied — sqlite does not rewrite a table for
+      `ADD COLUMN`, and it is dynamically typed anyway, so old rows keep the
+      values they had;
+    - a **dropped** column stays, deliberately: the store's standing rule is
+      that nothing recorded is ever removed, and a column this build does not
+      know may be one a build somebody else is running does;
+    - a column that is `NOT NULL` without a default, `UNIQUE`, or a foreign key
+      is refused by sqlite's own `ADD COLUMN` and would land in the caller's
+      warning.
+
+    Any of those is a change that needs a migration written for it, and this is
+    the point at which somebody would have to write one. What it buys is that
+    the change the schema has actually made four times in one day — *one more
+    column* — costs nothing.
+    """
+    present = set(_table_columns(connection, table))
+    for name in columns:
+        if name in present:
+            continue
+        connection.execute(
+            f"ALTER TABLE {table} ADD COLUMN {name} {types.get(name, 'TEXT')}"
+        )
 
 
 class SqliteRunSink:
@@ -779,6 +841,9 @@ class SqliteRunSink:
         self.path = Path(path) if path is not None else None
         self._connection: sqlite3.Connection | None = None
         self._broken = False
+        #: Whether a row has already been lost. The first loss and the tenth
+        #: are different facts and had one voice between them.
+        self._lost_a_row = False
 
     def record(self, record: RunRecord) -> None:
         connection = self._open()
@@ -807,7 +872,40 @@ class SqliteRunSink:
                         ],
                     )
         except sqlite3.Error as exc:
-            logger.warning("Could not write the run record to %s: %s", self.path, exc)
+            self._could_not_write(exc)
+
+    def _could_not_write(self, exc: sqlite3.Error) -> None:
+        """Say a row was lost — loudly the first time, and never by raising.
+
+        The broad catch above stays broad and stays a catch: a sink is an
+        observer, and `memory-and-replay/44` was careful that a door's turn does
+        not depend on one. What was wrong was the volume. *"The trace file is
+        unwritable"* is a warning; *"this installation has stopped keeping run
+        records"* is not, and the two went through one line, so the surface
+        built to make runs visible could go blank behind a log level nobody
+        reads at (`the-boundary-nobody-checked/07`).
+
+        So the first loss is an ERROR that names the file and what to do about
+        it, and every loss after it is the warning it always was — because the
+        failure that produces one of these produces one per run, and a report
+        repeated is a log flood, which is `_open`'s own argument for `_broken`.
+        """
+        if self._lost_a_row:
+            logger.warning(
+                "Could not write the run record to %s: %s", self.path, exc
+            )
+            return
+        self._lost_a_row = True
+        logger.error(
+            "Could not write the run record to %s: %s. This run finished and its "
+            "answer is unaffected, but it is not in the run store, and neither "
+            "will the ones after it be while this lasts — `openstategraph runs "
+            "list` will not show them. Check the file is writable and that its "
+            "disk is not full; `openstategraph runs export --to runs.json` "
+            "takes a copy of what it already holds before you move it aside.",
+            self.path,
+            exc,
+        )
 
     def close(self) -> None:
         if self._connection is not None:
@@ -866,6 +964,14 @@ class SqliteRunSink:
                     "CREATE INDEX IF NOT EXISTS run_bursts_run "
                     "ON run_bursts (run_rowid, ord)"
                 )
+                # `CREATE TABLE IF NOT EXISTS` is a no-op against a table that
+                # already exists with the old shape, so the four statements
+                # above are the whole schema only on a file this build created.
+                # Both tables, on the same open, in the same transaction: a
+                # burst insert shares the run row's transaction, so a mismatch
+                # on either would lose both.
+                _reconcile(connection, "runs", _COLUMNS, _COLUMN_TYPES)
+                _reconcile(connection, "run_bursts", _BURST_COLUMNS, _BURST_TYPES)
         except (OSError, sqlite3.Error) as exc:
             logger.warning("Could not open the run store at %s: %s", self.path, exc)
             self._broken = True
@@ -1038,12 +1144,25 @@ def read_runs(
         logger.warning("Could not open the run store at %s: %s", target, exc)
         return []
     try:
+        # **The reader reconciles by asking for less, because it cannot ALTER.**
+        # This connection is `mode=ro`, and `openstategraph runs list` is the
+        # first thing somebody runs after an upgrade — before any run has
+        # reopened the sink for writing. Naming today's columns against a file
+        # one column behind is `no such column`, which cost the whole listing
+        # rather than the one cell (`the-boundary-nobody-checked/07`). So: the
+        # intersection, and the fields the file does not carry keep the
+        # record's own defaults.
+        known = tuple(
+            name for name in _COLUMNS if name in _table_columns(connection, "runs")
+        )
+        if not known:
+            return []
         rows = connection.execute(
-            f"SELECT rowid,{','.join(_COLUMNS)} FROM runs{where} "
+            f"SELECT rowid,{','.join(known)} FROM runs{where} "
             "ORDER BY at DESC, rowid DESC LIMIT ?",
             [*values, max(1, limit)],
         ).fetchall()
-        records = [_record(row[1:]) for row in rows]
+        records = [_record(row[1:], known) for row in rows]
         if with_bursts:
             # Keyed by `runs.rowid`, never by `thread_id`: a thread is a
             # conversation and holds many turns, so filtering by it would give
@@ -1073,8 +1192,11 @@ def _attach_bursts(
         return
     placeholders = ",".join("?" for _ in rowids)
     try:
+        known = _known_burst_columns(connection)
+        if not known:
+            return
         rows = connection.execute(
-            f"SELECT run_rowid,{','.join(_BURST_COLUMNS[2:])} FROM run_bursts "
+            f"SELECT run_rowid,{','.join(known)} FROM run_bursts "
             f"WHERE run_rowid IN ({placeholders}) ORDER BY run_rowid, ord",
             rowids,
         ).fetchall()
@@ -1083,7 +1205,7 @@ def _attach_bursts(
         return
     by_run: dict[Any, list[RunBurst]] = {}
     for row in rows:
-        by_run.setdefault(row[0], []).append(_burst(row[1:]))
+        by_run.setdefault(row[0], []).append(_burst(row[1:], known))
     for rowid, record in zip(rowids, records):
         record.bursts = by_run.get(rowid, [])
 
@@ -1125,12 +1247,24 @@ def _burst_row(run_rowid: int | None, order: int, burst: RunBurst) -> tuple[Any,
     )
 
 
-def _burst(row: tuple[Any, ...]) -> RunBurst:
+def _known_burst_columns(connection: sqlite3.Connection) -> tuple[str, ...]:
+    """The burst columns this build wants that this file actually has.
+
+    `_BURST_COLUMNS[2:]` because the key and the ordinal are the join, not the
+    burst. Empty means no `run_bursts` table at all, which is every store
+    written before `memory-and-replay/47` and is an answer rather than a fault.
+    """
+    present = set(_table_columns(connection, "run_bursts"))
+    return tuple(name for name in _BURST_COLUMNS[2:] if name in present)
+
+
+def _burst(row: tuple[Any, ...], names: tuple[str, ...] = _BURST_COLUMNS[2:]) -> RunBurst:
     """One stored row, back as the object that wrote it. Tolerant in exactly
     the way `_record` is: a namespace that will not parse costs the namespace,
-    never the burst."""
+    never the burst — and a column the file predates costs that field and not
+    the burst either, which is `names` rather than `_BURST_COLUMNS[2:]`."""
     fields: dict[str, Any] = {}
-    for name, value in zip(_BURST_COLUMNS[2:], row):
+    for name, value in zip(names, row):
         if name == "namespace":
             try:
                 fields[name] = json.loads(value) if value else []
@@ -1209,8 +1343,11 @@ def read_run_bursts(
         logger.warning("Could not open the run store at %s: %s", target, exc)
         return []
     try:
+        known = _known_burst_columns(connection)
+        if not known:
+            return []
         rows = connection.execute(
-            f"SELECT {','.join('run_bursts.' + name for name in _BURST_COLUMNS[2:])} "
+            f"SELECT {','.join('run_bursts.' + name for name in known)} "
             "FROM run_bursts JOIN runs ON runs.rowid = run_bursts.run_rowid"
             f"{where} ORDER BY run_bursts.run_rowid, run_bursts.ord LIMIT ?",
             [*values, max(1, limit)],
@@ -1223,18 +1360,21 @@ def read_run_bursts(
         return []
     finally:
         connection.close()
-    return [_burst(row) for row in rows]
+    return [_burst(row, known) for row in rows]
 
 
-def _record(row: tuple[Any, ...]) -> RunRecord:
+def _record(row: tuple[Any, ...], names: tuple[str, ...] = _COLUMNS) -> RunRecord:
     """One stored row, back as the object that wrote it.
 
     Read tolerantly: a column whose JSON will not parse costs that field and not
     the row, because a history that refuses to list anything at all is worse to
-    a person diagnosing a run than a history with one blank cell.
+    a person diagnosing a run than a history with one blank cell. `names` is the
+    same rule one level up — the columns the *file* has, which on a store this
+    build is newer than is fewer than `_COLUMNS`, and the difference is the
+    record's own defaults rather than an empty listing.
     """
     fields: dict[str, Any] = {}
-    for name, value in zip(_COLUMNS, row):
+    for name, value in zip(names, row):
         if name == "total_tokens":
             continue  # derived on write; `usage` is the truth on read
         if name in _JSON_COLUMNS:

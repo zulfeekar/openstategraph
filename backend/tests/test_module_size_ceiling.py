@@ -385,6 +385,22 @@ SQL here is module-pinned and no model string reaches it, so this module was
 never the way in — it is routed through the seam anyway because the
 alternative is an exemption list, and an exemption list is how the seventh
 call site inherits the hole in silence.
+
+**529 -> 578** (`the-boundary-nobody-checked/07`). Forty-nine lines, and the
+argued docstrings are most of them: `_reconcile` and `_table_columns` are
+sixteen lines of code under a docstring that says why reflection beat a
+`PRAGMA user_version` ledger and — the part a reader needs — enumerates the
+four shapes of schema change it deliberately does not survive. The rest is
+`_could_not_write`, which splits the first lost row from the tenth, and a
+`names` parameter threaded through the two readers so a store this build is
+newer than lists what it holds instead of nothing.
+
+This is the module's one reason to change, arriving late rather than a second
+one: a store's schema and how it is read back is what this file *is*, and the
+comment being replaced (`_BURST_COLUMNS`, *"this module has no migration
+machinery"*) shows the concern was already here, stated as a constraint with
+nobody owning it. Nothing extractable was added — `_reconcile` has one caller
+and would be a module of two functions and a paragraph.
 """
 
 #: Eight modules, derived and then argued for one at a time. Nothing in this
@@ -400,7 +416,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_mcp.py": Recorded(750, PREBUILT_MCP),
     "mcp_server.py": Recorded(654, MCP_SERVER),
     "api/routes/workflows.py": Recorded(546, ROUTES_WORKFLOWS),
-    "run_sinks.py": Recorded(529, RUN_SINKS),
+    "run_sinks.py": Recorded(578, RUN_SINKS),
 }
 
 
