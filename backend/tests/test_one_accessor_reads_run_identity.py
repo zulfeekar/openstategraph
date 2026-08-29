@@ -35,6 +35,7 @@ from openstategraph.run_identity import (
     RUN_IDENTITY_KEYS,
     run_identity,
 )
+from openstategraph.api.audience import Audience
 
 
 def _package_root() -> Path:
@@ -127,7 +128,9 @@ class TestEveryDoorStillBehaves:
         services = WorkflowServices(workflows_root=root)
         WorkflowLibrary(services).save_draft("ledger-demo", "Ledger", _ledger_document())
 
-        result = WorkflowRuns(services).run(slug="ledger-demo", question="the crossing")
+        result = WorkflowRuns(services).run(
+            slug="ledger-demo", question="the crossing", audience=Audience.CUSTOMER
+        )
 
         assert result["error"] is None
         assert {

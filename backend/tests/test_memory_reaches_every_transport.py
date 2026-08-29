@@ -31,6 +31,7 @@ from langgraph.store.base import BaseStore
 
 from openstategraph.api.main import create_app
 from openstategraph.api.services import WorkflowServices
+from openstategraph.api.audience import Audience
 
 
 def _node(node_id: str, node_type: str, **data: Any) -> dict[str, Any]:
@@ -131,7 +132,9 @@ class TestTheMcpTransportCompilesAgainstTheMemoryStore:
             monkeypatch.delenv(var, raising=False)
         services = WorkflowServices(tmp_path)
 
-        WorkflowRuns(services).run(document=_document(), question="hello")
+        WorkflowRuns(services).run(
+            document=_document(), question="hello", audience=Audience.CUSTOMER
+        )
 
         assert stores, "the MCP run tool never reached WorkflowCompiler.build"
         assert stores[-1] is services.memory_store

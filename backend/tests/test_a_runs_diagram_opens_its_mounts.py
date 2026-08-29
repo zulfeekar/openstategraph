@@ -36,6 +36,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from openstategraph.api.audience import Audience
 
 BACKEND = Path(__file__).resolve().parent.parent
 EXAMPLES = BACKEND / "openstategraph" / "examples"
@@ -230,7 +231,9 @@ class TestTheMcpRunToolDrawsTheCompositionToo:
 
         services = WorkflowServices(EXAMPLES)
         try:
-            result = WorkflowRuns(services).run(slug="nested-mounts", question="hi")
+            result = WorkflowRuns(services).run(
+                slug="nested-mounts", question="hi", audience=Audience.CUSTOMER
+            )
         finally:
             services.close()
 

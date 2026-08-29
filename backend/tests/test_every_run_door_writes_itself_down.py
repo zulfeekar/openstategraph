@@ -35,6 +35,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from openstategraph.run_sinks import RunRecord, read_runs, reset_run_sink_registry
+from openstategraph.api.audience import Audience
 
 
 def _n(i: str, t: str, **d: Any) -> dict[str, Any]:
@@ -140,7 +141,9 @@ class TestTheMcpDoor:
         from openstategraph.mcp_server import WorkflowRuns
 
         services = WorkflowServices(workflows_root=workflows_root)
-        result = WorkflowRuns(services).run(document=_document(), question="over mcp")
+        result = WorkflowRuns(services).run(
+            document=_document(), question="over mcp", audience=Audience.CUSTOMER
+        )
         assert result["error"] is None, result
 
         rows = _rows(store)
@@ -181,7 +184,7 @@ class TestOneRowPerTurn:
         client.post("/api/runs", json={"workflow": _document(), "question": "a"})
         client.post("/api/runs/stream", json={"workflow": _document(), "question": "b"})
         WorkflowRuns(WorkflowServices(workflows_root=workflows_root)).run(
-            document=_document(), question="c"
+            document=_document(), question="c", audience=Audience.CUSTOMER
         )
 
         assert sorted(row.question for row in _rows(store)) == ["a", "b", "c"]

@@ -18,6 +18,16 @@ design:
   hands back a normalized `workflow.json` envelope, the compiled Mermaid
   topology, a run snippet and the package skeleton. They commit it. Nothing
   here needs to host it.
+- **`run_workflow` is a run door, and it is the one part of this module that
+  is not authoring.** Everything above composes; that tool *runs*, on the
+  deployer's model budget, and this module's own run-journal note calls it
+  "the one a customer's own model calls". So it answers to an audience like
+  `/api/runs`, `/api/runs/stream` and the CLI do, and the audience is the
+  **deployment's** — `OPENSTATEGRAPH_AUDIENCE`, through
+  `audience.deployment_audience()` — never an argument on the tool, because
+  the client filling in a tool's arguments here is a model
+  (`the-boundary-nobody-checked/08`). Unset means customer: no fence in the
+  answer or in `outputs`, and no `warnings` key at all.
 - **Hosting is optional and drafts-only.** `save_workflow_draft` exists for
   deployments that do host workflows. It always writes a draft; **publishing is
   not exposed over MCP** and neither is deletion. A human clicks publish in the
@@ -49,6 +59,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from openstategraph.api.audience import deployment_audience
 from openstategraph.api.diagram import workflow_mermaid
 from openstategraph.api.services import WorkflowServices
 from openstategraph.errors import DocumentError as _DocumentError
@@ -740,13 +751,41 @@ class WorkflowRuns:
         document: Any = None,
         recursion_limit: int | None = None,
         model: str | None = None,
+        *,
+        audience: Any,
     ) -> dict[str, Any]:
         """Compile and run, synchronously — the `/api/runs` path, no streaming.
 
         Credentials are never accepted over MCP: the model resolves from the
         server's own environment, exactly as `apply_credentials` guarantees the
         server's env always wins.
+
+        **This is a run door, and it answers to an audience like the other
+        three** (`the-boundary-nobody-checked/08`). It used to answer to none:
+        the fence stayed welded into `answer` and into every value of
+        `outputs`, and `warnings` — plan findings, `runtime_warnings`, run
+        failures and silent nodes, sentences naming node ids and unbound tool
+        types — rode the payload unconditionally, on the door this module's own
+        run-journal note calls *"the one a customer's own model calls"*.
+
+        `audience` is a **required keyword with no default**, which is
+        `run_sinks.read_run_bursts`' shape and it is required for that ticket's
+        reason: the audience *removes* content every caller here used to get,
+        and a default would remove it from somebody who never knew they were
+        being asked. It is still capped by `resolve()`, so a deployment that
+        set `OPENSTATEGRAPH_AUDIENCE=customer` caps this door too.
+
+        Where the MCP *tool* gets its value from is the decision this ticket
+        turned on, and it is not an argument on the tool — see
+        `audience.deployment_audience`.
         """
+        from openstategraph.api.audience import (
+            DeveloperChannel,
+            clean_output,
+            resolve as resolve_audience,
+            split_suggestion,
+            with_capability_notice,
+        )
         from openstategraph.api.model_resolution import resolve_model, workflow_default_model
         from openstategraph.chat_model import build_chat_model
         from openstategraph.compile.node_runtime import RunState
@@ -796,7 +835,12 @@ class WorkflowRuns:
         chat_model = build_chat_model(resolve_model(model or workflow_default_model(resolved)))
         compiler = WorkflowCompiler()
         plan = compiler.plan(resolved)
-        runtime = self._services.runtime_for(slug, resolved, chat_model)
+        audience = resolve_audience(audience)
+        # The *generation* half, which this door had left at its default.
+        # `runtime_for` already names MCP among the transports that get the
+        # customer half — passing it explicitly is what makes the two halves
+        # one decision rather than two conventions that happen to agree.
+        runtime = self._services.runtime_for(slug, resolved, chat_model, audience=audience)
 
         # Same checkpointer as HTTP and `load_workflow`, from the same
         # assembly point (ticket 05). Before it, this call site built with
@@ -884,9 +928,8 @@ class WorkflowRuns:
             # a gate is a turn that happened.
             # Read after the run: `runtime_warnings` collects what the runtime
             # could not resolve while it ran.
-            turn.record(
-                final, warnings=list(plan.warnings) + runtime_warnings(runtime)
-            )
+            degraded = list(plan.warnings) + runtime_warnings(runtime)
+            turn.record(final, warnings=degraded)
 
         if "__interrupt__" in final:
             return {
@@ -901,8 +944,13 @@ class WorkflowRuns:
                 ],
             }
 
-        from openstategraph.compile.state import published_routes
-        from openstategraph.compile.workflow_compiler import run_health_from_state
+        from openstategraph.compile.state import published_answer, published_routes
+        from openstategraph.compile.workflow_compiler import (
+            RUN_FAILED_ANSWER,
+            redact_failure_markers,
+            run_health_from_state,
+            suggestion_from_rejection,
+        )
 
         # `run_health_from_state` is the library door's own machinery
         # (`workflow-gallery` 49): it reads every run-health source off
@@ -915,36 +963,79 @@ class WorkflowRuns:
         # therefore reported on `/api/runs`, `/api/runs/stream` and
         # `load_workflow`, and shipped silently on the one door a customer's
         # own LLM actually calls to run a workflow.
-        from openstategraph.compile.state import published_answer
-
         health = run_health_from_state(final)
 
-        return {
+        # The same seam as `/api/runs`, applied in the same order, because
+        # this is the same kind of door (`the-boundary-nobody-checked/08`).
+        # The fence leaves the answer **before** anyone asks who is listening,
+        # so a developer audience is not the way to get one back — it arrives
+        # on `suggestion`, as a field, the way `done` carries it.
+        whole_answer = published_answer(final)
+        prose, suggestion = split_suggestion(whole_answer)
+        if suggestion is None:
+            # A fallback, never an override (`every-workflow-green` 33).
+            suggestion = suggestion_from_rejection(final.get("unmet_tools"))
+        developer = (
+            DeveloperChannel(
+                warnings=degraded + health.failures + health.silent,
+                suggestion=suggestion,
+            )
+            .payload(audience)
+            .get("developer")
+        )
+
+        # A step failed and no answer was produced. `/api/runs`' floor, owed
+        # here for the same reason and newly owed at all: withholding the
+        # warnings from a customer would otherwise turn a dead run into a
+        # blank string with `error: null`.
+        if not prose.strip() and health.failures:
+            prose = RUN_FAILED_ANSWER
+        # Ticket 51 — the sentences stay developer-only, *the fact* cannot.
+        # A customer who no longer reads the warnings must still be told the
+        # run was degraded, or a lost capability reads as a confident answer.
+        prose = with_capability_notice(prose, degraded, audience)
+        raw_outputs = final.get("outputs") or {}
+        visible = raw_outputs if developer else redact_failure_markers(raw_outputs)
+
+        payload: dict[str, Any] = {
             # The whole answer, every exit included (`launch-readiness/174`).
-            "answer": published_answer(final),
+            "answer": prose,
             "decisions": {k: str(v) for k, v in (final.get("decisions") or {}).items()},
             # Every branch a parallel router matched, not only the one
             # dispatched on (`launch-readiness/175`). Through the seam, like
-            # every other door: an MCP client composing a document is exactly
-            # the reader who needs to know `matchMode: "all"` opened two desks.
+            # every other door: a client that asked for `matchMode: "all"` is
+            # exactly the reader who needs to know it opened two desks.
             "routes": published_routes(final),
-            "outputs": {k: str(v) for k, v in (final.get("outputs") or {}).items()},
+            # Cleaned per value, not only in `answer`: ticket 15 found the
+            # same fence one field along on the door that cleaned only the one.
+            "outputs": {k: str(clean_output(str(v))) for k, v in visible.items()},
             "attempts": int(final.get("attempts") or 0),
+            # Both audiences, on purpose (`launch-readiness` 25): the grader's
+            # reason is guidance and stays on `warnings`, but that a rejected
+            # candidate was published anyway is a fact about this run.
+            "published_rejected": health.published_rejected,
             # Unlike `compile_workflow` above, this path *has* a library:
             # it just ran the children, so it can draw them. Until
             # `workflow-gallery` 62 it published `get_graph().draw_mermaid()`
-            # and a mount was one box here too. No audience — an MCP client
-            # is composing a document, so it gets the compiler's own names,
-            # which are what a mount bug is reported under.
+            # and a mount was one box here too. In the caller's own
+            # vocabulary now, like every other run door.
             "mermaid": workflow_mermaid(
-                graph, resolved, runtime=runtime, store=self._services.store
-            ),
-            "warnings": (
-                list(plan.warnings) + runtime_warnings(runtime) + health.failures + health.silent
+                graph,
+                resolved,
+                runtime=runtime,
+                audience=audience,
+                store=self._services.store,
             ),
             "recursion_limit": limit,
             "error": None,
         }
+        if developer:
+            # Absent, not empty, for a customer — `DeveloperChannel.payload`
+            # decides, so the fact "warnings are authoring diagnostics" is
+            # still written down in exactly one place.
+            payload["warnings"] = developer["warnings"]
+            payload["suggestion"] = developer["suggestion"]
+        return payload
 
 
 SERVER_INSTRUCTIONS = """\
@@ -1117,8 +1208,25 @@ def build_mcp_server(
             only tool that reaches a model; it uses the SERVER's credentials —
             never send keys over MCP. `recursion_limit` counts supersteps, not
             iterations, and is bounded server-side.
+
+            **This door answers to an audience, and the audience is the
+            deployment's, not yours.** By default you get a customer's payload:
+            the answer, `decisions`, `routes`, `outputs`, `attempts` and the
+            diagram — and no `warnings` key at all, because authoring
+            diagnostics name node ids and unbound tool types. A server run with
+            `OPENSTATEGRAPH_AUDIENCE=developer` adds `warnings` and
+            `suggestion`. There is deliberately no `audience` argument here:
+            the client filling these fields is a model, and a boundary a model
+            can name is not a boundary (`the-boundary-nobody-checked/08`).
             """
-            return runs.run(question, slug, document, recursion_limit, model)
+            return runs.run(
+                question,
+                slug,
+                document,
+                recursion_limit,
+                model,
+                audience=deployment_audience(),
+            )
 
     return server
 

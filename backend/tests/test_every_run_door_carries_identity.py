@@ -31,6 +31,7 @@ import pytest
 from openstategraph.api.services import WorkflowServices
 from openstategraph.mcp_server import WorkflowLibrary, WorkflowRuns
 from openstategraph.memory_segment import SEGMENT_ROOT
+from openstategraph.api.audience import Audience
 
 
 def _n(i: str, t: str, **d: Any) -> dict[str, Any]:
@@ -83,7 +84,9 @@ class TestARunStartedOverMCPKnowsWhichWorkflowItIs:
     ) -> None:
         WorkflowLibrary(services).save_draft("ledger-demo", "Ledger", _ledger_document())
 
-        result = WorkflowRuns(services).run(slug="ledger-demo", question="the crossing")
+        result = WorkflowRuns(services).run(
+            slug="ledger-demo", question="the crossing", audience=Audience.CUSTOMER
+        )
 
         assert result["error"] is None
         assert _segment_namespaces(services) == {
@@ -101,8 +104,8 @@ class TestARunStartedOverMCPKnowsWhichWorkflowItIs:
         library.save_draft("alpha", "Alpha", _ledger_document())
         library.save_draft("beta", "Beta", _ledger_document())
 
-        runs.run(slug="alpha", question="from alpha")
-        runs.run(slug="beta", question="from beta")
+        runs.run(slug="alpha", question="from alpha", audience=Audience.CUSTOMER)
+        runs.run(slug="beta", question="from beta", audience=Audience.CUSTOMER)
 
         assert _segment_namespaces(services) == {
             (SEGMENT_ROOT, "alpha", "crossings"),
@@ -119,7 +122,9 @@ class TestARunStartedOverMCPKnowsWhichWorkflowItIs:
         one here would be a fabricated identity, which is the failure mode the
         fix must not introduce while removing the other one.
         """
-        result = WorkflowRuns(services).run(document=_ledger_document(), question="hi")
+        result = WorkflowRuns(services).run(
+            document=_ledger_document(), question="hi", audience=Audience.CUSTOMER
+        )
 
         assert result["error"] is None
         assert _segment_namespaces(services) == {(SEGMENT_ROOT, "unsaved", "crossings")}
@@ -156,7 +161,7 @@ class TestARunStartedOverMCPKnowsWhichWorkflowItIs:
 
         WorkflowCompiler.build = spy  # type: ignore[method-assign]
         try:
-            runs.run(slug="ledger-demo", question="hi")
+            runs.run(slug="ledger-demo", question="hi", audience=Audience.CUSTOMER)
         finally:
             WorkflowCompiler.build = original  # type: ignore[method-assign]
 

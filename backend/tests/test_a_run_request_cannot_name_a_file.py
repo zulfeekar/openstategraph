@@ -48,6 +48,7 @@ from fastapi.testclient import TestClient
 from openstategraph.api.main import create_app
 from openstategraph.api.services import WorkflowServices
 from openstategraph.api.workflow_store import SLUG_PATTERN, InvalidSlugError, is_slug
+from openstategraph.api.audience import Audience
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -273,7 +274,10 @@ class TestTheSecondDoor:
         services = WorkflowServices(workflows_root=workflows_root)
 
         result = WorkflowRuns(services).run(
-            question="hi", document=SQLITE_DOCUMENT, slug="no-such-workflow"
+            question="hi",
+            document=SQLITE_DOCUMENT,
+            slug="no-such-workflow",
+            audience=Audience.CUSTOMER,
         )
 
         assert "no-such-workflow" in result["error"]
@@ -286,7 +290,10 @@ class TestTheSecondDoor:
         services = WorkflowServices(workflows_root=workflows_root)
 
         result = WorkflowRuns(services).run(
-            question="hi", document=SQLITE_DOCUMENT, slug="../../../tmp/pwned"
+            question="hi",
+            document=SQLITE_DOCUMENT,
+            slug="../../../tmp/pwned",
+            audience=Audience.CUSTOMER,
         )
 
         assert "error" in result

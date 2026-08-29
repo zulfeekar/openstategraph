@@ -40,7 +40,7 @@ The alternatives were priced and rejected:
   file in `src/` is not a measure.
 - **Top-level definitions.** Ranks `api/schemas.py` (55 declarations, 425 code
   lines, entirely declarative Pydantic) above `mcp_server.py` (7 definitions,
-  654 code lines). It counts the thing that is cheap to add and misses the
+  698 code lines). It counts the thing that is cheap to add and misses the
   thing that grows.
 - **Public names exported.** That is the class census's measure raised a level,
   and it already has a file. A module's problem is not always its surface —
@@ -322,7 +322,7 @@ it, so prose here is contract rather than commentary.
 That makes this the entry where the measure is most obviously the right one and
 still charges too much. The docstrings on module, class and function are free
 under `code_lines`, but the argument tables and `Literal` unions the tool
-schemas are built from are not, and this file is 654 code lines against 1,179
+schemas are built from are not, and this file is 698 code lines against 1,293
 physical.
 
 Structurally it already obeys the rule against god classes: four small
@@ -332,6 +332,20 @@ and delete off the wire. Splitting by collaborator is therefore the obvious
 move and a poor one: the four are assembled into one server object at one call
 site, so the reader's view would not change and the wiring would grow, which is
 the argument `WorkflowFileClient` is already recorded under in the class census.
+
+654 -> 698 (`the-boundary-nobody-checked/08`). `run_workflow` was the fourth run
+door and the only one that took no audience: it published the capability fence
+in `answer` and in every value of `outputs`, and `warnings` — authoring
+diagnostics naming node ids and unbound tool types — unconditionally, on the
+door this module itself calls "the one a customer's own model calls". Making it
+answer to one brought over the seam `/api/runs` already applies in the same
+order (`split_suggestion`, `clean_output`, `DeveloperChannel.payload`,
+`with_capability_notice`, `redact_failure_markers`), which is where the 44 lines
+went. Nothing was reimplemented — every one of those is an import from
+`api/audience.py` — but the *comments* explaining why each applies here are new,
+and they are the part that stops the next reader restoring the raw payload. The
+alternative, a private helper hiding the sequence, would put a fifth spelling of
+the boundary in the module the ticket found by reading it.
 """
 
 ROUTES_WORKFLOWS = """
@@ -422,7 +436,7 @@ RECORDED: dict[str, Recorded] = {
     "compile/workflow_compiler.py": Recorded(890, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(959, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(654, MCP_SERVER),
+    "mcp_server.py": Recorded(698, MCP_SERVER),
     "api/routes/workflows.py": Recorded(546, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(578, RUN_SINKS),
 }
