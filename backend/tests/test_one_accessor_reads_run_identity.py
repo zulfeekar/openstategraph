@@ -221,6 +221,12 @@ IDENTITY_LITERAL_SITES: dict[str, str] = {
     # table cannot drift from the accessor even though the model's own fields
     # must be declared to be typed at all (exactly `api/schemas.py`'s case).
     "run_sinks.py": "checkpoint",
+    # The seam that assembles the row `run_sinks` stores (`memory-and-replay`
+    # 44). It names the four keys as its own parameters and never touches
+    # `configurable`: each door reads the identity through the accessor — or
+    # holds it because it minted it — and hands it over. Same case as
+    # `run_sinks.py` one line up.
+    "run_journal.py": "checkpoint",
     "api/threads.py": "checkpoint",
     "compile/paused_mount.py": "checkpoint",
 }

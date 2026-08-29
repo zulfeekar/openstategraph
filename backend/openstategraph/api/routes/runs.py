@@ -52,6 +52,7 @@ from openstategraph.compile.run_context import validate_run_context
 from openstategraph.errors import RunContextError
 from openstategraph.memory import async_capable
 from openstategraph.run_doors import invoke_run
+from openstategraph.run_journal import run_turn
 from openstategraph.schema import normalize_document
 from openstategraph.step_budget import resolve_step_budget
 
@@ -220,36 +221,66 @@ def run_workflow(
     # is reusable after a collection anyway.
     thread_id = request.thread_id or f"run-{os.urandom(8).hex()}"
 
-    try:
-        graph = compiler.build(
-            document,
-            RunState,
-            runtime.factory(document),
-            # Without a saver the block above would still reach nothing:
-            # no persisted `messages`, no antecedent, the same defect with
-            # a config attached. The streaming endpoint already compiles
-            # this way, from the same per-workflow cache.
-            checkpointer=services.checkpointer_for(document.get("settings"), slug),
-            store=services.memory_store,
-        )
-        # `None` means *pass no argument at all* — see `validate_run_context`.
-        supplied: dict[str, Any] = {"context": run_context} if run_context is not None else {}
-        final = invoke_run(
-            graph,
-            {"question": request.question, "attempts": 0, "decisions": {}, "outputs": {}},
-            {
-                "recursion_limit": resolve_step_budget(request.recursion_limit, document),
-                "configurable": {
-                    "thread_id": thread_id,
-                    "session_id": request.session_id or "",
-                    "user_email": principal_id,
-                    "workflow_slug": slug or "",
+    # **This door used to write nothing down** (`memory-and-replay` 44). `43`
+    # wired the run store to `CompiledWorkflow.ask` alone, and this endpoint —
+    # the one a deployment serves — calls `invoke_run` directly, so the store
+    # was empty for exactly the traffic `guardrails/07` and
+    # `launch-readiness/99` were built to read. The turn spans the run because
+    # it owns the clock and the per-model token meter; see `run_journal` for
+    # why the seam is not `invoke_run` itself, and for why a nested `ask()`
+    # would write nothing rather than a second row.
+    with run_turn(
+        workflow_slug=slug or "",
+        thread_id=thread_id,
+        session_id=request.session_id or "",
+        user_email=principal_id,
+        question=request.question,
+    ) as turn:
+        try:
+            graph = compiler.build(
+                document,
+                RunState,
+                runtime.factory(document),
+                # Without a saver the block above would still reach nothing:
+                # no persisted `messages`, no antecedent, the same defect with
+                # a config attached. The streaming endpoint already compiles
+                # this way, from the same per-workflow cache.
+                checkpointer=services.checkpointer_for(document.get("settings"), slug),
+                store=services.memory_store,
+            )
+            # `None` means *pass no argument at all* — see `validate_run_context`.
+            supplied: dict[str, Any] = (
+                {"context": run_context} if run_context is not None else {}
+            )
+            final = invoke_run(
+                graph,
+                {"question": request.question, "attempts": 0, "decisions": {}, "outputs": {}},
+                {
+                    "recursion_limit": resolve_step_budget(request.recursion_limit, document),
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "session_id": request.session_id or "",
+                        "user_email": principal_id,
+                        "workflow_slug": slug or "",
+                    },
                 },
-            },
-            **supplied,
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
+                **supplied,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
+
+        # Above the pause check, so a turn that ended at a gate is written down
+        # exactly as the library door writes it: a run that stopped for a human
+        # is still a turn that happened and still cost what it cost. Recorded
+        # inside the `with`, because the token meter is cleared on exit.
+        # How the workflow was *built*, read once and used twice: this door's
+        # half of the run record, and the developer channel's `warnings`. Read
+        # **after** the run, because `runtime_warnings` collects what the
+        # runtime could not resolve while it ran. The run-health half of both
+        # is derived from the finished state rather than listed here
+        # (`every-workflow-green` 14/16).
+        degraded = list(plan.warnings) + runtime_warnings(runtime)
+        turn.record(final, warnings=degraded)
 
     # A paused run is not a finished one, and this endpoint cannot resume.
     #
@@ -316,7 +347,6 @@ def run_workflow(
     # model choosing to mention the gap it had just announced by calling it.
     if suggestion is None:
         suggestion = suggestion_from_rejection(final.get("unmet_tools"))
-    degraded = list(plan.warnings) + runtime_warnings(runtime)
     channel = DeveloperChannel(
         warnings=degraded
         # A node that failed after retries writes its failure into

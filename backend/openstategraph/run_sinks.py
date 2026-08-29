@@ -53,9 +53,11 @@ number, not a collector. Somebody who wants OTel writes twenty lines against
 
 ## What a sink may carry, and why it cannot bypass the redaction seam
 
-A `RunRecord` is assembled from what the run doors already publish, and the one
-field that quotes a customer's own data through a tool — `statements` — is
-copied from `executed_statements.statements_executed` and from nowhere else.
+A `RunRecord` is assembled in exactly one place — `run_journal.run_turn`, the
+seam every run door opens (`memory-and-replay/44`); this module stores what it
+hands over and never builds a row of its own. It is assembled from what the
+doors already publish, and the one field that quotes a customer's own data
+through a tool — `statements` — is copied from `executed_statements.statements_executed` and from nowhere else.
 That function carries `one-chinook-honest/30`'s two layers: the record holds
 the single argument some recogniser accepted as a *statement* and **never the
 argument map**, so an MCP tool's `connection_string`, `token` or `password`

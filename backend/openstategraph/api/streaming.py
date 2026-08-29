@@ -7,7 +7,7 @@ from openstategraph.messages import content_text, reasoning_text, usage_of
 import asyncio
 import json
 import logging
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 from collections.abc import Mapping
 from typing import Any
 
@@ -28,6 +28,8 @@ from openstategraph.executed_statements import statements_executed  # noqa: E402
 from openstategraph.progress import progress_report  # noqa: E402
 from openstategraph.api.registries import runtime_warnings  # noqa: E402
 from openstategraph.compile.node_doors import interruptible_nodes  # noqa: E402
+from openstategraph.run_journal import RunTurn, STOPPED_KIND, run_turn  # noqa: E402
+from openstategraph.run_identity import run_identity  # noqa: E402
 
 
 def customer_task_id(task_id: Any, audience: Any) -> Any:
@@ -922,6 +924,33 @@ def _resumes_a_paused_run(graph_input: Any) -> bool:
     return getattr(graph_input, "resume", None) is not None
 
 
+def _built_warnings(plan: Any, runtime: Any) -> list[str]:
+    """How the workflow was *built* — this door's own half of a run record.
+
+    Read at record time rather than when the turn opens, because
+    `runtime_warnings` collects what the runtime could not resolve while it
+    ran. `getattr` because the fold is also driven by scripted stubs.
+    """
+    return list(getattr(plan, "warnings", None) or ()) + runtime_warnings(runtime)
+
+
+def _question_asked(graph_input: Any) -> str:
+    """What this segment was asked, for the run record.
+
+    A fresh run carries the question in its initial state. A resume carries a
+    `Command(resume={"decision": ...})` instead, and the honest answer there is
+    what the person decided — the spelling `CompiledWorkflow.resume` has always
+    written into its own row, kept identical so one store does not hold two
+    vocabularies for one event.
+    """
+    if isinstance(graph_input, Mapping):
+        return str(graph_input.get("question") or "")
+    resume = getattr(graph_input, "resume", None)
+    if isinstance(resume, Mapping):
+        return f"resume:{resume.get('decision') or ''}"
+    return ""
+
+
 async def _stream_run(
     graph: Any,
     graph_input: Any,
@@ -977,6 +1006,29 @@ async def _stream_run(
     fold: a `get_state` or `draw_mermaid` failure unwound the generator with
     the client having seen updates and no ending at all.
     """
+    # **The turn this run is written down in** (`memory-and-replay` 44).
+    #
+    # Opened here rather than in `_run_frames` because this is the frame with a
+    # real `finally`: the turn holds the clock, LangChain's per-model token
+    # meter and the nesting guard, and every one of those has to be released
+    # once whichever way the stream ends — including the stop path, where the
+    # generator below may not yield another byte. `_run_frames` is where the
+    # *row* is assembled, because that is the frame that holds the state.
+    #
+    # An `ExitStack` rather than a `with` block: this generator's body is the
+    # protocol guarantee in the docstring above, and re-indenting it under a
+    # context manager would bury the one thing it exists to make obvious.
+    turn_stack = ExitStack()
+    identity = run_identity(config)
+    turn = turn_stack.enter_context(
+        run_turn(
+            workflow_slug=identity.get("workflow_slug", ""),
+            thread_id=thread_id,
+            session_id=identity.get("session_id", ""),
+            user_email=identity.get("user_email", ""),
+            question=_question_asked(graph_input),
+        )
+    )
     frames = _run_frames(
         graph,
         graph_input,
@@ -989,6 +1041,7 @@ async def _stream_run(
         document,
         store,
         run_context,
+        turn=turn,
     )
     ended = False
     # What a stop would do to the step in flight, kept as the frames go past
@@ -1145,6 +1198,9 @@ async def _stream_run(
         # already stopped waiting.
         with suppress(Exception, asyncio.CancelledError):
             await frames.aclose()
+        # After the frames, so a row recorded while they unwound is still
+        # inside the turn that meters it.
+        turn_stack.close()
 
     if not ended:
         # Unreachable by design — the fold's every path ends in `done`,
@@ -1175,6 +1231,7 @@ async def _run_frames(
     document: Any = None,
     store: Any = None,
     run_context: Mapping[str, Any] | None = None,
+    turn: "RunTurn | None" = None,
 ) -> Any:
     """Drives one `graph.astream()` call and yields SSE frames.
 
@@ -1218,6 +1275,13 @@ async def _run_frames(
     """
     from openstategraph.compile.node_runtime import RESET, keep_latest_nonempty
     from openstategraph.run_identity import run_identity
+
+    # The turn this run is being written down in — opened and closed by
+    # `_stream_run`, which is the frame with a real `finally`, and recorded
+    # here, which is the frame that holds the state (`memory-and-replay` 44).
+    # A caller driving this generator directly gets a turn that writes nothing,
+    # so a scripted fold in a test records no run.
+    turn = turn if turn is not None else RunTurn(silent=True)
 
     answer = ""
     spawns = SpawnWatcher(node_ids_by_name)
@@ -1845,6 +1909,27 @@ async def _run_frames(
                     # above and stays dropped.
                     if text or shown_usage or (withheld and content):
                         yield _token_frame(common, "text", text, shown_usage)
+    except (GeneratorExit, asyncio.CancelledError):
+        # **Stop, or a closed tab — and it is still a row** (`44`).
+        #
+        # Nothing may be *yielded* from here (see `_stream_run`), but writing
+        # is not yielding, and this is the row `guardrails/07` most needs: the
+        # provider call already issued is still billed, and Stop is exactly
+        # what a person presses when a run is costing money.
+        #
+        # `kind="stopped"`, not `failed=True` and not a plain run. `failed`
+        # means a node wrote the failure sentinel, and calling an abandoned
+        # run failed would corrupt every failure rate read out of this table;
+        # calling it a finished turn would hand `launch-readiness/99` half a
+        # sentence to learn from. A kind is the one of the three that costs no
+        # existing sink anything — which is why `RunRecord.kind` is a tolerant
+        # string rather than a `Literal`.
+        turn.record(
+            dict(folded, attempts=attempts, answer=answer),
+            warnings=_built_warnings(plan, runtime),
+            kind=STOPPED_KIND,
+        )
+        raise
     finally:
         # Explicit, not left to refcounting. CPython happens to close the
         # inner generator when this frame is destroyed, but "happens to" is
@@ -1862,6 +1947,19 @@ async def _run_frames(
                 await closer()
 
     snapshot = await graph.aget_state(config)
+    # **Above the pause branch, and the door's only terminal record** — a turn
+    # that ended at a gate is a turn that happened, and the library door has
+    # always written one. `record` is idempotent, so the stop handler above and
+    # this line cannot both produce a row.
+    #
+    # The state handed over is the fold's own accumulators, which is what this
+    # door has instead of a returned `RunResult`: `folded` is already the
+    # mapping `run_health_from_state` reads below, and `attempts`/`answer` are
+    # the two the fold keeps as scalars.
+    turn.record(
+        dict(folded, attempts=attempts, answer=answer),
+        warnings=_built_warnings(plan, runtime),
+    )
     if snapshot.next:
         interrupts = snapshot.tasks[0].interrupts if snapshot.tasks else ()
         payload_value = interrupts[0].value if interrupts else {}

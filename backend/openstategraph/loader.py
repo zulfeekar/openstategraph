@@ -29,7 +29,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,6 +39,7 @@ from openstategraph.errors import InvalidPackageName, PackageNotFound, ThreadNot
 from openstategraph.executed_statements import statements_executed
 from openstategraph.results import RunResult
 from openstategraph.run_doors import RunLoop, invoke_run
+from openstategraph.run_journal import run_turn
 from openstategraph.schema import normalize_document
 from openstategraph.step_budget import DEFAULT_STEP_BUDGET, resolve_step_budget
 
@@ -113,7 +113,7 @@ class CompiledWorkflow:
     #: The vendor-neutral document that was compiled, envelope already peeled.
     document: dict[str, Any] = field(default_factory=dict)
     #: Where `ask()` appends one JSON line per run, or None for no trace.
-    #: Set through `load_workflow(..., trace_file=...)`; see `_publish_run`
+    #: Set through `load_workflow(..., trace_file=...)`; see `_run_sinks`
     #: for exactly what is written and — more importantly — what is not.
     trace_file: Path | None = None
 
@@ -334,30 +334,34 @@ class CompiledWorkflow:
             },
         }
 
-        from langchain_core.callbacks import get_usage_metadata_callback
-
-        started = time.monotonic()
-        # **What the run cost, counted by LangChain rather than by us**
-        # (`workflow-gallery` 35). `get_usage_metadata_callback` aggregates
-        # `AIMessage.usage_metadata` per model, in-process, with no tracer and
-        # no account — so the answer to "what did that cost" stops being
-        # "attach LangSmith" for a run happening on this machine.
+        # **One turn, written down once, by whichever door started it**
+        # (`memory-and-replay` 44). This used to be a `get_usage_metadata_callback`
+        # block and a `_publish_run` call here, and *only* here — so the store
+        # was populated by the door a developer uses and empty for the three a
+        # deployment is served over. The turn owns the clock and the token
+        # meter because both have to span the run; see `run_journal` for why
+        # the seam is not `invoke_run`.
         #
         # `CLAUDE.md` says token accounting stays deliberately **not** unified
-        # — middleware for agents, callbacks elsewhere — "because unifying them
-        # would invent an abstraction LangGraph does not have". This is on the
-        # permitted side of that line and deliberately so: it is the library's
-        # own callback, wrapped around the one `invoke()` this door already
-        # makes. Nothing is declared on a base class, no node knows about it,
-        # and no family carries a capability it does not use. The forbidden
-        # move would be an accounting layer of ours that agents and tools both
-        # inherit; this adds no layer at all.
-        #
-        # The context variable is `inheritable=True`, so it reaches every model
-        # call the graph makes underneath — including inside an agent's ReAct
-        # loop and inside a mounted child, which is where a run's tokens
-        # actually go.
-        with get_usage_metadata_callback() as usage:
+        # — middleware for agents, callbacks elsewhere. This is on the
+        # permitted side of that line: it is LangChain's own callback, wrapped
+        # around the one run this door makes. Nothing is declared on a base
+        # class, no node knows about it, and no family carries a capability it
+        # does not use.
+        with run_turn(
+            workflow_slug=self.slug or "",
+            thread_id=thread,
+            session_id=session_id or "",
+            user_email=user_email or "",
+            question=question,
+            # What only this door knows: how the workflow was *built*. The run
+            # health half is derived from the finished state by the seam, so
+            # this door cannot fall behind a source by not re-listing it.
+            warnings=self.warnings,
+            failures=self.failure_warnings,
+            # This workflow's trace file, if it named one — see `_run_sinks`.
+            registry=self._run_sinks(),
+        ) as turn:
             # `None` means *pass no argument at all*, which is what every run
             # against a workflow declaring no context has always done.
             extra = {"context": run_context} if run_context is not None else {}
@@ -368,17 +372,12 @@ class CompiledWorkflow:
                 loop=self._loop,
                 **extra,
             )
-            # Read inside the block: the manager clears the variable on exit.
-            spent = dict(usage.usage_metadata)
-        result = self._result(final, spent, thread)
-        self._publish_run(
-            question,
-            result,
-            time.monotonic() - started,
-            thread_id=thread,
-            user_email=user_email or "",
-            session_id=session_id or "",
-        )
+            # Read inside the block: the callback clears the variable on exit.
+            spent = turn.spent()
+            result = self._result(final, spent, thread)
+            # Before `_answered` raises, deliberately: a failed run is the one
+            # most worth having in the store.
+            turn.record(final, answer=str(result))
         return self._answered(result)
 
     def pause(self, thread_id: str) -> dict[str, Any] | None:
@@ -481,27 +480,28 @@ class CompiledWorkflow:
 
         from langgraph.types import Command
 
-        from langchain_core.callbacks import get_usage_metadata_callback
-
-        started = time.monotonic()
         resume_value: dict[str, Any] = {"decision": decision}
         if feedback:
             resume_value["feedback"] = feedback
         config = self._config(thread_id, user_email, session_id, recursion_limit)
-        with get_usage_metadata_callback() as usage:
+        # The same turn `ask` opens — one seam, so a resumed turn is written
+        # down exactly as a first one is (`memory-and-replay` 44).
+        with run_turn(
+            workflow_slug=self.slug or "",
+            thread_id=thread_id,
+            session_id=session_id or "",
+            user_email=user_email or "",
+            question=f"resume:{decision}",
+            warnings=self.warnings,
+            failures=self.failure_warnings,
+            registry=self._run_sinks(),
+        ) as turn:
             final = invoke_run(
                 self.graph, Command(resume=resume_value), config, loop=self._loop
             )
-            spent = dict(usage.usage_metadata)
-        result = self._result(final, spent, thread_id)
-        self._publish_run(
-            f"resume:{decision}",
-            result,
-            time.monotonic() - started,
-            thread_id=thread_id,
-            user_email=user_email or "",
-            session_id=session_id or "",
-        )
+            spent = turn.spent()
+            result = self._result(final, spent, thread_id)
+            turn.record(final, answer=str(result))
         return self._answered(result)
 
     def _config(
@@ -613,7 +613,7 @@ class CompiledWorkflow:
         about what a failed run is would be the same defect one surface along.
         A legally empty answer still returns, and so does a paused run.
 
-        Raised **after** `_publish_run`, deliberately: a failed run is the one
+        Raised **after** the turn is recorded, deliberately: a failed run is the one
         most worth having in the trace file.
         """
         from openstategraph.errors import RunProducedNothing
@@ -640,62 +640,6 @@ class CompiledWorkflow:
         if chain:
             payload["mount"] = chain
         return payload
-
-    def _publish_run(
-        self,
-        question: str,
-        result: RunResult,
-        seconds: float,
-        *,
-        thread_id: str = "",
-        user_email: str = "",
-        session_id: str = "",
-    ) -> None:
-        """Write this run down, wherever the person installing this said to.
-
-        **This was `_append_trace`**, and until `memory-and-replay/43` it was a
-        hardcoded branch: one destination, a JSON-lines file, reachable only
-        through `trace_file=`. That was already a sink — it was simply the only
-        one, and it was welded in, so an operator who wanted these rows in
-        their own store had no answer but to fork.
-
-        Now the destinations are a registry and the row is a `RunRecord`. The
-        trace file still exists and still behaves identically; it is
-        `run_sinks.JsonlRunSink`, registered for this workflow when a path was
-        named. **The default sink writes sqlite on this machine and nothing
-        reaches a network** — `CLAUDE.md`'s *never send a user's graph to a
-        third party* decides that, and it is why no vendor exporter ships even
-        disabled.
-
-        Never fatal, for the reason it never was: losing a trace must never
-        lose the run that produced it. `publish` isolates each sink
-        individually, so a collector being down cannot cost the local store its
-        row either.
-        """
-        from openstategraph.run_sinks import RunRecord, now, publish
-
-        record = RunRecord(
-            at=now(),
-            workflow_slug=self.slug or "",
-            thread_id=thread_id,
-            user_email=user_email,
-            session_id=session_id,
-            question=question,
-            answer=str(result),
-            seconds=round(seconds, 3),
-            attempts=result.attempts,
-            decisions=result.decisions,
-            warnings=result.warnings,
-            failed=bool(result.failures),
-            usage=result.usage,
-            # Copied from the channel that already scrubbed them, never
-            # re-derived off `tool_use` here: `executed_statements` holds the
-            # rule that a credential-bearing argument is not recorded at all,
-            # and a second reader of that state would be a second chance to
-            # publish the argument map by accident.
-            statements=result.statements,
-        )
-        publish(record, registry=self._run_sinks())
 
     def _run_sinks(self) -> "RunSinkRegistry":
         """This process's sinks, plus this workflow's trace file if it has one.

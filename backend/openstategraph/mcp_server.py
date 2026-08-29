@@ -834,31 +834,53 @@ class WorkflowRuns:
         # indistinguishable from a forgotten one. That comparison is a test —
         # `tests/test_every_run_door_carries_identity.py`.
         thread_id = f"mcp-{uuid.uuid4().hex}"
-        try:
-            graph = compiler.build(
-                resolved,
-                RunState,
-                runtime.factory(resolved),
-                checkpointer=self._services.checkpointer_for(
-                    resolved.get("settings"), slug
-                ),
-                store=self._services.memory_store,
-            )
-            final = invoke_run(
-                graph,
-                {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
-                {
-                    "recursion_limit": limit,
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "session_id": "",
-                        "user_email": "",
-                        "workflow_slug": str(slug or ""),
+        from openstategraph.api.registries import runtime_warnings
+        from openstategraph.run_journal import run_turn
+
+        # **The third door that wrote nothing down** (`memory-and-replay` 44).
+        # It is the one a customer's own model calls, so a deployment whose
+        # traffic arrives over MCP left no history at all. Identity comes from
+        # the same four keys the config below carries — including the two this
+        # transport honestly has no source for, which stay empty rather than
+        # invented (see the note above).
+        with run_turn(
+            workflow_slug=str(slug or ""),
+            thread_id=thread_id,
+            question=question,
+        ) as turn:
+            try:
+                graph = compiler.build(
+                    resolved,
+                    RunState,
+                    runtime.factory(resolved),
+                    checkpointer=self._services.checkpointer_for(
+                        resolved.get("settings"), slug
+                    ),
+                    store=self._services.memory_store,
+                )
+                final = invoke_run(
+                    graph,
+                    {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},
+                    {
+                        "recursion_limit": limit,
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "session_id": "",
+                            "user_email": "",
+                            "workflow_slug": str(slug or ""),
+                        },
                     },
-                },
+                )
+            except Exception as exc:  # noqa: BLE001 — errors are data to the client
+                return {"error": f"{type(exc).__name__}: {exc}", "findings": []}
+
+            # Above the pause branch, like the HTTP door: a run that stopped at
+            # a gate is a turn that happened.
+            # Read after the run: `runtime_warnings` collects what the runtime
+            # could not resolve while it ran.
+            turn.record(
+                final, warnings=list(plan.warnings) + runtime_warnings(runtime)
             )
-        except Exception as exc:  # noqa: BLE001 — errors are data to the client
-            return {"error": f"{type(exc).__name__}: {exc}", "findings": []}
 
         if "__interrupt__" in final:
             return {
@@ -873,7 +895,6 @@ class WorkflowRuns:
                 ],
             }
 
-        from openstategraph.api.registries import runtime_warnings
         from openstategraph.compile.workflow_compiler import run_health_from_state
 
         # `run_health_from_state` is the library door's own machinery
