@@ -12,7 +12,6 @@ Nothing in this module runs a model, and nothing in it needs a network.
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -113,20 +112,6 @@ def test_an_explicit_case_override_beats_the_derivation() -> None:
 
 # --------------------------------------------------------------------------
 # execute_query — read-only, and never raises at the caller
-
-
-@pytest.fixture()
-def tiny_db(tmp_path: Path) -> Path:
-    path = tmp_path / "tiny.sqlite"
-    conn = sqlite3.connect(path)
-    conn.execute("CREATE TABLE genre (id INTEGER, name TEXT, revenue REAL)")
-    conn.executemany(
-        "INSERT INTO genre VALUES (?, ?, ?)",
-        [(1, "Rock", 826.65), (2, "Latin", 382.14), (3, "Metal", None)],
-    )
-    conn.commit()
-    conn.close()
-    return path
 
 
 def test_execute_query_returns_columns_and_rows(tiny_db: Path) -> None:

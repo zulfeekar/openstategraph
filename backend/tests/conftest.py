@@ -449,3 +449,27 @@ def drive_node(run: Any, state: Any) -> Any:
     if inspect.isawaitable(result):
         return asyncio.run(result)
     return result
+
+
+@pytest.fixture()
+def tiny_db(tmp_path: Path) -> Path:
+    """The three-row `genre` table the evaluation harness's tests grade against.
+
+    Here rather than in one of them because two modules now need it
+    (`test_evaluation.py` and `test_the_same_question_twice.py`), and a fixture
+    imported from a sibling test module shadows the parameter that receives it
+    — the lint gate says so, and a second copy of these eight lines is the
+    duplication of *knowledge* CLAUDE.md's DRY rule actually forbids.
+    """
+    import sqlite3
+
+    path = tmp_path / "tiny.sqlite"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE genre (id INTEGER, name TEXT, revenue REAL)")
+    conn.executemany(
+        "INSERT INTO genre VALUES (?, ?, ?)",
+        [(1, "Rock", 826.65), (2, "Latin", 382.14), (3, "Metal", None)],
+    )
+    conn.commit()
+    conn.close()
+    return path

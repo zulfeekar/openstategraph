@@ -262,10 +262,78 @@ openstategraph eval ./workflows/chinook-assistant --threshold 0.8
 | `--limit N` | grade only the first N cases, in file order |
 | `--model` | any model string `load_workflow` accepts. Omit for the package's own |
 | `--threshold F` | exit **1** when `overall_accuracy` is below `F` (0..1). Default 0: report, do not gate |
+| `--repeat N` | ask each case N times and report whether the answers **agreed**. Reported, never gated |
 | `--json` | the whole scorecard as JSON instead of the table |
 
 Per-case progress goes to **stderr**, so `eval --json > card.json` still pipes
 cleanly and a thirty-question run is not thirty minutes of silence.
+
+### Asking the same question twice — `--repeat`
+
+`launch-readiness/126`. A question asked three times against an unchanged
+warehouse answered correctly, then refused with an invented country set, then
+refused correctly — **each delivered with identical confidence**, so a user who
+asks once cannot know which of the three they got. A second question split
+2 / 0 / 0 the same way. The defect was not the wrong answer; it was that the
+same question did not produce the same answer, and nothing noticed.
+
+Both were diagnosed to named causes and fixed — a concurrent-search merge keyed
+on arrival, and a filter silently not applied — and eight runs afterwards
+agreed. What was still missing is the **instrument**: nothing measured
+stability, so the next regression of that shape would be as invisible as the
+last.
+
+```bash
+openstategraph eval ./workflows/chinook-assistant --repeat 3
+```
+
+```
+agreement               94.4%   (asked 3x each; 2 case(s) not comparable). Reported, not gated.
+```
+
+**It reports a rate and gates nothing.** `--threshold` still reads
+`overall_accuracy` alone, and a run that disagreed with itself still exits 0.
+That is deliberate and it is the ticket's own reasoning: a run is a full model
+turn, so this can never sit on a commit, and *a flaky check that is allowed to
+stay red teaches everyone to ignore it*. A tracked rate is honest; a green test
+that only passes when the coin lands right is not.
+
+**What agreement means here.** Two axes, kept apart, because two answers can be
+equivalent in different prose:
+
+| Axis | What it compares |
+| --- | --- |
+| `verdicts_agree` | did every repetition grade the same way — coarse, always available |
+| `results_agree` | did every repetition's statement return the same **rows**, by the same `result_eq` execution accuracy uses |
+
+The second is the strong one and the reason a literal-statement pin was
+refused: what survived the fixes was *a column alias and where the `DISTINCT`
+sits*, and a text pin would be red on a correct run. Rows are immune to that
+and are not immune to a genuinely different query.
+
+`results_agree` is **`null`**, never `false`, when fewer than two repetitions
+executed anything comparable. *We could not tell* and *they disagreed* are
+different findings, and the `unmeasurable` count says how many cases were in
+the first state.
+
+**It compares what ran, not what the answer said ran.** `AskOutcome.statements`
+comes from `RunResult.statements` (`one-chinook-honest/30`), so two runs
+quoting the same query while executing different ones are correctly reported as
+a disagreement. `ItemVerdict.sql` and `sql_recovery_rate` deliberately do not
+move: they measure whether the system *stated* its query, which is a different
+fact and keeps its name.
+
+**Cost.** `--repeat 3` over 36 cases is 108 model turns. The first repetition
+is the one that scores, so every other number on the card means exactly what it
+meant before and a `--repeat 1` card is unchanged.
+
+**What it cannot cover yet.** The two cases that motivated the ticket are not
+in any `evals/` directory and cannot be: this harness executes gold SQL against
+a **committed SQLite file** (`denotation.connect_readonly`), and an answerable
+case is required to carry `gold_sql`. Both of those questions are answered
+against Databricks. Recording the agreement rate for *those* questions needs a
+denotation engine that is not SQLite — filed as `launch-readiness/170`, not
+faked here with a case whose gold nobody can execute.
 
 ### It is not in the normal CI job, on purpose
 

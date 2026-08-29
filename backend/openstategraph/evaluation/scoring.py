@@ -143,6 +143,24 @@ class Scorecard:
     warnings: tuple[str, ...] = ()
     cost: dict[str, Any] = field(default_factory=dict)
     not_measured: tuple[str, ...] = NOT_MEASURED
+    #: Whether the same question gave the same answer, when it was asked more
+    #: than once (`launch-readiness/126`). Empty for the ordinary single pass:
+    #: one run cannot agree or disagree with anything, and a block of zeroes
+    #: would read as *they agreed*.
+    #:
+    #: **Reported, never gated.** `meets()` does not consult it and
+    #: `--threshold` still reads `overall_accuracy` alone. A run is a full
+    #: model turn, so this can never sit on a commit, and the ticket names the
+    #: trap in its own words: *a flaky check that is allowed to stay red
+    #: teaches everyone to ignore it*. A tracked rate is honest; a green test
+    #: that only passes when the coin lands right is not.
+    #:
+    #: `{"repeat", "cases", "disagreement_rate", "unmeasurable"}`, where each
+    #: case carries its verdicts, whether those agreed, and whether the rows
+    #: its statements returned agreed — `null` on that last one when nothing
+    #: comparable ran, because *we could not tell* and *they disagreed* are two
+    #: different findings.
+    agreement: dict[str, Any] = field(default_factory=dict)
 
     # -- headline numbers ---------------------------------------------------
 
@@ -248,6 +266,7 @@ class Scorecard:
                 "total_seconds": self.total_seconds,
             },
             "cost": self.cost,
+            "agreement": self.agreement,
             "not_measured": list(self.not_measured),
             "warnings": list(self.warnings),
             "items": [item.to_json() for item in self.items],
@@ -275,6 +294,16 @@ class Scorecard:
             f"total              {self.total_seconds:>8.2f}s",
             f"cost               {_cost_row(self.cost)}",
         ]
+        if self.agreement:
+            # Named as a rate rather than a verdict, and printed beside the
+            # gated numbers rather than among them: nothing here is a pass or
+            # a fail (`launch-readiness/126`).
+            lines.append(
+                f"agreement          {1 - self.agreement['disagreement_rate']:>8.1%}   "
+                f"(asked {self.agreement['repeat']}x each; "
+                f"{self.agreement['unmeasurable']} case(s) not comparable). "
+                "Reported, not gated."
+            )
         if self.by_difficulty():
             lines.append("")
             for level, block in self.by_difficulty().items():

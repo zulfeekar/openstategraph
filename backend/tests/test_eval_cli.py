@@ -245,6 +245,47 @@ def test_eval_forwards_its_flags(monkeypatch: pytest.MonkeyPatch) -> None:
     assert seen["model"] == "ollama:x"
 
 
+def test_repeat_is_forwarded_and_defaults_to_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`launch-readiness/126`. The default must stay one: every existing caller
+    and every CI job pays exactly what it paid before."""
+    seen = _stub(monkeypatch, _card())
+    main(["eval", "./pkg"])
+    assert seen["repeat"] == 1
+    main(["eval", "./pkg", "--repeat", "3"])
+    assert seen["repeat"] == 3
+
+
+def test_a_disagreeing_run_still_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The trap, at the exit code: the agreement rate is reported and gates
+    nothing. A live-model check allowed to go red on a coin flip is worse than
+    no check at all — the same lesson as the panel that cries wolf."""
+    card = _card()
+    disagreeing = Scorecard(
+        dataset=card.dataset,
+        database=card.database,
+        model=card.model,
+        items=card.items,
+        cost=card.cost,
+        agreement={
+            "repeat": 3,
+            "cases": [
+                {
+                    "case_id": "e01",
+                    "verdicts": ["correct", "no_sql", "no_sql"],
+                    "verdicts_agree": False,
+                    "results_agree": None,
+                    "distinct_results": 1,
+                }
+            ],
+            "disagreement_rate": 1.0,
+            "unmeasurable": 1,
+        },
+    )
+    _stub(monkeypatch, disagreeing)
+
+    assert main(["eval", "./pkg", "--repeat", "3", "--threshold", "0.5"]) == 0
+
+
 def test_progress_goes_to_stderr_so_json_pipes_cleanly(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

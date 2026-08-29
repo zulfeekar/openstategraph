@@ -502,7 +502,11 @@ def cmd_eval(args: argparse.Namespace) -> int:
     every question it cannot possibly know.
 
     **This costs money and calls a model.** It is not in the default test run;
-    see `docs/evaluation.md`.
+    see `docs/evaluation.md`. `--repeat N` multiplies that cost by N and buys
+    the agreement rate — whether the same question gives the same answer —
+    which is **reported and never gated**, for the reason
+    `launch-readiness/126` names: a flaky check allowed to stay red teaches
+    everyone to ignore it.
     """
     from openstategraph.evaluation import evaluate_package
 
@@ -511,6 +515,10 @@ def cmd_eval(args: argparse.Namespace) -> int:
         dataset_path=args.dataset,
         model=args.model,
         limit=args.limit,
+        # `launch-readiness/126`. The first repetition is the one that scores;
+        # the rest only answer "did the same question give the same answer",
+        # and no exit code reads it.
+        repeat=getattr(args, "repeat", 1),
         # Progress on stderr, so `eval --json > card.json` still pipes cleanly
         # and a thirty-question run is not thirty minutes of silence.
         on_item=None
@@ -1538,6 +1546,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "exit 1 when overall accuracy is below this (0..1). Default 0, i.e. "
             "report but do not gate; set it in CI to the number you will defend."
+        ),
+    )
+    evaluate.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help=(
+            "ask each case N times and report whether the answers agreed "
+            "(launch-readiness/126). Reported, never gated — --threshold still "
+            "reads overall accuracy alone. Costs N model turns per case."
         ),
     )
     evaluate.add_argument("--json", action="store_true", help="print the scorecard as JSON")
