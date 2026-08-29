@@ -668,6 +668,37 @@ ASYNC_DOORS = """**One added public member per model-driven verb, and the census
     deprecation; not worth doing to flatter a count."""
 
 
+#: `results.RunResult` — 11, and every one of them is a **field of one
+#: record**, not a method of one object.
+#:
+#: This is the answer to "what did that run produce", and it has exactly one
+#: reason to change: a run learns to produce something else. There is no
+#: behaviour here to split — `total_tokens`, `failed_nodes` and `statements`'
+#: neighbours are the run's own report, and a collaborator holding a subset of
+#: them (`result.health.warnings`, `result.cost.usage`) would buy a smaller
+#: number by making every caller learn which drawer their field is in. The
+#: HTTP doors already ship the identical set as one flat object for the same
+#: reason (`RunResponse`), and a library door whose shape disagreed with the
+#: wire's would be its own defect.
+#:
+#: What the ceiling is actually protecting against is a class described only
+#: with "and" — and this one is described with a list, which is what a record
+#: is. The number stays exact rather than becoming a budget: the eleventh
+#: member is `statements` (`one-chinook-honest` 30), and a twelfth still owes
+#: this paragraph an argument that it is a fact about a finished run rather
+#: than a capability bolted onto the object that carries one.
+RUN_RESULT = (
+    "A record, not an object with behaviour: eleven fields answering one "
+    "question — what did this run produce. One reason to change, which is the "
+    "rule the ceiling exists to serve. Splitting them across collaborators "
+    "would buy a smaller count by making every caller learn which drawer a "
+    "field lives in, and would make the library door's shape disagree with "
+    "`RunResponse`, which ships the same set flat over the wire. The eleventh "
+    "is `statements` — what the run executed (`one-chinook-honest` 30) — "
+    "added because the two correctness diagnoses that needed it ran the "
+    "package in-process, where this object is the whole of what survives."
+)
+
 RECORDED: dict[str, Recorded] = {
     "compile.diagnostics.Finding": Recorded(18, FINDING_KINDS),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
@@ -712,6 +743,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_web.WebSearchTool": Recorded(13, PREBUILT_TOOLS),
     "evaluation.scoring.Scorecard": Recorded(17, SCORECARD),
     "memory._AsyncCapableSaver": Recorded(12, ASYNC_CAPABLE_SAVER),
+    "results.RunResult": Recorded(11, RUN_RESULT),
 }
 
 

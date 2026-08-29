@@ -678,10 +678,22 @@ def tool_report(
         if getattr(message, "type", None) == "tool" and getattr(message, "status", None) != "error":
             sql = asked.get(str(getattr(message, "tool_call_id", "") or ""), "")
             if sql:
-                exchange = {
+                answer = str(getattr(message, "content", ""))
+                exchange: dict[str, Any] = {
                     "sql": sql,
-                    "result": str(getattr(message, "content", ""))[:QUERY_RESULT_RECORD_CAP],
+                    # Which tool answered. A gate asks "was this statement
+                    # answered"; a person asks "what did this tool actually
+                    # do" (`one-chinook-honest/30`), and an exchange with no
+                    # tool on it cannot answer the second.
+                    "tool": str(getattr(message, "name", "") or ""),
+                    "result": answer[:QUERY_RESULT_RECORD_CAP],
                 }
+                # A result that ended and a result the cap took render
+                # identically otherwise — this map's own failure shape, one
+                # field along. Only the **answer** is capped: the statement is
+                # the evidence and is never cut.
+                if len(answer) > QUERY_RESULT_RECORD_CAP:
+                    exchange["truncated"] = True
                 if exchange not in queries:
                     queries.append(exchange)
             # And the other thing a tool answer can carry that outlives it: a

@@ -28,6 +28,7 @@ from openstategraph.api.audience import (
     with_capability_notice,
 )
 from openstategraph.api.deps import PrincipalId, Services
+from openstategraph.executed_statements import statements_executed
 from openstategraph.api.diagram import workflow_mermaid
 from openstategraph.api.model_resolution import (
     apply_credentials,
@@ -336,6 +337,11 @@ def run_workflow(
             str(final.get("answer") or ""), suggestion, final.get("tool_use")
         ),
         redactions=redaction_report(final.get("redactions")),
+        # What the run actually executed (`one-chinook-honest/30`). Read off
+        # the same `tool_use` `capability_door` is reading two lines up —
+        # `165` recorded every exchange there and nothing published it, so a
+        # run could be judged by what it ran and not asked.
+        statements=statements_executed(final.get("tool_use")),
     )
     developer = channel.payload(audience).get("developer")
 

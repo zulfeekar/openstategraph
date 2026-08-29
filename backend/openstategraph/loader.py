@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from openstategraph.compile.run_context import validate_run_context
 from openstategraph.errors import InvalidPackageName, PackageNotFound, ThreadNotResumable
+from openstategraph.executed_statements import statements_executed
 from openstategraph.results import RunResult
 from openstategraph.run_doors import invoke_run
 from openstategraph.schema import normalize_document
@@ -538,6 +539,10 @@ class CompiledWorkflow:
             # in `outputs` and is still a broken run (`production-ready` 53).
             failures=[*self.failure_warnings, *health.failures],
             attempts=int(final.get("attempts") or 0),
+            # What this run executed (`one-chinook-honest` 30). The same read
+            # both HTTP doors make, off the same `tool_use`: a run must not be
+            # able to say what it did over one door and not another.
+            statements=statements_executed(final.get("tool_use")),
             # Empty when no model reported — which is *unknown*, not free.
             # See `RunResult.usage`; nothing here fabricates a zero.
             usage=spent,

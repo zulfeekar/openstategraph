@@ -146,6 +146,77 @@ describe('RuntimeClient.run', () => {
     });
   });
 
+  it('reads the statements the run executed off the developer channel', async () => {
+    // `one-chinook-honest` 30. Two correctness diagnoses reconstructed these
+    // from the model's prose, which is the one account that cannot be trusted
+    // when the model got it wrong.
+    const stub = stubFetch(
+      jsonResponse({
+        ...GOOD,
+        developer: {
+          warnings: [],
+          statements: [
+            {
+              node: 'agent1',
+              tool: 'sql_query',
+              statement: 'SELECT Name FROM Artist',
+              result: 'AC/DC',
+              truncated: true,
+            },
+          ],
+        },
+      }),
+    );
+    const result = await new RuntimeClient('http://rt', stub.fetch).run({
+      workflow: {},
+      question: 'q',
+      audience: 'developer',
+    });
+
+    expect(result.ok && result.value.developer?.statements).toEqual([
+      {
+        node: 'agent1',
+        tool: 'sql_query',
+        statement: 'SELECT Name FROM Artist',
+        result: 'AC/DC',
+        truncated: true,
+      },
+    ]);
+  });
+
+  it('reads a cut result as cut and an absent flag as whole', async () => {
+    // The field exists because a payload the cap took and a payload that ended
+    // render identically otherwise. A missing flag is the backend saying the
+    // result is whole, never a reason to guess from its length.
+    const stub = stubFetch(
+      jsonResponse({
+        ...GOOD,
+        developer: {
+          warnings: [],
+          statements: [{ node: 'a', tool: 't', statement: 'SELECT 1 FROM t', result: 'x' }],
+        },
+      }),
+    );
+    const result = await new RuntimeClient('http://rt', stub.fetch).run({
+      workflow: {},
+      question: 'q',
+      audience: 'developer',
+    });
+
+    expect(result.ok && result.value.developer?.statements[0]?.truncated).toBe(false);
+  });
+
+  it('reports no statements when a run executed none', async () => {
+    const stub = stubFetch(jsonResponse({ ...GOOD, developer: { warnings: [] } }));
+    const result = await new RuntimeClient('http://rt', stub.fetch).run({
+      workflow: {},
+      question: 'q',
+      audience: 'developer',
+    });
+
+    expect(result.ok && result.value.developer?.statements).toEqual([]);
+  });
+
   it('omits the model when none is chosen, so the server decides', async () => {
     const stub = stubFetch(jsonResponse(GOOD));
     await new RuntimeClient('http://rt', stub.fetch).run({ workflow: {}, question: 'q' });

@@ -339,8 +339,15 @@ class TestAnAgentsQueriesReachTheGate:
         from openstategraph.compile.node_runtime import tool_report
 
         row = tool_report("agent1", self._messages(), ["mcp_execute_sql"], ())["tool_use"]["agent1"]
+        # `tool` joined the exchange in `one-chinook-honest` 30: a gate asks
+        # whether the statement was answered, and a person reading the run asks
+        # what this tool actually did.
         assert row["queries"] == [
-            {"sql": DARK_COUNT_SQL, "result": '{"row_count": 1, "rows": [{"dark_vessels_count": 1454449}]}'}
+            {
+                "sql": DARK_COUNT_SQL,
+                "tool": "mcp_execute_sql",
+                "result": '{"row_count": 1, "rows": [{"dark_vessels_count": 1454449}]}',
+            }
         ]
 
     def test_a_run_with_no_sql_records_no_queries(self) -> None:

@@ -233,6 +233,41 @@ export interface DeveloperChannel {
    * learns which three.
    */
   readonly redactions: readonly GuardrailRedaction[];
+  /**
+   * What the run actually executed — the statements themselves, with the tool
+   * that ran each one (`one-chinook-honest` 30).
+   *
+   * Developer-only, like everything else on this channel, and for the sharper
+   * version of the same reason: this is *evidence*, and evidence quotes node
+   * ids, tool names and literal values out of the data. Two correctness
+   * diagnoses had to reconstruct these from the model's own prose about what
+   * it did, which is the one account that cannot be trusted when the model got
+   * it wrong.
+   */
+  readonly statements: readonly ExecutedStatement[];
+}
+
+/**
+ * One statement a run executed, as `DeveloperChannel.statements` carries it.
+ *
+ * `statement`, not `sql`: the question is *what did this tool actually do*,
+ * and the backend's recogniser set can grow without this type changing. What
+ * cannot appear here is a credential — only an argument recognised as a
+ * statement is ever recorded, never the tool's argument map.
+ */
+export interface ExecutedStatement {
+  /** The canvas node whose loop sent it. */
+  readonly node: string;
+  /** The tool that answered — `''` when the record did not name one. */
+  readonly tool: string;
+  /** The statement, never truncated. It is the evidence. */
+  readonly statement: string;
+  /** What came back, capped by the backend. */
+  readonly result: string;
+  /** Whether `result` was cut by that cap. A cut payload must not read as a
+   * complete one — the whole reason this field exists rather than a reader
+   * guessing from the length. */
+  readonly truncated: boolean;
 }
 
 /** One entry of `DeveloperChannel.redactions`. There is no value field. */
@@ -1520,6 +1555,7 @@ function asDeveloperChannel(value: unknown): DeveloperChannel | null {
   const suggestion = record['suggestion'];
   const capabilityGap = record['capabilityGap'];
   const redactions = record['redactions'];
+  const statements = record['statements'];
   return {
     warnings: Array.isArray(record['warnings']) ? record['warnings'].map(asString) : [],
     suggestion:
@@ -1538,6 +1574,21 @@ function asDeveloperChannel(value: unknown): DeveloperChannel | null {
             entity: asString(row['entity']),
             strategy: asString(row['strategy']),
             count: typeof row['count'] === 'number' ? row['count'] : 0,
+          }))
+      : [],
+    // Field by field for `redactions`' reason, and one more of its own: a
+    // reader deciding whether to trust a payload must never be handed a cut
+    // one that looks whole, so `truncated` is read explicitly and defaults to
+    // `false` only when the backend actually said so by omission.
+    statements: Array.isArray(statements)
+      ? statements
+          .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
+          .map((row) => ({
+            node: asString(row['node']),
+            tool: asString(row['tool']),
+            statement: asString(row['statement']),
+            result: asString(row['result']),
+            truncated: row['truncated'] === true,
           }))
       : [],
   };

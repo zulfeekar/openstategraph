@@ -24,6 +24,7 @@ from openstategraph.api.audience import (  # noqa: E402
     with_capability_notice,
 )
 from openstategraph.developer_channel import ProseGuard  # noqa: E402
+from openstategraph.executed_statements import statements_executed  # noqa: E402
 from openstategraph.progress import progress_report  # noqa: E402
 from openstategraph.api.registries import runtime_warnings  # noqa: E402
 from openstategraph.compile.node_doors import interruptible_nodes  # noqa: E402
@@ -1973,6 +1974,9 @@ async def _run_frames(
         # (`every-workflow-green` 35).
         capability_gap=capability_door(answer, suggestion, tool_use),
         redactions=redaction_report(redactions),
+        # The same read as the blocking door's (`one-chinook-honest/30`), off
+        # the `tool_use` this door already folded out of the frames.
+        statements=statements_executed(tool_use),
     )
 
     # A step failed and no answer was produced; see `RUN_FAILED_ANSWER` for

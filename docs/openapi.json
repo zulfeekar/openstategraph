@@ -97,6 +97,15 @@
             "title": "Redactions",
             "type": "array"
           },
+          "statements": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Statements",
+            "type": "array"
+          },
           "suggestion": {
             "anyOf": [
               {

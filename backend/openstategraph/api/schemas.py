@@ -589,6 +589,16 @@ class DeveloperChannelResponse(BaseModel):
     #: Counts and entity types, **never values** — the whole reason this rides
     #: the developer channel rather than the answer (guardrails ticket 03).
     redactions: list[dict[str, Any]] = []
+    #: What this run executed, as `{node, tool, statement, result, truncated}`
+    #: (`one-chinook-honest/30`). The statements themselves, so a run can be
+    #: asked what it did instead of a reader reconstructing it from the model's
+    #: prose about what it did.
+    #:
+    #: Free-form rows for `suggestion`'s reason inverted: the shape is ours and
+    #: stable, but *what counts as a statement* is owned by the recognisers in
+    #: `executed_statements`, and a second one must be able to join without a
+    #: schema change every client has to follow.
+    statements: list[dict[str, Any]] = []
 
 
 class RunResponse(BaseModel):

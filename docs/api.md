@@ -143,9 +143,53 @@ frame, and that object is where everything an editor may see now lives:
 | --- | --- |
 | `developer.warnings` | authoring diagnostics — unbound tool types, unresolved functions and subgraphs, mount overrides, capability-discovery failures |
 | `developer.suggestion` | the one capability-gap suggestion an agent may offer when it is blocked for want of a tool, as an object (`nodeType`, `attachTo`, `port`, `label`, `reason`) |
+| `developer.statements` | **what the run actually executed** — one row per statement, as `{node, tool, statement, result, truncated}` |
 
 The key is **absent**, not empty, on a customer run — so a client cannot read
 "there were no findings" out of a frame that was never entitled to carry any.
+
+### `developer.statements` — asking a finished run what it ran
+
+A run used to leave one account of what it executed: **the model's own prose
+about what it executed.** That is the account which cannot be trusted on
+exactly the runs that need auditing, and two correctness diagnoses paid for it
+in one day, reconstructing SQL from an answer and re-deriving it by hand
+against the warehouse.
+
+Each row is one statement a tool was actually handed and answered:
+
+```json
+{
+  "node": "agent1",
+  "tool": "mcp_execute_sql",
+  "statement": "SELECT port, SUM(barrels) FROM cargoflow_latest GROUP BY port",
+  "result": "{\"row_count\": 68, \"rows\": [...]}",
+  "truncated": true
+}
+```
+
+- **`statement`, not `sql`.** The question is *what did this tool actually do*,
+  and a SQL-only field would be the wrong shape the first time a tool does
+  something else. What stays narrow is what may enter a row: only a call
+  argument a recogniser accepted as a statement — today a SQL statement,
+  matched by shape and never by tool name, so a tool called `warehouse` reads
+  exactly as well as one called `mcp_execute_sql`.
+- **`truncated` says whether `result` is whole.** The recorded result is capped;
+  the statement never is. A cut payload and a short one would otherwise read
+  identically, and a `result` that ends mid-string is evidence to read, not
+  something to parse.
+- **No credential can appear.** A row carries the one argument recognised as a
+  statement and never the tool's argument map, so a `connection_string`,
+  `headers` or `token` argument is not recorded at all. On top of that, a
+  DSN password, an ODBC `PWD=`, a bearer token or a key-shaped literal found
+  *inside* a statement or its result is replaced with `[redacted]` — visibly,
+  so nothing is removed silently.
+- **Developer only.** It quotes node ids, tool names, table names and literal
+  values out of the data. The customer gets the answer.
+
+The same rows come back from `POST /api/runs` on `developer.statements`, and
+from the Python door as `RunResult.statements` — which has no audience, since a
+caller holding the process holds the run.
 
 Two things follow that a client should not try to work around:
 

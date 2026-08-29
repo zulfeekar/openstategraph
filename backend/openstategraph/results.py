@@ -111,6 +111,20 @@ class RunResult(str):
     #: went wrong and nothing degraded; the run is *waiting*, and the caller's
     #: move is to answer it with `resume()`, not to retry or to report a fault.
     pause: dict[str, Any] | None
+    #: What the run actually executed, as `{node, tool, statement, result,
+    #: truncated}` — `one-chinook-honest/30`, built by
+    #: `openstategraph.executed_statements.statements_executed`.
+    #:
+    #: The third door onto that record, and the one the correctness diagnoses
+    #: actually used: they ran the package **in-process**, so the run's own
+    #: state was gone by the time anybody had a question about it and the only
+    #: surviving account of what ran was the model's prose about what it ran.
+    #:
+    #: No audience gate here, unlike the HTTP doors: a caller holding the
+    #: process holds the run. The credential rule is not the audience's
+    #: though, and it still applies — only an argument recognised as a
+    #: *statement* is ever recorded, never the argument map.
+    statements: list[dict[str, Any]]
 
     def __new__(
         cls,
@@ -123,6 +137,7 @@ class RunResult(str):
         attempts: int = 0,
         usage: dict[str, dict[str, Any]] | None = None,
         pause: dict[str, Any] | None = None,
+        statements: list[dict[str, Any]] | None = None,
     ) -> "RunResult":
         self = super().__new__(cls, answer)
         self.answer = str(answer)
@@ -142,6 +157,9 @@ class RunResult(str):
         # Copied, and `None` kept as `None`: an empty dict would be a claim
         # that the run paused and said nothing, which is a different fact.
         self.pause = dict(pause) if pause is not None else None
+        # Copied a level down, like `usage`: these rows are read off live run
+        # state and a finished run must not keep changing.
+        self.statements = [dict(row) for row in (statements or [])]
         return self
 
     @property
@@ -188,6 +206,7 @@ class RunResult(str):
                 self.failures,
                 self.usage,
                 self.pause,
+                self.statements,
             ),
         )
 
@@ -239,13 +258,15 @@ def _rebuild(
     failures: list[str] | None = None,
     usage: dict[str, dict[str, Any]] | None = None,
     pause: dict[str, Any] | None = None,
+    statements: list[dict[str, Any]] | None = None,
 ) -> RunResult:
     """Module-level so `pickle` can find it by name.
 
     Every argument after `attempts` is optional and appended, never inserted,
     so a `RunResult` pickled by an older version still unpickles: a five-tuple
     written before the `failures` split, or a six-tuple written before `usage`
-    (`workflow-gallery` 35), lands on the same back-compat path as a caller
+    (`workflow-gallery` 35) or an eight-tuple written before `statements`
+    (`one-chinook-honest` 30), lands on the same back-compat path as a caller
     that never passed either. `usage` arrives as unknown, which is what a run
     that was never metered actually is.
     """
@@ -258,6 +279,7 @@ def _rebuild(
         attempts=attempts,
         usage=usage,
         pause=pause,
+        statements=statements,
     )
 
 

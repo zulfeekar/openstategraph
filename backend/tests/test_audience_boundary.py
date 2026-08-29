@@ -235,11 +235,14 @@ class TestADeveloperGetsItOnTheChannelInstead:
         # description a *new* module would be built from, when nothing in the
         # library provides it. Developer-only for the same reason `suggestion`
         # is — a customer is never told what the canvas lacks.
+        # `statements` joined it with `one-chinook-honest` 30 — what the run
+        # actually executed, empty here because this document runs nothing.
         assert done["developer"] == {
             "warnings": [],
             "suggestion": None,
             "capabilityGap": None,
             "redactions": [],
+            "statements": [],
         }
 
 
@@ -491,6 +494,7 @@ class TestTheChannelShape:
                 "suggestion": None,
                 "capabilityGap": None,
                 "redactions": [],
+                "statements": [],
             }
         }
 

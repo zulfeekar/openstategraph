@@ -76,6 +76,7 @@ developer-only by their own convention.
 | plan warnings | developer | same: findings about the document as an artifact |
 | **that** a capability was lost — `CAPABILITY_NOTICE`, appended to `answer` | **both**, differently | ticket 51. The sentences above stay developer-only; *the fact* cannot, because the alternative is a customer reading a degraded answer as a confident one and concluding the product does not know things. A developer gets the list and no notice; a customer gets the notice and no list. It rides `answer` rather than a field of its own for a hard reason as well as a soft one — a customer `done` frame may not carry a `warnings` key at all (see `payload` below, and the test that requires it *absent*), and `answer` is the one field every customer client already renders. |
 | guardrail `redactions` — counts and entity types per node, never values | developer | a customer must not be told what was removed from their own answer, and the developer needs to know the machinery rewrote it |
+| `statements` — what the run executed, with the tool that ran it and what came back | developer | `one-chinook-honest/30`. The evidence behind an answer, quoting node ids, tool names and a customer's own literal values. No credential can reach it: only an argument recognised as a *statement* is ever recorded, never the argument map (`executed_statements`) |
 | `mermaid` | **both** | `/chat` renders it as its live flow diagram, and `GET /api/workflows/{slug}/graph` already serves it to that page. Moving it here while leaving that endpoint open would be theatre, and it is topology, not guidance. |
 | `decisions` / `outputs` / `attempts` | **both** | facts about *this run*, which is the customer's own turn. `/chat`'s trace already shows them frame by frame. |
 | a `token` frame's **text** | depends — see `AnswerChannel` | the reply is the customer's; a tool payload, a branch name, a verdict and the echoed question are not. The *frame* still goes to both, emptied and marked `withheld`, because it is the only one that says where a run is mid-node. |
@@ -314,6 +315,21 @@ class DeveloperChannel:
     #: renders warnings as problems, and a channel that cries wolf on the
     #: happy path is one people learn to skip.
     redactions: list[dict[str, Any]] = field(default_factory=list)
+    #: What this run actually executed, as `{node, tool, statement, result,
+    #: truncated}` (`one-chinook-honest/30`). Built by
+    #: `openstategraph.executed_statements.statements_executed` from the run's
+    #: own `tool_use`, which is where `launch-readiness/165` already recorded
+    #: every exchange an agent's loop had.
+    #:
+    #: Developer only, and the reason is the same one `163` gave one field
+    #: along: this is the *evidence*, and evidence names node ids, tool names,
+    #: tables and literal values out of a customer's own data. A customer gets
+    #: the answer; the person who can audit the workflow gets what produced it.
+    #:
+    #: Two diagnoses in one day had to reconstruct these statements from the
+    #: model's prose about what it did — the one account that cannot be trusted
+    #: when the model got it wrong.
+    statements: list[dict[str, Any]] = field(default_factory=list)
 
     def payload(self, audience: Audience) -> dict[str, Any]:
         """The frame fragment to merge into `done` — `{}` for a customer.
@@ -332,6 +348,7 @@ class DeveloperChannel:
                 "suggestion": self.suggestion,
                 "capabilityGap": self.capability_gap,
                 "redactions": list(self.redactions),
+                "statements": list(self.statements),
             }
         }
 

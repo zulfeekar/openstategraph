@@ -171,6 +171,23 @@ ADDED_SINCE_THE_GOLDEN = {
     "detail": ("progress",),
 }
 
+#: The same table, one level down — keys added to the `done` frame's
+#: **`developer` object** since the golden was captured.
+#:
+#: A second table rather than a wildcard in the first, because the two are
+#: different claims: a top-level field is on the wire for every reader of that
+#: frame, and one of these is on it only for a developer. `_without_additions`
+#: strips both, and `test_the_only_addition_since_the_golden_is_named` now
+#: walks both — until `one-chinook-honest/30` it walked only the top level, so
+#: a field could join the developer channel without anything noticing, which is
+#: the exact hole this module exists to close one level up.
+ADDED_TO_THE_DEVELOPER_CHANNEL = {
+    # `one-chinook-honest/30`: the statements the run actually executed, so a
+    # correctness question is answered from the record rather than from the
+    # model's prose about what it did.
+    "statements",
+}
+
 
 def _without_additions(frames: list[str]) -> list[str]:
     """`frames`, with the named additions removed and everything else intact.
@@ -192,6 +209,10 @@ def _without_additions(frames: list[str]) -> list[str]:
         for field, frames_it_joined in ADDED_SINCE_THE_GOLDEN.items():
             if name in frames_it_joined:
                 payload.pop(field, None)
+        channel = payload.get("developer")
+        if isinstance(channel, dict):
+            for field in ADDED_TO_THE_DEVELOPER_CHANNEL:
+                channel.pop(field, None)
         trimmed.append(_sse(name, payload))
     return trimmed
 
@@ -218,6 +239,22 @@ def test_the_only_addition_since_the_golden_is_named() -> None:
     }
 
     assert live_fields - golden_fields == set(ADDED_SINCE_THE_GOLDEN)
+
+    golden_channel = _channel_fields(_golden()["developer"] + _golden()["customer"])
+    live_channel = _channel_fields(_frames(Audience.DEVELOPER) + _frames(Audience.CUSTOMER))
+
+    assert live_channel - golden_channel == ADDED_TO_THE_DEVELOPER_CHANNEL
+
+
+def _channel_fields(frames: list[str]) -> set[str]:
+    """Every key of a `done` frame's `developer` object, across `frames`."""
+    fields: set[str] = set()
+    for frame in frames:
+        payload = json.loads(frame.partition("\ndata: ")[2].rstrip("\n"))
+        channel = payload.get("developer")
+        if isinstance(channel, dict):
+            fields |= set(channel)
+    return fields
 
 
 def test_the_golden_covers_more_than_one_kind_of_frame() -> None:
