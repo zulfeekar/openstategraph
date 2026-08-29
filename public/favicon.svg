@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!--
+    The OpenStateGraph mark — the owner's authored `Turn 2 — Circuit`, LOCKED.
+    `src/design/brand/Mark.tsx` is the same drawing and carries the argument.
+
+    A favicon has no CSS, no cascade and no `currentColor`, so the two
+    variables the authored SVG names cannot be referenced here:
+
+      var(--color-text)  -> inlined as the authored ink, `#201e1d`, with the
+                            authored dark ink `#f3f2f2` swapped in under
+                            `prefers-color-scheme: dark`. An SVG favicon is
+                            styled by its own <style> element, and Chrome,
+                            Firefox and Safari all honour a media query inside
+                            one — which is the only mechanism a tab icon has
+                            for knowing what colour the browser chrome is.
+      var(--mark-accent) -> inlined as `#ec3013`, the one accent voice. It does
+                            not flip: the authored dark accent `#f4715c` exists
+                            because the accent sits on a dark *ground*, and a
+                            tab icon's ground is the browser's, not ours.
+
+    Two literals, therefore, that no token can reach. They are the only place
+    in the product where an authored colour is re-typed, and this comment is
+    the cross-reference that keeps them findable.
+  -->
+  <style>
+    :root { --ink: #201e1d; }
+    @media (prefers-color-scheme: dark) { :root { --ink: #f3f2f2; } }
+    .ink { stroke: var(--ink); fill: none; stroke-width: 5.5; }
+    .node { fill: var(--ink); }
+  </style>
+  <g class="ink">
+    <line x1="38" y1="24" x2="62" y2="24" />
+    <line x1="76" y1="38" x2="76" y2="62" />
+    <line x1="62" y1="76" x2="38" y2="76" />
+    <line x1="33.9" y1="33.9" x2="66.1" y2="66.1" />
+    <circle cx="24" cy="24" r="7.25" />
+  </g>
+  <circle class="node" cx="76" cy="24" r="10" />
+  <circle class="node" cx="76" cy="76" r="10" />
+  <circle cx="24" cy="76" r="10" fill="#ec3013" />
+</svg>

@@ -4,6 +4,17 @@
  * Components only ever reference the names in this file. Each theme
  * re-points the same role set at a different slice of the primitive
  * ramps, so a component is themed for free and can't leak a raw hex.
+ *
+ * The tiering did not change when the owner's design system landed
+ * (2026-08-29); only the right-hand sides did. Where a role has an
+ * authored counterpart it now aliases `--osg-*` directly, and where it
+ * does not it reads the derived ramp in `tokens.css`, which is the same
+ * ink family one interpolation away.
+ *
+ * **The dark block aliases ramp names and literals, never a theme-varying
+ * `--osg-*` name.** `tokens.css` carries the authored `[data-theme]`
+ * block and says why nothing here may point at it: a primitive that moves
+ * with the theme would resolve, inside this block, to its *light* value.
  * ------------------------------------------------------------------ */
 
 :root,
@@ -11,7 +22,7 @@
   color-scheme: light;
 
   /* ---------- Surfaces ---------- */
-  --color-bg-canvas: #f7f8fa;
+  --color-bg-canvas: #f9f8f8;
   --color-bg-surface: var(--neutral-0);
   --color-bg-surface-raised: var(--neutral-0);
   --color-bg-surface-sunken: var(--neutral-50);
@@ -20,12 +31,12 @@
   --color-bg-inverse: var(--neutral-900);
 
   /* Interaction states, expressed as overlays so they stack on any bg. */
-  --color-bg-hover: rgba(17, 20, 26, 0.04);
-  --color-bg-active: rgba(17, 20, 26, 0.07);
-  --color-bg-selected: var(--blue-50);
+  --color-bg-hover: rgba(32, 30, 29, 0.04);
+  --color-bg-active: rgba(32, 30, 29, 0.07);
+  --color-bg-selected: var(--osg-accent-100);
 
   /* ---------- Text ---------- */
-  --color-text-primary: #14171d;
+  --color-text-primary: var(--osg-text);
   --color-text-secondary: var(--neutral-600);
   /* Each one step down the ramp from where it was, and the reason is the
      same for all three: they were chosen as *shades of quiet* and never
@@ -42,15 +53,22 @@
   --color-text-quaternary: var(--neutral-550);
   --color-text-placeholder: var(--neutral-550);
   --color-text-inverse: var(--neutral-0);
-  --color-text-link: var(--blue-600);
+  /* The authored ramp names this one: `--osg-accent-700` is documented in
+     the design system as *"accent text at body size"*, and it is 6.35:1 on
+     white. A link was `--blue-600`; a system with one accent voice does not
+     get to spend a second hue on the least-used control in the product. */
+  --color-text-link: var(--osg-accent-700);
 
   /* ---------- Borders ---------- */
   --color-border-subtle: var(--neutral-100);
-  --color-border-default: #e4e7ec;
+  --color-border-default: #e7e6e6;
   --color-border-strong: var(--neutral-200);
   --color-border-emphasis: var(--neutral-300);
-  --color-border-focus: var(--blue-500);
-  --color-focus-ring: var(--blue-500);
+  /* `--osg-focus: 2px solid var(--osg-accent)` — the design system says the
+     focus ring is the accent, and that is adopted. Its *geometry* is not;
+     `--focus-ring-width` in `tokens.css` carries that argument. */
+  --color-border-focus: var(--osg-accent);
+  --color-focus-ring: var(--osg-accent);
 
   /* ---------- Brand / primary action ---------- */
   /* One step down the scale from the obvious choice, and the reason is the
@@ -62,7 +80,17 @@
      The same token is the pill *text* colour on `--color-primary-subtle`, and
      that failed at 3.12:1 for the same reason: a green tuned as a fill, then
      reused anywhere green was wanted. Both wanted darker, so one move fixes
-     both — 5.02:1 as a fill, 4.76:1 as pill text. */
+     both — 5.02:1 as a fill, 4.76:1 as pill text.
+
+     **The green moved on 2026-08-29 and the argument moved with it.** The
+     design system has no green — it ships one accent voice, `#ec3013` — so
+     green survives here as a *function* rather than as brand: go, flow,
+     passed. `--green-600` is now `#357a4a`, picked at the same luminance
+     band as the authored `--osg-accent-600` (5.21:1 against 5.22 on white)
+     precisely so the sentences above stay true: white 13px on it is 5.21:1,
+     and as pill text on `--color-primary-subtle` it is 4.93:1. Only the
+     chroma dropped, so it stops shouting over the brand red.
+  */
   --color-primary: var(--green-600);
   --color-primary-hover: var(--green-700);
   --color-primary-active: var(--green-800);
@@ -70,35 +98,37 @@
   --color-primary-text: var(--neutral-0);
 
   /* ---------- Status ---------- */
-  --color-status-idle: var(--neutral-300);
+  --color-status-idle: var(--osg-node-idle);
   --color-status-ready: var(--teal-500);
   --color-status-running: var(--blue-500);
   --color-status-success: var(--green-500);
   --color-status-warning: var(--amber-500);
-  --color-status-error: var(--red-500);
+  --color-status-error: var(--osg-accent);
 
   /* The active-node border glow is a two-hue gradient stroke, so it needs a
    * pair: it starts on the running-status accent and blends into violet. */
   --color-run-glow-from: var(--blue-500);
   --color-run-glow-to: var(--violet-500);
 
-  --color-danger: var(--red-600);
-  --color-danger-subtle: var(--red-50);
+  /* `--osg-node-error: var(--osg-accent-700)` — the authored node-state
+     token, used where the authored system actually speaks about error. */
+  --color-danger: var(--osg-node-error);
+  --color-danger-subtle: var(--osg-accent-100);
 
   /* ---------- Canvas chrome ---------- */
-  --color-canvas-grid-dot: #d5dae2;
-  --color-canvas-link: #b3b9c4;
+  --color-canvas-grid-dot: #dbd9d8;
+  --color-canvas-link: #b9b6b4;
   --color-canvas-link-hover: var(--neutral-500);
-  --color-canvas-link-active: var(--blue-500);
+  --color-canvas-link-active: var(--osg-accent);
   --color-canvas-link-flow: var(--green-500);
-  --color-port: #3d434f;
+  --color-port: #454241;
   --color-port-ring: var(--neutral-0);
-  --color-port-hover: var(--blue-600);
+  --color-port-hover: var(--osg-accent-600);
   --color-port-valid: var(--green-500);
-  --color-port-invalid: var(--red-500);
-  --color-snapline: var(--violet-500);
-  --color-selection-band: rgba(59, 130, 246, 0.08);
-  --color-selection-band-border: var(--blue-500);
+  --color-port-invalid: var(--osg-accent);
+  --color-snapline: var(--osg-accent);
+  --color-selection-band: rgba(236, 48, 19, 0.08);
+  --color-selection-band-border: var(--osg-accent);
   --color-group-fill: #e8f1fd;
   --color-group-border: #c6ddf8;
   --color-group-text: #16324f;
@@ -106,97 +136,113 @@
   --color-note-border: var(--amber-100);
 
   /* ---------- Elevation ----------
-   * Two-layer shadows: a tight contact shadow for edge definition plus
-   * a wide ambient one for lift. Kept low-opacity so cards read crisp
-   * against the light canvas rather than smudged. */
-  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
-  --shadow-md: 0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 10px -2px rgba(16, 24, 40, 0.06);
-  --shadow-lg: 0 2px 4px rgba(16, 24, 40, 0.05), 0 10px 24px -4px rgba(16, 24, 40, 0.1);
-  --shadow-xl: 0 4px 8px rgba(16, 24, 40, 0.05), 0 20px 40px -8px rgba(16, 24, 40, 0.14);
-  --shadow-node:
-    0 0 0 1px var(--color-border-default), 0 1px 2px rgba(16, 24, 40, 0.05),
-    0 4px 12px -4px rgba(16, 24, 40, 0.08);
-  --shadow-node-hover:
-    0 0 0 1px var(--color-border-emphasis), 0 2px 4px rgba(16, 24, 40, 0.06),
-    0 8px 20px -6px rgba(16, 24, 40, 0.12);
-  --shadow-node-selected:
-    0 0 0 1.5px var(--blue-500), 0 2px 4px rgba(37, 99, 235, 0.1),
-    0 8px 20px -6px rgba(37, 99, 235, 0.16);
+   * Was a two-layer soft shadow — a tight contact shadow plus a wide
+   * ambient one — which is the elevation language of a rounded system.
+   * The design system is flat and 0-radius, and its own shadows say so:
+   * `--osg-shadow-sm/md/lg` are `0 Npx 0`, an offset with **no blur**. A
+   * soft shadow under a square corner reads as a mistake, so the whole
+   * scale moves rather than half of it.
+   *
+   * The ring stays. On a flat system the hairline *is* the edge, and the
+   * offset is only lift. */
+  --shadow-xs: 0 1px 0 rgba(32, 30, 29, 0.1);
+  --shadow-sm: var(--osg-shadow-sm);
+  --shadow-md: var(--osg-shadow-md);
+  --shadow-lg: var(--osg-shadow-lg);
+  --shadow-xl: 0 10px 0 rgba(32, 30, 29, 0.26);
+  --shadow-node: 0 0 0 1px var(--color-border-default), var(--osg-shadow-sm);
+  --shadow-node-hover: 0 0 0 1px var(--color-border-emphasis), var(--osg-shadow-md);
+  --shadow-node-selected: 0 0 0 var(--osg-rule) var(--osg-accent), var(--osg-shadow-md);
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --color-bg-canvas: #0e1116;
-  --color-bg-surface: #171b22;
-  --color-bg-surface-raised: #1c2129;
-  --color-bg-surface-sunken: #12161c;
-  --color-bg-subtle: #1f242d;
-  --color-bg-muted: #262c36;
+  /* The two surfaces a person actually looks at are the authored dark
+     ground and the authored dark surface, `#1a1918` and `#201e1d`, and
+     they land here for free: the greys they replace were `#171b22` and
+     `#1c2129`, whose relative luminances are 0.0108 and 0.0149 against the
+     authored 0.0098 and 0.0132. The design system's dark end and this
+     product's dark end were already the same depth; only the temperature
+     differed. Everything around them is the derived ink ramp at the
+     luminance it already had. */
+  --color-bg-canvas: #0f0e0e;
+  --color-bg-surface: #1a1918;
+  --color-bg-surface-raised: #201e1d;
+  --color-bg-surface-sunken: #151413;
+  --color-bg-subtle: #262423;
+  --color-bg-muted: #2c2928;
   --color-bg-inverse: var(--neutral-75);
 
-  --color-bg-hover: rgba(255, 255, 255, 0.05);
-  --color-bg-active: rgba(255, 255, 255, 0.09);
-  --color-bg-selected: rgba(59, 130, 246, 0.16);
+  --color-bg-hover: rgba(243, 242, 242, 0.05);
+  --color-bg-active: rgba(243, 242, 242, 0.09);
+  --color-bg-selected: rgba(244, 113, 92, 0.16);
 
-  --color-text-primary: #e8eaee;
-  --color-text-secondary: #9aa2b1;
+  /* `#f3f2f2` is the authored dark ink, written as a literal rather than
+     as `var(--osg-text)` for the reason at the top of this file. */
+  --color-text-primary: #eae9e9;
+  --color-text-secondary: #a19e9c;
   /* Dark failed harder than light — 3.21 and 2.97 — because a dim grey on a
      dim ground has nowhere to go. Measured against `--color-bg-subtle`
-     (#1f242d), the *lightest* dark background and therefore the worst case
-     for pale text: 5.35, 4.66, 4.66. */
-  --color-text-tertiary: #8f98a7;
-  --color-text-quaternary: #868f9e;
-  --color-text-placeholder: #868f9e;
+     (now `#262423`), the *lightest* dark background and therefore the worst
+     case for pale text: 5.19, 4.70, 4.70 — the same three ratios, re-tinted
+     at constant luminance rather than re-picked. */
+  --color-text-tertiary: #989593;
+  --color-text-quaternary: #918d8b;
+  --color-text-placeholder: #918d8b;
   --color-text-inverse: var(--neutral-950);
-  --color-text-link: #7aa7f5;
+  /* The authored `--osg-accent-300`, which the design system ships as the
+     accent for dark grounds. */
+  --color-text-link: #f9b3a6;
 
-  --color-border-subtle: #22272f;
-  --color-border-default: #2b313b;
-  --color-border-strong: #363d49;
-  --color-border-emphasis: #454e5c;
-  --color-border-focus: #5b93f0;
-  --color-focus-ring: #5b93f0;
+  --color-border-subtle: #272524;
+  --color-border-default: #312f2e;
+  /* The authored dark `--osg-border`. */
+  --color-border-strong: #3a3736;
+  --color-border-emphasis: #4f4c4b;
+  /* The authored dark accent, `--osg-accent-400`. */
+  --color-border-focus: #f4715c;
+  --color-focus-ring: #f4715c;
 
   /* Dark was worse than light: 3.09:1. The scale keeps this theme's own
      intent — hover *brightens*, active *deepens* — which took some care,
      because brightening is what costs contrast against white text. These
-     three are 6.17, 4.62 and 7.80. */
-  --color-primary: #12703a;
-  --color-primary-hover: #17864a;
-  --color-primary-active: #0f5f2c;
-  --color-primary-subtle: rgba(31, 168, 85, 0.14);
+     three are 6.11, 4.63 and 7.84 after the chroma drop — the same three
+     numbers, since each state kept the luminance it was measured at. */
+  --color-primary: #306e42;
+  --color-primary-hover: #398350;
+  --color-primary-active: #285c38;
+  --color-primary-subtle: rgba(69, 159, 96, 0.14);
   --color-primary-text: #ffffff;
 
-  --color-status-idle: #454e5c;
+  --color-status-idle: #4a4746; /* authored dark `--osg-node-idle` */
   --color-status-ready: #2dd4bf;
   --color-status-running: #60a5fa;
   --color-status-success: #34d399;
   --color-status-warning: #fbbf24;
-  --color-status-error: #f87171;
+  --color-status-error: #f4715c; /* authored dark accent */
 
   /* Lifted on dark, where a mid-ramp accent reads as muddy against the
    * canvas rather than as a light source. */
   --color-run-glow-from: #60a5fa;
   --color-run-glow-to: #a78bfa;
 
-  --color-danger: #f87171;
-  --color-danger-subtle: rgba(248, 113, 113, 0.14);
+  --color-danger: #f9b3a6; /* authored dark `--osg-node-error` */
+  --color-danger-subtle: rgba(244, 113, 92, 0.14);
 
-  --color-canvas-grid-dot: #262c36;
-  --color-canvas-link: #3d4552;
-  --color-canvas-link-hover: #5c6675;
-  --color-canvas-link-active: #60a5fa;
+  --color-canvas-grid-dot: #2c2928;
+  --color-canvas-link: #474443;
+  --color-canvas-link-hover: #676462;
+  --color-canvas-link-active: #f4715c;
   --color-canvas-link-flow: #34d399;
-  --color-port: #8b95a5;
-  --color-port-ring: #171b22;
-  --color-port-hover: #7aa7f5;
+  --color-port: #969290;
+  --color-port-ring: #1a1918;
+  --color-port-hover: #f9b3a6;
   --color-port-valid: #34d399;
-  --color-port-invalid: #f87171;
-  --color-snapline: #a78bfa;
-  --color-selection-band: rgba(96, 165, 250, 0.1);
-  --color-selection-band-border: #60a5fa;
+  --color-port-invalid: #f4715c;
+  --color-snapline: #f4715c;
+  --color-selection-band: rgba(244, 113, 92, 0.1);
+  --color-selection-band-border: #f4715c;
   --color-group-fill: rgba(59, 130, 246, 0.09);
   --color-group-border: rgba(96, 165, 250, 0.26);
   --color-group-text: #c4d9f7;
@@ -204,20 +250,18 @@
   --color-note-border: rgba(245, 158, 11, 0.22);
 
   /* Dark surfaces get their definition from a light hairline, not from a
-   * shadow — so the shadows shrink and the ring carries the edge. */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.35), 0 4px 12px -2px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.4), 0 12px 28px -6px rgba(0, 0, 0, 0.45);
-  --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.45), 0 24px 48px -10px rgba(0, 0, 0, 0.55);
-  --shadow-node:
-    0 0 0 1px var(--color-border-default), 0 1px 2px rgba(0, 0, 0, 0.35),
-    0 4px 12px -4px rgba(0, 0, 0, 0.35);
-  --shadow-node-hover:
-    0 0 0 1px var(--color-border-emphasis), 0 2px 4px rgba(0, 0, 0, 0.4),
-    0 8px 20px -6px rgba(0, 0, 0, 0.45);
-  --shadow-node-selected:
-    0 0 0 1.5px #5b93f0, 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px -6px rgba(0, 0, 0, 0.45);
+   * shadow — so the shadows shrink and the ring carries the edge. That
+   * argument survives the flattening and gets stronger: an unblurred offset
+   * on a dark ground is nearly invisible, so here the ring does almost all
+   * the work and the offset is a hint. */
+  --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.45);
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 2px 0 rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 6px 0 rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 10px 0 rgba(0, 0, 0, 0.65);
+  --shadow-node: 0 0 0 1px var(--color-border-default), 0 1px 0 rgba(0, 0, 0, 0.5);
+  --shadow-node-hover: 0 0 0 1px var(--color-border-emphasis), 0 2px 0 rgba(0, 0, 0, 0.55);
+  --shadow-node-selected: 0 0 0 var(--osg-rule) #f4715c, 0 2px 0 rgba(0, 0, 0, 0.55);
 }
 
 /* ------------------------------------------------------------------ *

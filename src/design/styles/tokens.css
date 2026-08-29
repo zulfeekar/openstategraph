@@ -4,51 +4,227 @@
  * Raw, theme-independent values. Nothing in the app references these
  * directly; `theme.css` maps them onto semantic roles. Changing a ramp
  * here re-tints the whole product without touching a component.
+ *
+ * ---- Where these values come from, as of 2026-08-29 ----
+ *
+ * The block marked `--osg-*` below is **the owner's authored design
+ * system**, read verbatim out of their Claude Design project
+ * `OpenStateGraph Logo Design` (`acd38dfa-f173-4aec-b029-7d5110e6f4d1`)
+ * through the `DesignSync` MCP, and corroborated independently by the
+ * `Modernist` project's own `theme.json` — same accent `#ec3013`, same
+ * ground `#f3f2f2`, same ink `#201e1d`, same `radius 0`. Provenance is
+ * recorded in `.scratch/the-look-has-an-author-now/tickets/01`.
+ *
+ * The prefix is kept on purpose: it makes visible, at a glance, which
+ * variables have an author outside this repository. Everything under
+ * `--osg-` is theirs and is not ours to retune; everything below it is
+ * this application's own ramp, **derived** from theirs and saying how.
+ *
+ * The derivation is one rule, applied everywhere: *keep the relative
+ * luminance this product already measured, adopt the authored hue.* The
+ * greys in this file were not picked for their temperature — several were
+ * picked for a contrast ratio, argued for at their declaration and pinned
+ * by `primaryContrast.test.ts`. Re-tinting at constant luminance changes
+ * the temperature and leaves every one of those arguments standing.
  * ------------------------------------------------------------------ */
 
 :root {
-  /* ---------- Typeface ---------- */
-  --font-sans:
-    'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
-    Arial, sans-serif;
-  --font-mono:
-    ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, 'Cascadia Mono', 'Roboto Mono',
-    Consolas, monospace;
+  /* ================================================================== *
+   * The authored design system — OpenStateGraph tokens v1.0.
+   * Brand layer over Modernist. Flat, 0 radius, one accent.
+   * Verbatim. Do not retune here; retune in the design project.
+   * ================================================================== */
+
+  /* Type */
+  --osg-font-display: 'Archivo Variable', 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --osg-font-text: 'IBM Plex Sans Variable', 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  --osg-font-mono:
+    'IBM Plex Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, monospace;
+
+  --osg-text-12: 0.75rem; /* 12px — table meta, dense labels */
+  --osg-text-13: 0.8125rem; /* 13px — UI captions */
+  --osg-text-14: 0.875rem; /* 14px — UI default */
+  --osg-text-15: 0.9375rem; /* 15px — body */
+  --osg-text-17: 1.0625rem; /* 17px — lead */
+  --osg-text-20: 1.25rem;
+  --osg-text-24: 1.5rem;
+  --osg-text-30: 1.875rem;
+  --osg-text-38: 2.375rem;
+  --osg-text-48: 3rem;
+  --osg-text-60: 3.75rem;
+
+  --osg-leading-tight: 1.05;
+  --osg-leading-snug: 1.3;
+  --osg-leading-body: 1.6;
+  --osg-tracking-display: -0.03em;
+  --osg-tracking-body: 0em;
+  --osg-tracking-label: 0.16em;
+
+  /* Ink & ground */
+  --osg-bg: #f3f2f2;
+  --osg-surface: #ffffff;
+  --osg-text: #201e1d;
+  --osg-text-muted: #4a4746;
+  --osg-text-subtle: #6b6866;
+  --osg-divider: #201e1d; /* 2px rules, full ink */
+  --osg-border: #d9d7d6;
+
+  --osg-neutral-100: #f7f6f6;
+  --osg-neutral-300: #d9d7d6;
+  --osg-neutral-600: #6b6866;
+  --osg-neutral-700: #4a4746;
+  --osg-neutral-900: #201e1d;
+
+  /* Accent */
+  --osg-accent: #ec3013;
+  --osg-accent-100: #fde8e4;
+  --osg-accent-300: #f9b3a6;
+  --osg-accent-400: #f4715c; /* accent on dark grounds */
+  --osg-accent-600: #d02a10; /* pressed */
+  --osg-accent-700: #b8250e; /* accent text at body size */
+  --osg-accent-900: #6f1608;
+
+  /* Graph canvas — semantic node/edge states */
+  --osg-canvas: var(--osg-bg);
+  --osg-node-initial: transparent; /* hollow, ink ring */
+  --osg-node-initial-ring: var(--osg-text);
+  --osg-node-active: var(--osg-text);
+  --osg-node-idle: var(--osg-neutral-300);
+  --osg-node-terminal: var(--osg-accent);
+  --osg-node-error: var(--osg-accent-700);
+  --osg-edge: var(--osg-text);
+  --osg-edge-muted: var(--osg-neutral-300);
+  --osg-edge-1: 2px;
+  --osg-edge-2: 4px;
+  --osg-edge-3: 7px;
+  --osg-node-ring: 5.5; /* mark stroke, in 100-unit mark space */
+  --osg-node-r: 10;
+
+  /* Space — 4px base */
+  --osg-space-1: 4px;
+  --osg-space-2: 8px;
+  --osg-space-3: 12px;
+  --osg-space-4: 16px;
+  --osg-space-6: 24px;
+  --osg-space-8: 32px;
+  --osg-space-12: 48px;
+  --osg-space-16: 64px;
+  --osg-space-24: 96px;
+
+  /* Line, radius, elevation */
+  --osg-rule: 2px;
+  --osg-hairline: 1px;
+  --osg-radius: 0px;
+  --osg-shadow-sm: 0 1px 0 rgba(32, 30, 29, 0.14);
+  --osg-shadow-md: 0 2px 0 rgba(32, 30, 29, 0.18);
+  --osg-shadow-lg: 0 6px 0 rgba(32, 30, 29, 0.22);
+
+  /* Motion */
+  --osg-dur-1: 120ms;
+  --osg-dur-2: 180ms;
+  --osg-dur-3: 280ms;
+  --osg-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Focus */
+  --osg-focus: 2px solid var(--osg-accent);
+  --osg-focus-offset: 2px;
+
+  /* ---- Four steps the authored dark block needs and the ramp does not
+   * name. Same values, given ramp names so Tier 2's dark block can reach
+   * them without aliasing a token whose value changes with the theme —
+   * which is the one thing a *primitive* must never do. Nothing here is
+   * invented: every value is lifted from the authored
+   * `[data-theme="dark"]` block below. */
+  --osg-neutral-200: #c9c6c4; /* authored dark `--osg-text-muted` */
+  --osg-neutral-500: #8f8b89; /* authored dark `--osg-text-subtle` */
+  --osg-neutral-800: #3a3736; /* authored dark `--osg-border`     */
+  --osg-neutral-950: #1a1918; /* authored dark `--osg-bg`         */
+
+  /* ================================================================== *
+   * This application's ramp, derived from the authored one.
+   * ================================================================== */
+
+  /* ---------- Typeface ----------
+   * Three families where there were two, because the design system names
+   * three, and `--font-display` is new — it is the role an Archivo exists
+   * for. Inter is gone: it was the one loaded family and IBM Plex Sans has
+   * taken its job, so keeping it in the stack would have been 218 KB of
+   * fallback for a face that is already loaded.
+   *
+   * Each stack ends in a real fallback — `'Helvetica Neue', Arial` for the
+   * two sans, the platform mono for the third — because a subset that was
+   * dropped, or a face that has not arrived yet, has to land somewhere.
+   * `styles/fonts.css` declares the faces and prices them. */
+  --font-sans: var(--osg-font-text);
+  --font-display: var(--osg-font-display);
+  --font-mono: var(--osg-font-mono);
 
   /* ---------- Type scale ----------
    * Tuned for a dense, information-rich canvas: a 10 → 20px ramp where
    * every step is legible at 100% zoom. Optical letter-spacing tightens
    * as size grows, loosens as it shrinks — the usual trick for keeping
-   * small UI text readable and large text from looking gappy. */
+   * small UI text readable and large text from looking gappy.
+   *
+   * **Four of the seven steps are the authored scale and now say so.** The
+   * authored scale starts at 12 and steps 12/13/14/15/17/20/…; this one
+   * starts at 10 and steps 10/11/12/13/14/16/20. Where they coincide the
+   * value is aliased rather than re-typed, so a change in the design
+   * project arrives here.
+   *
+   * The three that do not coincide are kept, with the reason, rather than
+   * rounded onto the nearest authored step:
+   *   - 10 and 11 sit **below the authored floor**. The design system was
+   *     authored for document and marketing surfaces; this product's
+   *     densest surface is a 252px node card carrying a title, a subtitle,
+   *     a port list and a status line. Rounding both up to 12 is a layout
+   *     change to every card, not a type change, and it is not what the
+   *     design system asked for.
+   *   - 16 falls between the authored 15 and 17. It is the section-heading
+   *     size and the one the palette and inspector headers are built on;
+   *     moving it either way re-flows two panels for a 1px difference. */
   --font-size-10: 0.625rem; /*  10px — micro labels, table heads   */
   --font-size-11: 0.6875rem; /*  11px — captions, node subtitles    */
-  --font-size-12: 0.75rem; /*  12px — secondary UI               */
-  --font-size-13: 0.8125rem; /*  13px — the workhorse body size    */
-  --font-size-14: 0.875rem; /*  14px — emphasis, panel titles     */
+  --font-size-12: var(--osg-text-12); /*  12px — secondary UI     */
+  --font-size-13: var(--osg-text-13); /*  13px — workhorse body   */
+  --font-size-14: var(--osg-text-14); /*  14px — emphasis, titles */
   --font-size-16: 1rem; /*  16px — section headings           */
-  --font-size-20: 1.25rem; /*  20px — display                    */
+  --font-size-20: var(--osg-text-20); /*  20px — display          */
 
   --font-weight-regular: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
 
+  /* `snug` and `relaxed` are the authored `--osg-leading-snug` / `-body`.
+   * `tight` is not `--osg-leading-tight` (1.05): that leading is for
+   * 38–60px display type, and at 20px it clips descenders in a node
+   * title. `normal` has no authored counterpart. */
   --line-height-tight: 1.2;
-  --line-height-snug: 1.35;
+  --line-height-snug: var(--osg-leading-snug);
   --line-height-normal: 1.5;
-  --line-height-relaxed: 1.65;
+  --line-height-relaxed: var(--osg-leading-body);
 
-  --letter-spacing-tighter: -0.02em;
+  /* The two ends are the authored voice — a display line set tight and an
+   * uppercase micro-label set wide are most of what makes this system
+   * recognisable. `--letter-spacing-wider` moves 0.06em → 0.16em, which is
+   * a real and deliberate change to every uppercase label in the product. */
+  --letter-spacing-tighter: var(--osg-tracking-display);
   --letter-spacing-tight: -0.011em;
-  --letter-spacing-normal: 0em;
+  --letter-spacing-normal: var(--osg-tracking-body);
   --letter-spacing-wide: 0.01em;
-  --letter-spacing-wider: 0.06em; /* uppercase micro-labels */
+  --letter-spacing-wider: var(--osg-tracking-label); /* uppercase micro-labels */
 
   /* ---------- Composite type roles ----------
    * Shorthand bundles so a component writes one declaration instead of
    * four, and can never drift out of the scale.                       */
+  /* The one role that reads `--font-display`. Archivo is a display face —
+     the design system's own `theme.json` ships it at 400/600/800 — and a
+     product that loads one and never sets it anywhere is paying for a
+     typeface to sit in a variable. Display is 20px here rather than the
+     38–60px the authored scale reaches, because this is a canvas and not a
+     landing page; it is still the largest type in the product. */
   --type-display: var(--font-weight-semibold) var(--font-size-20) / var(--line-height-tight)
-    var(--font-sans);
+    var(--font-display);
   --type-heading-lg: var(--font-weight-semibold) var(--font-size-16) / var(--line-height-snug)
     var(--font-sans);
   --type-heading-sm: var(--font-weight-semibold) var(--font-size-14) / var(--line-height-snug)
@@ -66,23 +242,27 @@
   --type-mono-sm: var(--font-weight-regular) var(--font-size-11) / var(--line-height-normal)
     var(--font-mono);
 
-  /* ---------- Space — 4px base, no arbitrary values ---------- */
+  /* ---------- Space — 4px base, no arbitrary values ----------
+   * Seven of the sixteen steps are the authored 4px scale outright. The
+   * half-steps between them (2, 6, 10, 14, 20, 28, 40) are this product's
+   * own and stay: they are the padding of controls 24, 28 and 32px tall,
+   * and a scale with no half-steps cannot centre text in any of them. */
   --space-0: 0;
   --space-px: 1px;
   --space-0-5: 0.125rem; /*  2px */
-  --space-1: 0.25rem; /*  4px */
+  --space-1: var(--osg-space-1);
   --space-1-5: 0.375rem; /*  6px */
-  --space-2: 0.5rem; /*  8px */
+  --space-2: var(--osg-space-2);
   --space-2-5: 0.625rem; /* 10px */
-  --space-3: 0.75rem; /* 12px */
+  --space-3: var(--osg-space-3);
   --space-3-5: 0.875rem; /* 14px */
-  --space-4: 1rem; /* 16px */
+  --space-4: var(--osg-space-4);
   --space-5: 1.25rem; /* 20px */
-  --space-6: 1.5rem; /* 24px */
+  --space-6: var(--osg-space-6);
   --space-7: 1.75rem; /* 28px */
-  --space-8: 2rem; /* 32px */
+  --space-8: var(--osg-space-8);
   --space-10: 2.5rem; /* 40px */
-  --space-12: 3rem; /* 48px */
+  --space-12: var(--osg-space-12);
 
   /* ---------- Control geometry ----------
    * One height per size step, shared by *every* control class — button,
@@ -96,38 +276,67 @@
   --control-height-md: 28px;
   --control-height-lg: 32px;
 
-  /* ---------- Radius ---------- */
-  --radius-xs: 3px;
-  --radius-sm: 5px;
-  --radius-md: 7px;
-  --radius-lg: 9px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
+  /* ---------- Radius ----------
+   * `--osg-radius: 0px`, and the design system's own one-line description
+   * of itself is *"Flat, 0 radius, one accent."* So every corner radius in
+   * the product is the authored zero — six names kept rather than one,
+   * because a name is where the next change lands and collapsing them to
+   * a single `--radius` would make un-flattening a hundred-site edit.
+   *
+   * `--radius-full` is the exception and is not a corner radius at all: it
+   * is how a status dot, an avatar and a pill are made *circular*. A
+   * circle is not a rounded rectangle, and the authored mark is built from
+   * four of them — `--osg-node-r`. Flattening it would turn every status
+   * dot into a square. */
+  --radius-xs: var(--osg-radius);
+  --radius-sm: var(--osg-radius);
+  --radius-md: var(--osg-radius);
+  --radius-lg: var(--osg-radius);
+  --radius-xl: var(--osg-radius);
+  --radius-2xl: var(--osg-radius);
   --radius-full: 999px;
 
-  /* ---------- Neutral ramp (slate, very slightly cool) ---------- */
+  /* ---------- Neutral ramp (the authored warm ink) ----------
+   * Was a cool slate; is now the authored ink family — `#f7f6f6` through
+   * `#201e1d`, warm, almost chroma-free.
+   *
+   * **Eighteen steps against the design system's five, and every one of
+   * the eighteen is derived rather than chosen.** The rule: each step
+   * keeps the *exact relative luminance it already had* and takes the
+   * authored hue, by interpolating the authored family (its five ramp
+   * steps plus the four its dark block adds, plus white and black at the
+   * ends) at that luminance. `--neutral-700` lands on `#4a4746` — the
+   * authored `--osg-neutral-700` exactly — which is the check that the
+   * interpolation is reading the right curve.
+   *
+   * Constant luminance is the whole point. Six of these steps carry a
+   * contrast argument written at the token that uses them, and one
+   * (`--neutral-550`) exists *only* for a threshold. Re-picking them by
+   * eye would have silently re-opened every one of those; re-tinting them
+   * at their own luminance cannot. */
   --neutral-0: #ffffff;
-  --neutral-25: #fcfcfd;
-  --neutral-50: #f8f9fb;
-  --neutral-75: #f4f5f8;
-  --neutral-100: #eef0f4;
-  --neutral-150: #e6e8ee;
-  --neutral-200: #dcdfe6;
-  --neutral-300: #c7ccd6;
-  --neutral-400: #9aa1ae;
-  --neutral-500: #767e8c;
+  --neutral-25: #fcfcfc;
+  --neutral-50: #f9f9f9;
+  --neutral-75: #f6f5f5;
+  --neutral-100: #f1efef;
+  --neutral-150: #e9e7e7;
+  --neutral-200: #e0dedd;
+  --neutral-300: #cecbc9;
+  --neutral-400: #a19d9b;
+  --neutral-500: #7f7b79;
   /* Between 500 and 600, and it exists for a threshold rather than a taste:
      it is the lightest step that still clears 4.5:1 against `--neutral-75`,
      the darkest light background text sits on. `--neutral-500` was the
-     quiet-text colour and missed at 3.75:1. */
-  --neutral-550: #68707e;
-  --neutral-600: #5a6270;
-  --neutral-700: #414855;
-  --neutral-800: #2b313c;
-  --neutral-850: #21262f;
-  --neutral-900: #191d25;
-  --neutral-950: #11141a;
-  --neutral-1000: #0a0c10;
+     quiet-text colour and missed at 3.75:1. The re-tint kept the ratio it
+     was chosen for: 4.65:1 on the new `--neutral-75`, against 4.63 before. */
+  --neutral-550: #716e6c;
+  --neutral-600: #63605e;
+  --neutral-700: var(--osg-neutral-700);
+  --neutral-800: #312f2e;
+  --neutral-850: #262423;
+  --neutral-900: #1e1c1b;
+  --neutral-950: #121211;
+  --neutral-1000: #0a0909;
 
   /* ---------- Accent ramps ----------
    * One ramp per node family, so a node's identity colour and its
@@ -144,15 +353,25 @@
   --indigo-500: #6366f1;
   --indigo-600: #4f46e5;
 
-  --green-50: #ecfdf3;
-  --green-100: #d1fadf;
-  --green-500: #16a34a;
-  --green-600: #15803d;
-  --green-700: #126e33;
+  /* The green is the one hue the design system does not have — it ships
+   * *"one accent voice"*, and that voice is `#ec3013`. Green stays because
+   * it is not brand, it is **go**: the Run button, a link carrying flow, a
+   * step that passed. What changed is the chroma. `--green-600` is now
+   * `#357a4a`, chosen at the *same luminance band* as the authored
+   * `--osg-accent-600` — 5.21:1 on white against its 5.22 — so it sits
+   * beside the brand red as an equal rather than competing with it, and so
+   * that every contrast argument in `theme.css` survives the swap
+   * untouched. The rest of the ramp is derived from it the same way the
+   * neutrals are: each step keeps the luminance it had. */
+  --green-50: #f5faf6;
+  --green-100: #e5f4e9;
+  --green-500: #459f60;
+  --green-600: #357a4a;
+  --green-700: #2f6b41;
   /* Deep enough to carry white 13px text at 7.8:1 — the pressed state of the
      primary button, which had no token dark enough once `--color-primary`
      moved down the scale to pass AA. */
-  --green-800: #0f5f2c;
+  --green-800: #285c38;
 
   --amber-50: #fffaeb;
   --amber-100: #fef0c7;
@@ -185,14 +404,17 @@
   /* ---------- Motion ----------
    * Short, mechanical easings. Canvas UI should feel instant; only
    * viewport moves get a longer, decelerating curve. */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* `--ease-out` is the authored `--osg-ease`. The other two have no
+   * authored counterpart: the design system ships one curve, and a spring
+   * is not an easing the way the other two are. */
+  --ease-out: var(--osg-ease);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   --duration-instant: 60ms;
-  --duration-fast: 120ms;
-  --duration-normal: 180ms;
-  --duration-slow: 280ms;
+  --duration-fast: var(--osg-dur-1);
+  --duration-normal: var(--osg-dur-2);
+  --duration-slow: var(--osg-dur-3);
   --duration-viewport: 420ms;
 
   /* One lap of the active-node border glow. Long enough to read as a
@@ -215,7 +437,17 @@
    * panels and node cards these controls live inside.
    *
    * `--color-focus-ring` is the theme's colour and is not ours to change;
-   * width, offset and alpha are geometry and are. */
+   * width, offset and alpha are geometry and are.
+   *
+   * The authored system declares `--osg-focus: 2px solid var(--osg-accent)`
+   * with `--osg-focus-offset: 2px`. The **colour** is adopted (see
+   * `--color-focus-ring` in `theme.css`); the **geometry** is not, and the
+   * paragraph above is why: an offset ring is clipped by the scrolling
+   * panels and node cards these controls live inside, which is a fact
+   * about this product's layout rather than a disagreement about taste.
+   * 3px over 2px for the same reason — the ring is drawn as a translucent
+   * halo at `--focus-ring-alpha`, so it needs the extra pixel to read at
+   * the same strength a solid 2px line would. */
   --focus-ring-width: 3px;
   --focus-ring-offset: 0px;
   --focus-ring-alpha: 45%;
@@ -259,4 +491,34 @@
   --layout-palette-width: 232px;
   --layout-inspector-width: 300px;
   --layout-drawer-width: 320px;
+}
+
+/* ------------------------------------------------------------------ *
+ * The authored dark block, verbatim.
+ *
+ * Kept so that a reader who looks up `--osg-bg` gets the truth in both
+ * themes rather than a light value with a dark theme happening around it.
+ *
+ * **Tier 2 does not reference any of these names.** A primitive that
+ * changes with the theme is not a primitive, and `theme.css` aliasing one
+ * would put a colour in the dark theme that reads its value from the
+ * light `:root`. Every one of these values already has a ramp name that
+ * does not move — `--osg-neutral-200/500/800/950` above are the four that
+ * did not, added for exactly this reason — and the dark theme uses those.
+ * ------------------------------------------------------------------ */
+
+[data-theme='dark'] {
+  --osg-bg: #1a1918;
+  --osg-surface: #201e1d;
+  --osg-text: #f3f2f2;
+  --osg-text-muted: #c9c6c4;
+  --osg-text-subtle: #8f8b89;
+  --osg-divider: #f3f2f2;
+  --osg-border: #3a3736;
+  --osg-accent: #f4715c;
+  --osg-accent-700: #f9b3a6;
+  --osg-node-active: #f3f2f2;
+  --osg-node-idle: #4a4746;
+  --osg-node-initial-ring: #f3f2f2;
+  --osg-edge: #f3f2f2;
 }

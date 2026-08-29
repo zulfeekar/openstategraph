@@ -67,7 +67,11 @@ describe.each(['light', 'dark'] as const)('quiet text in %s', (scheme) => {
    * against white in a light theme is how these passed a check for years
    * without being legible.
    */
-  const worstBackground = scheme === 'light' ? '#f4f5f8' : '#1f242d';
+  /* Re-tinted 2026-08-29 with the rest of the ink ramp — `--color-bg-subtle`
+   * is `--neutral-75` in light and a literal in dark, and both moved onto the
+   * authored warm family. The luminance did not move, which is the point: the
+   * ratios these tests measure came out within 0.05 of where they were. */
+  const worstBackground = scheme === 'light' ? '#f6f5f5' : '#262423';
 
   it.each(['--color-text-tertiary', '--color-text-quaternary', '--color-text-placeholder'])(
     '%s is readable on the least helpful background',

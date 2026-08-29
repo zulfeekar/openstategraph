@@ -72,6 +72,19 @@ describe('the toolbar', () => {
     expect(css).not.toMatch(/\.topbar\s*\{[^}]*[^-]height:\s*\d+px/);
   });
 
+  it('names itself with the authored mark rather than a stand-in glyph', () => {
+    // `the-look-has-an-author-now/04`. The product had no logo anywhere — not
+    // in the bar, not in the tab — and the brand slot held a generic `Network`
+    // icon on an inverted tile, which is what a placeholder looks like. This
+    // pins the three things that made it a placeholder, so a later tidy-up
+    // that reaches for a lucide glyph again goes red here rather than shipping.
+    expect(topbar).toContain('<Mark size={22} />');
+    expect(topbar).toMatch(/import \{ Mark \} from '@design\/brand\/Mark';/);
+    // The tile is gone: the mark is a line drawing with a hollow node in it,
+    // and a filled background closes the hollow.
+    expect(css).not.toMatch(/\.topbar__mark\s*\{[^}]*background:/);
+  });
+
   it('carries New, so creating a workflow is not hidden in a panel', () => {
     expect(topbar).toContain('onNewWorkflow');
     expect(topbar).toMatch(/>\s*New\s*</);

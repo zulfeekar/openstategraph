@@ -52,15 +52,19 @@
   padding-right: var(--space-1);
 }
 
+/* The mark draws itself in ink on the bar's own ground. It used to be a
+   filled tile with an inverted glyph inside it — the shape a placeholder
+   takes when there is no logo to put there. The authored mark is a line
+   drawing with a hollow initial node, and a tile behind it would close the
+   hollow and put a rounded corner on a system whose first sentence about
+   itself is "flat, 0 radius". */
 .topbar__mark {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: var(--radius-md);
-  background: var(--color-text-primary);
-  color: var(--color-bg-surface);
+  color: var(--color-text-primary);
 }
 
 .topbar__product {
