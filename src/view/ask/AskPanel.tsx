@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { showsThinking } from './settledThinking';
 import { SpawnedPills } from '@view/spawned/SpawnedPills';
 import { attemptsLine } from './attemptsLine';
+import { decisionRows } from './decisionRows';
 import { rectOfAdded } from './revealAdded';
 import { doorHeadline } from './doorHeadline';
 import { graderVerdictLine } from './graderVerdictLine';
@@ -2187,7 +2188,9 @@ function ApprovalPrompt({
  */
 
 function Answer({ result }: { result: RunResult }) {
-  const decisions = Object.entries(result.decisions);
+  // Every branch a parallel router matched, not only the one the graph
+  // dispatched on (`launch-readiness/175`). See `decisionRows`.
+  const decisions = decisionRows(result);
 
   return (
     <div className="ask__answer-block">
@@ -2218,9 +2221,9 @@ function Answer({ result }: { result: RunResult }) {
 
       {decisions.length > 0 ? (
         <div className="ask__decisions">
-          {decisions.map(([nodeId, branch]) => (
+          {decisions.map(({ nodeId, branch }) => (
             <div key={nodeId} className="ask__decision">
-              <span className="ask__decision-node">{nodeId.replace(/^node:/, '')}</span>
+              <span className="ask__decision-node">{nodeId}</span>
               <span className="ask__decision-branch">{branch}</span>
             </div>
           ))}

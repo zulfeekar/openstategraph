@@ -559,6 +559,7 @@ class CompiledWorkflow:
         """One finished `invoke` as a `RunResult` — the assembly `ask` and
         `resume` share, so a run cannot report its health differently
         depending on which door started it."""
+        from openstategraph.compile.state import published_routes
         from openstategraph.compile.workflow_compiler import run_health_from_state
 
         outputs = final.get("outputs") or {}
@@ -570,6 +571,12 @@ class CompiledWorkflow:
         return RunResult(
             str(final.get("answer") or ""),
             decisions=final.get("decisions") or {},
+            # Every branch a parallel router matched, not only the one the
+            # graph dispatched on (`launch-readiness/175`). The seam, never a
+            # read of `state["routes"]` here: five doors folding one channel
+            # their own way is how two of them came to publish two different
+            # answers for one run.
+            routes=published_routes(final),
             outputs=outputs,
             # A warning about how the workflow was *built* explains one about
             # how it ran, so compile findings go first; a claim the run failed

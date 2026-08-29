@@ -687,7 +687,7 @@ ASYNC_DOORS = """**One added public member per model-driven verb, and the census
     deprecation; not worth doing to flatter a count."""
 
 
-#: `results.RunResult` — 11, and every one of them is a **field of one
+#: `results.RunResult` — 12, and every one of them is a **field of one
 #: record**, not a method of one object.
 #:
 #: This is the answer to "what did that run produce", and it has exactly one
@@ -706,8 +706,17 @@ ASYNC_DOORS = """**One added public member per model-driven verb, and the census
 #: member is `statements` (`one-chinook-honest` 30), and a twelfth still owes
 #: this paragraph an argument that it is a fact about a finished run rather
 #: than a capability bolted onto the object that carries one.
+#:
+#: The twelfth is `routes` (`launch-readiness/175`), and here is that argument.
+#: It is a fact about a finished run in the most literal sense available: the
+#: run computed it, named it and stored it in `RunState.routes` — *"router
+#: node id -> every branch label it matched"* — and then no door published it,
+#: so a router that matched one branch and a router that matched three left
+#: identical rows in `decisions`. Not a capability: it answers "what did this
+#: run produce" in the same voice `decisions` does, one field along, and it is
+#: shipped flat on `RunResponse` for the reason the paragraph above gives.
 RUN_RESULT = (
-    "A record, not an object with behaviour: eleven fields answering one "
+    "A record, not an object with behaviour: twelve fields answering one "
     "question — what did this run produce. One reason to change, which is the "
     "rule the ceiling exists to serve. Splitting them across collaborators "
     "would buy a smaller count by making every caller learn which drawer a "
@@ -715,7 +724,10 @@ RUN_RESULT = (
     "`RunResponse`, which ships the same set flat over the wire. The eleventh "
     "is `statements` — what the run executed (`one-chinook-honest` 30) — "
     "added because the two correctness diagnoses that needed it ran the "
-    "package in-process, where this object is the whole of what survives."
+    "package in-process, where this object is the whole of what survives. "
+    "The twelfth is `routes` — every branch a parallel router matched "
+    "(`launch-readiness/175`) — a fact the run already computed and stored "
+    "and that no door published, so one match and three read the same."
 )
 
 RECORDED: dict[str, Recorded] = {
@@ -762,7 +774,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_web.WebSearchTool": Recorded(13, PREBUILT_TOOLS),
     "evaluation.scoring.Scorecard": Recorded(17, SCORECARD),
     "memory._AsyncCapableSaver": Recorded(12, ASYNC_CAPABLE_SAVER),
-    "results.RunResult": Recorded(11, RUN_RESULT),
+    "results.RunResult": Recorded(12, RUN_RESULT),
 }
 
 

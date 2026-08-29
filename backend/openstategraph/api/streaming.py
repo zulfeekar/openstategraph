@@ -33,6 +33,7 @@ from openstategraph.executed_statements import statements_executed  # noqa: E402
 from openstategraph.progress import progress_report  # noqa: E402
 from openstategraph.api.registries import runtime_warnings  # noqa: E402
 from openstategraph.compile.node_doors import interruptible_nodes  # noqa: E402
+from openstategraph.compile.state import published_routes  # noqa: E402
 from openstategraph.run_journal import RunTurn, STOPPED_KIND, run_turn  # noqa: E402
 from openstategraph.run_identity import run_identity  # noqa: E402
 
@@ -876,7 +877,7 @@ _PAYLOAD_FIELDS: dict[str, tuple[str, ...]] = {
     "spawn": ("kind", "parent", "label", "instruction", "taskId", "namespace"),
     "interrupt": ("threadId", "node", "message", "candidate", "verdict", "reason", "check"),
     "done": (
-        "threadId", "answer", "decisions", "outputs",
+        "threadId", "answer", "decisions", "routes", "outputs",
         "nested", "attempts", "mermaid", "developer", "publishedRejected",
     ),
     "error": ("threadId", "detail"),
@@ -935,6 +936,10 @@ def _is_terminal(frame: str) -> bool:
 #: gap rather than implied by a list that looks complete.
 RESUME_SEEDED_KEYS: tuple[str, ...] = (
     "decisions",
+    # A router that matched two desks before an approval pause still matched
+    # them after it (`launch-readiness/175`), so the row survives the resume
+    # exactly as the decision it belongs beside does.
+    "routes",
     "outputs",
     "nested_outputs",
     "answer",
@@ -1380,6 +1385,13 @@ async def _run_frames(
     # once here instead.
     canvas_node_ids = set(node_ids_by_name.values())
     decisions: dict[str, str] = {}
+    #: router node id -> every branch label it matched (`launch-readiness/175`).
+    #: Folded exactly like `forced` and flat rather than split by mount depth:
+    #: the label list is keyed by mount path when it comes from below, which is
+    #: the same vocabulary `forced` and `unrouted` already use. Read at the end
+    #: through `published_routes`, never published raw — one seam, so this door
+    #: and `/api/runs` cannot fold one channel into two shapes.
+    routes: dict[str, Any] = {}
     # Force-passed graders (`every-workflow-green` 09), accumulated like the
     # two above so the terminal frame can report them.
     forced: dict[str, str] = {}
@@ -1449,6 +1461,7 @@ async def _run_frames(
     #: read by that function; the mapping is the door's, not the report's.
     folded: dict[str, Any] = {
         "decisions": decisions,
+        "routes": routes,
         "outputs": outputs,
         "nested_outputs": nested_outputs,
         "forced": forced,
@@ -1619,6 +1632,13 @@ async def _run_frames(
                     )
                     forced.update(
                         {key(k): str(v) for k, v in (update.get("forced") or {}).items()}
+                    )
+                    routes.update(
+                        {
+                            key(k): v
+                            for k, v in (update.get("routes") or {}).items()
+                            if k != RESET
+                        }
                     )
                     budget_stops.update(
                         {key(k): v for k, v in (update.get("budget_stops") or {}).items()}
@@ -2171,6 +2191,11 @@ async def _run_frames(
             "threadId": thread_id,
             "answer": prose,
             "decisions": decisions,
+            # The rest of what a parallel router did. Derived, not folded raw:
+            # `published_routes` is the one place `routes` becomes something a
+            # door publishes, and it is what keeps `decisions[r]` inside
+            # `routes[r]` on every door at once.
+            "routes": published_routes({"routes": routes, "decisions": decisions}),
             "outputs": outputs,
             # Everything below the outermost document, keyed by mount path
             # (ticket 40). Always present, even when empty: a client that

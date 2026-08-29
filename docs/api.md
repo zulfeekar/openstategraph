@@ -98,7 +98,7 @@ endpoints emit the identical vocabulary and one parser handles both.
 | `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `detail` (developer only, else `null`), `current`, `total` (both `int` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs`, plus `seq` and `elapsedMs` |
 | `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`async`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace`, plus `seq` and `elapsedMs` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate**, plus `check` when that verdict cost no model call, plus `seq` and `elapsedMs` |
-| `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run**, plus `seq` and `elapsedMs` |
+| `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `routes`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run**, plus `seq` and `elapsedMs` |
 | `error` | **terminal** — the run failed | `threadId`, `detail`, plus `seq` and `elapsedMs` |
 
 #### Every frame says when it happened — `seq` and `elapsedMs`
@@ -241,6 +241,25 @@ author gave it, and every mount opened to any depth with the child's own
 document supplying the names inside it (`workflow-gallery` 62). `decisions`,
 `outputs` and `attempts` stay too — they are facts about the customer's own
 turn.
+
+#### `decisions` vs `routes` — which field to believe about a parallel router
+
+**`decisions[router]` is the branch the graph dispatched on. `routes[router]`
+is every branch that ran.** A router in `matchMode: "all"` opens a desk per
+match in the same superstep, and `decisions` can hold only one label — so a
+router that matched one branch and a router that matched three published the
+identical row, while both desks' answers sat in `outputs` (`launch-readiness`
+175). If you are asking *what did this run do*, read `routes`.
+
+`routes` carries a row for **every** router that ran, whether it matched one
+branch or four, so an absent row means *no router* and never *one branch*. The
+label the graph dispatched on is always one of the labels in the row: both are
+derived together, from the same finished run, by one function. `decisions` is
+unchanged and stays a single label on purpose — the compiler's conditional edge
+dispatches on that exact key, and a list there would change control flow.
+
+Both are on both audiences: they are facts about the customer's own turn, in
+the same voice, and neither is a developer's guidance.
 
 `publishedRejected` stays on both audiences for the same reason
 (`launch-readiness` 25): `attempts` alone proves a grader's loop exhausted

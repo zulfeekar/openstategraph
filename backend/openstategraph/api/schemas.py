@@ -609,8 +609,28 @@ class RunResponse(BaseModel):
     #: customer surface needs continuity as much as an editor does, and the
     #: streaming side already discloses it to both.
     thread_id: str = ""
-    #: node id -> branch taken, so the editor can highlight the path that ran.
+    #: node id -> the **one** branch label the graph dispatched on.
+    #:
+    #: This line used to end *"so the editor can highlight the path that ran"*,
+    #: and no editor has ever read it for that: the canvas lights cards from
+    #: per-node run status as the stream reports them (`CanvasStage`), and a
+    #: persistent path tint was tried there and removed. `decisions` is the
+    #: **record** — the row a reader sees beside the answer and the row an
+    #: exported trace carries — which is exactly why one label was not enough
+    #: (`launch-readiness/175`).
     decisions: dict[str, str] = {}
+    #: router node id -> **every** branch label that router matched.
+    #:
+    #: A parallel router (`matchMode: "all"`) opens more than one desk in the
+    #: same superstep and `decisions` can hold only the label the conditional
+    #: edge dispatched on, so a router that matched one branch and a router
+    #: that matched three published the identical row. Both desks' answers
+    #: were already in `outputs`; nothing said the second branch had run.
+    #:
+    #: Present for every router that ran, one match or four — an absent row
+    #: means no router, never one branch. No audience gate, for `decisions`'
+    #: own reason: it is a fact about the run, not guidance for a developer.
+    routes: dict[str, list[str]] = {}
     #: node id -> that node's output, for per-node inspection in the sidebar.
     outputs: dict[str, str] = {}
     attempts: int = 0

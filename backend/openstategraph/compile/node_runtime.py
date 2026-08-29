@@ -2928,15 +2928,16 @@ class NodeRuntime:
                 # while the model classified by human-readable *name*.
                 # `route_key` is the one place that mapping lives.
                 "decisions": {node_id: router.route_key(decision.branch)},
-                # Every branch it matched, when it matched more than one. Only
-                # written when there is something extra to say, so a document
-                # that never asked for this carries no such key and takes the
-                # identical path it always did.
-                **(
-                    {"routes": {node_id: [router.route_key(b) for b in decision.branches]}}
-                    if len(decision.branches) > 1
-                    else {}
-                ),
+                # Every branch it matched — **always**, one label or five
+                # (`launch-readiness/175`, question 3). It used to be written
+                # only when more than one matched, which made an absent row
+                # mean either "this router took one branch" or "nothing here
+                # reports branches", and a door publishing it could not tell
+                # the two apart. One key per router that ran costs nothing and
+                # removes the ambiguity. The compiler's dispatch is unmoved: a
+                # one-item list has always been unwrapped back to a plain
+                # label there, so the graph takes the identical path.
+                "routes": {node_id: [router.route_key(b) for b in decision.branches]},
                 "outputs": {node_id: turn},
             }
 

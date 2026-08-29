@@ -171,7 +171,14 @@ export interface RunResult extends RunFrameStamp {
   readonly threadId: string;
   readonly answer: string;
   /**
-   * node id → branch taken, so the canvas can highlight the path that ran.
+   * node id → the **one** branch label the graph dispatched on.
+   *
+   * This line used to end *"so the canvas can highlight the path that ran"*,
+   * and no canvas has ever read it for that: cards light from per-node run
+   * status as the stream reports them (`CanvasStage`), and a persistent
+   * path tint was tried there and removed. This is the **record** — the rows
+   * beside the answer and in an exported trace — which is exactly why one
+   * label was not enough. See `routes`.
    *
    * **The outermost document's own nodes only** (ticket 40). It used to hold
    * every document the run touched, and `concierge` and `chinook-assistant`
@@ -180,6 +187,20 @@ export interface RunResult extends RunFrameStamp {
    * below the top level is in `nested`.
    */
   readonly decisions: Readonly<Record<string, string>>;
+  /**
+   * router node id → **every** branch label that router matched.
+   *
+   * `decisions` above can only ever hold the one label the graph dispatched
+   * on, and a router in `matchMode: "all"` opens a desk per match in the same
+   * superstep — so a router that matched one branch and a router that matched
+   * three published the identical row, while both desks' answers were sitting
+   * in `outputs` (`launch-readiness/175`).
+   *
+   * One row per router that **ran**, whether it matched one branch or four:
+   * an absent row means no router, never one branch. The dispatched label is
+   * always one of the labels in the row — the server derives both together.
+   */
+  readonly routes: Readonly<Record<string, readonly string[]>>;
   /** node id → that node's output, for per-node inspection. Top level only. */
   readonly outputs: Readonly<Record<string, string>>;
   /**
@@ -1044,6 +1065,7 @@ export class RuntimeClient implements IRuntimeClient {
         threadId: asString(payload['thread_id']),
         answer: asString(payload['answer']),
         decisions: asRecord(payload['decisions']),
+        routes: asLabelLists(payload['routes']),
         outputs: asRecord(payload['outputs']),
         nested: {
           outputs: asRecord(
@@ -1258,6 +1280,7 @@ export class RuntimeClient implements IRuntimeClient {
           threadId: asString(payload['threadId']),
           answer: asString(payload['answer']),
           decisions: asRecord(payload['decisions']),
+          routes: asLabelLists(payload['routes']),
           outputs: asRecord(payload['outputs']),
           nested: {
             outputs: asRecord(
@@ -1625,6 +1648,23 @@ const asRecord = (value: unknown): Record<string, string> => {
   if (typeof value !== 'object' || value === null) return {};
   const out: Record<string, string> = {};
   for (const [key, item] of Object.entries(value)) out[key] = asString(item);
+  return out;
+};
+
+/**
+ * `routes`, read tolerantly: a record of label lists, and nothing else.
+ *
+ * A backend that predates the field sends nothing, which is an empty record —
+ * *no router reported*, which is the honest reading of a payload that cannot
+ * say. A non-array value is dropped rather than coerced into a one-item list:
+ * a row that is not a list of branches is not a row about branches.
+ */
+const asLabelLists = (value: unknown): Record<string, readonly string[]> => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
+  const out: Record<string, readonly string[]> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (Array.isArray(item)) out[key] = item.filter((l): l is string => typeof l === 'string');
+  }
   return out;
 };
 

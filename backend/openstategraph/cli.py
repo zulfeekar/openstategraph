@@ -241,6 +241,11 @@ def cmd_run(args: argparse.Namespace) -> int:
                 {
                     "answer": result.answer,
                     "decisions": result.decisions,
+                    # Every branch a parallel router matched, beside the one
+                    # it dispatched on (`launch-readiness/175`). A script
+                    # piping this must be able to tell a run that opened two
+                    # desks from one that opened one.
+                    "routes": result.routes,
                     "outputs": result.outputs,
                     "warnings": result.warnings,
                     "attempts": result.attempts,
@@ -392,6 +397,11 @@ def cmd_resume(args: argparse.Namespace) -> int:
                 {
                     "answer": result.answer,
                     "decisions": result.decisions,
+                    # Every branch a parallel router matched, beside the one
+                    # it dispatched on (`launch-readiness/175`). A script
+                    # piping this must be able to tell a run that opened two
+                    # desks from one that opened one.
+                    "routes": result.routes,
                     "outputs": result.outputs,
                     "warnings": result.warnings,
                     "attempts": result.attempts,

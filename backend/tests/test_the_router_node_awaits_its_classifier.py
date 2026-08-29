@@ -197,7 +197,13 @@ class TestTheUpdateIsWhatItAlwaysWas:
 
         assert update["decisions"] == {"r1": "b-billing"}
         assert update["outputs"] == {"r1": "my invoice is wrong"}
-        assert "routes" not in update
+        # One row, not no row (`launch-readiness/175`). This used to assert
+        # `"routes" not in update`, on the argument that a `best`-mode router
+        # had nothing extra to say — and it left every door unable to tell a
+        # router that took one branch from one that reports no branches at
+        # all. The dispatch is unmoved either way: the conditional edge
+        # unwraps a one-item list back to a plain label.
+        assert update["routes"] == {"r1": ["b-billing"]}
 
     def test_match_all_still_writes_every_branch_it_matched(
         self, monkeypatch: Any
