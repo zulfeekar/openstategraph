@@ -305,16 +305,29 @@ equivalent in different prose:
 | --- | --- |
 | `verdicts_agree` | did every repetition grade the same way — coarse, always available |
 | `results_agree` | did every repetition's statement return the same **rows**, by the same `result_eq` execution accuracy uses |
+| `figures_agree` | did every repetition's answer assert the same **quantities** — reaches no database |
 
-The second is the strong one and the reason a literal-statement pin was
+`results_agree` is the strong one and the reason a literal-statement pin was
 refused: what survived the fixes was *a column alias and where the `DISTINCT`
 sits*, and a text pin would be red on a correct run. Rows are immune to that
 and are not immune to a genuinely different query.
 
-`results_agree` is **`null`**, never `false`, when fewer than two repetitions
-executed anything comparable. *We could not tell* and *they disagreed* are
-different findings, and the `unmeasurable` count says how many cases were in
-the first state.
+`figures_agree` is the one that reaches nothing (`launch-readiness/170`). It
+reads the quantities out of each answer with `grounded_numbers.quantities_in`
+— the same rule that separates a count from a version number or a list marker
+— and compares the sets, so `6,119` and `6119` are one figure. It needs no
+committed database, no network and no model, which is exactly what a question
+answered against a warehouse can offer.
+
+**Rows decide wherever rows exist.** `figures_agree` is reported on every case
+and counts toward the rate only where `results_agree` is `null`, so a lap that
+wraps the same rows in a sentence carrying one extra date is never a second
+answer. It speaks only for the case the strong axis cannot reach at all.
+
+Both are **`null`**, never `false`, when fewer than two repetitions offered
+that axis anything to compare. *We could not tell* and *they disagreed* are
+different findings, and `unmeasurable` counts the cases where **no** axis could
+tell.
 
 **It compares what ran, not what the answer said ran.** `AskOutcome.statements`
 comes from `RunResult.statements` (`one-chinook-honest/30`), so two runs
@@ -327,13 +340,29 @@ fact and keeps its name.
 is the one that scores, so every other number on the card means exactly what it
 meant before and a `--repeat 1` card is unchanged.
 
-**What it cannot cover yet.** The two cases that motivated the ticket are not
-in any `evals/` directory and cannot be: this harness executes gold SQL against
-a **committed SQLite file** (`denotation.connect_readonly`), and an answerable
-case is required to carry `gold_sql`. Both of those questions are answered
-against Databricks. Recording the agreement rate for *those* questions needs a
-denotation engine that is not SQLite — filed as `launch-readiness/170`, not
-faked here with a case whose gold nobody can execute.
+**What it cannot cover yet, and what turned out not to be the obstacle.** The
+two cases that motivated the ticket are still not in any `evals/` directory:
+this harness executes gold SQL against a **committed SQLite file**
+(`denotation.connect_readonly`), an answerable case is required to carry
+`gold_sql`, and `EvalDataset.database` is required too. Both of those questions
+are answered against Databricks.
+
+`launch-readiness/170` asked whether the answer is a second denotation engine,
+since agreement compares runs to each other and needs no ground truth. **It is
+not**, and neither is simply permitting a gold-less case. Reading the harness,
+both axes it compared reached the database — `verdicts_agree` compares grades,
+which come from executing gold, and `results_agree` re-executes each lap's own
+statement. A gold-less warehouse case would therefore have reported verdicts
+that agree because every lap was graded the same coarse way, beside
+`results_agree: null`: three different answers published as agreement, which is
+worse than no measurement.
+
+What was missing was a comparison that reaches nothing, and `126`'s own symptom
+says which one — *one question, three answers* means three different **figures**.
+That axis is `figures_agree` above, and it is built. What remains for these two
+questions is the dataset format rather than the measurement: a third expectation
+that grades on agreement alone, and an `EvalDataset` whose `database` may be
+absent. Filed on `170`.
 
 ### It is not in the normal CI job, on purpose
 

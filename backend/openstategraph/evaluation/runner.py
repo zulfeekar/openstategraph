@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -33,6 +34,7 @@ from openstategraph.evaluation.dataset import EvalCase, EvalDataset, load_datase
 from openstategraph.evaluation.denotation import compare, execute_query, result_eq
 from openstategraph.evaluation.recovery import recover_from_run
 from openstategraph.evaluation.scoring import ItemVerdict, Scorecard
+from openstategraph.grounded_numbers import quantities_in
 
 #: Why a cost block carries tokens and never dollars, stated once.
 #:
@@ -137,7 +139,7 @@ def evaluate(
 
 
 def _case_agreement(case: EvalCase, graded: list["GradedRun"]) -> dict[str, Any]:
-    """One case's repetitions, compared on both axes.
+    """One case's repetitions, compared on three axes.
 
     **Verdicts** are the coarse signal and are always available. **Results**
     are the strong one — the rows each repetition's statement returned,
@@ -146,16 +148,26 @@ def _case_agreement(case: EvalCase, graded: list["GradedRun"]) -> dict[str, Any]
     reason a literal-statement pin was refused: it would be red on a correct
     run.
 
-    `results_agree` is `None`, never `False`, when fewer than two repetitions
-    produced rows to compare. *We could not tell* and *they disagreed* are two
-    findings, and reporting the first as the second is the failure shape this
-    map is named after.
+    **Figures** are the third, and the one that reaches no database
+    (`launch-readiness/170`): the set of quantities each answer asserted. It
+    exists for the question the strong axis is permanently blind to — a
+    warehouse question has no committed file to re-execute against, so `rows`
+    is `None` for every lap of it, and `126`'s own symptom was three different
+    *figures* rather than three different result sets. It is reported always
+    and decides only where rows could not, so a lap that wraps the same rows in
+    a sentence carrying one more date is never a second answer.
+
+    `results_agree` and `figures_agree` are `None`, never `False`, when fewer
+    than two repetitions offered that axis anything to compare. *We could not
+    tell* and *they disagreed* are two findings, and reporting the first as the
+    second is the failure shape this map is named after.
     """
     verdicts = [item.verdict for item, _ in graded]
-    comparable = [rows for _, rows in graded if rows is not None]
+    with_rows = [c.rows for _, c in graded if c is not None and c.rows is not None]
+    with_figures = [c.figures for _, c in graded if c is not None and c.figures]
 
     distinct: list[tuple[tuple[Any, ...], ...]] = []
-    for rows in comparable:
+    for rows in with_rows:
         if not any(
             result_eq(list(seen), list(rows), order_matters=case.ordering_matters())
             for seen in distinct
@@ -166,32 +178,50 @@ def _case_agreement(case: EvalCase, graded: list["GradedRun"]) -> dict[str, Any]
         "case_id": case.id,
         "verdicts": verdicts,
         "verdicts_agree": len(set(verdicts)) == 1,
-        "results_agree": None if len(comparable) < 2 else len(distinct) == 1,
+        "results_agree": None if len(with_rows) < 2 else len(distinct) == 1,
         "distinct_results": len(distinct),
+        "figures_agree": None if len(with_figures) < 2 else len(set(with_figures)) == 1,
     }
 
 
 def _agreement_block(repeat: int, cases: list[dict[str, Any]]) -> dict[str, Any]:
     """The card's agreement block — `{}` for a single pass.
 
-    A case disagrees when its verdicts differ **or** its results do. The second
-    half is the silent one this ticket is actually about: three answers, all
-    graded the same way, all delivered with identical confidence, reached
-    through statements that returned different rows.
+    A case disagrees when its verdicts differ, **or** its results do, **or** —
+    where nothing could be re-executed — the figures its answers asserted do.
+    The second is the silent one `126` is about: three answers, all graded the
+    same way, all delivered with identical confidence, reached through
+    statements that returned different rows.
+
+    The third is `170`'s, and it is deliberately subordinate. Rows decide
+    wherever rows exist, so this can never turn an agreeing pair into a
+    disagreeing one over a sentence that mentions one extra date; it speaks
+    only for the case the strong axis could not reach at all, which is every
+    question answered against a warehouse this harness holds no copy of.
     """
     if repeat < 2 or not cases:
         return {}
-    disagreed = sum(
-        1 for case in cases if not case["verdicts_agree"] or case["results_agree"] is False
-    )
+    disagreed = sum(1 for case in cases if _case_disagreed(case))
     return {
         "repeat": repeat,
         "cases": cases,
         "disagreement_rate": round(disagreed / len(cases), 3),
         # Named rather than folded into the rate: a case nothing could compare
-        # is not a case that agreed.
-        "unmeasurable": sum(1 for case in cases if case["results_agree"] is None),
+        # is not a case that agreed. It counts only where *no* axis could tell.
+        "unmeasurable": sum(
+            1
+            for case in cases
+            if case["results_agree"] is None and case.get("figures_agree") is None
+        ),
     }
+
+
+def _case_disagreed(case: dict[str, Any]) -> bool:
+    if not case["verdicts_agree"]:
+        return True
+    if case["results_agree"] is not None:
+        return not case["results_agree"]
+    return case.get("figures_agree") is False
 
 
 def cost_block(spent: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -247,14 +277,49 @@ def _accumulate(spent: dict[str, dict[str, Any]], usage: Any) -> None:
             into[field_name] = int(into.get(field_name, 0)) + int(value)
 
 
-#: One graded repetition: the verdict, and the rows the run's own statement
-#: returned — `None` when nothing comparable ran.
+@dataclass(frozen=True)
+class Comparable:
+    """What one repetition offers the agreement comparison, on both axes.
+
+    **Rows** are the strong axis and reach the database: the run's own
+    statement, re-executed. **Figures** are the axis that reaches nothing —
+    the quantities the answer asserted, which is what `launch-readiness/126`
+    was actually looking at when it saw one question produce three answers.
+
+    The second exists for `launch-readiness/170`. A question answered against
+    a warehouse has no committed file to re-execute against, so `rows` is
+    `None` for every lap of it and the strong axis is permanently blind; the
+    ticket asked whether the fix is a second denotation engine, and it is not,
+    because agreement needs no ground truth and comparing two answers'
+    quantities needs no database, no network and no model.
+
+    `figures` is a set, so two laps that phrase the same figure differently
+    (`6,119` and `6119`) agree, and `quantities_in` draws the line between a
+    quantity and a version number or a list marker rather than this module
+    redrawing it.
+    """
+
+    rows: "tuple[tuple[Any, ...], ...] | None" = None
+    figures: "frozenset[Decimal]" = frozenset()
+
+    @classmethod
+    def of(
+        cls, rows: "tuple[tuple[Any, ...], ...] | None", answer: str
+    ) -> "Comparable":
+        return cls(
+            rows=rows,
+            figures=frozenset(value for _, value, _ in quantities_in(answer or "")),
+        )
+
+
+#: One graded repetition: the verdict, and what it offers the comparison —
+#: `None` when the run raised before producing anything at all.
 #:
-#: A pair rather than a field on `ItemVerdict`, because the rows are working
-#: material for the agreement comparison and not a number on a published
+#: A pair rather than a field on `ItemVerdict`, because both axes are working
+#: material for the agreement comparison and not numbers on a published
 #: scorecard. `Scorecard.to_json()` is diffed between releases; a result set
 #: has no business in that diff.
-GradedRun = tuple[ItemVerdict, "tuple[tuple[Any, ...], ...] | None"]
+GradedRun = tuple[ItemVerdict, "Comparable | None"]
 
 
 def _executed_statement(outcome: AskOutcome) -> str | None:
@@ -271,21 +336,23 @@ def _executed_statement(outcome: AskOutcome) -> str | None:
     return None
 
 
-def _comparable_rows(
-    outcome: AskOutcome, recovered: str | None, database: Path
-) -> "tuple[tuple[Any, ...], ...] | None":
-    """The rows this repetition's statement returned, for the agreement axis.
+def _comparable(outcome: AskOutcome, recovered: str | None, database: Path) -> Comparable:
+    """What this repetition offers the agreement comparison, on both axes.
 
     The **record** is preferred over the prose (`30`): an answer can quote a
     query the run never sent, which is `production-ready/95` in person, and two
     runs quoting the same query while executing different ones is precisely the
     disagreement this measurement exists to catch.
+
+    The figures axis is read straight off the answer and needs no database, so
+    it survives the case the rows axis cannot reach (`170`).
     """
     statement = _executed_statement(outcome) or recovered
-    if not statement:
-        return None
-    outcome_rows = execute_query(database, statement)
-    return outcome_rows.rows if outcome_rows.ok else None
+    rows: "tuple[tuple[Any, ...], ...] | None" = None
+    if statement:
+        outcome_rows = execute_query(database, statement)
+        rows = outcome_rows.rows if outcome_rows.ok else None
+    return Comparable.of(rows=rows, answer=outcome.answer)
 
 
 def _grade(
@@ -334,15 +401,15 @@ def _grade(
     # refused still has an agreement to report, and a *correct* refusal that
     # ran a query on one lap and not on another is exactly the instability
     # this measures.
-    rows = _comparable_rows(outcome, sql, database)
+    comparable = _comparable(outcome, sql, database)
 
     if case.expects == "refusal":
-        return _grade_refusal(case, outcome, common), rows
+        return _grade_refusal(case, outcome, common), comparable
 
     gold = execute_query(database, case.gold_sql or "")
     if not gold.ok:
         warnings.append(f"case {case.id}: the GOLD query does not execute — {gold.error}")
-        return ItemVerdict(**common, verdict="dataset_error", error=gold.error), rows
+        return ItemVerdict(**common, verdict="dataset_error", error=gold.error), comparable
     if case.expected is not None and set(case.expected.as_rows()) != set(gold.rows):
         warnings.append(
             f"case {case.id}: committed expected rows differ from the database "
@@ -358,7 +425,7 @@ def _grade(
                 exact_set_match=False,
                 gold_row_count=len(gold.rows),
             ),
-            rows,
+            comparable,
         )
 
     predicted = execute_query(database, sql)
@@ -372,7 +439,7 @@ def _grade(
                 gold_row_count=len(gold.rows),
                 error=predicted.error,
             ),
-            rows,
+            comparable,
         )
 
     verdicts = compare(gold, predicted, order_matters=case.ordering_matters())
@@ -385,7 +452,7 @@ def _grade(
             gold_row_count=len(gold.rows),
             predicted_row_count=len(predicted.rows),
         ),
-        rows,
+        comparable,
     )
 
 
