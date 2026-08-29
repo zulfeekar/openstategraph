@@ -243,6 +243,26 @@ Change them in the package and every mount of it changes.
 > Starting from `openstategraph new my-thing --template routed-qa` gives you
 > this shape already wired, with a router in front of it.
 
+### A router that opens more than one desk, and what the record says about it
+
+A router's **Match** field has a *Run every match* setting. Turn it on and the
+question can belong to several branches at once: every matching desk runs, in
+parallel, in the same step.
+
+The record beside the answer names **every** branch that ran — `cost + risk`,
+not `cost`. That is worth saying out loud because it used to name one. The
+canvas was never the problem: cards light as they run, so both desks glowed
+either way. It was the record that outlived the glow, and it reported the run
+that opened two desks exactly as it reported the run that opened one.
+
+Over the API the field to believe is **`routes`**: router node id → every
+branch label that router matched, on `RunResult`, on `POST /api/runs`, on the
+terminal `done` frame and in `openstategraph run --json`. `decisions` is still
+there, still one label per node, and it is the label the graph *dispatched* on
+— useful for a grader or an approval, which have no branches to report and
+never appear in `routes` at all. If the question is *what did this run do*,
+read `routes`.
+
 ---
 
 ## 4. A mount runs another workflow as one step

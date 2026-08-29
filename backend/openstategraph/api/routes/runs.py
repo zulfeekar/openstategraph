@@ -49,6 +49,7 @@ from openstategraph.api.streaming import (
     stop_when_client_leaves,
 )
 from openstategraph.compile.run_context import validate_run_context
+from openstategraph.compile.state import published_routes
 from openstategraph.errors import RunContextError
 from openstategraph.memory import async_capable
 from openstategraph.run_doors import invoke_run
@@ -409,6 +410,10 @@ def run_workflow(
         # is the one that did not name a thread.
         thread_id=thread_id,
         decisions={k: str(v) for k, v in (final.get("decisions") or {}).items()},
+        # The rest of what a parallel router did (`launch-readiness/175`).
+        # Through the seam, so this door and the stream cannot fold one
+        # channel into two different shapes.
+        routes=published_routes(final),
         outputs={k: str(clean_output(str(v))) for k, v in visible.items()},
         attempts=int(final.get("attempts") or 0),
         # Both audiences, on purpose — `launch-readiness` 25: the grader's

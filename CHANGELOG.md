@@ -37,6 +37,21 @@
   measured (1.21 s → 0.54 s) is kept rather than traded away.
 
 ### Added
+- **Every branch a parallel router matched now reaches a reader**
+  (`launch-readiness/175`). A `matchMode: "all"` classifier opens a desk per
+  match, and the run already recorded which ones in `RunState.routes` — a
+  channel written by the router node, read by the compiler's conditional edge,
+  and published by no door at all. What every door published was
+  `decisions[router]`, one label, so a router that matched one branch and a
+  router that matched three left the identical row while both desks' answers
+  sat in `outputs`. `routes` is now on `RunResult`, on `RunResponse`, on the
+  terminal SSE `done` frame, on `run_workflow`'s result and in
+  `openstategraph run --json` — one row per router that ran, one match or
+  four, so an absent row means *no router* and never *one branch*. `decisions`
+  is unchanged and still a single label: the conditional edge dispatches on
+  that exact key. `compile.state.published_routes` is the one place the
+  channel becomes something a door publishes, which is also what keeps
+  `decisions[r]` inside `routes[r]` everywhere at once.
 - **`RunProducedNothing`**, exported from `openstategraph` and
   `openstategraph.errors`. `CompiledWorkflow.ask` / `resume` now **raise** it
   when a run produced no answer *and* something went wrong, instead of

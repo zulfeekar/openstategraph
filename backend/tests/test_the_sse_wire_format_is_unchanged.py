@@ -175,6 +175,10 @@ ADDED_SINCE_THE_GOLDEN = {
     # developer watching a failing MCP call can read what the customer
     # sentence is written never to say.
     "detail": ("progress",),
+    # `launch-readiness/175`: every branch a parallel router matched. On the
+    # terminal frame alone, beside `decisions`, which could only ever carry
+    # the one label the graph dispatched on.
+    "routes": ("done",),
 }
 
 #: The same table, one level down — keys added to the `done` frame's

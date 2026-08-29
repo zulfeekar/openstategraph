@@ -377,6 +377,30 @@ describe('the client and the published contract', () => {
     });
   });
 
+  /**
+   * The *response* half, which nothing here watched.
+   *
+   * Every assertion above is about what the client **sends** — endpoints,
+   * request fields, frame names. A field the server publishes and the client
+   * never reads is the other direction of the same drift, and it is how
+   * `routes` could have shipped on `RunResponse` and reached no reader
+   * (`launch-readiness/175`): the run already computed every branch a parallel
+   * router matched, and one label per router was all any door published.
+   *
+   * Pinned narrowly rather than as a whole-schema census: this file's own
+   * argument is that a hand-written mirror is pinned on *the things a drift
+   * would actually break*, and a census over every response schema would fail
+   * on fields the editor has good reason never to read.
+   */
+  it('reads the run fields the contract publishes', () => {
+    const declared = new Set(Object.keys(openapi.components.schemas.RunResponse.properties));
+
+    for (const field of ['answer', 'decisions', 'routes', 'outputs', 'attempts']) {
+      expect(declared, `RunResponse is missing ${field}`).toContain(field);
+      expect(client, `RuntimeClient never reads ${field}`).toContain(`'${field}'`);
+    }
+  });
+
   it('sends run fields the contract declares', () => {
     // The keys `runBody` writes must be ones `RunRequest` accepts, or the
     // server ignores them and the editor loses a feature silently — which is

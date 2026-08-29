@@ -34,6 +34,7 @@ class RunResult(str):
         answer = workflow.ask("How many invoices are there?")
         print(answer)                 # it is the answer text
         print(answer.decisions)       # ...and the branch each router took
+        print(answer.routes)          # ...and every branch it matched
         if answer.warnings:           # ...and what did not resolve
             ...
 
@@ -45,8 +46,21 @@ class RunResult(str):
     #: `result.answer` is what reads correctly next to `result.decisions`,
     #: and because it is the attribute that survives the 1.0 dataclass.
     answer: str
-    #: node id -> the branch label that router or grader chose.
+    #: node id -> the branch label that router or grader chose. **One label**,
+    #: and the one the graph dispatched on — see `routes` for the rest.
     decisions: dict[str, str]
+    #: router node id -> **every** branch label that router matched
+    #: (`launch-readiness/175`).
+    #:
+    #: A second field rather than a widened `decisions`, because `decisions` is
+    #: what the compiler's conditional edge dispatches on and a list there
+    #: would change control flow (ticket 09 is the record of learning that).
+    #: The two are different facts about one router and `published_routes`
+    #: derives both together, so `decisions[r]` is always in `routes[r]`.
+    #:
+    #: One row per router that ran, whether it matched one branch or four: an
+    #: absent row means *no router*, never *one branch*.
+    routes: dict[str, list[str]]
     #: node id -> that node's own textual output.
     outputs: dict[str, str]
     #: Everything worth telling a reader about this run: what the package
@@ -131,6 +145,7 @@ class RunResult(str):
         answer: str = "",
         *,
         decisions: dict[str, str] | None = None,
+        routes: dict[str, list[str]] | None = None,
         outputs: dict[str, str] | None = None,
         warnings: list[str] | None = None,
         failures: list[str] | None = None,
@@ -144,6 +159,9 @@ class RunResult(str):
         # Empty containers, never None: a caller iterating `.warnings` on a
         # clean run must not have to guard for it.
         self.decisions = dict(decisions or {})
+        # Copied a level down: the lists are read off live run state and a
+        # finished run must not keep changing.
+        self.routes = {str(k): list(v) for k, v in (routes or {}).items()}
         self.outputs = dict(outputs or {})
         self.warnings = list(warnings or [])
         # `None` is not "no failures" — it is a caller that predates the
@@ -207,6 +225,7 @@ class RunResult(str):
                 self.usage,
                 self.pause,
                 self.statements,
+                self.routes,
             ),
         )
 
@@ -243,6 +262,7 @@ class RunResult(str):
     def __repr__(self) -> str:
         return (
             f"RunResult({str.__repr__(self)}, decisions={self.decisions!r}, "
+            f"routes={self.routes!r}, "
             f"outputs={self.outputs!r}, warnings={self.warnings!r}, "
             f"failures={self.failures!r}, attempts={self.attempts!r}, "
             f"usage={self.usage!r})"
@@ -259,6 +279,7 @@ def _rebuild(
     usage: dict[str, dict[str, Any]] | None = None,
     pause: dict[str, Any] | None = None,
     statements: list[dict[str, Any]] | None = None,
+    routes: dict[str, list[str]] | None = None,
 ) -> RunResult:
     """Module-level so `pickle` can find it by name.
 
@@ -280,6 +301,7 @@ def _rebuild(
         usage=usage,
         pause=pause,
         statements=statements,
+        routes=routes,
     )
 
 

@@ -358,6 +358,62 @@ class RunState(TypedDict, total=False):
     remaining_steps: RemainingSteps
 
 
+def published_routes(state: Mapping[str, Any]) -> dict[str, list[str]]:
+    """router node id -> every branch label that router matched, for a reader.
+
+    **The one place `routes` becomes something a door publishes**
+    (`launch-readiness/175`). The channel was written by `_router`, read by the
+    compiler's own conditional edge, and published by nobody: `RunResult`,
+    `RunResponse`, the terminal SSE frame, `run_workflow` and
+    `openstategraph run --json` all carried `decisions[router]` alone, which is
+    **one** label. So a router that matched one branch and a router that
+    matched three were the same row, measured live on `stress-parallel-drop`
+    with both desks' answers sitting in `outputs`.
+
+    One function rather than a read at each door, for the reason 174 measured
+    rather than assumed: five doors each folding a channel their own way is how
+    the same run published the cost desk on `/api/runs/stream` and the risk
+    desk on `/api/runs`.
+
+    **`decisions` is read here too, and that is what stops two fields becoming
+    two stories.** They are different facts — `decisions[r]` is the single
+    label the conditional edge dispatched on, `routes[r]` is every label that
+    ran — and the invariant binding them (`decisions[r] in routes[r]`) is
+    *produced* here rather than merely asserted somewhere: a router whose row
+    somehow omits its own dispatched label gets it appended instead of
+    published inconsistently. Only for a node that already has a `routes` row,
+    though: `decisions` also holds graders, guards and approvals, and none of
+    those has branches to report.
+
+    Read tolerantly, like everything crossing this seam: `routes` is state, so
+    its contents are whatever a node wrote. Non-string labels are dropped and
+    duplicates collapse, keeping first appearance — the document's declared
+    branch order, which is the order the classifier matched in.
+    """
+    routes = state.get("routes") if hasattr(state, "get") else None
+    if not isinstance(routes, Mapping):
+        return {}
+    decisions = state.get("decisions") or {}
+    if not isinstance(decisions, Mapping):
+        decisions = {}
+
+    published: dict[str, list[str]] = {}
+    for node_id, matched in routes.items():
+        if node_id == RESET or not isinstance(matched, (list, tuple)):
+            continue
+        labels: list[str] = []
+        for label in matched:
+            text = str(label) if isinstance(label, str) else ""
+            if text and text not in labels:
+                labels.append(text)
+        dispatched = decisions.get(node_id)
+        if isinstance(dispatched, str) and dispatched and dispatched not in labels:
+            labels.append(dispatched)
+        if labels:
+            published[str(node_id)] = labels
+    return published
+
+
 def _thread_question(state: RunState, limit: int = 6) -> str:
     """The user's message *in conversation* — what intent-interpreting nodes
     (router, supervisor) must classify against.

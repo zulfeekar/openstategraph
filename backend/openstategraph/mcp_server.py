@@ -901,6 +901,7 @@ class WorkflowRuns:
                 ],
             }
 
+        from openstategraph.compile.state import published_routes
         from openstategraph.compile.workflow_compiler import run_health_from_state
 
         # `run_health_from_state` is the library door's own machinery
@@ -922,6 +923,11 @@ class WorkflowRuns:
             # The whole answer, every exit included (`launch-readiness/174`).
             "answer": published_answer(final),
             "decisions": {k: str(v) for k, v in (final.get("decisions") or {}).items()},
+            # Every branch a parallel router matched, not only the one
+            # dispatched on (`launch-readiness/175`). Through the seam, like
+            # every other door: an MCP client composing a document is exactly
+            # the reader who needs to know `matchMode: "all"` opened two desks.
+            "routes": published_routes(final),
             "outputs": {k: str(v) for k, v in (final.get("outputs") or {}).items()},
             "attempts": int(final.get("attempts") or 0),
             # Unlike `compile_workflow` above, this path *has* a library:
