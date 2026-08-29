@@ -239,3 +239,54 @@ class TestTheEntryPointIsTheOneShipped:
         ]
         assert scripts == {"openstategraph": "openstategraph.cli:console_main"}
         assert callable(cli.console_main)
+
+
+class TestNoInternalIdReachesAUser:
+    """`launch-readiness/12` — a stranger read `eval --help` and met a ticket id.
+
+    ``--repeat``'s help text ended *"(launch-readiness/126)"*. That is a
+    reference to a planning document a consumer of the wheel cannot open, has
+    no way to look up, and is not told is internal — printed in the one place
+    the tool explains itself to somebody who has never seen the project.
+
+    The map ids are deliberately everywhere in docstrings and comments, which
+    is where they belong: they carry the argument to the next person reading
+    the source. `help=` is the other side of the boundary. This walks every
+    parser rather than grepping, so a new subcommand is covered the day it is
+    added.
+    """
+
+    #: Every map under `.scratch/`, plus the shape a future one will have.
+    _TICKET = re.compile(
+        r"\b[a-z][a-z-]{3,}/\d{1,3}\b(?!\S)|"
+        r"\((?:launch-readiness|one-chinook-honest|workflow-gallery|production-ready|"
+        r"canvas-feels-right|every-workflow-green|say-it-on-the-surface|docs-and-gaps|"
+        r"memory-hardening|ship-it|fullstack-langgraph)/\d+\)"
+    )
+
+    def _help_strings(self) -> list[tuple[str, str]]:
+        found: list[tuple[str, str]] = []
+
+        def walk(parser: argparse.ArgumentParser, path: str) -> None:
+            for text in (parser.description, parser.epilog):
+                if text:
+                    found.append((path, text))
+            for action in parser._actions:
+                if action.help:
+                    found.append((f"{path} {action.dest}", action.help))
+                if isinstance(action, argparse._SubParsersAction):
+                    for name, sub in action.choices.items():
+                        walk(sub, f"{path} {name}".strip())
+
+        walk(cli.build_parser(), "openstategraph")
+        return found
+
+    def test_no_help_text_names_a_planning_ticket(self) -> None:
+        leaks = [
+            (where, match.group(0))
+            for where, text in self._help_strings()
+            for match in [self._TICKET.search(text)]
+            if match
+        ]
+
+        assert not leaks, f"internal ticket ids printed to a user: {leaks}"

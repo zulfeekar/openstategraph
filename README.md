@@ -81,8 +81,11 @@ prints the variable names and leaves the file to you. Existing directory? It
 refuses and tells you both ways forward (`--force` uses it anyway and
 overwrites nothing).
 
-**The wheel carries the canvas.** The built editor ships as package data
-(2.7 MB of a 2.9 MB wheel), so `serve` starts one process that serves the
+**The wheel carries the canvas.** The built editor ships as package data —
+110 files, 1.6 MB of a 4.4 MB wheel (measured on `0.3.0rc7`, 2026-08-29;
+the line previously read "2.7 MB of a 2.9 MB wheel", which was stale in both
+halves and made the editor sound like 93% of the download rather than a
+third) — so `serve` starts one process that serves the
 editor at `/`, the customer chat surface at `/chat` and the API under `/api`
 — from one origin, on whatever port it reports. No clone, no Docker, no `npm`.
 Just running graphs needs none of that:

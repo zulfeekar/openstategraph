@@ -1553,9 +1553,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         help=(
-            "ask each case N times and report whether the answers agreed "
-            "(launch-readiness/126). Reported, never gated — --threshold still "
-            "reads overall accuracy alone. Costs N model turns per case."
+            "ask each case N times and report whether the answers agreed. "
+            "Each repetition runs on its own thread, so a repeat is the "
+            "question asked again rather than a follow-up. Reported, never "
+            "gated — --threshold still reads overall accuracy alone. Costs N "
+            "model turns per case."
         ),
     )
     evaluate.add_argument("--json", action="store_true", help="print the scorecard as JSON")

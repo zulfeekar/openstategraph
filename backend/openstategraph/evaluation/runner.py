@@ -421,11 +421,25 @@ def package_asker(workflow: Any) -> Asker:
     another's conversation — the dataset is a set of independent questions, and
     letting case 12 see case 11's history would make the score depend on file
     order.
+
+    **And each repetition gets its own thread too** (`launch-readiness/12`).
+    The per-case id above predates `--repeat`, and the two did not compose: two
+    laps of one case shared a thread, so lap 2 was the same question asked of
+    an agent that had just answered it rather than the question asked again.
+    Live against the shipped `sql-qa` package, lap 2 returned an empty answer
+    and no statement, every case graded `no_sql`, and the card printed
+    `agreement 20.0%` beside `overall accuracy 100.0%` — the instrument
+    measuring the conversation and reporting it as instability in the product.
     """
+    laps: dict[str, int] = {}
 
     def ask(case: EvalCase) -> AskOutcome:
         started = time.monotonic()
-        result = workflow.ask(case.question, thread_id=f"eval-{case.id}")
+        lap = laps[case.id] = laps.get(case.id, 0) + 1
+        # Lap 1 keeps the id it has always had, so a `repeat=1` run — every run
+        # until this flag is passed — reads and checkpoints exactly as before.
+        thread_id = f"eval-{case.id}" if lap == 1 else f"eval-{case.id}-lap{lap}"
+        result = workflow.ask(case.question, thread_id=thread_id)
         return AskOutcome(
             answer=str(result),
             outputs=dict(result.outputs),

@@ -291,3 +291,74 @@ class TestNothingIsGatedOnIt:
         card = evaluate(_tiny_dataset(tmp_path, tiny_db), _answers(STABLE), repeat=2)
 
         assert "agreement" in card.render().lower()
+
+
+class TestARepetitionIsNotAFollowUp:
+    """`launch-readiness/12` — the instrument was measuring the conversation.
+
+    `package_asker` gave every case its own thread id so case 12 could not see
+    case 11's history. That was written before `--repeat` existed, and the two
+    do not compose: with `repeat=2` both laps ran on **the same** thread, so
+    lap 2 was not the question asked again — it was the same question asked a
+    second time *of an agent that had just answered it*.
+
+    Measured on the shipped `sql-qa` package against a live cloud model: lap 1
+    answered with its `SELECT`, lap 2 returned an **empty answer** and no
+    statement, so every case graded `no_sql` on the second lap. The card then
+    read `agreement 20.0%` beside `overall accuracy 100.0%` on a workflow whose
+    two laps, run on independent threads, agree perfectly. A number that
+    measures the harness is worse than no number, and this map is named after
+    not letting that render as a finding about the product.
+    """
+
+    def test_each_repetition_gets_its_own_thread(self, tmp_path: Path) -> None:
+        from openstategraph.evaluation.runner import package_asker
+
+        seen: list[str] = []
+
+        class _Door:
+            def ask(self, question: str, *, thread_id: str) -> object:
+                seen.append(thread_id)
+                return _Result()
+
+        class _Result:
+            outputs: dict[str, str] = {}
+            attempts = 1
+            usage: dict[str, object] = {}
+            statements: tuple[object, ...] = ()
+
+            def __str__(self) -> str:
+                return "an answer"
+
+        case = EvalCase(id="s01", question="how many?", gold_sql="SELECT 1")
+        ask = package_asker(_Door())
+        ask(case)
+        ask(case)
+
+        assert len(set(seen)) == 2, f"both repetitions shared a thread: {seen}"
+
+    def test_two_cases_still_never_share_a_thread(self, tmp_path: Path) -> None:
+        """The property the per-case id existed for, kept."""
+        from openstategraph.evaluation.runner import package_asker
+
+        seen: list[str] = []
+
+        class _Door:
+            def ask(self, question: str, *, thread_id: str) -> object:
+                seen.append(thread_id)
+                return _Result()
+
+        class _Result:
+            outputs: dict[str, str] = {}
+            attempts = 1
+            usage: dict[str, object] = {}
+            statements: tuple[object, ...] = ()
+
+            def __str__(self) -> str:
+                return "an answer"
+
+        ask = package_asker(_Door())
+        ask(EvalCase(id="s01", question="a?", gold_sql="SELECT 1"))
+        ask(EvalCase(id="s02", question="b?", gold_sql="SELECT 1"))
+
+        assert len(set(seen)) == 2
