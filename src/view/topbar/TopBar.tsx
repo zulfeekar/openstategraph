@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore, type Ref } from 'react';
 import {
   Download,
   FileJson,
@@ -22,6 +22,7 @@ import {
   Undo2,
   Upload,
   GitBranch,
+  ChartGantt,
   Crosshair,
   Globe,
   GlobeLock,
@@ -108,6 +109,19 @@ interface TopBarProps {
   /** Route to the workflow list — open, unpublish, delete, publish, save. */
   onWorkflowsToggle: () => void;
   workflowsOpen: boolean;
+  /**
+   * The button the Workflows popover is centred on (`launch-readiness` 189).
+   *
+   * A rectangle, not a behaviour. The list used to be a panel docked to the
+   * opposite edge of the window from this button — measured at 1440px, the
+   * button's centre at x=691 and the panel's left edge at x=1120 — and a
+   * popover is centred on its trigger, so somebody has to hand the shell the
+   * trigger. Only the toolbar knows where its own controls are.
+   */
+  workflowsAnchorRef: Ref<HTMLButtonElement>;
+  /** The run timeline, docked below everything (`memory-and-replay` 51). */
+  onTimelineToggle: () => void;
+  timelineOpen: boolean;
   /** The chat panel, which is where a run is watched. */
   onAskToggle: () => void;
   askOpen: boolean;
@@ -154,6 +168,9 @@ export function TopBar({
   saving,
   onWorkflowsToggle,
   workflowsOpen,
+  workflowsAnchorRef,
+  onTimelineToggle,
+  timelineOpen,
   onAskToggle,
   askOpen,
   onRun,
@@ -467,6 +484,7 @@ export function TopBar({
           <div className="topbar__hint-anchor">
             <Tooltip content="Open, publish or delete a saved workflow" shortcut="Mod+Shift+F">
               <Button
+                ref={workflowsAnchorRef}
                 variant="ghost"
                 active={workflowsOpen}
                 icon={<Icon glyph={FileText} size="sm" />}
@@ -507,6 +525,19 @@ export function TopBar({
               active={showGrid}
               icon={<Icon glyph={Grid2x2} size="md" />}
               onClick={() => onGridChange(!showGrid)}
+            />
+          </Tooltip>
+          {/* The owner asked for the timeline as "a section on the top
+              panel", and this is the half of that which belongs up here: the
+              **control**. The surface it opens is a dock along the bottom,
+              because a scrubbable multi-lane chart is not a thing that fits in
+              a 48px header strip — see `RunDock`. */}
+          <Tooltip content="Toggle run timeline" shortcut={shortcutText('Mod+Shift+L')}>
+            <IconButton
+              label="Toggle run timeline"
+              active={timelineOpen}
+              icon={<Icon glyph={ChartGantt} size="md" />}
+              onClick={onTimelineToggle}
             />
           </Tooltip>
 

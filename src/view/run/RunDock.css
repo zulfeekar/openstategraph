@@ -1,0 +1,166 @@
+/* ------------------------------------------------------------------ *
+ * The run dock — a bottom panel that pushes the shell rather than
+ * covering it. `memory-and-replay` 51.
+ *
+ * A sibling of `.app-shell__stage`, not a child of it: the stage is the
+ * whole of the current view and this stands under it, so the canvas is
+ * never overlaid — only shorter. Its height is inline, because a drag
+ * writes it, and clamped by `dockFit` before it ever reaches the style.
+ * ------------------------------------------------------------------ */
+
+.run-dock {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border-default);
+  z-index: var(--z-panel);
+}
+
+/* The draggable edge. Wider than it looks: a 1px border is a target
+ * nobody hits, so the grip is a transparent band straddling the top edge
+ * with the visible line drawn by the panel's own border above it. */
+.run-dock__grip {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 7px;
+  cursor: ns-resize;
+  touch-action: none;
+  z-index: 1;
+}
+
+.run-dock__grip:hover::after,
+.run-dock__grip:focus-visible::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-primary);
+}
+
+.run-dock__grip:focus-visible {
+  outline: none;
+}
+
+.run-dock__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  min-height: 36px;
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.run-dock__title {
+  flex: none;
+  margin: 0;
+  font: var(--type-heading-sm);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+}
+
+/* The question, given every pixel the row has spare and truncated rather
+ * than wrapped: the head is one row tall by design, and a long brief must
+ * not push the bars down. */
+.run-dock__subject {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.run-dock__state {
+  flex: none;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  font: var(--type-label);
+  color: var(--color-text-secondary);
+}
+
+.run-dock__state[data-running] {
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
+}
+
+.run-dock__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.run-dock__close {
+  border: none;
+  background: none;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font: var(--type-label);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.run-dock__close:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+/* Bars on the left, the trace tree on the right. Side by side rather than
+ * behind a tab: the width is the whole reason a run's two readings are
+ * worth promoting out of a 300px chat panel. */
+.run-dock__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+}
+
+.run-dock__bars,
+.run-dock__detail {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.run-dock__bars {
+  flex: 3 1 0;
+}
+
+.run-dock__detail {
+  flex: 2 1 0;
+  border-left: 1px solid var(--color-border-subtle);
+  padding-left: var(--space-3);
+}
+
+.run-dock__idle {
+  margin: 0;
+  padding: var(--space-4) var(--space-3);
+  font: var(--type-body-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* One column once the dock is narrower than two readable columns: the
+ * detail pane goes under the bars rather than to a sliver beside them. */
+@media (max-width: 900px) {
+  .run-dock__body {
+    flex-direction: column;
+  }
+
+  .run-dock__detail {
+    border-left: none;
+    border-top: 1px solid var(--color-border-subtle);
+    padding-left: 0;
+    padding-top: var(--space-2);
+  }
+}

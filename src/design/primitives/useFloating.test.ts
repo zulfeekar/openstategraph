@@ -138,3 +138,77 @@ describe('a floating element bigger than the window', () => {
     expect(at.y).toBe(8);
   });
 });
+
+/**
+ * The box, and what happens when it is not the window.
+ *
+ * `launch-readiness` 189 with `memory-and-replay` 51. The Workflows list is a
+ * popover anchored to a top-bar button, and the run dock is a sibling of the
+ * stage that button sits in — so opening or dragging the dock takes height out
+ * of the stage while the window's size does not change and no `resize` event
+ * fires anywhere. A popover clamped to the window would hang over the
+ * timeline, silently, and nothing in the DOM would ever say so.
+ *
+ * `placeFloating` already took the box as data, which is why the fix is a
+ * shorter rectangle here rather than a second positioner somewhere else.
+ */
+describe('a floating surface bounded by something smaller than the window', () => {
+  /** The stage with a 300px dock under it, in a 1000x800 window. */
+  const stage = { width: 1000, height: 500 };
+
+  it('fits inside the stage rather than over the panel below it', () => {
+    const at = placeFloating(anchor(480, 20), { width: 320, height: 600 }, stage, {
+      placement: 'bottom',
+      align: 'center',
+      offset: 6,
+      padding: 8,
+    });
+
+    // Taller than the room it has, so it starts at the padding and scrolls —
+    // never at `anchor.bottom`, which would put six hundred pixels of list
+    // across a timeline the user is watching.
+    expect(at.y).toBe(8);
+  });
+
+  it('still hangs off its trigger when the stage has room', () => {
+    const at = placeFloating(anchor(480, 20), { width: 320, height: 200 }, stage, {
+      placement: 'bottom',
+      align: 'center',
+      offset: 6,
+      padding: 8,
+    });
+
+    expect(at.y).toBe(46);
+    // Centred: 480 + 40/2 - 320/2.
+    expect(at.x).toBe(340);
+  });
+
+  it('lets fitting beat centring when the trigger is near an edge', () => {
+    // The case the top bar actually produces: the bar wraps and reflows, so
+    // the Workflows button genuinely does travel to within half a popover of
+    // both edges. Centring is a preference — it says *this came from that
+    // button* — and fitting is a requirement, so the centre is computed first
+    // and then clamped.
+    const at = placeFloating(anchor(960, 20), { width: 320, height: 200 }, stage, {
+      placement: 'bottom',
+      align: 'center',
+      offset: 6,
+      padding: 8,
+    });
+
+    expect(at.x).toBe(stage.width - 320 - 8);
+  });
+
+  it('keeps the head of an over-wide popover rather than centring the overflow', () => {
+    // A list is read from its left edge, so what overflows should be its tail.
+    const narrow = { width: 300, height: 500 };
+    const at = placeFloating(anchor(150, 20), { width: 320, height: 200 }, narrow, {
+      placement: 'bottom',
+      align: 'center',
+      offset: 6,
+      padding: 8,
+    });
+
+    expect(at.x).toBe(8);
+  });
+});

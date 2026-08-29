@@ -1,0 +1,31 @@
+/* A floating panel anchored to the control that opened it.
+ *
+ * Positioned by `translate3d` from `useFloating`, so `top`/`left` stay at the
+ * origin and the transform is the only thing that moves — the same shape
+ * `Menu.css` uses, and the reason both are cheap to reposition per frame while
+ * the run dock is being dragged. */
+.popover {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  width: var(--layout-drawer-width);
+  max-width: calc(100vw - var(--space-4));
+  overflow: hidden;
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+}
+
+/* A `Panel` used as a popover's content is no longer claiming a column: it
+ * gets its height from the popover's measured maximum rather than from a
+ * flow it is no longer in, and the popover has already painted the ground and
+ * the border underneath it. */
+.popover > .panel {
+  height: auto;
+  min-height: 0;
+  background: transparent;
+}
