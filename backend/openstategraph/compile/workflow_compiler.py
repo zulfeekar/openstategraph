@@ -1528,16 +1528,6 @@ class CompiledPlan:
     advisories: list[str] = field(default_factory=list)
 
 
-#: How far the budget walk below will follow a chain before it gives up.
-#:
-#: "Longest path" is unbounded the moment the tail contains a cycle, and a
-#: `pass` branch may legally close one — so this is a capped walk rather than
-#: a graph algorithm, as `organisms-first-class` 59 asked for. Comfortably
-#: larger than any drawing a person lays out by hand, and small enough that a
-#: pathological one answers in microseconds instead of hanging.
-STEP_BUDGET_WALK_CAP = 32
-
-
 def always_taken_cycles(plan: "CompiledPlan") -> list[tuple[str, ...]]:
     """Every loop in `plan` that no decision can leave, as node paths.
 
@@ -1582,7 +1572,7 @@ def always_taken_cycles(plan: "CompiledPlan") -> list[tuple[str, ...]]:
     #: rather than recursion depth, because a back edge is exactly "a
     #: successor still on the path" and nothing else here needs to know it.
     #:
-    #: The walk is iterative for the reason `STEP_BUDGET_WALK_CAP` is capped:
+    #: The walk is iterative for the reason the budget walk below is:
     #: a document arriving through a door that is not the editor was not laid
     #: out by hand, and a `RecursionError` raised out of `plan()` would be
     #: reported as *"Compile failed"* — the compiler blaming itself for a
@@ -1705,43 +1695,172 @@ def _plan_destinations(plan: CompiledPlan) -> dict[str, list[str]]:
     return onward
 
 
-def _longest_chain(
-    onward: Mapping[str, list[str]], node: str, seen: frozenset[str]
+def _walk_successors(
+    onward: Mapping[str, list[str]], start: str
+) -> dict[str, list[str]]:
+    """Everything reachable from `start`, asking each node for its successors
+    **once** — which is the whole of `the-cost-of-one-more` 01.
+
+    The walk this replaced carried a per-path `seen` set, so it re-expanded
+    every node once per distinct path prefix that reached it. That is an
+    enumeration of simple paths, and on a drawable width-3 tail it cost 55
+    seconds at 69 nodes. Nothing downstream of here asks `onward` a second
+    time; the local map is what the rest of the derivation reads.
+    """
+    successors: dict[str, list[str]] = {}
+    stack = [start]
+    while stack:
+        node = stack.pop()
+        if node in successors:
+            continue
+        onward_of_node = list(onward.get(node, ()))
+        successors[node] = onward_of_node
+        stack.extend(nxt for nxt in onward_of_node if nxt not in successors)
+    return successors
+
+
+def _nodes_that_reach(successors: Mapping[str, list[str]], target: str) -> set[str]:
+    """The half of `successors` from which `target` is still reachable.
+
+    A route *back* is a path that has to arrive somewhere. Restricting the
+    vertex set first is what lets the same condensation answer both walks:
+    inside this set every node reaches `target`, so the component holding
+    `target` has no successors and the walk stops there without a special
+    case.
+    """
+    if target not in successors:
+        return set()
+    backward: dict[str, list[str]] = {}
+    for node, nexts in successors.items():
+        for nxt in nexts:
+            backward.setdefault(nxt, []).append(node)
+    reaching = {target}
+    stack = [target]
+    while stack:
+        node = stack.pop()
+        for previous in backward.get(node, ()):
+            if previous not in reaching:
+                reaching.add(previous)
+                stack.append(previous)
+    return reaching
+
+
+def _components(
+    successors: Mapping[str, list[str]], vertices: set[str]
+) -> list[list[str]]:
+    """Strongly connected components of `vertices`, successors emitted first.
+
+    Tarjan, iterative for the same reason `always_taken_cycles` is: a document
+    that did not come from the editor can be deeper than the interpreter's
+    stack, and a `RecursionError` out of `plan()` reads as the compiler
+    blaming itself. Tarjan's emission order *is* a reverse topological order
+    of the condensation, so the dynamic programme below needs no second sort.
+    """
+    index: dict[str, int] = {}
+    lowest: dict[str, int] = {}
+    on_stack: set[str] = set()
+    pending: list[str] = []
+    emitted: list[list[str]] = []
+    counter = 0
+    for root in vertices:
+        if root in index:
+            continue
+        work: list[tuple[str, int]] = [(root, 0)]
+        while work:
+            node, cursor = work.pop()
+            if cursor == 0:
+                index[node] = lowest[node] = counter
+                counter += 1
+                pending.append(node)
+                on_stack.add(node)
+            nexts = [nxt for nxt in successors.get(node, ()) if nxt in vertices]
+            descended = False
+            while cursor < len(nexts):
+                nxt = nexts[cursor]
+                cursor += 1
+                if nxt not in index:
+                    work.append((node, cursor))
+                    work.append((nxt, 0))
+                    descended = True
+                    break
+                if nxt in on_stack:
+                    lowest[node] = min(lowest[node], index[nxt])
+            if descended:
+                continue
+            if lowest[node] == index[node]:
+                component: list[str] = []
+                while True:
+                    member = pending.pop()
+                    on_stack.discard(member)
+                    component.append(member)
+                    if member == node:
+                        break
+                emitted.append(component)
+            if work:
+                lowest[work[-1][0]] = min(lowest[work[-1][0]], lowest[node])
+    return emitted
+
+
+def _longest_component_path(
+    successors: Mapping[str, list[str]], vertices: set[str], start: str
 ) -> int:
+    """The most nodes any one path from `start` can visit, or an over-estimate.
+
+    **Longest simple path is NP-hard and this does not compute it.** What it
+    computes is the longest path through the *condensation*, weighting each
+    strongly connected component by how many nodes it holds — O(V+E), with a
+    real memo, and an upper bound on the simple-path answer because a path
+    crosses the components in topological order and can visit at most every
+    node of each.
+
+    Over-estimating is safe in the only direction that matters here. The
+    number is a **floor for a default**: too large stops a revision loop one
+    lap early, too small restores the `GraphRecursionError` that
+    `organisms-first-class` 56 exists to remove. It is also never smaller than
+    the walk it replaced, which truncated at a fixed depth and so under-read
+    exactly the deep tails this is for.
+
+    Where the graph is acyclic — which is every shipped drawing's `pass` tail
+    — every component is a single node and the answer is exact.
+    """
+    emitted = _components(successors, vertices)
+    component_of: dict[str, int] = {}
+    for position, component in enumerate(emitted):
+        for member in component:
+            component_of[member] = position
+    longest = [0] * len(emitted)
+    for position, component in enumerate(emitted):
+        onward_best = 0
+        for member in component:
+            for nxt in successors.get(member, ()):
+                neighbour = component_of.get(nxt)
+                if neighbour is not None and neighbour != position:
+                    onward_best = max(onward_best, longest[neighbour])
+        longest[position] = len(component) + onward_best
+    return longest[component_of[start]]
+
+
+def _longest_chain(onward: Mapping[str, list[str]], node: str) -> int:
     """Supersteps from `node` onward, counting `node` itself.
 
     Depth, not node count — a fan-out layer runs in **one** superstep however
     wide it is, which is why the longest path is the right measure and a
     census of the reachable set would be the wrong one.
     """
-    if node in seen or len(seen) >= STEP_BUDGET_WALK_CAP:
-        return 0
-    seen = seen | {node}
-    return 1 + max(
-        (_longest_chain(onward, nxt, seen) for nxt in onward.get(node, ())),
-        default=0,
-    )
+    successors = _walk_successors(onward, node)
+    return _longest_component_path(successors, set(successors), node)
 
 
 def _longest_route_back(
-    onward: Mapping[str, list[str]], node: str, target: str, seen: frozenset[str]
+    onward: Mapping[str, list[str]], node: str, target: str
 ) -> int | None:
     """Supersteps from `node` to `target` inclusive, or `None` if it never
     gets there — which is what an open-ended `revise` branch looks like."""
-    if node in seen or len(seen) >= STEP_BUDGET_WALK_CAP:
+    successors = _walk_successors(onward, node)
+    reaching = _nodes_that_reach(successors, target)
+    if node not in reaching:
         return None
-    if node == target:
-        return 1
-    seen = seen | {node}
-    routes = [
-        found
-        for found in (
-            _longest_route_back(onward, nxt, target, seen)
-            for nxt in onward.get(node, ())
-        )
-        if found is not None
-    ]
-    return 1 + max(routes) if routes else None
+    return _longest_component_path(successors, reaching, node)
 
 
 def step_budget_floor_for(plan: CompiledPlan, node_id: str) -> int:
@@ -1773,20 +1892,31 @@ def step_budget_floor_for(plan: CompiledPlan, node_id: str) -> int:
     drawn on one of its branches has nothing to derive from, and a number
     below the measured one would restore the crash.
 
-    The walk is capped rather than solved. Longest simple path is NP-hard and
-    a cycle in the tail makes it meaningless anyway; what this needs is a
-    number that is large enough and always arrives.
+    **Both walks run over the whole plan digraph, and it is cyclic on
+    purpose** — the revise loop is the subject, and a `pass` branch may
+    legally close a second one. So neither walk asks for the longest simple
+    path, which is NP-hard and, in a cycle, not even finite. Each asks for the
+    longest path through the graph's **condensation**, weighting a strongly
+    connected component by the nodes it holds: O(V+E), and an upper bound on
+    the simple-path answer, which is the safe direction for a floor. See
+    `_longest_component_path`. Until `the-cost-of-one-more` 01 this paragraph
+    read *"the walk is capped rather than solved"*, and the cap it named
+    bounded a path's length while the walk enumerated their number — 55
+    seconds for one grader on a drawable 69-node document.
+
+    The map is built once here and both walks read it, rather than once per
+    walk. It is **not** cached across calls: a grader and a guard each pay one
+    O(V+E) pass, which is the same class as the walk it feeds, and a cache
+    keyed on a plan would buy a constant factor with a lifetime.
     """
     branches = plan.conditional.get(node_id) or {}
     onward = _plan_destinations(plan)
-    lap = _longest_route_back(
-        onward, branches["revise"], node_id, frozenset()
-    ) if "revise" in branches else None
-    tail = (
-        _longest_chain(onward, branches["pass"], frozenset())
-        if "pass" in branches
+    lap = (
+        _longest_route_back(onward, branches["revise"], node_id)
+        if "revise" in branches
         else None
     )
+    tail = _longest_chain(onward, branches["pass"]) if "pass" in branches else None
     if lap is None or tail is None:
         return STEP_BUDGET_FLOOR
     return max(STEP_BUDGET_FLOOR, lap + tail)

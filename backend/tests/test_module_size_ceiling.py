@@ -267,6 +267,20 @@ they are edge-kind handlers rather than layers. Nothing here groups into a
 collaborator the way `node_runtime.py`'s families do, so the honest recorded
 position is that this one is long because the substrate is, and the number is
 here to catch it growing for a different reason.
+
+**964 since `the-cost-of-one-more` 01**, and the +74 is one algorithm rather
+than seventy-four lines of drift. `step_budget_floor_for`'s two walks carried
+a per-path `seen` set, which enumerates simple paths — 55 seconds for one
+grader on a drawable 69-node document, a compile-time hang reachable from any
+document a caller can POST. They condense the graph now (`_walk_successors`,
+`_nodes_that_reach`, `_components`, `_longest_component_path`), which is
+Tarjan plus a dynamic programme over the condensation: four small named
+functions where there were two recursive ones, and the growth is Tarjan's
+iterative form, written out for the reason `always_taken_cycles` beside it is.
+It stays here rather than moving to a `graph_walks.py` because both of this
+file's walks are about **what a canvas edge means for the step budget**, which
+is the file's one reason to change; a shared walk module would be a home for
+two callers and would separate the walk from the edge table it reads.
 """
 
 STREAMING = """
@@ -483,7 +497,7 @@ and would be a module of two functions and a paragraph.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(569, NODE_RUNTIME),
     "cli.py": Recorded(1102, CLI),
-    "compile/workflow_compiler.py": Recorded(890, WORKFLOW_COMPILER),
+    "compile/workflow_compiler.py": Recorded(964, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1026, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(698, MCP_SERVER),
