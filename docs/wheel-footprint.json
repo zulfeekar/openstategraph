@@ -1,15 +1,15 @@
 {
   "wheel": "openstategraph-0.3.0rc7-py3-none-any.whl",
   "version": "0.3.0rc7",
-  "measured": "2026-08-29",
-  "total_bytes": 4448735,
-  "browser_bytes": 2737247,
-  "browser_share_percent": 62,
+  "measured": "2026-08-30",
+  "total_bytes": 4496820,
+  "browser_bytes": 2694817,
+  "browser_share_percent": 60,
   "groups": {
     "editor": {
       "label": "the built canvas",
       "files": 110,
-      "bytes": 1646563
+      "bytes": 1603180
     },
     "mermaid": {
       "label": "vendored Mermaid, for /chat's flow view",
@@ -19,12 +19,12 @@
     "static_other": {
       "label": "the served HTML shells",
       "files": 5,
-      "bytes": 115516
+      "bytes": 116469
     },
     "python": {
       "label": "our own Python",
-      "files": 177,
-      "bytes": 1061654
+      "files": 198,
+      "bytes": 1148120
     },
     "examples": {
       "label": "the shipped gallery",
@@ -34,7 +34,7 @@
     "metadata": {
       "label": "wheel metadata",
       "files": 5,
-      "bytes": 22525
+      "bytes": 23430
     },
     "other": {
       "label": "the rest of the package data",

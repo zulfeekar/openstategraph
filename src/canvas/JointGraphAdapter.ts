@@ -20,6 +20,7 @@ import {
   linkRouter,
 } from './links/edgeDecoration';
 import { obstacleTest } from './links/flowObstacles';
+import { FONT_SIZE } from '@design/tokens';
 
 /**
  * Projects the workflow model onto a JointJS graph.
@@ -509,7 +510,7 @@ function buildLabel(text: string, position: dia.Link.LabelPosition): dia.Link.La
       labelText: {
         text,
         fill: 'var(--color-text-secondary)',
-        fontSize: 11,
+        fontSize: FONT_SIZE.edgeLabel,
         fontFamily: 'var(--font-sans)',
         fontWeight: 500,
         textAnchor: 'middle',

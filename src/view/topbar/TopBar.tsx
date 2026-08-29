@@ -37,6 +37,7 @@ import {
   shortcutText,
   type MenuEntry,
 } from '@design/primitives';
+import { Mark } from '@design/brand/Mark';
 import type { Theme } from '@design/tokens';
 import {
   useController,
@@ -355,8 +356,13 @@ export function TopBar({
     <>
       <header className="topbar">
         <div className="topbar__brand">
-          <span className="topbar__mark" aria-hidden="true">
-            <Icon glyph={Network} size="md" />
+          {/* The mark, not a stand-in for one. Until 2026-08-29 this was a
+              generic `Network` glyph on an inverted tile — the placeholder a
+              product wears while it has no logo. It has one now: the owner's
+              authored `Turn 2 — Circuit`, locked, drawn from the same two
+              tokens the canvas draws a node from. `Mark` carries the rest. */}
+          <span className="topbar__mark">
+            <Mark size={22} />
           </span>
           <span className="topbar__product">OpenStateGraph</span>
           <span className="topbar__divider" role="presentation" />

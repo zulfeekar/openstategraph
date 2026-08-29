@@ -1,0 +1,138 @@
+/* ------------------------------------------------------------------ *
+ * The webfonts, declared here rather than imported wholesale.
+ *
+ * The design system names three families — Archivo for display, IBM Plex
+ * Sans for text, IBM Plex Mono for code — where this product loaded one.
+ * Three families is not automatically three times the bytes, and this file
+ * is where the difference is spent deliberately instead of inherited.
+ *
+ * **Why not `@import '@fontsource-variable/archivo/wght.css'`.** That is one
+ * line and it ships seven subsets: cyrillic, cyrillic-ext, greek, greek-ext,
+ * vietnamese, latin, latin-ext. A browser downloads only the subsets it needs
+ * — `unicode-range` sees to that — but the *wheel* carries every one of them,
+ * and the wheel is what a stranger downloads before any browser has an
+ * opinion. That is exactly how the Inter this replaces came to cost 218,512
+ * bytes in a product with no stated non-Latin commitment: nobody chose the six
+ * extra subsets, they arrived with the import.
+ *
+ * **What was dropped, and on what grounds.** cyrillic, cyrillic-ext, greek,
+ * greek-ext and vietnamese. `docs/` and `README.md` state no
+ * internationalization commitment and the editor ships no translations, so
+ * this is not a capability being removed — it is one that was never declared
+ * and was being paid for five times over. A future non-Latin commitment adds
+ * subsets back here, per family, as a reviewable diff. That is the point of
+ * spelling the faces out instead of importing them.
+ *
+ * **What it costs, measured on the built assets** (`docs/decisions/self-hosted-webfonts.md`
+ * carries the table and the method):
+ *
+ *   before  Inter Variable, 7 subsets, weight axis           218,512 B
+ *   after   Archivo Variable, latin + latin-ext, wght         67,536 B
+ *           IBM Plex Sans Variable, latin + latin-ext, wght   76,676 B
+ *           IBM Plex Mono 400, latin + latin-ext              28,056 B
+ *                                                          = 172,268 B
+ *
+ * Three families for 46,244 bytes **less** than one, because the saving is in
+ * the subsets rather than in the faces.
+ *
+ * **Mono ships one weight, and that is a choice with a visible edge.** IBM
+ * Plex Mono has no variable release — `@fontsource-variable/ibm-plex-mono`
+ * does not exist, only static per-weight files — so every additional weight is
+ * another 28 KB. `--type-mono-sm` is the only role that sets this family *and*
+ * a weight, and it sets regular; the few places that set `font-family:
+ * var(--font-mono)` raw inherit whatever weight surrounds them, and where that
+ * is bold the browser synthesises it. A synthetic bold in a code span is a
+ * fair price for not doubling a family.
+ *
+ * **No Google Fonts, and not because a rule forbids it.** The published-
+ * Artifact CSP that excepts `fonts.googleapis.com` is a constraint on a
+ * different product. This editor is a Vite build shipped inside a Python wheel
+ * and served by `openstategraph serve` from the user's own machine, so the
+ * choice was free and was made long before this file: everything is
+ * self-hosted, and a page that works offline once the wheel is installed has
+ * no network call it can silently fail.
+ *
+ * Every family also carries a real fallback stack — see `--osg-font-*` in
+ * `tokens.css`. A face that has not loaded, or a subset that was dropped,
+ * lands on Helvetica or the platform mono rather than on nothing.
+ * ------------------------------------------------------------------ */
+
+/* Archivo Variable — latin */
+@font-face {
+  font-family: 'Archivo Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/archivo/files/archivo-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Archivo Variable — latin-ext */
+@font-face {
+  font-family: 'Archivo Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/archivo/files/archivo-latin-ext-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+/* IBM Plex Sans Variable — latin */
+@font-face {
+  font-family: 'IBM Plex Sans Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 700;
+  src: url('@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* IBM Plex Sans Variable — latin-ext */
+@font-face {
+  font-family: 'IBM Plex Sans Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 700;
+  src: url('@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-latin-ext-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+/* IBM Plex Mono — latin */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* IBM Plex Mono — latin-ext */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-ext-400-normal.woff2')
+    format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}

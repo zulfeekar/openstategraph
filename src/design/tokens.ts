@@ -24,6 +24,66 @@ export type Accent = (typeof ACCENTS)[number];
 export const THEMES = ['light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
 
+/**
+ * The brand mark's geometry, on its own 100-unit grid.
+ *
+ * Here rather than inside `Mark.tsx` for the reason this file exists: two of
+ * these numbers are **tokens the design system ships** — `--osg-node-ring:
+ * 5.5` and `--osg-node-r: 10`, declared in `design/styles/tokens.css` beside
+ * the canvas's node and edge colours, not beside the logo. A node in the mark
+ * and a node on the canvas are drawn from one pair of numbers, deliberately,
+ * and that is the identity rather than a coincidence.
+ *
+ * `markGeometry.test.ts` fails the day the stylesheet and this disagree.
+ *
+ * The rest is transcription. The mark is marked LOCKED in the design project,
+ * and `Mark.tsx` records why the four gaps are the author's literals rather
+ * than the tangency arithmetic they nearly are.
+ */
+export const MARK = {
+  /** The coordinate space the mark is drawn in. */
+  grid: 100,
+  /** Stroke weight. The stylesheet's `--osg-node-ring`. */
+  ring: 5.5,
+  /** A node's radius. The stylesheet's `--osg-node-r`. */
+  radius: 10,
+  /**
+   * The initial state is hollow, and its *outer* edge sits where a filled
+   * node's does: `radius - ring / 2`. The one number here that is arithmetic
+   * and matches what the author drew.
+   */
+  hollowRadius: 7.25,
+  /** Centre of the two near nodes. */
+  near: 24,
+  /** Centre of the two far nodes. */
+  far: 76,
+  /** Where a straight transition starts, measured from the grid edge. */
+  edgeGap: 38,
+  /** Where the diagonal transition starts, measured from the grid corner. */
+  diagonalGap: 33.9,
+} as const;
+
+/**
+ * The type sizes canvas-drawn SVG reads, in px.
+ *
+ * The scale lives in `design/styles/tokens.css` and every DOM element gets it
+ * from there. **Canvas text does not go through CSS**: JointJS writes
+ * `fontSize` as an SVG presentation attribute, which takes a number and cannot
+ * take a `var()`. So `buildLabel` in `canvas/JointGraphAdapter.ts` carried a
+ * bare `11` — coincidentally the pixel value of `--font-size-11`, with no code
+ * path connecting them, which is precisely the shape of duplication this
+ * file's docstring exists to prevent (`the-look-has-an-author-now/03`).
+ *
+ * Only the sizes canvas SVG actually draws are here. The nine composite
+ * `--type-*` roles are deliberately **not** mirrored: `font:` shorthand has no
+ * SVG equivalent JointJS consumes, so a TypeScript twin of them would be a
+ * second description with no reader.
+ */
+export const FONT_SIZE = {
+  /** `--font-size-11`. Edge labels — a router's branch names. */
+  edgeLabel: 11,
+} as const;
+
 /** Chrome dimensions. Mirrored into `--layout-*` custom properties. */
 export const LAYOUT = {
   topbarHeight: 48,
@@ -70,7 +130,13 @@ export const NODE = {
   portRadius: 4.5,
   /** Horizontal overhang of a port dot beyond the card edge. */
   portOverhang: 0,
-  cornerRadius: 9,
+  /**
+   * Zero, and the TypeScript twin of `--radius-*` in `design/styles/tokens.css`.
+   * The authored design system is `--osg-radius: 0px` and describes itself as
+   * *"Flat, 0 radius, one accent"*; a card whose CSS corner is square and
+   * whose canvas corner is 9 would be two answers to one question.
+   */
+  cornerRadius: 0,
 } as const;
 
 /**
@@ -135,7 +201,8 @@ export const GROUP = {
   padding: { top: 128, right: 40, bottom: 32, left: 40 },
   minWidth: 280,
   minHeight: 200,
-  cornerRadius: 12,
+  /** Flat, for the reason recorded on `NODE.cornerRadius`. */
+  cornerRadius: 0,
 } as const;
 
 /**
