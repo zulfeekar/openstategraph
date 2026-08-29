@@ -390,13 +390,35 @@ _HOW_MATCHED_FOR_MODEL: dict[str, str] = {
 }
 
 
-def notes_for_reader(notes: tuple[ToolNote, ...] | list[ToolNote]) -> str:
+def notes_for_reader(
+    notes: tuple[ToolNote, ...] | list[ToolNote],
+    *,
+    unsent_values: frozenset[str] | set[str] | None = None,
+) -> str:
     """The reader rail: the disclosure paragraph, or `""`.
 
     Only substitutions, only where the word actually changed, and always
     carrying `how_matched` in words — the property `127`'s "done when" turns
     on. A `Correction` is silently skipped rather than reworded: it is the
     tool talking to the model.
+
+    **`unsent_values` is `launch-readiness/155`**, and it is a fact about the
+    run rather than about the note. A `Substitution` is minted when the word is
+    *resolved*, before the model runs, so the note cannot carry whether the run
+    went on to answer from it; the caller measures that
+    (`compile.workflow_compiler.values_no_statement_carried`) and names the
+    canonical values no statement carried. It changes one sentence and
+    withdraws nothing: what the word was taken to mean is still disclosed,
+    because that is `127`, and only the claim about a result that was never
+    obtained is dropped.
+
+    A **set of values** rather than a flag, because one word can resolve on two
+    axes at once — *"Persian Gulf"* is a shipping region and a chokepoint
+    geofence in the same warehouse — and a run that queried one of them was
+    disclosed as being *"for"* both.
+
+    Keyword-only and empty by default — *no such measurement* — so a caller
+    that has not made it produces exactly the paragraph it always did.
     """
     lines: list[str] = []
     for note in notes:
@@ -415,11 +437,71 @@ def notes_for_reader(notes: tuple[ToolNote, ...] | list[ToolNote]) -> str:
         if not isinstance(note, Substitution) or not note.changed_the_question():
             continue
         lines.append(
-            f'You asked for "{note.user_term}". This data holds no such value, so '
-            f"the answer above is for {note.canonical_value} on {note.axis} — "
-            f"{_HOW_MATCHED_FOR_READER[note.how_matched]}."
+            _substitution_for_reader(note, note.canonical_value in (unsent_values or frozenset()))
         )
     return "\n".join(_dedup(lines))
+
+
+def _substitution_for_reader(note: Substitution, unsent: bool) -> str:
+    """Two sentences, and which one is said is a measurement — `155`.
+
+    The first is `127`'s, and it makes a claim about a **result**: *the answer
+    above is for X*. Live on 2026-08-28 a run that answered nothing carried it
+    anyway, and a second live run carried it while having queried a different
+    axis entirely.
+
+    The second says the same thing about the **word**, and then states what was
+    measured rather than asserting what did not happen — the property
+    `UncoveredWindow` and `ToolFailure` already hold. *"No statement this run
+    ran carried that value"* is checkable and is exactly what the caller
+    looked at; *"nothing above came from that data"* would be a claim about
+    every rail there is, and this one can only see statements.
+    """
+    head = f'You asked for "{note.user_term}". This data holds no such value, so '
+    tail = f"{note.canonical_value} on {note.axis} — {_HOW_MATCHED_FOR_READER[note.how_matched]}."
+    if not unsent:
+        return f"{head}the answer above is for {tail}"
+    return (
+        f"{head}this run read it as {tail} No statement this run ran carried that value, "
+        "so this says what the word was taken to mean and not what any answer is about."
+    )
+
+
+def notes_for_grader(
+    notes: tuple[ToolNote, ...] | list[ToolNote],
+    *,
+    unsent_values: frozenset[str] | set[str] | None = None,
+) -> str:
+    """The reader rail, shown to the judge — `launch-readiness/154`.
+
+    **Not a third rail.** It carries no sentence of its own: it is
+    `notes_for_reader`'s paragraph plus one line saying whose it is. A grader
+    handed the disclosure with no framing is being shown text and left to guess
+    who wrote it, and the obvious guess — *the candidate already says this* —
+    is the one wrong answer available.
+
+    Why a grader is shown it at all: `route.grader` judges the producing node's
+    raw text, and the disclosure is appended after it by `_output`. So a
+    criterion like *"say which sense you used"* was judged against a document
+    that did not yet contain the sentence the reader would get, and on a covered
+    term — where the disclosure is unconditional — a model that happened to be
+    silent cost a full revise lap to obtain a sentence the reader had anyway.
+
+    It rides in the prompt's generated **Context** layer, never in the
+    candidate, so the published answer is untouched and nothing invites the
+    model to write the paragraph itself.
+
+    Empty when the disclosure is empty. Silence by default is the whole
+    module's rule and it is not suspended for a grader.
+    """
+    disclosure = notes_for_reader(notes, unsent_values=unsent_values)
+    if not disclosure:
+        return ""
+    return (
+        "This workflow appends the following to the answer before anyone reads "
+        "it, whichever way you judge. It is the workflow's own disclosure and "
+        "the answer does not have to repeat it:\n" + disclosure
+    )
 
 
 def _tool_failure_for_reader(note: ToolFailure) -> str:
@@ -623,6 +705,24 @@ def record_notes(
     return True
 
 
+def peek_notes(thread_id: str | None = None) -> tuple[ToolNote, ...]:
+    """Everything this run has recorded so far, **without emptying the bucket**.
+
+    `launch-readiness/154`. The rail has one taker and it must stay one: a
+    grader that called `take_notes` to see what the reader will be told would
+    empty the bucket and delete the disclosure — trading a wasted revise lap
+    for the defect `127` exists to close. So a second *reader* is a different
+    verb on one bucket rather than a second reading of one verb, and which
+    callers may take is stated where the store is: `_output` takes, everything
+    else peeks.
+    """
+    thread = thread_id if thread_id is not None else _current_thread()
+    if not thread:
+        return ()
+    with _lock:
+        return tuple(_recorded.get(thread, ()))
+
+
 def take_notes(thread_id: str | None = None) -> tuple[ToolNote, ...]:
     """Everything this run recorded, and empty the bucket.
 
@@ -647,8 +747,10 @@ __all__ = [
     "ToolNote",
     "UncoveredWindow",
     "UnverifiedAnswer",
+    "notes_for_grader",
     "notes_for_model",
     "notes_for_reader",
+    "peek_notes",
     "record_notes",
     "take_notes",
 ]

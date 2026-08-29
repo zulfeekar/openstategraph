@@ -220,6 +220,41 @@ def cells_of(result: str) -> str:
     return "\n".join(parts)
 
 
+#: A failure envelope's own flag, matched **in the text** — the fallback half
+#: of `statement_was_answered`. See there for why a parse is not enough.
+_FAILED_FLAG = re.compile(r'"ok"\s*:\s*false', re.IGNORECASE)
+
+
+def statement_was_answered(result: Any) -> bool:
+    """Whether this exchange came back with data rather than a refusal.
+
+    `launch-readiness/155`. *"A statement carrying the value was sent"* is not
+    evidence that an answer is about that value; *"and it came back with
+    something"* is. `cells_of` already states the rule — a payload that
+    declares itself unsuccessful contributes nothing at all — so this is that
+    reading asked as a question.
+
+    **The textual fallback is not belt-and-braces, it is the live path.**
+    `tool_report` caps a recorded result at `QUERY_RESULT_RECORD_CAP` (2 000
+    characters), and an ODBC failure message is longer than that, so what the
+    record holds is a Python repr cut mid-string: `ast.literal_eval` refuses
+    it, `payloads_of` hands back the raw text, and `cells_of` — correctly, for
+    a CSV or a Markdown table — passes it through as data. Measured on
+    `cpl-mcp` on 2026-08-29: three refusals in a row, every one of them
+    carrying its own `"ok": false` in text that could not be parsed.
+
+    Tolerant in reading, strict in trusting: the flag is the one
+    `abc/tool_findings` already treats as the envelope's failure, matched
+    nowhere else and never inferred from an `error` key that merely exists.
+    """
+    text = str(result or "")
+    if not text.strip():
+        return False
+    if _FAILED_FLAG.search(text):
+        return False
+    return bool(cells_of(text).strip())
+
+
 #: Every table a statement names, not only the first. A join reaches two, and
 #: a check that read only `FROM` would judge a two-table statement by the one
 #: that happened to be written first (`launch-readiness/166`, found on a live

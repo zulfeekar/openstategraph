@@ -52,7 +52,9 @@ from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
 from openstategraph.abc.router import Router
 from openstategraph.abc.tool_notes import (
     UnverifiedAnswer,
+    notes_for_grader,
     notes_for_reader,
+    peek_notes,
     record_notes,
     take_notes,
 )
@@ -103,6 +105,7 @@ from openstategraph.compile.workflow_compiler import (
     step_budget_floor_for,
     unbound_capability_claim,
     unrun_query_claim,
+    values_no_statement_carried,
 )
 # Re-exported, not merely used: `context.py` was carved out of this module and
 # every one of these names was importable from here before the move. The seam
@@ -534,6 +537,20 @@ def _final_text(messages: list[Any]) -> str:
         if text.strip():
             return text
     return ""
+
+def _values_never_sent(state: RunState, notes: Any) -> frozenset[str]:
+    """The canonical values in `notes` that no statement of this run carried.
+
+    `launch-readiness/155`, and it is one line in two places on purpose: the
+    grader is told what the reader will be handed (`154`), so the two must
+    reach the same measurement or the judge is shown a paragraph nobody gets.
+    """
+    from openstategraph.abc.tool_notes import Substitution
+
+    return values_no_statement_carried(
+        state, [n.canonical_value for n in notes if isinstance(n, Substitution)]
+    )
+
 
 def tool_report(
     node_id: str,
@@ -2999,8 +3016,26 @@ class NodeRuntime:
             # second's answer, with `outputs[a2]` still empty beside it.
             previous = str((state.get("outputs") or {}).get(node_id) or "")
             candidate = _upstream_text(state, upstream) or previous
+            # `launch-readiness/154`. This grader judges the producing node's
+            # raw text, and `127`'s disclosure is appended after it by
+            # `_output` — so a criterion like *"say which sense you used"* was
+            # judged against a document that did not contain the sentence the
+            # reader would actually get, and could burn a whole revise lap to
+            # obtain it.
+            #
+            # **Peeked, never taken.** `take_notes` drains, and a grader that
+            # drained the rail would delete the reader's disclosure — `154`'s
+            # fix causing `127`'s defect. And it rides in the generated
+            # *Context* layer, never in the candidate: what this node publishes
+            # is still exactly what the producer wrote.
+            seen = peek_notes()
+            sections = (
+                self._run_context_section(),
+                notes_for_grader(seen, unsent_values=_values_never_sent(state, seen)),
+            )
             grader = grader_for(
-                _wired_skill(state, skills, self._nodes), self._run_context_section()
+                _wired_skill(state, skills, self._nodes),
+                "\n\n".join(part for part in sections if part),
             )
 
             # A deterministic check the *grader* cannot make, because it needs
@@ -5091,7 +5126,18 @@ class NodeRuntime:
             # the canonical value actually differ, and always carrying
             # `how_matched`, so a substitution the model inferred for itself
             # can never arrive labelled as one the data declared.
-            disclosure = notes_for_reader(take_notes())
+            # `launch-readiness/155`. The sentence above says *"the answer
+            # above is for X"*, and a run that answered nothing still got it:
+            # live, an agent that asked the user which sense of "Persian Gulf"
+            # they meant — and called no tool at all — published that claim
+            # about a result that does not exist. Whether the run reached its
+            # data is a fact about its own record, read here where the record
+            # is in hand, and never a question put to the model: `127`'s whole
+            # argument is that the disclosure is not the model's to forget.
+            recorded = take_notes()
+            disclosure = notes_for_reader(
+                recorded, unsent_values=_values_never_sent(state, recorded)
+            )
             if disclosure:
                 answer = f"{answer}\n\n{disclosure}"
 

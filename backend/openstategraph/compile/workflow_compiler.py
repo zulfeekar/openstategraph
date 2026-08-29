@@ -517,6 +517,73 @@ def unrun_query_claim(candidate: str, tool_use: Any, nodes: Any = ()) -> str | N
     return None
 
 
+def values_no_statement_carried(state: Any, values: Any) -> frozenset[str]:
+    """Which of `values` appear in **no statement this run executed** — `155`.
+
+    The third reader of the run's own record, and the one that answers a claim
+    rather than a suspicion. `127`'s disclosure says *"the answer above is for
+    Middle East Gulf (MEG) on `load_shipping_region_v2`"* — a claim that a
+    result was obtained on that axis, for that value. The note carries no such
+    knowledge: `resolve.vocabulary` mints it when it **resolves the word**,
+    before the model runs. Nothing between there and `_output` asked whether
+    the run went on to use it, and live on 2026-08-28 a run that answered
+    nothing carried the sentence anyway.
+
+    What settles it is not the prose. The live non-answer names the canonical
+    value itself (*"location → MEG"*), so a search of the answer would have
+    passed exactly the run this exists for; and asking the model whether it
+    used the resolution is the thing `127` was filed to stop relying on.
+
+    The evidence for *"the answer is for this value"* is a statement that
+    carried it **and came back with data**, and `counted_rows` holds both
+    halves already: `exchanges_in`, every statement this run executed on both
+    rails — the agent's own `tool_use[node]["queries"]` and the message rail a
+    node-run query leaves behind — and `cells_of`, whose settled rule is that
+    *"a payload that declares itself unsuccessful contributes nothing at
+    all"*.
+
+    That second half was learned live, three runs in, and no fixture would have
+    taught it. Every refusal measured on 2026-08-29 had **sent** a statement
+    carrying the value and been answered `{"ok": false}` by the warehouse — an
+    invalid column, twice — and then published *"the answer above is for
+    Middle East Gulf (MEG)"* over *"I was unable to determine…"*. A statement
+    nobody answered is not a result.
+
+    A value **found** is dropped from the result, so the default is `127`'s
+    sentence and this only ever subtracts a claim. Matching is a case-folded
+    containment, which errs the same way: a value that matches loosely is
+    treated as used, and the reader gets exactly the paragraph they got before.
+
+    **And it says nothing at all about a run with no statement rail.** A record
+    showing neither an executed statement nor a bound capability is one this
+    cannot speak about — a writer that resolved a term and wrote about it has
+    no statements to be missing from — so nothing is subtracted and `127`'s
+    sentence stands. That gate is what keeps this off correct work (`133`); it
+    is not a guess about what such a run did.
+
+    Two resolutions of one word are the case that makes this per-value rather
+    than per-run. *"Persian Gulf"* is genuinely live on two axes in the same
+    warehouse — a shipping region and a chokepoint geofence — and a run that
+    queried one of them was, before this, disclosed as being *"for"* both.
+    """
+    from openstategraph.counted_rows import exchanges_in, statement_was_answered
+
+    wanted = [str(v) for v in (values or ()) if str(v).strip()]
+    if not wanted:
+        return frozenset()
+    record = state if isinstance(state, Mapping) else {}
+    executed = exchanges_in(record)
+    if not executed:
+        rows = record.get("tool_use") or {}
+        rows = rows if isinstance(rows, dict) else {}
+        if not any(isinstance(row, dict) and row.get("bound") for row in rows.values()):
+            return frozenset()
+    answered = " \n".join(
+        sql for sql, result in executed if statement_was_answered(result)
+    ).casefold()
+    return frozenset(v for v in wanted if v.casefold() not in answered)
+
+
 def capability_door(answer: str, suggestion: Any, tool_use: Any) -> str | None:
     """What a developer is offered to *build*, or None — one verdict, both doors.
 
