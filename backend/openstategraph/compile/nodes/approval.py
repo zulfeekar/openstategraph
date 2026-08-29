@@ -8,18 +8,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    # Types only — `from __future__ import annotations` keeps langgraph's
-    # store out of this module's import graph, the pattern `loader.py`
-    # established. The name is what matters here: `BaseStore` is the memory
-    # store, never the filesystem `WorkflowStore` (ticket 12).
-
-    # `mounted_graphs` is annotated with it below. The runtime import is
-    # deliberately local to `builder_for` — `compile.composition` imports
-    # back into this module — so the forward reference had nothing to
-    # resolve against and both gates said so: ruff `F821` and mypy
-    # `name-defined` (`organisms-first-class` 47).
-    pass
 from openstategraph.compile.workflow_compiler import (
     CompiledPlan,
 )
