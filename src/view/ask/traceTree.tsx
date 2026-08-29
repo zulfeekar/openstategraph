@@ -90,6 +90,11 @@ export interface SpawnDetail {
    * it (`memory-and-replay` 54). */
   readonly spawnId?: string;
   readonly outcome?: 'ok' | 'error' | 'detached' | 'unknown';
+  /** The server's offset on the `settled` frame that closed this child — the
+   * other end of a lane's bar (`memory-and-replay` 50). Carried here rather
+   * than as a row of its own, for the reason the outcome is: a child that
+   * started and a child that stopped are one lane. */
+  readonly settledMs?: number | null;
 }
 
 /**

@@ -928,7 +928,18 @@ export function AskPanel({
             row: T,
           ): T =>
             row.spawn && row.spawn.spawnId === event.spawnId
-              ? ({ ...row, spawn: { ...row.spawn, outcome: event.outcome } } as T)
+              ? ({
+                  ...row,
+                  spawn: {
+                    ...row.spawn,
+                    outcome: event.outcome,
+                    // The other end of the bar, kept because 50 draws it: a
+                    // child lane's span is its two dated frames, which is a
+                    // measured start and end rather than the gap between
+                    // whichever frames happened to arrive.
+                    settledMs: event.elapsedMs,
+                  },
+                } as T)
               : row;
           for (let i = 0; i < spawnRows.length; i += 1) {
             spawnRows[i] = closed(spawnRows[i] as SpawnedTaskRow);

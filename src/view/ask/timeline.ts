@@ -39,6 +39,14 @@
  * span is attributed to whichever frames arrived. The UI says so in a line
  * under the bars rather than implying otherwise with a precise-looking number.
  *
+ * That admission used to end here, with the sentence *"the UI must not claim
+ * otherwise"* — and a column of bars read top to bottom claims otherwise
+ * whatever the caption says. `buildLanes` at the foot of this module is the
+ * answer to it (`memory-and-replay` 50): a dispatched child gets a lane of its
+ * own, and its bar is a **measured** start and end, because 46 dated every
+ * frame and 54 gave every `spawn` a `settled` to close it. The sentence above
+ * still binds every bar in the run's own lane, and nothing else.
+ *
  * Until 2026-08-29 this paragraph blamed the library for the missing start,
  * and the blame was misplaced. LangGraph publishes seven stream modes and the
  * backend asks for three (`api/streaming.py`: `["updates", "messages",
@@ -96,6 +104,16 @@ export interface TimelineRow {
      * open, and absent for good against a backend that closes nothing —
      * which is why it is optional rather than defaulted to a word. */
     readonly outcome?: 'ok' | 'error' | 'detached' | 'unknown';
+    /**
+     * The server's offset on the `settled` frame that closed this child — the
+     * *other end of the bar*, and the reason 50 waited for 54.
+     *
+     * Written onto the spawn row by `AskPanel` when the close arrives, rather
+     * than arriving as a row of its own: a child that started and a child that
+     * stopped are one lane, and a second row would read as a second child.
+     * Absent exactly when `outcome` is, and for the same reasons.
+     */
+    readonly settledMs?: number | null;
   };
 }
 
@@ -327,4 +345,282 @@ export function barWidthPercent(step: TimelineStep, totalMs: number | null): num
 export function barOffsetPercent(step: TimelineStep, totalMs: number | null): number {
   if (totalMs === null || totalMs <= 0 || step.startMs === null) return 0;
   return Math.min(98.5, (step.startMs / totalMs) * 100);
+}
+
+// ---------------------------------------------------------------------------
+// Lanes — `memory-and-replay` 50
+// ---------------------------------------------------------------------------
+
+/**
+ * How a lane ended, in the run's own words (`memory-and-replay` 54's
+ * `outcome`). `null` is a real state and not a fifth word: the child is still
+ * open, or the backend closes nothing at all.
+ */
+export type LaneEnding = 'ok' | 'error' | 'detached' | 'unknown';
+
+/** One row of the chart: a thing whose bar may legitimately overlap another's. */
+export interface RunLane {
+  /** `'run'` for the graph's own lane, otherwise the child's `spawnId`. */
+  readonly key: string;
+  /** What to call it — see `buildLanes` for where the word comes from. */
+  readonly name: string;
+  readonly kind: 'run' | 'fanout' | 'subagent' | 'async';
+  /** The canvas node that announced this child. `null` on the run's lane. */
+  readonly parent: string | null;
+  readonly taskId: string | null;
+  /** The lane's own start on the server's clock: the `spawn` frame's offset. */
+  readonly startMs: number | null;
+  /** The `settled` frame's offset. `null` while the lane is open-ended. */
+  readonly endMs: number | null;
+  /**
+   * A **measured** span between two dated frames — not a gap between whichever
+   * frames arrived, which is what a bar in the run's lane still is.
+   *
+   * `null` whenever either end is missing, never `0`: `launch-readiness` 108's
+   * rule, and the whole reason this ticket was blocked on 54.
+   */
+  readonly durationMs: number | null;
+  /** The run never said this lane ended. A different claim from a bar that
+   * has an end, and a renderer must draw it as one. */
+  readonly openEnded: boolean;
+  readonly ending: LaneEnding | null;
+  /**
+   * One of several lanes that share a name **and overlap in time** — "the 2nd
+   * of 3 `impact-analyst`s". `null` when the name is unambiguous while this
+   * lane is open.
+   *
+   * Deliberately not `visit`. `visit` counts laps of one node and means
+   * *sequence*; this counts siblings and means *simultaneity*, and a chart on
+   * which they render alike is the drawing this ticket exists to stop.
+   */
+  readonly sibling: { readonly index: number; readonly of: number } | null;
+  /** The bars that belong to this lane, in the order they fired. */
+  readonly steps: readonly TimelineStep[];
+}
+
+export interface RunLanes {
+  /** The run's own lane first, then children in the order they were announced. */
+  readonly lanes: readonly RunLane[];
+  /** The recording's own wall clock — where an open-ended bar reaches. */
+  readonly totalMs: number | null;
+}
+
+/** The run's own lane, named as the History panel already names it. */
+const RUN_LANE = 'The workflow';
+
+/**
+ * Folds a run's frames into lanes: rows whose bars may overlap.
+ *
+ * A partition of `buildTimeline`'s bars, never a second derivation of them —
+ * every bar that fold produces lands on exactly one lane, so the two cannot
+ * come to disagree about what ran.
+ *
+ * # What a lane is, and what the other candidates became
+ *
+ * **A lane is a `spawn` of kind `fanout`, `subagent` or `async`**, keyed on
+ * `spawnId`. The other candidates the data offers are all real and none of
+ * them is the axis:
+ *
+ * - A **`taskId`** is the join *within* a lane, not the lane. It is `null` for
+ *   a `subgraph` spawn, and 54 settled that a join for three kinds out of four
+ *   is not a join.
+ * - A **checkpoint namespace** is a mount, and a mount is not a lane — below.
+ * - A **canvas node** is what a lane's steps are drawn from, not the lane: one
+ *   `worker` node wears four concurrent children in the recorded run.
+ *
+ * Everything else — every top-level step, every revise lap, every mount —
+ * stays on the run's own lane, where sequence is the truth.
+ *
+ * # Fan-out, mount and revise loop, told apart in the data
+ *
+ * The three look identical on a chart and are three different claims, so the
+ * discriminator is never the shape:
+ *
+ * | | what says so |
+ * | --- | --- |
+ * | a fan-out child | a `spawn` frame with `kind: "fanout"`, minted from an entry in the orchestrator's own `subtasks` plan. Siblings arrive on one frame carrying one `elapsedMs`, so their overlap is recorded rather than inferred |
+ * | a mounted workflow | a `spawn` frame with `kind: "subgraph"`, minted from a checkpoint namespace appearing for the first time. **Not a lane**: it is one node on the canvas and its parent blocks inside it, so it folds into the parent's bar exactly as `buildTimeline`'s rule 2 already folds it. That also settles the collapse depth — `nested-mounts` is three documents and yields one lane, because the rule is about what a mount *is* rather than about how deep a reader can bear to look |
+ * | a revise lap | **no spawn frame at all** — the same top-level node reporting again. It keeps its `visit` counter and stays a second bar in the run's lane |
+ *
+ * # Where a lane's name comes from
+ *
+ * From the `label` the **run** put on the `spawn` frame, and from nowhere
+ * else: the orchestrator's chosen archetype for a `fanout` child, the
+ * `subagent_type` the model asked for for the other two. Read against the two
+ * tickets that were already paid for here —
+ *
+ * - **39** (a lane named by the compiler): this name never passes through
+ *   `safe_name`. It is minted where the run resolved it, so nothing is
+ *   reversed and nothing is guessed; a run that gives no name gives its own
+ *   subtask id instead, and that is left exactly as stored.
+ * - **40** (a lane called `1`): the fallback is a domain id a reader can act
+ *   on — the string that appears in `worker_results`, on the card's chip and
+ *   in the trace — never an invocation counter, which names nothing.
+ *
+ * **A name is not an identity**, which is the second half and the one a
+ * fan-out breaks: `stress-review` dispatched four children all called
+ * `impact-analyst`. So the lane is *keyed* on `spawnId` and *named* by the
+ * label, and overlapping namesakes carry `sibling` to say which of them this
+ * is.
+ *
+ * # What a lane claims about time
+ *
+ * A child lane's bar is a **measured** start and end — two dated frames, the
+ * `spawn` and the `settled` (46 and 54 together). That is a stronger claim
+ * than any bar in the run's lane can make, which is still a span between
+ * whichever frames arrived, and the difference is worth keeping visible.
+ *
+ * A lane the run never closed has `endMs: null`, `durationMs: null` and
+ * `openEnded: true`, and its `ending` says which kind of open it is —
+ * `detached` for a background child still working outside this run, `unknown`
+ * for a recording that ended owing an account, `null` for a child that has
+ * simply not finished yet. None of them is given a number, because the run
+ * measured none.
+ *
+ * ## What this fold still does not model
+ *
+ * **Two top-level branches running in parallel.** In the recorded run the
+ * router opened both desks in one superstep, so the `deep` mount ran
+ * alongside the whole supervisor branch — and neither has a `spawn` frame
+ * saying they are concurrent with *each other*, because a branch is not a
+ * child. They stay bars in the run's lane, span-attributed, with the caveat
+ * that lane already carries. Named here rather than left for a reader to
+ * discover.
+ */
+export function buildLanes(rows: readonly TimelineRow[]): RunLanes {
+  const { steps, totalMs } = buildTimeline(rows);
+
+  type Child = { -readonly [K in keyof RunLane]: RunLane[K] } & { steps: TimelineStep[] };
+  const children: Child[] = [];
+
+  for (const row of rows) {
+    const spawn = row.spawn;
+    // A mount folds; the run's own steps are the run's own lane. Only a child
+    // that can outlive the frame that announced it earns a row.
+    if (!spawn || spawn.kind === 'subgraph') continue;
+    const startMs = Number.isFinite(row.elapsedMs as number) ? (row.elapsedMs as number) : null;
+    const endMs = Number.isFinite(spawn.settledMs as number) ? (spawn.settledMs as number) : null;
+    children.push({
+      // A backend older than 54 mints no `spawnId`; the lane still exists and
+      // is still keyed uniquely, it simply can never be closed.
+      key: spawn.spawnId ?? `spawn@${children.length}`,
+      name: spawn.label,
+      kind: spawn.kind === 'subagent' || spawn.kind === 'async' ? spawn.kind : 'fanout',
+      parent: stepLabel(row.node),
+      taskId: row.taskId,
+      startMs,
+      endMs,
+      durationMs: startMs === null || endMs === null ? null : Math.max(0, endMs - startMs),
+      openEnded: endMs === null,
+      ending: spawn.outcome ?? null,
+      sibling: null,
+      steps: [],
+    });
+  }
+
+  const runLane: Child = {
+    key: 'run',
+    name: RUN_LANE,
+    kind: 'run',
+    parent: null,
+    taskId: null,
+    startMs: steps.length > 0 ? (steps[0]?.startMs ?? null) : null,
+    endMs: totalMs,
+    durationMs: totalMs,
+    // The reference frame: the recording's end *is* its end, so it is never
+    // the open-ended shape even while the run is still streaming.
+    openEnded: false,
+    ending: null,
+    sibling: null,
+    steps: [],
+  };
+
+  for (const step of steps) {
+    const lane = claim(children, step) ?? runLane;
+    // `visit` is renumbered **within the lane**, and that is not tidiness.
+    // `buildTimeline` counts visits across the whole run, so the recorded
+    // fan-out's four children came out `visit 1..4` — the panel's badge for
+    // *a fourth revise lap of one node*, said about four workers that ran two
+    // at a time. A lap is a lap of this lane or it is nothing.
+    lane.steps.push(
+      lane === runLane
+        ? step
+        : { ...step, visit: lane.steps.filter((seen) => seen.label === step.label).length + 1 },
+    );
+  }
+  assignSiblings(children, totalMs);
+
+  return { lanes: [runLane, ...children], totalMs };
+}
+
+/**
+ * The child lane a bar belongs to, or nothing — it is the run's own.
+ *
+ * Matched on the task id **inside the lane's window**, not on the task id
+ * alone. The window is what makes a second wave of the same fan-out a second
+ * set of lanes rather than a re-entry of the first: a worker's completion
+ * frame lands between its child's two dated frames by construction, and a run
+ * that reuses a subtask id across laps still resolves to the lap that was open.
+ */
+function claim<T extends { taskId: string | null; startMs: number | null; endMs: number | null }>(
+  lanes: readonly T[],
+  step: TimelineStep,
+): T | undefined {
+  if (step.taskId === null) return undefined;
+  const named = lanes.filter((lane) => lane.taskId === step.taskId);
+  const within = named.find(
+    (lane) =>
+      lane.startMs !== null &&
+      step.startMs !== null &&
+      step.startMs >= lane.startMs &&
+      (lane.endMs === null || step.startMs <= lane.endMs),
+  );
+  // With no clock there is no window, so an unambiguous name is all there is;
+  // an ambiguous one claims nothing rather than claiming wrongly (ticket 39's
+  // rule, one level down).
+  return within ?? (named.length === 1 ? named[0] : undefined);
+}
+
+/**
+ * Numbers the lanes that share a name **and are open at the same time**.
+ *
+ * Per overlapping group, never per run: `stress-review` fanned out twice under
+ * one archetype, and "1 of 2, 2 of 2, 1 of 2, 2 of 2" is what happened, while
+ * "1 of 4 … 4 of 4" would say the second wave was still waiting on the first.
+ * An open-ended lane is treated as reaching the end of the recording, which is
+ * as far as anything is known to have been running.
+ */
+function assignSiblings(
+  lanes: readonly { -readonly [K in keyof RunLane]: RunLane[K] }[],
+  totalMs: number | null,
+): void {
+  const byName = new Map<string, (typeof lanes)[number][]>();
+  for (const lane of lanes) {
+    const group = byName.get(lane.name) ?? [];
+    group.push(lane);
+    byName.set(lane.name, group);
+  }
+  for (const group of byName.values()) {
+    if (group.length < 2) continue;
+    const end = (lane: (typeof group)[number]): number =>
+      lane.endMs ?? totalMs ?? Number.MAX_SAFE_INTEGER;
+    let cluster: (typeof group)[number][] = [];
+    let reach = -1;
+    const close = (): void => {
+      if (cluster.length > 1) {
+        cluster.forEach((lane, index) => {
+          lane.sibling = { index: index + 1, of: cluster.length };
+        });
+      }
+      cluster = [];
+      reach = -1;
+    };
+    for (const lane of group) {
+      const start = lane.startMs ?? 0;
+      if (cluster.length > 0 && start > reach) close();
+      cluster.push(lane);
+      reach = Math.max(reach, end(lane));
+    }
+    close();
+  }
 }

@@ -1,0 +1,1561 @@
+{
+ "_": [
+  "One real run of `stress-review` (backend/tests/workflows/stress/stress-review),",
+  "recorded off POST /api/runs/stream frame by frame on 2026-08-29 against",
+  "ollama:gpt-oss:120b-cloud \u2014 55.4 s, 866 frames, developer audience.",
+  "",
+  "Trimmed to the frames a timeline is built from (`update`, `spawn`, `settled`,",
+  "`done`) and to the fields it reads. The 722 `token` and 15 `progress` frames",
+  "are dropped because AskPanel makes no activity row out of them, and every",
+  "`output` is dropped because none of the assertions is about what was said \u2014",
+  "the same choice `recorded_chinook_assistant_run.json` made, for the same",
+  "reason.",
+  "",
+  "Why this run: the router opened both branches, the supervisor fanned out",
+  "twice \u2014 two children at 5060 ms and two more at 27564 ms after the grader",
+  "sent the plan back \u2014 all four labelled `impact-analyst`, and a mount two",
+  "levels deep ran under the grader. Every case ticket 50 has to tell apart is",
+  "in one recording."
+ ],
+ "frames": [
+  {
+   "type": "update",
+   "seq": 0,
+   "elapsedMs": 5,
+   "node": "in1",
+   "taskId": "__turn_reset__",
+   "internal": false,
+   "namespace": [],
+   "activeNode": "in1"
+  },
+  {
+   "type": "update",
+   "seq": 1,
+   "elapsedMs": 1190,
+   "node": "router",
+   "taskId": null,
+   "internal": false,
+   "namespace": [],
+   "activeNode": "router"
+  },
+  {
+   "type": "spawn",
+   "seq": 2,
+   "elapsedMs": 2775,
+   "spawnId": "spawn-0",
+   "kind": "subgraph",
+   "parent": "router",
+   "label": "deep",
+   "taskId": null,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ]
+  },
+  {
+   "type": "update",
+   "seq": 3,
+   "elapsedMs": 2776,
+   "node": "PatchToolCallsMiddleware.before_agent",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 4,
+   "elapsedMs": 2776,
+   "node": "SummarizationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 5,
+   "elapsedMs": 2777,
+   "node": "OffloadMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 6,
+   "elapsedMs": 2778,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "spawn",
+   "seq": 54,
+   "elapsedMs": 5060,
+   "spawnId": "spawn-1",
+   "kind": "fanout",
+   "parent": "lead",
+   "label": "impact-analyst",
+   "taskId": "task-1",
+   "namespace": []
+  },
+  {
+   "type": "spawn",
+   "seq": 55,
+   "elapsedMs": 5060,
+   "spawnId": "spawn-2",
+   "kind": "fanout",
+   "parent": "lead",
+   "label": "impact-analyst",
+   "taskId": "task-2",
+   "namespace": []
+  },
+  {
+   "type": "update",
+   "seq": 56,
+   "elapsedMs": 5060,
+   "node": "lead",
+   "taskId": null,
+   "internal": false,
+   "namespace": [],
+   "activeNode": "lead"
+  },
+  {
+   "type": "update",
+   "seq": 58,
+   "elapsedMs": 7026,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 59,
+   "elapsedMs": 7027,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 62,
+   "elapsedMs": 7030,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 63,
+   "elapsedMs": 7031,
+   "node": "SummarizationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 64,
+   "elapsedMs": 7031,
+   "node": "OffloadMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 65,
+   "elapsedMs": 7032,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 67,
+   "elapsedMs": 7847,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 68,
+   "elapsedMs": 7848,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 71,
+   "elapsedMs": 7851,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 72,
+   "elapsedMs": 7852,
+   "node": "SummarizationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 73,
+   "elapsedMs": 7853,
+   "node": "OffloadMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 74,
+   "elapsedMs": 7854,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 192,
+   "elapsedMs": 13314,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 193,
+   "elapsedMs": 13314,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "activeNode": "deep"
+  },
+  {
+   "type": "update",
+   "seq": 194,
+   "elapsedMs": 13317,
+   "node": "deep",
+   "taskId": null,
+   "internal": false,
+   "namespace": [],
+   "activeNode": "deep"
+  },
+  {
+   "type": "settled",
+   "seq": 195,
+   "elapsedMs": 13317,
+   "spawnId": "spawn-0",
+   "kind": "subgraph",
+   "parent": "router",
+   "label": "deep",
+   "taskId": null,
+   "namespace": [
+    "deep:f939824c-bfa8-fd35-5efc-f03e10d75010"
+   ],
+   "outcome": "ok"
+  },
+  {
+   "type": "update",
+   "seq": 196,
+   "elapsedMs": 13328,
+   "node": "out2",
+   "taskId": null,
+   "internal": false,
+   "namespace": [],
+   "activeNode": "out2"
+  },
+  {
+   "type": "spawn",
+   "seq": 197,
+   "elapsedMs": 13332,
+   "spawnId": "spawn-3",
+   "kind": "subgraph",
+   "parent": "out2",
+   "label": "worker",
+   "taskId": null,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ]
+  },
+  {
+   "type": "update",
+   "seq": 198,
+   "elapsedMs": 13333,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 199,
+   "elapsedMs": 13334,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:f7f28e84-f0b4-05e4-eea9-e8cde5e935b7"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 201,
+   "elapsedMs": 14882,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 202,
+   "elapsedMs": 14883,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 205,
+   "elapsedMs": 14886,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 206,
+   "elapsedMs": 14887,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 208,
+   "elapsedMs": 14941,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:f7f28e84-f0b4-05e4-eea9-e8cde5e935b7"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 209,
+   "elapsedMs": 14942,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:f7f28e84-f0b4-05e4-eea9-e8cde5e935b7"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 212,
+   "elapsedMs": 14946,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:f7f28e84-f0b4-05e4-eea9-e8cde5e935b7"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 213,
+   "elapsedMs": 14947,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:f7f28e84-f0b4-05e4-eea9-e8cde5e935b7"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 215,
+   "elapsedMs": 16545,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 216,
+   "elapsedMs": 16546,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 219,
+   "elapsedMs": 16548,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 220,
+   "elapsedMs": 16549,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 222,
+   "elapsedMs": 16698,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:f7f28e84-f0b4-05e4-eea9-e8cde5e935b7"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 223,
+   "elapsedMs": 16699,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:f7f28e84-f0b4-05e4-eea9-e8cde5e935b7"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 226,
+   "elapsedMs": 16702,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:f7f28e84-f0b4-05e4-eea9-e8cde5e935b7"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 227,
+   "elapsedMs": 16703,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:f7f28e84-f0b4-05e4-eea9-e8cde5e935b7"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 283,
+   "elapsedMs": 17723,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:f7f28e84-f0b4-05e4-eea9-e8cde5e935b7"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 284,
+   "elapsedMs": 17724,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:f7f28e84-f0b4-05e4-eea9-e8cde5e935b7"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 285,
+   "elapsedMs": 17728,
+   "node": "worker",
+   "taskId": "task-2",
+   "internal": false,
+   "namespace": [],
+   "activeNode": "worker"
+  },
+  {
+   "type": "settled",
+   "seq": 286,
+   "elapsedMs": 17728,
+   "spawnId": "spawn-2",
+   "kind": "fanout",
+   "parent": "lead",
+   "label": "impact-analyst",
+   "taskId": "task-2",
+   "namespace": [],
+   "outcome": "ok"
+  },
+  {
+   "type": "settled",
+   "seq": 287,
+   "elapsedMs": 17728,
+   "spawnId": "spawn-3",
+   "kind": "subgraph",
+   "parent": "out2",
+   "label": "worker",
+   "taskId": null,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "outcome": "ok"
+  },
+  {
+   "type": "update",
+   "seq": 289,
+   "elapsedMs": 18583,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 290,
+   "elapsedMs": 18584,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 293,
+   "elapsedMs": 18588,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 294,
+   "elapsedMs": 18589,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 296,
+   "elapsedMs": 19362,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 297,
+   "elapsedMs": 19364,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 300,
+   "elapsedMs": 19369,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 301,
+   "elapsedMs": 19371,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 439,
+   "elapsedMs": 20943,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 440,
+   "elapsedMs": 20945,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:b8615c14-ad15-3d6b-d425-7f86525ba95e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 441,
+   "elapsedMs": 20947,
+   "node": "worker",
+   "taskId": "task-1",
+   "internal": false,
+   "namespace": [],
+   "activeNode": "worker"
+  },
+  {
+   "type": "settled",
+   "seq": 442,
+   "elapsedMs": 20947,
+   "spawnId": "spawn-1",
+   "kind": "fanout",
+   "parent": "lead",
+   "label": "impact-analyst",
+   "taskId": "task-1",
+   "namespace": [],
+   "outcome": "ok"
+  },
+  {
+   "type": "update",
+   "seq": 443,
+   "elapsedMs": 20948,
+   "node": "join",
+   "taskId": null,
+   "internal": false,
+   "namespace": [],
+   "activeNode": "join"
+  },
+  {
+   "type": "update",
+   "seq": 444,
+   "elapsedMs": 24849,
+   "node": "grader",
+   "taskId": null,
+   "internal": false,
+   "namespace": [],
+   "activeNode": "grader"
+  },
+  {
+   "type": "spawn",
+   "seq": 499,
+   "elapsedMs": 27564,
+   "spawnId": "spawn-4",
+   "kind": "fanout",
+   "parent": "lead",
+   "label": "impact-analyst",
+   "taskId": "task-1-1",
+   "namespace": []
+  },
+  {
+   "type": "spawn",
+   "seq": 500,
+   "elapsedMs": 27564,
+   "spawnId": "spawn-5",
+   "kind": "fanout",
+   "parent": "lead",
+   "label": "impact-analyst",
+   "taskId": "task-1-2",
+   "namespace": []
+  },
+  {
+   "type": "update",
+   "seq": 501,
+   "elapsedMs": 27564,
+   "node": "lead",
+   "taskId": null,
+   "internal": false,
+   "namespace": [],
+   "activeNode": "lead"
+  },
+  {
+   "type": "update",
+   "seq": 502,
+   "elapsedMs": 27583,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:ddcc5c77-efdc-69fa-9ed8-45b40506b38e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 503,
+   "elapsedMs": 27584,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 505,
+   "elapsedMs": 29012,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 506,
+   "elapsedMs": 29014,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 509,
+   "elapsedMs": 29019,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 510,
+   "elapsedMs": 29021,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 512,
+   "elapsedMs": 31032,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 513,
+   "elapsedMs": 31033,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 516,
+   "elapsedMs": 31038,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 517,
+   "elapsedMs": 31039,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 519,
+   "elapsedMs": 32507,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 520,
+   "elapsedMs": 32509,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 523,
+   "elapsedMs": 32514,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 524,
+   "elapsedMs": 32516,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 526,
+   "elapsedMs": 33265,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 527,
+   "elapsedMs": 33266,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 530,
+   "elapsedMs": 33269,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 531,
+   "elapsedMs": 33269,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 533,
+   "elapsedMs": 34067,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 534,
+   "elapsedMs": 34068,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 537,
+   "elapsedMs": 34072,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 538,
+   "elapsedMs": 34073,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 540,
+   "elapsedMs": 35145,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:ddcc5c77-efdc-69fa-9ed8-45b40506b38e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 541,
+   "elapsedMs": 35146,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:ddcc5c77-efdc-69fa-9ed8-45b40506b38e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 544,
+   "elapsedMs": 35150,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:ddcc5c77-efdc-69fa-9ed8-45b40506b38e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 545,
+   "elapsedMs": 35151,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:ddcc5c77-efdc-69fa-9ed8-45b40506b38e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 660,
+   "elapsedMs": 40120,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:ddcc5c77-efdc-69fa-9ed8-45b40506b38e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 661,
+   "elapsedMs": 40120,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:ddcc5c77-efdc-69fa-9ed8-45b40506b38e"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 662,
+   "elapsedMs": 40122,
+   "node": "worker",
+   "taskId": "task-1-2",
+   "internal": false,
+   "namespace": [],
+   "activeNode": "worker"
+  },
+  {
+   "type": "settled",
+   "seq": 663,
+   "elapsedMs": 40122,
+   "spawnId": "spawn-5",
+   "kind": "fanout",
+   "parent": "lead",
+   "label": "impact-analyst",
+   "taskId": "task-1-2",
+   "namespace": [],
+   "outcome": "ok"
+  },
+  {
+   "type": "update",
+   "seq": 821,
+   "elapsedMs": 41373,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 822,
+   "elapsedMs": 41374,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "worker:06515a36-4b7d-904c-41da-5564e6aee770"
+   ],
+   "activeNode": "worker"
+  },
+  {
+   "type": "update",
+   "seq": 823,
+   "elapsedMs": 41376,
+   "node": "worker",
+   "taskId": "task-1-1",
+   "internal": false,
+   "namespace": [],
+   "activeNode": "worker"
+  },
+  {
+   "type": "settled",
+   "seq": 824,
+   "elapsedMs": 41376,
+   "spawnId": "spawn-4",
+   "kind": "fanout",
+   "parent": "lead",
+   "label": "impact-analyst",
+   "taskId": "task-1-1",
+   "namespace": [],
+   "outcome": "ok"
+  },
+  {
+   "type": "update",
+   "seq": 825,
+   "elapsedMs": 41377,
+   "node": "join",
+   "taskId": null,
+   "internal": false,
+   "namespace": [],
+   "activeNode": "join"
+  },
+  {
+   "type": "update",
+   "seq": 826,
+   "elapsedMs": 44644,
+   "node": "grader",
+   "taskId": null,
+   "internal": false,
+   "namespace": [],
+   "activeNode": "grader"
+  },
+  {
+   "type": "spawn",
+   "seq": 827,
+   "elapsedMs": 44647,
+   "spawnId": "spawn-6",
+   "kind": "subgraph",
+   "parent": "grader",
+   "label": "audit",
+   "taskId": null,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1"
+   ]
+  },
+  {
+   "type": "update",
+   "seq": 828,
+   "elapsedMs": 44647,
+   "node": "in1",
+   "taskId": "__turn_reset__",
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 829,
+   "elapsedMs": 44649,
+   "node": "in1",
+   "taskId": "__turn_reset__",
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 830,
+   "elapsedMs": 44655,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149",
+    "linter:babb31f1-3981-be0b-27f0-97cd9587d85d"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 831,
+   "elapsedMs": 44656,
+   "node": "SummarizationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149",
+    "linter:babb31f1-3981-be0b-27f0-97cd9587d85d"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 833,
+   "elapsedMs": 46526,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149",
+    "linter:babb31f1-3981-be0b-27f0-97cd9587d85d"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 834,
+   "elapsedMs": 46526,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149",
+    "linter:babb31f1-3981-be0b-27f0-97cd9587d85d"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 837,
+   "elapsedMs": 46529,
+   "node": "tools",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149",
+    "linter:babb31f1-3981-be0b-27f0-97cd9587d85d"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 838,
+   "elapsedMs": 46530,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149",
+    "linter:babb31f1-3981-be0b-27f0-97cd9587d85d"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 839,
+   "elapsedMs": 46531,
+   "node": "SummarizationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149",
+    "linter:babb31f1-3981-be0b-27f0-97cd9587d85d"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 846,
+   "elapsedMs": 51305,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149",
+    "linter:babb31f1-3981-be0b-27f0-97cd9587d85d"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 847,
+   "elapsedMs": 51306,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149",
+    "linter:babb31f1-3981-be0b-27f0-97cd9587d85d"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 848,
+   "elapsedMs": 51308,
+   "node": "linter",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 849,
+   "elapsedMs": 51308,
+   "node": "out1",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "mount_lint:6675518a-90df-499a-3497-1cbfbb59d149"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 850,
+   "elapsedMs": 51310,
+   "node": "mount_lint",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 851,
+   "elapsedMs": 51315,
+   "node": "NarrationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "auditor:65dbd71e-ebab-5c5a-b069-55c734fdc8a0"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 852,
+   "elapsedMs": 51316,
+   "node": "SummarizationMiddleware.before_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "auditor:65dbd71e-ebab-5c5a-b069-55c734fdc8a0"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 858,
+   "elapsedMs": 52477,
+   "node": "model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "auditor:65dbd71e-ebab-5c5a-b069-55c734fdc8a0"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 859,
+   "elapsedMs": 52478,
+   "node": "NarrationMiddleware.after_model",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1",
+    "auditor:65dbd71e-ebab-5c5a-b069-55c734fdc8a0"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 860,
+   "elapsedMs": 52489,
+   "node": "auditor",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 861,
+   "elapsedMs": 52490,
+   "node": "out1",
+   "taskId": null,
+   "internal": true,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1"
+   ],
+   "activeNode": "audit"
+  },
+  {
+   "type": "update",
+   "seq": 862,
+   "elapsedMs": 52492,
+   "node": "audit",
+   "taskId": null,
+   "internal": false,
+   "namespace": [],
+   "activeNode": "audit"
+  },
+  {
+   "type": "settled",
+   "seq": 863,
+   "elapsedMs": 52492,
+   "spawnId": "spawn-6",
+   "kind": "subgraph",
+   "parent": "grader",
+   "label": "audit",
+   "taskId": null,
+   "namespace": [
+    "audit:2332cdb6-d566-b5a6-6a5e-1981e7ae39a1"
+   ],
+   "outcome": "ok"
+  },
+  {
+   "type": "update",
+   "seq": 864,
+   "elapsedMs": 52493,
+   "node": "out1",
+   "taskId": null,
+   "internal": false,
+   "namespace": [],
+   "activeNode": "out1"
+  },
+  {
+   "type": "done",
+   "seq": 865,
+   "elapsedMs": 52502
+  }
+ ]
+}
