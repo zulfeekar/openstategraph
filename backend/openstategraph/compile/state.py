@@ -12,7 +12,8 @@ this seam.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Annotated, Any, TypedDict
+from dataclasses import dataclass
+from typing import Annotated, Any, TypedDict, get_type_hints
 
 from langgraph.managed import RemainingSteps
 
@@ -110,13 +111,79 @@ NO_ANSWER_PRODUCED = "The workflow finished without producing an answer."
 STEP_BUDGET_FLOOR = 3
 
 
+@dataclass(frozen=True)
+class _CustomerVisible:
+    """Marker: this channel's contents may cross the customer boundary.
+
+    ## Why the audience of a channel is declared *on the channel*
+
+    `the-boundary-nobody-checked/02`. The audience of a state channel was
+    written down twice already — the table in `api/audience.py`, and the
+    comments below — and `GET /api/threads/{id}` published every channel to
+    everybody because it had neither in code. A third spelling, a key list
+    beside that door's `_PRIVATE_PREFIXES`, is exactly how the same defect
+    comes back a third time: three lists that agree today and disagree after
+    the next channel.
+
+    So the declaration is the annotation, and `customer_visible_channels()`
+    below reads it back. Adding a channel and deciding who may read it is one
+    edit, in one place, and they cannot drift because there is only one of
+    them.
+
+    ## Two decisions inside the marker
+
+    **Unmarked means developer-only**, so the default is a refusal. `RunState`
+    is where the machinery accumulates — a tool's arguments and results, a
+    grader's reason, a deep agent's files — and a channel added tomorrow by
+    somebody thinking about a reducer is refused to a customer without them
+    having to think about a boundary at all. This is the direction
+    `api/audience.py`'s move 1 already takes for a request.
+
+    **It goes first in the metadata, before the reducer.** LangGraph reads the
+    reducer from `__metadata__[-1]` (`langgraph/graph/state.py::_is_field_binop`,
+    read off the installed version rather than remembered), so a marker
+    appended after a reducer would quietly demote a merged channel to a
+    last-value one — an `InvalidUpdateError` shipped by a security fix. Pinned
+    in `tests/test_a_stored_run_answers_to_an_audience.py` rather than trusted
+    to this paragraph.
+
+    `compile/` cannot import `api/`, so this says *customer-visible* rather
+    than naming `api.audience.Audience`. The two meet in `api/audience.py`,
+    which is the one module allowed to know both.
+    """
+
+
+#: This channel is part of what a customer's own run already publishes.
+CUSTOMER_VISIBLE = _CustomerVisible()
+
+
+def customer_visible_channels() -> frozenset[str]:
+    """The `RunState` channels a customer may read, off the channels themselves.
+
+    The set every door serving a customer filters by. It is deliberately the
+    same set a customer's live `done` frame carries — answer, question,
+    decisions, routes, outputs, nested outputs and attempts — because a
+    customer's *history* being a different shape from their *run* is the
+    inconsistency the two audiences exist to remove.
+    """
+    hints = get_type_hints(RunState, include_extras=True)
+    return frozenset(
+        name
+        for name, annotation in hints.items()
+        if any(
+            isinstance(item, _CustomerVisible)
+            for item in getattr(annotation, "__metadata__", ())
+        )
+    )
+
+
 class RunState(TypedDict, total=False):
     """The shared state schema for a compiled workflow."""
 
     messages: Annotated[list[Any], reducer_for(Reducer.ADD_MESSAGES)]
-    question: str
+    question: Annotated[str, CUSTOMER_VISIBLE]
     #: node id -> branch label chosen. Read by the compiler's `path` functions.
-    decisions: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    decisions: Annotated[dict[str, Any], CUSTOMER_VISIBLE, reducer_for(Reducer.MERGE)]
     #: agent node id -> tool names the runtime refused, because the model
     #: called something it was never given (`every-workflow-green` 33).
     #:
@@ -159,10 +226,10 @@ class RunState(TypedDict, total=False):
     #: key and every trace row, warning and test reads it. Ticket 09 is the
     #: record of learning that a new value there changes control flow.
     #: MERGE, because a document may hold several classifiers.
-    routes: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    routes: Annotated[dict[str, Any], CUSTOMER_VISIBLE, reducer_for(Reducer.MERGE)]
     #: node id -> that node's textual output, so a downstream node can read it.
-    outputs: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
-    answer: Annotated[str, reducer_for(Reducer.LATEST_NONEMPTY)]
+    outputs: Annotated[dict[str, Any], CUSTOMER_VISIBLE, reducer_for(Reducer.MERGE)]
+    answer: Annotated[str, CUSTOMER_VISIBLE, reducer_for(Reducer.LATEST_NONEMPTY)]
     #: output node id -> `{"title", "order"}` for every Output node that
     #: actually finished this run (`launch-readiness/174`).
     #:
@@ -195,7 +262,7 @@ class RunState(TypedDict, total=False):
     #: per step`, with the raw error then rendered into the chat panel as
     #: if it were the model's own answer.
     feedback: Annotated[str, reducer_for(Reducer.LATEST_NONEMPTY)]
-    attempts: Annotated[int, reducer_for(Reducer.MAX)]
+    attempts: Annotated[int, CUSTOMER_VISIBLE, reducer_for(Reducer.MAX)]
     #: grader node id -> how many candidates *that grader* has judged this turn
     #: (`workflow-gallery` 21). The revision budget, and the only counter a
     #: grader's `maxAttempts` is measured against.
@@ -312,7 +379,7 @@ class RunState(TypedDict, total=False):
     #: `/api/runs`, which has no frame stream to rebuild it from the way
     #: `streaming.py` does (`every-workflow-green` 16). MERGE, because a
     #: document may mount several packages and each writes its own keys.
-    nested_outputs: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
+    nested_outputs: Annotated[dict[str, Any], CUSTOMER_VISIBLE, reducer_for(Reducer.MERGE)]
     #: guardrail node id -> what its policy did, as `{entity, strategy,
     #: count}` rows. **Counts and entity types, never values** — the whole
     #: point of the channel is that a developer can see "3 emails redacted

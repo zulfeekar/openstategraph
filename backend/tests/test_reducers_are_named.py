@@ -89,6 +89,36 @@ class TestTheImplementations:
         assert latest("kept", RESET) == ""
 
 
+def _annotated_channels() -> list[tuple[str, list[str]]]:
+    """Every `RunState` channel declared `Annotated[...]`, with its metadata.
+
+    Parsed rather than split on commas: `dict[str, Any]` carries one of its
+    own, and a census that mis-reads the type as metadata reports a defect
+    that is not there.
+    """
+    import ast
+    import textwrap
+
+    from openstategraph.compile import node_runtime
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(node_runtime.RunState)))
+    found: list[tuple[str, list[str]]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.AnnAssign) or not isinstance(node.target, ast.Name):
+            continue
+        annotation = node.annotation
+        if not (
+            isinstance(annotation, ast.Subscript)
+            and getattr(annotation.value, "id", "") == "Annotated"
+            and isinstance(annotation.slice, ast.Tuple)
+        ):
+            continue
+        found.append(
+            (node.target.id, [ast.unparse(item) for item in annotation.slice.elts[1:]])
+        )
+    return found
+
+
 class TestNothingBindsAnAnonymousReducer:
     """The guard, and the reason this file is not just three unit tests.
 
@@ -98,16 +128,31 @@ class TestNothingBindsAnAnonymousReducer:
     """
 
     def test_run_state_declares_its_reducers_by_name(self) -> None:
-        from openstategraph.compile import node_runtime
+        """Nothing in a channel's metadata may be a reducer this file cannot name.
 
-        source = inspect.getsource(node_runtime.RunState)
+        Stated as the rule rather than as its old proxy, "an annotated line has
+        a reducer": since `the-boundary-nobody-checked/02` a channel also
+        carries its audience in `Annotated[...]` (`CUSTOMER_VISIBLE`), and
+        `question` is annotated for that alone — which the proxy read as an
+        anonymous reducer.
+        """
+        for channel, metadata in _annotated_channels():
+            for item in metadata:
+                assert item == "CUSTOMER_VISIBLE" or item.startswith(
+                    "reducer_for(Reducer."
+                ), f"{channel}: {item}"
 
-        # Every `Annotated[...]` in the state schema resolves through
-        # `reducer_for`, so a stored document could name what it uses.
-        for line in source.splitlines():
-            if "Annotated[" not in line:
+    def test_a_marker_never_takes_the_reducers_place_at_the_end(self) -> None:
+        """LangGraph reads the reducer from `__metadata__[-1]`
+        (`langgraph/graph/state.py::_is_field_binop`), so a marker appended
+        after one would silently demote a merged channel to a last-value one —
+        an `InvalidUpdateError` arriving through a boundary fix. Asserted at
+        the source, beside the rule it protects; the compiled consequence is
+        pinned in `test_a_stored_run_answers_to_an_audience.py`."""
+        for channel, metadata in _annotated_channels():
+            if not any(item.startswith("reducer_for(Reducer.") for item in metadata):
                 continue
-            assert "reducer_for(Reducer." in line, line.strip()
+            assert metadata[-1].startswith("reducer_for(Reducer."), channel
 
 
 class TestTheOtherSideIsNotNeededYet:

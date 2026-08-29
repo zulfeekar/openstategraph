@@ -40,6 +40,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from typing_extensions import Annotated
 
+from openstategraph.api.audience import Audience
 from openstategraph.api import threads as thread_queries
 
 
@@ -216,7 +217,9 @@ def usage_history() -> Any:
         {"question": "how many tracks?"},
         {"configurable": {"thread_id": "run-usage", "workflow_slug": "chinook-assistant"}},
     )
-    history = thread_queries.read_thread([saver], "run-usage")
+    history = thread_queries.read_thread(
+        [saver], "run-usage", audience=Audience.DEVELOPER
+    )
     assert history is not None
     return history
 
@@ -260,6 +263,8 @@ class TestWhatAStepCost:
         builder.compile(checkpointer=saver).invoke(
             {"question": "?"}, {"configurable": {"thread_id": "run-mute"}}
         )
-        history = thread_queries.read_thread([saver], "run-mute")
+        history = thread_queries.read_thread(
+            [saver], "run-mute", audience=Audience.DEVELOPER
+        )
         assert history is not None
         assert all(step.tokens is None for step in history.steps)

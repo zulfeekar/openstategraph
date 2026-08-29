@@ -209,7 +209,7 @@ class TestOneStoreTwoTables:
                       workflow_slug="w", answer="Hello world", bursts=written)
         )
         sink.close()
-        read = read_run_bursts(tmp_path / "runs.sqlite", thread_id="t1")
+        read = read_run_bursts(tmp_path / "runs.sqlite", thread_id="t1", audience="developer")
         assert read == written
         assert read[0].replay() == [(0, "Hel"), (7, "lo "), (14, "world")]
 
@@ -221,7 +221,8 @@ class TestOneStoreTwoTables:
             sink.record(RunRecord(thread_id="t", at=f"2026-08-29T10:0{turn}:00+0200",
                                   bursts=recorder.bursts()))
         sink.close()
-        assert [b.text for b in read_run_bursts(tmp_path / "runs.sqlite", thread_id="t")] == [
+        reader = read_run_bursts(tmp_path / "runs.sqlite", thread_id="t", audience="developer")
+        assert [b.text for b in reader] == [
             "first",
             "second",
         ]
@@ -230,7 +231,7 @@ class TestOneStoreTwoTables:
         sink = SqliteRunSink(tmp_path / "runs.sqlite")
         sink.record(RunRecord(thread_id="t", answer="from a function node"))
         sink.close()
-        assert read_run_bursts(tmp_path / "runs.sqlite", thread_id="t") == []
+        assert read_run_bursts(tmp_path / "runs.sqlite", thread_id="t", audience="developer") == []
 
     def test_reading_a_store_that_predates_this_ticket_is_not_an_error(
         self, tmp_path: Path
@@ -242,7 +243,7 @@ class TestOneStoreTwoTables:
         connection.execute("CREATE TABLE runs (kind TEXT, at TEXT, thread_id TEXT)")
         connection.commit()
         connection.close()
-        assert read_run_bursts(path, thread_id="t") == []
+        assert read_run_bursts(path, thread_id="t", audience="developer") == []
 
 
 class TestTheTextIsTheAnswersRule:
@@ -395,7 +396,9 @@ class TestARealRunLeavesItsCadenceBehind:
 
         (row,) = read_runs(tmp_path / "runs.sqlite", thread_id="t-real")
         assert row.answer == "Hello world"
-        bursts = read_run_bursts(tmp_path / "runs.sqlite", thread_id="t-real")
+        bursts = read_run_bursts(
+            tmp_path / "runs.sqlite", thread_id="t-real", audience="developer"
+        )
         assert [b.node for b in bursts] == ["agent-sql"]
         assert [text for _, text in bursts[0].replay()] == ["Hel", "lo ", "world"]
         assert bursts[0].audience == "developer"
@@ -441,7 +444,12 @@ class TestARealRunLeavesItsCadenceBehind:
             )
         )
         store.close()
-        assert read_run_bursts(tmp_path / "runs.sqlite", thread_id="t-quiet") == []
+        assert (
+            read_run_bursts(
+                tmp_path / "runs.sqlite", thread_id="t-quiet", audience="developer"
+            )
+            == []
+        )
 
 
 class TestWhatAReplayMayClaim:

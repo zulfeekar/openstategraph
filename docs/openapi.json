@@ -1,6 +1,15 @@
 {
   "components": {
     "schemas": {
+      "Audience": {
+        "description": "Who is on the other end of a run.\n\n`str`-valued so it serialises as itself on the wire and Pydantic accepts\nthe literal, rather than the contract carrying an integer nobody can read.",
+        "enum": [
+          "customer",
+          "developer"
+        ],
+        "title": "Audience",
+        "type": "string"
+      },
       "CapabilitiesResponse": {
         "properties": {
           "ambient_tools": {
@@ -2740,7 +2749,7 @@
     },
     "/api/threads/{thread_id}": {
       "get": {
-        "description": "A recorded run played back as text. **Nothing is re-executed.**\n\nEvery value here was written while the run happened; reading it calls\nno model and no tool, so viewing a run that sent an email does not\nsend it again. The endpoint that *does* execute is\n`POST /api/runs/resume`, which continues a `paused` thread from its\ninterrupt \u2014 a different verb on purpose.",
+        "description": "A recorded run played back as text. **Nothing is re-executed.**\n\nEvery value here was written while the run happened; reading it calls\nno model and no tool, so viewing a run that sent an email does not\nsend it again. The endpoint that *does* execute is\n`POST /api/runs/resume`, which continues a `paused` thread from its\ninterrupt \u2014 a different verb on purpose.\n\n`audience` is the same parameter the run doors take, capped by the same\n`resolve()` \u2014 a deployment that sets `OPENSTATEGRAPH_AUDIENCE=customer`\ncannot be talked into a run's machinery through its history either\n(`the-boundary-nobody-checked/02`). It defaults to `customer`, so a client\nwritten before this parameter existed reads a customer's history rather\nthan a developer's; a developer surface asks for what it needs.",
         "operationId": "read_thread_endpoint_api_threads__thread_id__get",
         "parameters": [
           {
@@ -2766,6 +2775,15 @@
                 }
               ],
               "title": "Workflow Slug"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Audience",
+              "default": "customer"
             }
           }
         ],

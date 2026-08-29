@@ -1303,6 +1303,34 @@ endpoint can start or change a run — a `paused` thread is continued through
 server-side and private channels are omitted, so a thread carrying a long
 message history does not become a multi-megabyte response.
 
+#### A stored run has an audience too
+
+`GET /api/threads/{id}` takes `?audience=customer|developer`, the same
+parameter a run takes on its body and capped by the same
+`OPENSTATEGRAPH_AUDIENCE` ceiling. **It defaults to `customer`**, so a client
+that does not ask reads a customer's history.
+
+A customer's history is the same shape as a customer's live run, which is the
+whole rule — a fact refused on the wire must not be readable afterwards:
+
+| On a customer read | |
+| --- | --- |
+| `tool_calls` | **`[]`** — no tool name, no arguments, no result. The step is still listed and still timed |
+| `tokens` | **`null`**, always, exactly as `usage` is on a customer's stream |
+| `values` / `wrote` | only the channels a customer's own `done` frame carries — `question`, `answer`, `decisions`, `routes`, `outputs`, `nested_outputs`, `attempts`. The machinery channels (`messages`, `tool_use`, `redactions`, a grader's `verdicts`, a deep agent's files) are absent |
+| `duration_ms` | unchanged — elapsed time is a property of the deployment, not of the content (see `seq` and `elapsedMs` above) |
+
+`values` is filtered by a declaration the state channel itself carries, not by
+a list this endpoint keeps, so a channel added to the runtime tomorrow is
+withheld from a customer until somebody marks it otherwise. The examples below
+are a **developer** read.
+
+Until `the-boundary-nobody-checked/02` this endpoint had no audience at all
+and answered every caller with the developer view: the tool's name, the
+statement it was sent, the rows that came back, the usage, and the whole
+`tool_use` channel. No shipped client called it that way, which is why this is
+a correction and not an incident.
+
 `status` and `failed` answer two different questions and must not be
 conflated. `status` is `paused` (stopped at an `interrupt()`, resumable) or
 `finished` (nothing pending) — a failed run is `finished`, not a third status

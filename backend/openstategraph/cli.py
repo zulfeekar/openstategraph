@@ -1332,10 +1332,19 @@ def cmd_threads_show(args: argparse.Namespace) -> int:
     conversation, and it has never been able to answer an `interrupt()`.)
     """
     from openstategraph.api import threads as thread_queries
+    from openstategraph.api.audience import Audience, resolve
 
     services, savers = _thread_savers(args)
     try:
-        history = thread_queries.read_thread(savers, args.thread_id)
+        # A terminal on the machine that holds the checkpoints is a developer
+        # surface — the same person who could open the sqlite file. So it asks
+        # for the developer view rather than inheriting the door's closed
+        # default, and still through `resolve()`, so a deployment that capped
+        # itself to `customer` caps this too
+        # (`the-boundary-nobody-checked/02`).
+        history = thread_queries.read_thread(
+            savers, args.thread_id, audience=resolve(Audience.DEVELOPER)
+        )
     finally:
         services.close()
 

@@ -32,6 +32,7 @@ already on every checkpoint.
 
 from __future__ import annotations
 
+from openstategraph.api.audience import Audience
 from openstategraph.api import threads as thread_queries
 
 
@@ -91,9 +92,19 @@ class TestWhichGraphAStepBelongsTo:
 class TestWhatTheStepDid:
     def test_it_names_the_channels_this_superstep_wrote(self) -> None:
         step = thread_queries._step(
-            _Checkpoint(updated=["answer", "outputs", "worker_results"])
+            _Checkpoint(updated=["answer", "outputs", "worker_results"]),
+            audience=Audience.DEVELOPER,
         )
         assert step.wrote == ["answer", "outputs", "worker_results"]
+
+    def test_a_customer_is_not_told_which_machinery_channel_ran(self) -> None:
+        """A channel *name* is the disclosure here — *this step wrote
+        `worker_results`* is the orchestration, and a customer's own run
+        publishes none of it (`the-boundary-nobody-checked/02`)."""
+        step = thread_queries._step(
+            _Checkpoint(updated=["answer", "outputs", "worker_results"])
+        )
+        assert step.wrote == ["answer", "outputs"]
 
     def test_the_schedulers_bookkeeping_is_left_out(self) -> None:
         """Same rule `values` already obeys, and the same reason: `branch:to:`
@@ -166,7 +177,9 @@ class _Run:
         # `read_thread` is handed newest-first and reverses; hand it the same.
         from openstategraph.api import threads as tq
 
-        history = tq.read_thread([_Saver(list(reversed(self.tuples)))], "run-1")
+        history = tq.read_thread(
+            [_Saver(list(reversed(self.tuples)))], "run-1", audience=Audience.DEVELOPER
+        )
         assert history is not None
         return history.steps
 

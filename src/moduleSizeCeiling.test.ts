@@ -109,7 +109,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       Recorded at 908 so the next four hundred lines land as a red test.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 647,
+    lines: 649,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -133,7 +133,13 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       clearer one, since every consumer imports the types and the client
       together. The number is here to catch *behaviour* arriving, which would
       look like the code-line count moving without the physical count moving
-      much.`,
+      much.
+
+      **647 -> 649** (\`the-boundary-nobody-checked/02\`). \`pastRun\` builds its
+      query through \`URLSearchParams\` and names \`audience=developer\`, because
+      \`GET /api/threads/{id}\` now defaults to a customer's view of a stored
+      run. Two lines, and no behaviour: it is the same request, saying who is
+      making it.`,
   },
 };
 

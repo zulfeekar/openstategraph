@@ -226,6 +226,12 @@ deprecation policy, so the split is invisible to users and costs a package
 where a file is today. Recorded rather than done, and the next person should
 start by asking whether `run`, `eval` and `build` want their own modules — they
 are the three with real argument surfaces.
+
+**1099 -> 1102** (`the-boundary-nobody-checked/02`). `threads show` names the
+audience it reads a stored run with — through `resolve()`, so a capped
+deployment caps the terminal too. Three lines, and no new logic: the door it
+already wrapped grew a parameter, and a caller that declines to answer would
+have been the silence this ticket is about.
 """
 
 WORKFLOW_COMPILER = """
@@ -362,6 +368,13 @@ once for exactly one destination with no way to answer it again
 So the file is the Protocol, the dispatch, and the built-in sinks that prove the
 socket takes more than one plug. The built-ins are the extractable part and the
 number is here to make that visible when a fourth one lands.
+
+**524 -> 528** (`the-boundary-nobody-checked/02`). `read_run_bursts` gained the
+required `audience` keyword and the two-line clause that honours it, plus the
+paragraph saying why the keyword has no default: `RunBurst.audience` was
+written *"so a reader can refuse"* and the reader had nothing to refuse with.
+Four lines on the reading half of what this module already stores — its one
+reason to change — not a new concern.
 """
 
 #: Eight modules, derived and then argued for one at a time. Nothing in this
@@ -371,13 +384,13 @@ number is here to make that visible when a fourth one lands.
 #: worried about.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(2035, NODE_RUNTIME),
-    "cli.py": Recorded(1099, CLI),
+    "cli.py": Recorded(1102, CLI),
     "compile/workflow_compiler.py": Recorded(890, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(959, STREAMING),
     "prebuilt_mcp.py": Recorded(750, PREBUILT_MCP),
     "mcp_server.py": Recorded(654, MCP_SERVER),
     "api/routes/workflows.py": Recorded(546, ROUTES_WORKFLOWS),
-    "run_sinks.py": Recorded(524, RUN_SINKS),
+    "run_sinks.py": Recorded(528, RUN_SINKS),
 }
 
 
