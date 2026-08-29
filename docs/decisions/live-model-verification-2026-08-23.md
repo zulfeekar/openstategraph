@@ -77,6 +77,13 @@ about tool-calling behaviour rather than about the Chinook fixture.
 worker's marker reached a model and the other's did not — the poem question
 three times, the arithmetic question twice.
 
+That record shape is **superseded** (`launch-readiness/178`, 2026-08-29): the
+line quoted above is exactly what this evening could not tell you — which
+worker ran — and it took the marker check beside it to know. The same five runs
+today would read `{"a1": {"ran": ["delegate:poet"]}}` and
+`{"a1": {"ran": ["delegate:mathematician"]}}`. Kept as written because it is
+what was measured on the day; the measurement stands, its notation does not.
+
 ## 3 — A model uses an opted-in value and stays ignorant of a withheld one
 
 `organisms-first-class/72` renders declared run-context fields into a

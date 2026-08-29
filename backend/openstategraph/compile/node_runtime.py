@@ -590,6 +590,17 @@ def tool_report(
     memory or knowledge tool the agent genuinely used, and a deep agent's
     preset tools with it.
 
+    **A delegation is recorded as the worker, not as the harness's tool**
+    (`launch-readiness` 178, `openstategraph/delegations.py`). Every deep-agent
+    delegation returns under `deepagents`' single `task` tool, so `ran` carried
+    that one entry however many workers ran and whichever ones they were: a run
+    that used both declared workers and a run that used the anonymous built-in
+    left the identical record. It reads `delegate:data-classifier` now, which is
+    our own vocabulary (guardrail 4) and matters beyond tidiness, because
+    `silent_node_warnings` prints `ran` back to a reader verbatim. A delegation
+    the harness refused — an undeclared worker's name, answered with a sentence
+    and no run — records nothing at all, exactly as an invented tool name does.
+
     Returns no `unmet_tools` key rather than an empty map when nothing was
     refused, so a clean run writes nothing there — a node that reports `[]` and
     a node that reports nothing must not look the same to the reducer.
@@ -612,6 +623,16 @@ def tool_report(
         looks_like_sql_query,
         rejected_tool_names,
     )
+    from openstategraph.delegations import DELEGATION_TOOL, delegations_by_call
+
+    #: `tool_call_id -> our own name for the worker that answered`
+    #: (`launch-readiness/178`). A deep agent's delegations all come back
+    #: under `deepagents`' one tool name, so without this the record says
+    #: `task` once however many workers ran and whichever they were — and a
+    #: vendor's spelling reaches `ran`, which `silent_node_warnings` prints
+    #: to a reader. Resolved from the delegating call's own arguments, paired
+    #: to the answer by id, and only for the calls an answer bears out.
+    delegations = delegations_by_call(messages or [])
 
     #: Calls whose **arguments** a real tool refused, by `tool_call_id`
     #: (`production-ready` 100). Gathered in a pass of its own because the
@@ -739,6 +760,16 @@ def tool_report(
             # (`the-agent-asks-for-what-it-cannot-get` 01).
             continue
         used = str(getattr(message, "name", "") or "")
+        if used == DELEGATION_TOOL:
+            # A delegation is recorded as the **worker**, never as the
+            # harness's tool: which worker got the work is the one thing
+            # `compile/subagents.py` is strict about before the run, and was
+            # the one thing the run did not say. An unresolved id here is a
+            # delegation that reached nobody — an undeclared worker's name,
+            # which `deepagents` answers with a sentence and no run — so it
+            # drops out of `ran` exactly as an invented tool name does
+            # (`production-ready` 98).
+            used = delegations.get(str(getattr(message, "tool_call_id", "") or ""), "")
         if used and used not in ran:
             ran.append(used)
     # A tool the runtime refused never ran, so it never sent anything either.
