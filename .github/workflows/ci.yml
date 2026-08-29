@@ -201,17 +201,43 @@ jobs:
   # git + bash, no dependencies. Escape hatch: `docs: not-needed` in any
   # commit message in the PR.
   docs-freshness:
-    if: github.event_name == 'pull_request'
+    # Runs on a pull request **and** on a push to main. It was `pull_request`
+    # only, and this repository pushes straight to main, so it had executed
+    # once in its life -- a fact the `gallery-diagrams-check` comment below
+    # already recorded and pointed at without anybody closing it. A gate that
+    # skips on the only event this repository produces is not a gate.
+    #
+    # The range differs by event and nothing else: a pull request compares its
+    # own base to its head; a push compares what main was to what it now is.
+    # `github.event.before` is all zeroes on a branch's first push and can name
+    # a commit a force-push made unreachable, so both are checked for and the
+    # job says so rather than failing on a range it cannot read.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - name: Code changes must touch docs
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
         run: |
           set -euo pipefail
+          if [ -n "${PR_BASE:-}" ]; then
+            BASE="$PR_BASE"; HEAD="$PR_HEAD"
+          else
+            BASE="${PUSH_BEFORE:-}"; HEAD="$PUSH_AFTER"
+            case "$BASE" in
+              ''|0000000000000000000000000000000000000000)
+                echo "First push on this ref — no range to compare."; exit 0 ;;
+            esac
+            if ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+              echo "The previous head is not in this clone (force-push?) — nothing to compare."
+              exit 0
+            fi
+          fi
+          echo "Comparing $BASE..$HEAD"
           changed=$(git diff --name-only "$BASE" "$HEAD")
           code=$(printf '%s\n' "$changed" | grep -E '^(src|backend)/' || true)
           if [ -z "$code" ]; then
@@ -260,10 +286,12 @@ jobs:
   # nobody was asking.
   #
   # This runs on every push to main and every pull request, same as every
-  # other job in this file — deliberately not copied onto `docs-freshness`'s
-  # `if: pull_request` restriction, because this repository pushes straight to
-  # main and a PR-only gate here would be a gate nobody has for the second
-  # time (see `docs-freshness` above, which already fires once, ever).
+  # other job in this file. It used to say so by contrast with
+  # `docs-freshness`, which was `if: pull_request` and had therefore fired
+  # once in its life — an observation this comment recorded, pointed at, and
+  # left standing. `docs-freshness` runs on a push now too, so the contrast is
+  # gone and the rule is simply the file's rule: this repository pushes
+  # straight to main, so a PR-only gate is a gate nobody has.
   #
   # Both scripts render Mermaid through `scripts/render_mermaid.mjs`, which
   # drives the vendored mermaid build inside Playwright chromium rather than

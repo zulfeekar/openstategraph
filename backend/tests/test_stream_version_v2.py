@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import ScriptedGraph, drive_fold  # noqa: E402
 
 from openstategraph.api.audience import Audience  # noqa: E402
+from openstategraph.api.frame_clock import FRAME_CLOCK_FIELDS  # noqa: E402
 from openstategraph.api.streaming import _stream_parts, _stream_run  # noqa: E402
 from openstategraph.compile.diagnostics import CompileDiagnostics  # noqa: E402
 
@@ -101,6 +102,24 @@ class TestTheVersionWeAskFor:
         assert graph.stream_kwargs["subgraphs"] is True
 
 
+def _without_clock(frames: list[tuple[str, Any]]) -> list[tuple[str, Any]]:
+    """Frames minus the two fields `46` stamps on every one of them.
+
+    Named off `FRAME_CLOCK_FIELDS` rather than listing `seq` and `elapsedMs`
+    here, so a third clock field cannot make a comparison flaky again without
+    the import going with it.
+    """
+    return [
+        (
+            kind,
+            {k: v for k, v in payload.items() if k not in FRAME_CLOCK_FIELDS}
+            if isinstance(payload, dict)
+            else payload,
+        )
+        for kind, payload in frames
+    ]
+
+
 class TestTheDecoderReadsBothShapes:
     """The fold reads a part, not a tuple.
 
@@ -114,7 +133,14 @@ class TestTheDecoderReadsBothShapes:
         v1 = [((), "updates", {"in1": {"outputs": {"in1": "hello"}}})]
         v2 = [{"type": "updates", "ns": (), "data": {"in1": {"outputs": {"in1": "hello"}}}}]
 
-        assert _frames(v1)[0] == _frames(v2)[0]
+        # Compared without the clock. Each `_frames` call opens its own stream
+        # and `memory-and-replay/46` stamps every frame with `elapsedMs` and
+        # `seq`, so two folds of one payload agree on everything they decode
+        # and disagree on when they ran. This assertion is about the decoder;
+        # a machine slow enough to straddle a millisecond between the two
+        # calls was failing it on a difference the decoder did not make
+        # (green locally at 0.22s, red on CI).
+        assert _without_clock(_frames(v1)[0]) == _without_clock(_frames(v2)[0])
 
     def test_a_namespaced_v2_part_keeps_its_namespace(self) -> None:
         events, _ = _frames(
