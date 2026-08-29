@@ -21,12 +21,28 @@ class UnknownSourceError(ValueError):
     """A `source` naming no registered builder."""
 
 
-def resolve_build_model(model_name: str | None, credentials: dict[str, str] | None) -> Any:
-    """The same resolution chain the run endpoints use, in one place."""
+def resolve_build_model(
+    model_name: str | None,
+    credentials: dict[str, str] | None,
+    *,
+    refused_because: str | None,
+) -> Any:
+    """The same resolution chain the run endpoints use, in one place.
+
+    **Including the deployment gate, rather than excepted from it**
+    (`the-boundary-nobody-checked/03`). This is not a run, but it calls the
+    same model with the same browser-supplied key and writes it into the same
+    process-global `os.environ`, so "the first caller becomes the
+    configuration" is true here word for word — and it would be the quiet way
+    back in if the run doors alone were closed. `refused_because` is
+    keyword-only with no default for that reason; the HTTP door passes
+    `auth.shared_deployment_reason(request)`, and the CLI passes `None`
+    because a terminal on the machine *is* the operator.
+    """
     from openstategraph.api.model_resolution import apply_credentials, resolve_model
     from openstategraph.chat_model import build_chat_model
 
-    apply_credentials(credentials)
+    apply_credentials(credentials, refused_because=refused_because)
     return build_chat_model(resolve_model(model_name))
 
 

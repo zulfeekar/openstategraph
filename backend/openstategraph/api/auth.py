@@ -329,6 +329,57 @@ def exposure_warning(host: str) -> str | None:
     )
 
 
+def shared_deployment_reason(request: Any) -> str | None:
+    """Why this request is **not** from a single-user machine — or `None`.
+
+    Asked once per request, by every door that accepts `credentials` in its
+    body (`the-boundary-nobody-checked/03`). A key a browser pastes goes into
+    `os.environ`, which is process-global: on a server the operator left
+    unconfigured, the first request to arrive *becomes* the configuration and
+    every later caller's prompts then bill to — and are logged by — that one
+    person's vendor account. `apply_credentials` cannot see the difference
+    between the laptop where that is the whole point of the dialog and the team
+    VM where it is a boundary crossing. This is what can.
+
+    Three signals, any of which means somebody other than the operator can
+    reach this process, and none of which needs a new variable to set:
+
+    - **A shared token is configured.** A deployment turns the gate on because
+      more than one person calls it; that is what the gate is *for*.
+    - **The proxy said so.** `PROXY_ASSERTION_HEADER` is set by every config in
+      `deploy/` (ticket 01), so a request carrying it arrived over a network
+      and the loopback address below belongs to the proxy, not to the caller.
+    - **The caller is not on this machine.** Anything that is not provably a
+      loopback literal is treated as remote, the same direction `_is_loopback`
+      already fails in: the safe answer to "is this exposed?" is yes.
+
+    Returns the sentence a log line and an operator need, never a value, and
+    never a refusal of the *request* — a shared deployment still runs the
+    workflow, on the operator's own credentials, and says the missing-key
+    message that names the variable to set when there are none.
+
+    **What it does not cover, said plainly.** A loopback bind with no token
+    forwarded over an SSH tunnel presents as local, because at the socket it
+    *is* local. That deployment has no authentication of any kind, so a
+    borrowed key is not the boundary it is missing first; `exposure_warning`
+    and `docs/deploying.md` §1 are where it is addressed.
+    """
+    from openstategraph.principal import PROXY_ASSERTION_HEADER
+
+    if configured_token() is not None:
+        return (
+            f"this deployment sets {API_TOKEN_ENV}, so more than one person can reach it"
+        )
+    headers = getattr(request, "headers", None)
+    if headers is not None and PROXY_ASSERTION_HEADER.lower() in headers:
+        return f"this request arrived through a reverse proxy ({PROXY_ASSERTION_HEADER})"
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", None)
+    if not host or not _is_loopback(host):
+        return f"this request came from {host or 'an unknown address'}, not from this machine"
+    return None
+
+
 def _is_loopback(host: str) -> bool:
     text = (host or "").strip().strip("[]")
     if text in {"localhost", ""}:

@@ -1053,7 +1053,9 @@ def cmd_knowledge_build(args: argparse.Namespace) -> int:
         report = run_build(
             package,
             document,
-            resolve_build_model(args.model, None),
+            # A terminal on this machine is the operator, so there is no
+            # shared deployment to refuse for — and no credentials either.
+            resolve_build_model(args.model, None, refused_because=None),
             package.parent,
             source=args.source,
             instruction=args.instruction,

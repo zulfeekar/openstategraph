@@ -184,7 +184,7 @@ class TestNothingHardcodesAClosedListAnymore:
             ),
         )
         env: dict[str, str] = {}
-        assert apply_credentials({"NVIDIA_API_KEY": "nv-1"}, env) == ["NVIDIA_API_KEY"]
+        assert apply_credentials({"NVIDIA_API_KEY": "nv-1"}, env, refused_because=None) == ["NVIDIA_API_KEY"]
 
     def test_extras_hint_derives_from_the_catalogue(
         self, monkeypatch: pytest.MonkeyPatch

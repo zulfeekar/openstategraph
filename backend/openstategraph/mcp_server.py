@@ -757,8 +757,13 @@ class WorkflowRuns:
         """Compile and run, synchronously — the `/api/runs` path, no streaming.
 
         Credentials are never accepted over MCP: the model resolves from the
-        server's own environment, exactly as `apply_credentials` guarantees the
-        server's env always wins.
+        server's own environment, which is the strongest form of the rule
+        `apply_credentials` applies to the HTTP doors — there, a request
+        credential is taken only on a machine whose caller is the operator, and
+        here there is no channel to take one through at all
+        (`the-boundary-nobody-checked/03`, which corrected the older claim that
+        a client's key "can only ever lose to the server's own": true only
+        where the server has one).
 
         **This is a run door, and it answers to an audience like the other
         three** (`the-boundary-nobody-checked/08`). It used to answer to none:
@@ -775,7 +780,7 @@ class WorkflowRuns:
         being asked. It is still capped by `resolve()`, so a deployment that
         set `OPENSTATEGRAPH_AUDIENCE=customer` caps this door too.
 
-        Where the MCP *tool* gets its value from is the decision this ticket
+        Where the MCP *tool* gets its value from is the decision that ticket
         turned on, and it is not an argument on the tool — see
         `audience.deployment_audience`.
         """

@@ -490,6 +490,13 @@ class RunRequest(BaseModel):
     #: still see "no model configured" from Chat. Applied as a **fallback
     #: only**: an env var already set server-side always wins (see
     #: `apply_credentials`). Never logged, never echoed back.
+    #:
+    #: **And only on a single-user deployment.** A value here goes into
+    #: process-global `os.environ`, so on a server with a shared token, a proxy
+    #: in front of it, or a caller who is not on the machine, it is dropped
+    #: with a log line rather than applied — otherwise the first browser to
+    #: send one would configure the server for everybody else's runs
+    #: (`auth.shared_deployment_reason`, `the-boundary-nobody-checked/03`).
     credentials: dict[str, str] | None = None
 
 

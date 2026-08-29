@@ -41,21 +41,23 @@ def test_resume_request_accepts_credentials_too() -> None:
 
 def test_absent_env_vars_are_filled() -> None:
     env: dict[str, str] = {}
-    filled = apply_credentials({"ANTHROPIC_API_KEY": "sk-test"}, env)
+    filled = apply_credentials({"ANTHROPIC_API_KEY": "sk-test"}, env, refused_because=None)
     assert filled == ["ANTHROPIC_API_KEY"]
     assert env["ANTHROPIC_API_KEY"] == "sk-test"
 
 
 def test_present_env_vars_are_never_overridden() -> None:
     env = {"ANTHROPIC_API_KEY": "server-value"}
-    assert apply_credentials({"ANTHROPIC_API_KEY": "browser-value"}, env) == []
+    assert apply_credentials({"ANTHROPIC_API_KEY": "browser-value"}, env, refused_because=None) == []
     assert env["ANTHROPIC_API_KEY"] == "server-value"
 
 
 def test_unknown_and_blank_keys_are_ignored() -> None:
     env: dict[str, str] = {}
     filled = apply_credentials(
-        {"PATH": "/evil", "AWS_SECRET_ACCESS_KEY": "x", "OPENAI_API_KEY": "   "}, env
+        {"PATH": "/evil", "AWS_SECRET_ACCESS_KEY": "x", "OPENAI_API_KEY": "   "},
+        env,
+        refused_because=None,
     )
     assert filled == []
     assert env == {}
@@ -63,7 +65,7 @@ def test_unknown_and_blank_keys_are_ignored() -> None:
 
 def test_none_is_a_no_op() -> None:
     env: dict[str, str] = {}
-    assert apply_credentials(None, env) == []
+    assert apply_credentials(None, env, refused_because=None) == []
     assert env == {}
 
 

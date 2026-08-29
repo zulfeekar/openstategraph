@@ -61,7 +61,7 @@ class TestApplyCredentials:
     def test_an_endpoint_in_the_body_is_ignored(self, monkeypatch: pytest.MonkeyPatch) -> None:
         env: dict[str, str] = {}
 
-        filled = apply_credentials({"OLLAMA_HOST": "https://evil.tld"}, env)
+        filled = apply_credentials({"OLLAMA_HOST": "https://evil.tld"}, env, refused_because=None)
 
         assert filled == []
         assert env == {}
@@ -69,7 +69,7 @@ class TestApplyCredentials:
     def test_a_key_is_still_filled_when_absent(self) -> None:
         env: dict[str, str] = {}
 
-        filled = apply_credentials({"OLLAMA_API_KEY": "sk-from-the-browser"}, env)
+        filled = apply_credentials({"OLLAMA_API_KEY": "sk-from-the-browser"}, env, refused_because=None)
 
         assert filled == ["OLLAMA_API_KEY"]
         assert env["OLLAMA_API_KEY"] == "sk-from-the-browser"
@@ -77,7 +77,7 @@ class TestApplyCredentials:
     def test_a_server_key_still_wins(self) -> None:
         env = {"OLLAMA_API_KEY": "the-operators-key"}
 
-        apply_credentials({"OLLAMA_API_KEY": "the-clients-key"}, env)
+        apply_credentials({"OLLAMA_API_KEY": "the-clients-key"}, env, refused_because=None)
 
         assert env["OLLAMA_API_KEY"] == "the-operators-key"
 

@@ -130,6 +130,49 @@ Nothing breaks, and nothing is silently wrong:
 A library caller embedding `openstategraph` **is** the server, so identity is
 theirs to supply directly: `workflow.ask(question, user_email="ada@example.com")`.
 
+## 1c. Whose API key pays, and why a browser cannot answer that here
+
+The editor has a **Models and credentials** dialog. Keys pasted there live in
+the browser, and every run request carries them — otherwise a developer who
+pasted a key would still see "no model configured" from Chat.
+
+A request credential is written into the server's `os.environ`, which is
+**process-global and outlives the request**. Read together with the old rule —
+*absent → fill, present → leave alone* — that means the first browser to send a
+key on a server whose operator configured none does not merely run: it
+**becomes the configuration**. From that moment every other caller's runs
+authenticate as that person, every prompt and every customer question reaches
+their vendor account under their logging and their organisation's data
+agreement, and rotating their key or revoking their access to the machine
+changes nothing until the process restarts.
+
+**So the deployment decides, not the request.** A credential in a request body
+is taken only when all three are true:
+
+| | |
+| --- | --- |
+| no `OPENSTATEGRAPH_API_TOKEN` | a gate exists because more than one person calls this server |
+| no `X-OpenStateGraph-Proxy` on the request | a proxy in front means the caller is on a network |
+| the caller's address is loopback | otherwise they are on another machine |
+
+That is a laptop, where the dialog is the point. Anywhere else the credentials
+are **dropped**, with one `WARNING` per variable naming the variable — never
+the value — and the run continues on the server's own environment. It is not
+an error: a shared deployment whose operator *did* set a key was already
+ignoring these values, and refusing the request would break a working server to
+make a point. If the operator set nothing, the run fails with the usual message
+naming the variable to export.
+
+**On a shared deployment, put provider keys in the server's environment**
+(checklist step 3 below). The dialog is a single-user convenience, and after
+this it says so by behaving like one.
+
+The one case the check cannot see: a loopback bind with no token, reached over
+an SSH tunnel, presents as local because at the socket it *is*. That deployment
+has no authentication of any kind — §1 is the part of it to fix first.
+
+---
+
 ## 2. Authentication: two supported answers
 
 ### A reverse proxy — the supported path for anything public
@@ -307,7 +350,8 @@ export OPENSTATEGRAPH_STATE_DIR=/var/lib/openstategraph
 # 2. Something authenticates. Pick at least one.
 export OPENSTATEGRAPH_API_TOKEN="$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')"
 
-# 3. Provider keys in the environment, never in openstategraph.yaml.
+# 3. Provider keys in the environment, never in openstategraph.yaml — and
+#    never left to a browser to supply on a shared deployment (§1c).
 export ANTHROPIC_API_KEY=...
 
 # 4. Loopback, one worker, proxy in front.
