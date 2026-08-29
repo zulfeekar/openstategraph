@@ -31,6 +31,21 @@
       "name": "chat",
       "url": "http://localhost:8000",
       "autoPort": false
+    },
+    {
+      "name": "preview",
+      "url": "http://localhost:8123",
+      "autoPort": false,
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "openstategraph.cli",
+        "serve",
+        "--port",
+        "8123"
+      ],
+      "cwd": "backend",
+      "port": 8123
     }
   ]
 }
