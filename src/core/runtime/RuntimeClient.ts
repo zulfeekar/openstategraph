@@ -439,6 +439,12 @@ export interface TokenUsage {
  * node's dispatched instances carry instead, and is `null` for every other
  * node type.
  */
+/**
+ * The four structurally different ways a run makes a child, named once
+ * because two frames now carry it — `spawn` opens and `settled` closes.
+ */
+export type SpawnKind = 'fanout' | 'subagent' | 'async' | 'subgraph';
+
 export type RunStreamEvent =
   | ({
       readonly type: 'update';
@@ -719,13 +725,53 @@ export type RunStreamEvent =
        * the id the agent will poll with, so a surface can follow one
        * background worker from launch to answer. */
       readonly type: 'spawn';
-      readonly kind: 'fanout' | 'subagent' | 'async' | 'subgraph';
+      /**
+       * This child's identity for the run, and the **only** honest join
+       * between this frame and the `settled` frame that closes it
+       * (`memory-and-replay` 54). Not the label — a fan-out routinely
+       * dispatches three children under one — and not `taskId`, which a
+       * `subgraph` spawn does not have.
+       */
+      readonly spawnId: string;
+      readonly kind: SpawnKind;
       /** The canvas node that did the spawning. */
       readonly parent: string;
       /** What to call the child: archetype, subagent type, or mounted node. */
       readonly label: string;
       /** First ~120 chars of the child's instruction, if the frame carried one. */
       readonly instruction: string;
+      readonly taskId: string | null;
+      readonly namespace: readonly string[];
+    } & RunFrameStamp)
+  | ({
+      /**
+       * A child the run announced has ended — the other end of the bar
+       * (`memory-and-replay` 54). One frame with an `outcome` rather than the
+       * two kinds AG-UI has, because `error` below is terminal for the
+       * *whole run* and a child failing is not that.
+       *
+       * Everything but `spawnId` and `outcome` is echoed from the `spawn`
+       * this closes, so a surface can render one row without joining. There
+       * is deliberately **no result**: what the child produced already
+       * arrived on the frame that revealed the completion, and a copy here
+       * would be the one of the two a redaction could miss.
+       */
+      readonly type: 'settled';
+      readonly spawnId: string;
+      /**
+       * `ok` — observed. `error` — observed, and no worker ran. `detached` —
+       * an `async` child, still working outside this run when the stream
+       * ended. `unknown` — the stream ended with no account of it.
+       *
+       * Read the last two as statements about the *recording*: neither says
+       * the child failed. And a `spawn` with no `settled` at all means the
+       * body stopped early — the same reading as a body with no terminal
+       * frame.
+       */
+      readonly outcome: 'ok' | 'error' | 'detached' | 'unknown';
+      readonly kind: SpawnKind;
+      readonly parent: string;
+      readonly label: string;
       readonly taskId: string | null;
       readonly namespace: readonly string[];
     } & RunFrameStamp)
@@ -1191,14 +1237,31 @@ export class RuntimeClient implements IRuntimeClient {
           pathSlugs: asPath(payload['pathSlugs'], { keepBlanks: true }),
         });
       } else if (eventName === 'spawn') {
-        const kind = asString(payload['kind']);
         onEvent({
           ...asFrameStamp(payload),
           type: 'spawn',
-          kind: kind === 'fanout' || kind === 'subagent' || kind === 'async' ? kind : 'subgraph',
+          spawnId: asString(payload['spawnId']),
+          kind: asSpawnKind(payload['kind']),
           parent: asString(payload['parent']),
           label: asString(payload['label']),
           instruction: asString(payload['instruction']),
+          taskId: typeof payload['taskId'] === 'string' ? payload['taskId'] : null,
+          namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
+        });
+      } else if (eventName === 'settled') {
+        const outcome = asString(payload['outcome']);
+        onEvent({
+          ...asFrameStamp(payload),
+          type: 'settled',
+          spawnId: asString(payload['spawnId']),
+          // `unknown` is the safe default and the honest one: a value this
+          // client does not recognise is exactly a child it cannot account
+          // for, which is what the word already means here.
+          outcome:
+            outcome === 'ok' || outcome === 'error' || outcome === 'detached' ? outcome : 'unknown',
+          kind: asSpawnKind(payload['kind']),
+          parent: asString(payload['parent']),
+          label: asString(payload['label']),
           taskId: typeof payload['taskId'] === 'string' ? payload['taskId'] : null,
           namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
         });
@@ -1602,6 +1665,11 @@ async function readDetail(response: Response): Promise<string> {
 }
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+/** A spawn kind the contract declares, else `subgraph` — the shape a frame
+ * from a backend older than a future fifth kind is safest read as. */
+const asSpawnKind = (value: unknown): SpawnKind =>
+  value === 'fanout' || value === 'subagent' || value === 'async' ? value : 'subgraph';
 
 /**
  * A frame's `path` or `pathSlugs`, defensively: strings only.

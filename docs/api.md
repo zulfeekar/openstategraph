@@ -87,7 +87,7 @@ itself.
 
 ### `POST /api/runs/stream` and `POST /api/runs/resume`
 
-Seven event names. A resumed run is not a different kind of thing from a
+Eight event names. A resumed run is not a different kind of thing from a
 client's point of view — it is the same stream picking back up — so both
 endpoints emit the identical vocabulary and one parser handles both.
 
@@ -96,7 +96,8 @@ endpoints emit the identical vocabulary and one parser handles both.
 | `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `interruptible`, `path`, `pathSlugs`, `output`, and `check` with `reason` **only when a grader rejected the candidate without invoking a model**, plus `seq` and `elapsedMs` |
 | `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `block` (`text`/`reasoning`), `usage` (`{inputTokens, outputTokens, totalTokens}` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply**, plus `seq` and `elapsedMs` |
 | `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `detail` (developer only, else `null`), `current`, `total` (both `int` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs`, plus `seq` and `elapsedMs` |
-| `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`async`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace`, plus `seq` and `elapsedMs` |
+| `spawn` | the run created a child worker or subagent | `spawnId`, `kind` (`fanout`/`subagent`/`async`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace`, plus `seq` and `elapsedMs` |
+| `settled` | a child the run announced has ended | `spawnId`, `outcome` (`ok`/`error`/`detached`/`unknown`), and `kind`, `parent`, `label`, `taskId`, `namespace` echoed from the `spawn` it closes, plus `seq` and `elapsedMs` |
 | `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate**, plus `check` when that verdict cost no model call, plus `seq` and `elapsedMs` |
 | `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run**, plus `seq` and `elapsedMs` |
 | `error` | **terminal** — the run failed | `threadId`, `detail`, plus `seq` and `elapsedMs` |
@@ -142,10 +143,73 @@ node it knows and fall back to the namespace head otherwise; the editor's
 
 `taskId` is the child's own identity and joins the frames it produced: a
 `fanout` child's `update` frames carry the same id the spawn announced. A
-`subagent` and an `async` child produce **no** frames on this stream at all —
-the first reports back as one `ToolMessage`, and the second runs on a desk
-outside the run — so an empty account for those two is correct rather than a
-gap.
+`subagent` and an `async` child produce **no** `update` or `token` frames of
+their own — the first reports back as one `ToolMessage`, and the second runs on
+a desk outside the run — so an empty account of their *steps* is correct rather
+than a gap. Both are still opened and closed; see below.
+
+#### Every spawn is closed — `settled`, and `spawnId` is the join
+
+A bar needs two ends. Every `spawn` frame carries a `spawnId`, unique within
+the run, and exactly one `settled` frame carries it back.
+
+**Join on `spawnId`, never on `label` and never on `taskId`.** A fan-out
+routinely dispatches three children under one label — measured on a real
+supervisor run, three workers all called `impact-analyst` — so a label
+identifies a *kind* of child, not a child. `taskId` is the child's own domain
+id and is genuinely distinct where it exists, but a `subgraph` spawn has none
+(`taskId: null`), so it is the join for three of the four kinds and for the
+fourth not at all. `spawnId` is on both halves of every pair.
+
+`outcome` is one of four, and the last two are the honest ones:
+
+| `outcome` | What ended the child |
+| --- | --- |
+| `ok` | the completion was observed on this stream |
+| `error` | observed, and **no worker ran** — the tool rail failed, or a delegation named a subagent that was never declared. A worker reporting bad news reported it successfully, and that is `ok` |
+| `detached` | an `async` child, still running outside this run when the stream ended |
+| `unknown` | the stream ended with no account of this child |
+
+**One frame with an outcome, rather than two frame kinds.** The `error` frame
+in the table above is terminal for the *whole run*; a child failing is not that,
+and a second kind that ends one child while the run continues would make the
+terminal-frame guarantee a rule with an exception in it.
+
+**A `settled` frame carries no result**, deliberately. What a child produced
+already reaches you on the frame that revealed the completion — a `fanout`
+worker's own `update.output`, a delegation's `token` frames. A copy here would
+be a second spelling of one fact and the only one of the two that could drift
+out of step with the audience boundary. So a customer and a developer receive
+the identical `settled` frame: *that* a child finished is not a disclosure, any
+more than its cadence is.
+
+**What ends each kind, and the one that nothing ends:**
+
+| `kind` | Closed by | `outcome` you will see |
+| --- | --- | --- |
+| `fanout` | its `taskId` appearing in the dispatcher's results | `ok` |
+| `subagent` | the delegation answer bearing its call id | `ok` or `error` |
+| `subgraph` | the mounted node reporting as an ordinary step of the parent canvas | `ok` |
+| `async` | **nothing** — the parent never waits for it | `detached` |
+
+`async` is the honest gap and it is stated rather than papered over. A
+background task is handed an id and left running on a desk outside the run, so
+this stream has no moment to report; the `settled` frame it gets when the
+stream ends says `detached`, which is a fact about *this run* and not a claim
+about the child. Ask the desk for the child's own ending.
+
+**One `subgraph` spawn, one `settled`, even across a revision loop.** A mounted
+node is announced once per run however many checkpoints it is given — a
+`Send`-dispatched worker gets a fresh one per instance — and it is closed once,
+on the first top-level frame the node reports. A grader sending the run back
+around does not re-announce it and does not re-close it.
+
+**And an open bar with no `settled` at all is a statement about the
+recording.** A stream that dies with the connection cannot emit anything more
+(see the terminal-frame guarantee below), so a body that simply stops carries
+no closes for whatever was still running. Read that as *the recording ended*,
+never as *the child is still working* — the same way a body with no terminal
+frame already means a dropped connection rather than a silent success.
 
 #### Audience: what a customer's run cannot carry
 
@@ -321,8 +385,8 @@ held anyone else's nodes in the first place.
 
 > **Every stream ends with a frame that says how it ended.** Exactly one of
 > `done`, `interrupt` or `error` is the last frame of every stream that lives
-> long enough to send one. `update`, `token`, `progress` and `spawn` are
-> progress: after any of them, keep waiting.
+> long enough to send one. `update`, `token`, `progress`, `spawn` and
+> `settled` are progress: after any of them, keep waiting.
 
 A client must never tell "still working", "finished" and "died" apart by
 waiting and guessing. There is exactly one exception, and it is honest rather

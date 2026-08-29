@@ -102,6 +102,33 @@ def _requested_workers(messages: Any) -> dict[str, str]:
     return requests
 
 
+def delegation_outcome(message: Any) -> str | None:
+    """Whether one message is a delegation's **answer**, and how it went.
+
+    `"ok"`, `"error"`, or `None` for a message that is not a `task` answer at
+    all. Split out of `delegations_by_call` below rather than written twice
+    (`memory-and-replay` 54): the run stream needs the same three questions —
+    *is this an answer, whose call, did a worker actually run* — to close the
+    `spawn` frame it opened when the call went out, and a second reading of
+    `deepagents`' answers would be a second place to keep the refusal sentence
+    up to date.
+
+    An `"error"` here is a delegation that **reached no worker**: the tool rail
+    itself reported a failure, or `deepagents` answered with the sentence it
+    uses for an undeclared `subagent_type`. It is not a judgement on what a
+    worker said — a worker reporting bad news reported it successfully.
+    """
+    if getattr(message, "type", None) != "tool":
+        return None
+    if str(getattr(message, "name", "") or "") != DELEGATION_TOOL:
+        return None
+    if getattr(message, "status", None) == "error":
+        return "error"
+    if _NO_SUCH_WORKER.match(str(getattr(message, "content", "") or "")):
+        return "error"
+    return "ok"
+
+
 def delegations_by_call(messages: Any) -> dict[str, str]:
     """`tool_call_id -> our record name`, for the delegations that reached a worker.
 
@@ -115,14 +142,7 @@ def delegations_by_call(messages: Any) -> dict[str, str]:
     requests = _requested_workers(messages)
     resolved: dict[str, str] = {}
     for message in messages or []:
-        if getattr(message, "type", None) != "tool":
-            continue
-        if str(getattr(message, "name", "") or "") != DELEGATION_TOOL:
-            continue
-        if getattr(message, "status", None) == "error":
-            continue
-        content = str(getattr(message, "content", "") or "")
-        if _NO_SUCH_WORKER.match(content):
+        if delegation_outcome(message) != "ok":
             continue
         call_id = str(getattr(message, "tool_call_id", "") or "")
         if not call_id:

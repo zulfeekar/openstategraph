@@ -81,6 +81,11 @@ export interface SpawnedTaskRow {
     readonly kind: 'fanout' | 'subagent' | 'async' | 'subgraph';
     readonly label: string;
     readonly instruction: string;
+    /** The run's join between this child's opening and its ending
+     * (`memory-and-replay` 54). Carried here so a panel holding these rows
+     * can close one without a second index. */
+    readonly spawnId?: string;
+    readonly outcome?: 'ok' | 'error' | 'detached' | 'unknown';
   };
 }
 

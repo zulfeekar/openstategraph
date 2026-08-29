@@ -125,7 +125,7 @@ const IGNORED_BY_DESIGN: Record<string, readonly string[]> = {
   // the answer, not the run, and `docs/api.md` introduces it as exactly that.
   // Teaching a reader to handle the progress frames is the *next* page's job;
   // making this one handle seven events would cost it the property it is for.
-  'docs/examples/minimal-client.html': ['update', 'progress', 'spawn'],
+  'docs/examples/minimal-client.html': ['update', 'progress', 'spawn', 'settled'],
 };
 
 /**
@@ -353,7 +353,7 @@ describe('the client and the published contract', () => {
 
       // Anti-vacuity: an extractor that matched nothing would make the loop
       // below a statement about no frames and no fields.
-      expect(Object.keys(declared)).toHaveLength(7);
+      expect(Object.keys(declared)).toHaveLength(8);
       expect(declared['token']).toContain('withheld');
 
       for (const [name, fields] of Object.entries(declared)) {

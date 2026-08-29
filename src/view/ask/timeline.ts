@@ -88,6 +88,14 @@ export interface TimelineRow {
     readonly kind: string;
     readonly label: string;
     readonly instruction: string;
+    /** This child's identity for the run — the join a `settled` frame carries
+     * back (`memory-and-replay` 54). A lane is keyed on it rather than on the
+     * label, because a fan-out dispatches several children under one. */
+    readonly spawnId?: string;
+    /** How it ended, once the run said so. Absent while the child is still
+     * open, and absent for good against a backend that closes nothing —
+     * which is why it is optional rather than defaulted to a word. */
+    readonly outcome?: 'ok' | 'error' | 'detached' | 'unknown';
   };
 }
 

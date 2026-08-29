@@ -86,6 +86,32 @@ export interface SpawnDetail {
   readonly kind: 'fanout' | 'subagent' | 'async' | 'subgraph';
   readonly label: string;
   readonly instruction: string;
+  /** The run's own id for this child, and the join to the frame that closes
+   * it (`memory-and-replay` 54). */
+  readonly spawnId?: string;
+  readonly outcome?: 'ok' | 'error' | 'detached' | 'unknown';
+}
+
+/**
+ * How a spawn row ends, in the reader's words — or nothing at all.
+ *
+ * **Absent is a real state and must not render as a word.** A child that has
+ * not ended yet, and a backend that closes nothing, both arrive here as
+ * `undefined`, and inventing "finished" for either is the same defect this
+ * codebase keeps closing: two situations that must not read identically.
+ *
+ * `detached` and `unknown` are statements about the *recording*, not about the
+ * child, and the sentences say so — a background worker is still working, and
+ * an unaccounted one is something this run stopped being able to see. Neither
+ * is a failure. `error` is the only one that is, and it is narrow: no worker
+ * ran at all.
+ */
+export function spawnEnding(outcome: SpawnDetail['outcome']): string {
+  if (outcome === 'ok') return 'finished';
+  if (outcome === 'error') return 'never ran';
+  if (outcome === 'detached') return 'still running';
+  if (outcome === 'unknown') return 'no ending recorded';
+  return '';
 }
 
 /**
@@ -323,6 +349,7 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
           >
             <span className="ask__activity-node">
               ⤷ {spawnVerb(step.spawn.kind)} {step.spawn.label}
+              {spawnEnding(step.spawn.outcome) ? ` · ${spawnEnding(step.spawn.outcome)}` : ''}
             </span>
             {step.spawn.instruction ? (
               <span className="ask__activity-spawn-task">{step.spawn.instruction}</span>
