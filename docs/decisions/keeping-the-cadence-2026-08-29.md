@@ -97,10 +97,21 @@ profiler, which reads *finished* state, and finished state genuinely holds
 everything a profiler asks. Playback asks for cadence, which no finished state
 holds at any grain.
 
-**No column is added to `runs`.** This module has no migration machinery and
-`CREATE TABLE IF NOT EXISTS` would leave every existing store unable to take a
-row. The join key is `runs.rowid`, read back from the insert in the same
-transaction — exact, and free.
+**No column is added to `runs`.** The join key is `runs.rowid`, read back from
+the insert in the same transaction — exact, and free.
+
+> The reason originally given here was *"this module has no migration machinery
+> and `CREATE TABLE IF NOT EXISTS` would leave every existing store unable to
+> take a row"*. That was right about this decision and was the whole statement
+> of the problem for the next one, which
+> `the-boundary-nobody-checked/07` then found: the day either column list gained
+> an entry, an installation that had run before lost every row from then on
+> behind one WARNING, and `runs list` on it answered with nothing rather than
+> with the rows still in the file. `_reconcile` in `run_sinks.py` is now the
+> machinery — `PRAGMA table_info` against the one declaration, `ALTER TABLE ADD
+> COLUMN` for what is missing, nothing removed — and its docstring names the
+> four shapes of change it deliberately does not survive. The decision above is
+> unchanged; only its reason has been superseded.
 
 **And the cadence reaches a sink as a field on `RunRecord`, not as a method on
 `IRunSink`.** That is this module's own declared asymmetry being used rather
