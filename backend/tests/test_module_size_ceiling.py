@@ -298,9 +298,17 @@ re-opened the socket and re-ran `initialize` + `notifications/initialized` +
 `tools/list` before every single `tools/call` — roughly half of every MCP call
 was the handshake. Holding a live session instead is the fix and it brings
 lifetime, eviction and failure handling with it. Thirty-five top-level
-definitions at 750 code lines; the plausible seam is session management out to
+definitions at 758 code lines; the plausible seam is session management out to
 its own module, which is a real extraction and is named here so it is the first
 thing considered when this number next moves.
+
+750 → 758 is `McpAuth.credential_source()` and the comment at the one call
+site that passes it (`the-boundary-nobody-checked/05`). It belongs here rather
+than in `mcp_sessions`: the pool is handed a library `Connection` dict, which
+has no room for a fact about a *document*, and only this module knows that a
+row names an environment variable rather than carrying a value. That is this
+module's one reason to change — "how a document declares an MCP server" — so
+the growth is on the right side of the question above.
 """
 
 MCP_SERVER = """
@@ -413,7 +421,7 @@ RECORDED: dict[str, Recorded] = {
     "cli.py": Recorded(1102, CLI),
     "compile/workflow_compiler.py": Recorded(890, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(959, STREAMING),
-    "prebuilt_mcp.py": Recorded(750, PREBUILT_MCP),
+    "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(654, MCP_SERVER),
     "api/routes/workflows.py": Recorded(546, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(578, RUN_SINKS),

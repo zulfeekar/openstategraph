@@ -225,6 +225,20 @@ class McpAuth:
     def as_payload(self) -> dict[str, Any]:
         return {"kind": self.kind, "headerName": self.header_name, "tokenEnv": self.token_env}
 
+    def credential_source(self) -> str:
+        """Where the credential is read from — a variable **name**, never a value.
+
+        This is what makes two rows for one URL two sessions. Header names
+        cannot do it, because `resolve_auth_headers` spells every bearer
+        credential as the one header `Authorization`; the variable each row
+        names is the thing that actually differs, and it is already in the
+        clear in a committed document. Empty for a keyless row, so two of
+        those still share one session.
+        """
+        if self.kind == AUTH_NONE or not self.kind:
+            return ""
+        return f"{self.kind}:{self.token_env.strip()}"
+
 
 @dataclass(frozen=True)
 class McpServerDefinition:
@@ -570,7 +584,14 @@ async def _discover_tools(
     # The session is a pooled `McpSessionProxy`, so it is shared with every
     # other card naming this server and it reconnects itself; nothing here
     # captures a socket that can go stale.
-    proxy = session_proxy(definition.connection(headers), timeout=timeout)
+    # `credential_source` is not decoration: without it two rows for one URL
+    # naming two different environment variables collapse to one session and
+    # the second runs on the first one's token (`the-boundary-nobody-checked/05`).
+    proxy = session_proxy(
+        definition.connection(headers),
+        timeout=timeout,
+        credential_source=definition.auth.credential_source(),
+    )
     return await asyncio.wait_for(
         load_mcp_tools(cast(Any, proxy), server_name=definition.name), timeout
     )

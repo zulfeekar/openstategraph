@@ -217,7 +217,49 @@ class McpSessionProxy:
         self._timeout = timeout
         self._session: Any | None = None
         self._stack: AsyncExitStack | None = None
+        self._stale = False
         self._lock = asyncio.Lock()
+
+    def __repr__(self) -> str:
+        """The key and nothing else — never `_connection`, which holds a value.
+
+        `object.__repr__` would already have been safe; this exists so that
+        staying safe is a decision somebody made rather than a default nobody
+        touched. A dataclass, an `attrs` conversion or a debugging `!r` on the
+        connection are each one edit away from putting a bearer token in a
+        traceback, and the key is the whole identity anyway.
+        """
+        return f"<McpSessionProxy {self.key}>"
+
+    def adopt(self, connection: Mapping[str, Any]) -> None:
+        """Take the newest header *values* for this identity.
+
+        The key deliberately carries names and not values, so a rotated
+        credential cannot evict a pooled session — the identity did not
+        change, only the secret behind it. Without this, the value frozen at
+        `__init__` is the one every later caller runs on for the life of the
+        process, and the recovery path from a rotation is a restart.
+
+        A transport failure is not the mechanism that would have caught it:
+        an expired token is a **protocol** failure, and `is_transport_failure`
+        deliberately does not retry those — a silent second call is how a
+        retry turns a wrong answer into two. So the eviction has to come from
+        the caller, which is the only party that has just re-read the
+        environment.
+
+        Marks rather than drops: this is called under the pool's lock, from
+        whichever thread wanted a proxy, and closing a transport belongs to
+        the MCP loop. `_ensure` does the drop, before the next call goes out.
+        No comparison and no branch here reaches a log line.
+        """
+        incoming = dict(connection)
+        if incoming == self._connection:
+            return
+        # Rebinding an attribute is atomic, so `_open` reading `_connection`
+        # concurrently sees one dict or the other and never a half-updated one.
+        self._connection = incoming
+        self._stale = True
+        logger.info("MCP credentials for %s changed; reopening on next call", self.key)
 
     # -- lifecycle ------------------------------------------------------ #
 
@@ -236,19 +278,25 @@ class McpSessionProxy:
 
     async def _ensure(self) -> Any:
         async with self._lock:
+            if self._stale:
+                stack, self._stack, self._session, self._stale = self._stack, None, None, False
+                await self._close(stack)
             if self._session is not None:
                 return self._session
             return await self._open()
 
-    async def _drop(self) -> None:
-        async with self._lock:
-            stack, self._stack, self._session = self._stack, None, None
+    async def _close(self, stack: AsyncExitStack | None) -> None:
         if stack is None:
             return
         try:
             await stack.aclose()
         except BaseException:  # noqa: BLE001 — closing a broken pipe often raises
             logger.debug("MCP session for %s did not close cleanly", self.key, exc_info=True)
+
+    async def _drop(self) -> None:
+        async with self._lock:
+            stack, self._stack, self._session = self._stack, None, None
+        await self._close(stack)
 
     async def aclose(self) -> None:
         await self._drop()
@@ -285,33 +333,70 @@ _POOL: dict[str, McpSessionProxy] = {}
 _POOL_LOCK = threading.Lock()
 
 
-def pool_key(connection: Mapping[str, Any]) -> str:
-    """Identity of a connection — URL, transport and *header names*.
+def pool_key(connection: Mapping[str, Any], *, credential_source: str = "") -> str:
+    """Identity of a connection — URL, transport, *header names*, and where the
+    credential is read from.
 
-    Header **names** and not values: two rows differing only by credential
-    must still be two sessions, but a key that carried the value would put a
-    token in a dict key, and from there into a repr, a log line and a
-    traceback. The name plus the URL is enough to tell two rows apart, and the
-    value can change under a live session without changing who it is.
+    **Names, never values.** A key that carried the value would put a token in
+    a dict key, and from there into a repr, a log line and a traceback. So the
+    key never holds a secret, and never holds anything derived from one: a
+    digest was the obvious way to tell two credentials apart and is rejected,
+    because a digest is still a stable identifier for a secret sitting in every
+    surface a key appears in, a short one collides, and a long one over a
+    low-entropy value is not opaque.
+
+    `credential_source` is the missing name. Header names alone are not enough
+    to tell two rows apart, because `resolve_auth_headers` spells **every**
+    bearer credential as the one header `Authorization`: two rows for one URL
+    naming two different environment variables produced the identical key, and
+    the second row ran on the first row's token. What separates them is the
+    variable each reads from — `bearer:GITHUB_TOKEN` against
+    `bearer:GITHUB_ORG_TOKEN` — which is a name a document already carries in
+    the clear.
+
+    Not the server's display name, which was the other candidate: a row renamed
+    on the canvas would open a second socket to a server it is already talking
+    to, and two cards naming one server sharing one session is the whole point
+    of the pool. The variable is what actually decides which account answers.
+
+    The value can still change under a live session without changing who it is
+    — which is right, and is why a rotation is `McpSessionProxy.adopt`'s job
+    rather than the key's.
     """
     headers = connection.get("headers") or {}
     named = ",".join(sorted(headers)) if isinstance(headers, Mapping) else ""
-    return f"{connection.get('transport', '')}|{connection.get('url', '')}|{named}"
+    return (
+        f"{connection.get('transport', '')}|{connection.get('url', '')}"
+        f"|{named}|{credential_source}"
+    )
 
 
-def session_proxy(connection: Mapping[str, Any], *, timeout: float) -> McpSessionProxy:
+def session_proxy(
+    connection: Mapping[str, Any], *, timeout: float, credential_source: str = ""
+) -> McpSessionProxy:
     """The one proxy for this connection, created on first ask.
 
     Keyed rather than per-node, because two `tool.mcp` cards naming the same
     server are the expected case and there is no reason for them to hold two
-    sockets open to it.
+    sockets open to it. `credential_source` is what keeps "the same server"
+    from meaning "the same account" — see `pool_key`.
+
+    An existing proxy `adopt`s the connection it was asked for, so a caller
+    that has just re-read the environment hands on a rotated value instead of
+    discarding it.
+
+    The pool stays bounded by the number of *configured* rows, which is what
+    `launch-readiness/182` cleared it on: a row carries exactly one credential
+    source, so the widened key adds no entry a configuration did not declare.
     """
-    key = pool_key(connection)
+    key = pool_key(connection, credential_source=credential_source)
     with _POOL_LOCK:
         proxy = _POOL.get(key)
         if proxy is None:
             proxy = McpSessionProxy(key, connection, timeout=timeout)
             _POOL[key] = proxy
+        else:
+            proxy.adopt(connection)
         return proxy
 
 
