@@ -394,7 +394,12 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   if (!open) return null;
 
   return (
-    <Panel side="left" className="workflow-manager" style={{ width: 'var(--layout-drawer-width)' }}>
+    // Neither a side nor a width of its own any more (`launch-readiness` 189).
+    // Both belonged to being a docked left-hand panel: `side="left"` drew the
+    // border that separated it from the canvas beside it, and the inline width
+    // was the column it claimed out of the shell's row. Inside a popover the
+    // container owns both, and the panel is only the chrome for the content.
+    <Panel className="workflow-manager">
       <PanelHeader
         title="Workflows"
         actions={<IconButton label="Close" icon={<Icon glyph={X} size="sm" />} onClick={onClose} />}

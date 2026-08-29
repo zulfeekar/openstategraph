@@ -86,7 +86,7 @@ interface Recorded {
 
 const RECORDED: Readonly<Record<string, Recorded>> = {
   'view/ask/AskPanel.tsx': {
-    lines: 922,
+    lines: 905,
     reason: `The largest module under \`src/\` and the one the ticket named: the counterpart
       of \`node_runtime.py\` with no split ticket behind it at all. Eight hundred and
       eighty-nine code lines out of 2,237 physical — the rest is JSX structure, imports and
@@ -122,7 +122,21 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       three lines below it does, for the reason written there: it is one of the
       frames that arrive while a node is still working. Neither adds a reason to
       change; both are the transcript seam this entry has been asking somebody
-      to take.`,
+      to take.
+
+      **922 -> 905** (\`memory-and-replay/51\`), and this is the first time the
+      number has gone *down*. The two run views left: the trace tree and the
+      bars, the two-tab switch between them, and the Export button that belongs
+      with the trace all moved to the run dock, which is a sibling of the whole
+      stage rather than a section of a 300px chat column. What replaced them is
+      six lines publishing the newest turn into \`runView\`.
+
+      Seventeen lines is not the point and would not be worth a paragraph. What
+      is worth one is that a **reason to change** came out with them: this entry
+      has listed "the run's live state" among the things this module composes
+      since it was written, and drawing a run is no longer one of them. The
+      transcript seam it keeps asking somebody to take is still the next one,
+      and it is now the only structural one left.`,
   },
   'core/runtime/RuntimeClient.ts': {
     lines: 700,

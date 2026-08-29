@@ -55,10 +55,10 @@ import { parseMountAddress } from '@core/model/MountAddress';
 import { replayRun, turnToReplay } from '@core/runtime/replayRun';
 import { CURRENT_SLUG_KEY } from '@app/workflowFileWatch';
 import { RichText } from '@view/common/RichText';
-import { Activity, exportTrace, type ActivityRow } from './traceTree';
+import { type ActivityRow } from './traceTree';
 import { ToolResults, appendToolChunk, type ToolResult } from './toolResults';
-import { RunTimeline } from './RunTimeline';
 import { PastRuns } from './PastRuns';
+import { runView } from '../run/runView';
 import { displayNamesByGraphName } from '@core/runtime/graphName';
 import { busKey, suggestionOutcome, unreadyFields, type CapabilitySuggestion } from './suggestion';
 import { acceptAction, type AcceptAction } from './acceptAction';
@@ -412,6 +412,30 @@ export function AskPanel({
     conversations.read(currentSubject()),
   );
   const turns = conversation.turns;
+
+  /**
+   * Hand the newest run to the timeline dock (`memory-and-replay` 51).
+   *
+   * The two run views this panel used to hold — the bars and the trace tree —
+   * now live in a dock along the bottom of the shell, so what is left here is
+   * the *source*: rows in, published out. The panel is conditionally rendered
+   * and the dock is not a descendant of it, which is why this goes through a
+   * store rather than a prop.
+   *
+   * The store is silent when nothing changed, which matters: this effect runs
+   * on every render of a panel that re-renders per stream frame *and* per
+   * keystroke in the composer.
+   */
+  useEffect(() => {
+    const newest = turns[turns.length - 1];
+    if (!newest) return;
+    runView.publish({
+      source: 'live',
+      question: newest.question,
+      rows: newest.activity,
+      running: newest.running,
+    });
+  }, [turns]);
   /**
    * The same functional-updater shape the panel's own `useState` had, so every
    * caller reads unchanged — the subject is resolved at write time, never
@@ -1954,10 +1978,6 @@ function Turn({
   /** Seeds the composer with the brief that opens the build interview. */
   onStartBuild: (gap: string) => void;
 }) {
-  // Per turn, and ephemeral: a run's timeline is a fact about that run, and
-  // nothing about it deserves to be persisted.
-  const [view, setView] = useState<'trace' | 'timeline'>('trace');
-
   return (
     <div className="ask__turn">
       {/* The one place the thread's shape is visible: everything above this
@@ -1971,28 +1991,13 @@ function Turn({
 
       {turn.running || turn.activity.length > 0 ? (
         <div className="ask__steps">
-          {/* Two readings of one record, never two records: the trace answers
-              *what* ran and what it produced, the timeline answers *when* and
-              for how long. Both are built from `turn.activity`. */}
-          <div className="ask__views" role="tablist" aria-label="Run steps view">
-            {(['trace', 'timeline'] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                role="tab"
-                aria-selected={view === option}
-                className="ask__view-tab"
-                onClick={() => setView(option)}
-              >
-                {option === 'trace' ? 'Trace' : 'Timeline'}
-              </button>
-            ))}
-          </div>
-          {view === 'trace' ? (
-            <Activity rows={turn.activity} />
-          ) : (
-            <RunTimeline rows={turn.activity} running={turn.running} />
-          )}
+          {/* The trace tree and the bars used to be here, behind a two-tab
+              switch. `memory-and-replay` 51 moved both to the run dock along
+              the bottom of the shell, side by side rather than one at a time:
+              they are two readings of one record and a 300px chat column could
+              only ever show one. What is left in the chat panel is the chat —
+              what is being said now, and what this run handed to somebody
+              else. */}
           {/* Below both views and outside either record: what the working step
               is saying about itself right now is not a step that ran and not a
               bar on a timeline. Gated on `running` so every ending — answered,
@@ -2030,17 +2035,6 @@ function Turn({
             />
           )}
         </div>
-      ) : null}
-
-      {!turn.running && turn.activity.length > 0 ? (
-        <button
-          type="button"
-          className="ask__export"
-          onClick={() => exportTrace(turn)}
-          title="Download this run as structured trace JSON"
-        >
-          Export trace JSON
-        </button>
       ) : null}
 
       {/* Above the reasoning, because the tools are what the reasoning is

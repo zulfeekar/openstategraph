@@ -33,6 +33,26 @@ interface FloatingOptions {
    * every render costs one re-subscription and never a leak.
    */
   subscribe?: (update: () => void) => () => void;
+  /**
+   * The box the floating element must stay inside. Defaults to the window.
+   *
+   * `launch-readiness` 189 needs this and nothing before it did: the shell's
+   * stage is a **sibling** of the run dock (`memory-and-replay` 51), so
+   * dragging the dock's edge makes the stage shorter while the window's size
+   * is unchanged. A popover clamped to the window would hang over the
+   * timeline, and the `resize` listener below would never fire to correct it —
+   * hence `subscribe`, which is how the caller says the stage moved.
+   *
+   * A function rather than a ref, matching `subscribe` above and for a related
+   * reason: the caller is the one that knows what its container is, and the
+   * box has to be measured **from the window's origin** — `placeFloating`
+   * clamps its low edge to `padding` from zero, so a bound with an origin of
+   * its own would need an offset the clamp does not carry. Handing back
+   * `{ width: rect.right, height: rect.bottom }` is what makes that true, and
+   * saying so at the call site is more honest than a ref this could silently
+   * mis-measure. `null` means *not measurable yet*, and the window is used.
+   */
+  bounds?: () => { width: number; height: number } | null;
 }
 
 export interface FloatingPosition {
@@ -177,6 +197,7 @@ export function useFloating(
     padding = 8,
     enabled = true,
     subscribe,
+    bounds,
   }: FloatingOptions = {},
 ): FloatingPosition | null {
   const [position, setPosition] = useState<FloatingPosition | null>(null);
@@ -196,7 +217,7 @@ export function useFloating(
     } = placeFloating(
       anchorRect,
       size,
-      { width: window.innerWidth, height: window.innerHeight },
+      bounds?.() ?? { width: window.innerWidth, height: window.innerHeight },
       { placement, align, offset, padding },
     );
 
@@ -205,7 +226,7 @@ export function useFloating(
         ? prev
         : { x, y, placement: used },
     );
-  }, [anchorRef, floatingRef, placement, align, offset, padding]);
+  }, [anchorRef, floatingRef, placement, align, offset, padding, bounds]);
 
   useLayoutEffect(() => {
     if (!enabled) {

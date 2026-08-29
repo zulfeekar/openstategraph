@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties } from 'react';
 import type { Theme } from '@design/tokens';
 import type { Shortcut } from '@canvas/features/KeyboardFeature';
@@ -21,8 +21,14 @@ import { McpServersDialog } from './overlays/McpServersDialog';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
 import { WorkflowManager } from './workflow/WorkflowManager';
+import { Popover } from '@design/primitives';
 import { leftOverlayWidth, panelsMustOverlay, rightOverlayWidth } from './layout/panelFit';
 import { useViewportWidth } from './layout/useViewportWidth';
+import { observeResize } from './layout/observeResize';
+import { clampDockHeight } from './layout/dockFit';
+import { RunDock } from './run/RunDock';
+import { runView } from './run/runView';
+import { readDockHeight, rememberDockHeight } from './run/dockHeightMemory';
 import { interruptedRunNotice, takeInterruptedRun } from './ask/interruptedRun';
 import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
 import { DrillBanner } from './workflow/DrillBanner';
@@ -155,6 +161,112 @@ export function AppShell() {
   const [mcpServersOpen, setMcpServersOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
 
+  /* ---------------- the two things a bottom dock adds ----------------
+   *
+   * `memory-and-replay` 51 wraps everything above it — top bar, palette,
+   * canvas, inspector — in one **stage**, and hangs the run dock underneath as
+   * its sibling. So the dock pushes rather than overlays: the canvas is never
+   * covered, only shorter.
+   *
+   * Two refs come out of that, and both are load-bearing rather than
+   * bookkeeping. `shellRef` is what the drag clamps against, because the
+   * ceiling is a fact about how tall the whole app is and the dock cannot see
+   * past itself. `stageRef` is the box the Workflows popover has to stay
+   * inside (`launch-readiness` 189): the window does **not** resize when the
+   * dock takes three hundred pixels, so a popover measured against the window
+   * would hang over the timeline.
+   */
+  const shellRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const workflowsAnchorRef = useRef<HTMLButtonElement>(null);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  /**
+   * Whether the user has said anything about the dock yet.
+   *
+   * `ship-it` 39's lesson, applied before it can be re-learned: publishing
+   * worked perfectly for months in a panel nobody opened. The bars and the
+   * trace tree used to be in the chat, which Run opens on its own — if the
+   * dock they moved to only ever appeared for someone who found a new toolbar
+   * button, moving them would be shipping them switched off.
+   *
+   * So the first run of a tab opens it, and after any deliberate press of the
+   * toggle or of Close it never opens itself again. A ref rather than state:
+   * nothing renders differently because of it.
+   */
+  const dockDecided = useRef(false);
+  /**
+   * Both stable, and both use the functional form — which is the bug this
+   * comment exists to stop coming back. Written first as
+   * `showDock(!timelineOpen)`, the binding table below then had `timelineOpen`
+   * in its dependency array, the array's identity changed on every toggle, and
+   * the keyboard feature had already installed the *first* closure: every
+   * press asked to open a dock that was already open, so the shortcut opened
+   * it once and could never close it. Found by pressing it in a browser, which
+   * is the only place a stale closure inside a `useMemo` shows itself. Every
+   * other row in that table takes the functional form for the same reason.
+   */
+  const toggleDock = useCallback(() => {
+    dockDecided.current = true;
+    setTimelineOpen((value) => !value);
+  }, []);
+  const closeDock = useCallback(() => {
+    dockDecided.current = true;
+    setTimelineOpen(false);
+  }, []);
+  const [dockHeight, setDockHeight] = useState(readDockHeight);
+
+  /**
+   * The run on show, from the store rather than from the chat panel.
+   *
+   * `useSyncExternalStore` and not a prop, because the writer (`AskPanel`) is
+   * conditionally rendered and is not an ancestor of the reader. Closing the
+   * chat to look at the canvas a run is drawing on must not take the timeline
+   * with it — which is the whole reason this surface was promoted out of the
+   * panel.
+   */
+  const shownRun = useSyncExternalStore(
+    useCallback((listener: () => void) => runView.subscribe(listener), []),
+    useCallback(() => runView.read(), []),
+  );
+
+  /** A drag's request, brought inside what the shell can actually give. */
+  const resizeDock = useCallback((requested: number) => {
+    const shell = shellRef.current;
+    const height = clampDockHeight(
+      requested,
+      shell?.getBoundingClientRect().height ?? window.innerHeight,
+    );
+    setDockHeight(height);
+    rememberDockHeight(height);
+  }, []);
+
+  /**
+   * Tell whoever asks when the stage's box changed.
+   *
+   * The escape hatch `useFloating` already carries for the canvas, used for
+   * the second reason an anchor moves: a sibling panel taking height. Stable
+   * across renders so an open popover re-subscribes once, never per frame.
+   */
+  const stageResized = useCallback(
+    (update: () => void) => observeResize(stageRef.current, update),
+    [],
+  );
+
+  /**
+   * The stage's box, measured from the window's origin.
+   *
+   * `right` and `bottom` rather than `width` and `height`, and that is the
+   * contract `useFloating.bounds` states: the clamp inside it runs from zero,
+   * so what it wants is *how far the container reaches*, not how big it is.
+   * They are the same numbers here — the stage is flush with the top-left of
+   * the window — and writing it this way keeps that an assertion about this
+   * container rather than an assumption inside the primitive.
+   */
+  const stageBounds = useCallback(() => {
+    const box = stageRef.current?.getBoundingClientRect();
+    return box ? { width: box.right, height: box.bottom } : null;
+  }, []);
+
   /* ---------------- theme ---------------- */
 
   useEffect(() => {
@@ -262,6 +374,21 @@ export function AppShell() {
         run: () => setWorkflowManagerOpen((value) => !value),
       },
       {
+        // Not Mod+Shift+T, which is the mnemonic: Chrome owns it for reopening
+        // a closed tab, and `Mod+Shift+K` above records what happens when a
+        // binding the browser has already claimed is registered anyway — it
+        // works perfectly and never reaches the page. Verified in a real
+        // browser, as that one was.
+        //
+        // A row in this table rather than a handler on the dock, because one
+        // binding table drives both the dispatcher and the shortcuts drawer,
+        // and a toggle wired anywhere else would work and be undiscoverable.
+        keys: 'Mod+Shift+L',
+        label: 'Toggle run timeline',
+        group: 'View',
+        run: toggleDock,
+      },
+      {
         // The convention every editor on this machine already trained the
         // user in. `allowInTextEntry` because a save you have to click out of
         // a textarea to reach is a save you lose work to — and because the
@@ -290,7 +417,7 @@ export function AppShell() {
         run: () => setCredentialsOpen(true),
       },
     ],
-    [workbench, runWorkflow, saveOpenWorkflow],
+    [workbench, runWorkflow, saveOpenWorkflow, toggleDock],
   );
 
   /* ---------------- run feedback ---------------- */
@@ -359,138 +486,189 @@ export function AppShell() {
     palette: paletteOpen,
     ask: askOpen,
     inspector: inspectorOpen,
-    workflows: workflowManagerOpen,
   });
 
   return (
-    <div className="app-shell">
-      <TopBar
-        theme={theme}
-        onThemeChange={setTheme}
-        showGrid={showGrid}
-        onGridChange={setShowGrid}
-        paletteOpen={paletteOpen}
-        onPaletteToggle={() => setPaletteOpen((value) => !value)}
-        inspectorOpen={inspectorOpen}
-        onInspectorToggle={() => setInspectorOpen((value) => !value)}
-        onOpenCredentials={() => setCredentialsOpen(true)}
-        onOpenMcpServers={() => setMcpServersOpen(true)}
-        onNotify={onNotify}
-        onNewWorkflow={() => void startNewWorkflow()}
-        onSave={() => void saveOpenWorkflow()}
-        saving={saving}
-        onWorkflowsToggle={() => setWorkflowManagerOpen((value) => !value)}
-        workflowsOpen={workflowManagerOpen}
-        askOpen={askOpen}
-        onAskToggle={() =>
-          setAskOpen((value) => {
-            if (value) {
-              setAskNotice(null);
-              // Closing the panel ends the runs it was showing. The panel is
-              // where a run is watched, answered and continued, and its
-              // transcript goes with it — so a stream left open would write
-              // to nothing a user can ever read while still billing tokens.
-              // Said here rather than in the panel's cleanup for the reason
-              // `askStreams` records.
-              askStreams.abortAll();
-            }
-            return !value;
-          })
-        }
-        onRun={runWorkflow}
-        // The run lives in the Ask panel, so Stop is a request forwarded to
-        // it — never a second place that knows how to abort. Except when the
-        // panel is not there to receive it: the shell holds the handle, so a
-        // Stop offered while the panel is closed is one that can be delivered
-        // rather than a button that silently does nothing (ticket 07).
-        onStop={() => (askOpen ? setAskStopRequest({ nonce: Date.now() }) : askStreams.abortAll())}
-        runInFlight={backendRunning}
-      />
-
-      <div
-        className="app-shell__body"
-        // Whether the panels share the row with the canvas or float over it,
-        // decided by what is open rather than by a breakpoint (55.4). Four
-        // panels at 1280 used to leave ~140px of canvas, silently.
-        data-overlay={mustOverlay || undefined}
-        // The drawer is a second left-hand panel: floating, it must stand
-        // beside the palette rather than on top of it.
-        data-palette-open={paletteOpen || undefined}
-      >
-        {paletteOpen ? <Palette onNotify={onNotify} /> : null}
-
-        <main
-          className="app-shell__canvas"
-          // Ask/Inspector float over the canvas rather than sharing its row
-          // when overlaying (55.4), so the canvas element stays full width —
-          // anything centred on it, like the empty-state copy, was centring
-          // on space the panels sit on top of (76). This tells the canvas how
-          // much of its right edge is actually covered.
-          style={
-            {
-              '--canvas-empty-inset-right': `${rightOverlayWidth(mustOverlay, {
-                ask: askOpen,
-                inspector: inspectorOpen,
-              })}px`,
-              // launch-readiness 39: the palette (and the Workflows drawer
-              // beside it) float over the canvas at `left: 0` in overlay
-              // mode too — the empty-state hint needs the same inset on the
-              // left that Ask/Inspector already get on the right (76), or a
-              // narrow window centres it behind the palette.
-              '--canvas-empty-inset-left': `${leftOverlayWidth(mustOverlay, {
-                palette: paletteOpen,
-                workflows: workflowManagerOpen,
-              })}px`,
-            } as CSSProperties
+    <div className="app-shell" ref={shellRef}>
+      {/* The stage: everything that was the app before there was a dock.
+          The dock is its **sibling** below, so the canvas is pushed rather
+          than covered — the owner's own framing of `memory-and-replay` 51,
+          and better than an overlay because a time axis is something you read
+          *while* watching the thing it measures. */}
+      <div className="app-shell__stage" ref={stageRef}>
+        <TopBar
+          theme={theme}
+          onThemeChange={setTheme}
+          showGrid={showGrid}
+          onGridChange={setShowGrid}
+          paletteOpen={paletteOpen}
+          onPaletteToggle={() => setPaletteOpen((value) => !value)}
+          inspectorOpen={inspectorOpen}
+          onInspectorToggle={() => setInspectorOpen((value) => !value)}
+          onOpenCredentials={() => setCredentialsOpen(true)}
+          onOpenMcpServers={() => setMcpServersOpen(true)}
+          onNotify={onNotify}
+          onNewWorkflow={() => void startNewWorkflow()}
+          onSave={() => void saveOpenWorkflow()}
+          saving={saving}
+          onWorkflowsToggle={() => setWorkflowManagerOpen((value) => !value)}
+          workflowsOpen={workflowManagerOpen}
+          // One prop, and it carries a rectangle rather than a behaviour: the
+          // Workflows list is now a popover centred on this button
+          // (`launch-readiness` 189), and only the button knows where it is.
+          // `TopBarProps` is a long interface and 51 warned against absorbing
+          // anything else into it; an anchor is the one thing that genuinely
+          // cannot live anywhere but on the control.
+          workflowsAnchorRef={workflowsAnchorRef}
+          timelineOpen={timelineOpen}
+          onTimelineToggle={toggleDock}
+          askOpen={askOpen}
+          onAskToggle={() =>
+            setAskOpen((value) => {
+              if (value) {
+                setAskNotice(null);
+                // Closing the panel ends the runs it was showing. The panel is
+                // where a run is watched, answered and continued, and its
+                // transcript goes with it — so a stream left open would write
+                // to nothing a user can ever read while still billing tokens.
+                // Said here rather than in the panel's cleanup for the reason
+                // `askStreams` records.
+                askStreams.abortAll();
+              }
+              return !value;
+            })
           }
+          onRun={runWorkflow}
+          // The run lives in the Ask panel, so Stop is a request forwarded to
+          // it — never a second place that knows how to abort. Except when the
+          // panel is not there to receive it: the shell holds the handle, so a
+          // Stop offered while the panel is closed is one that can be delivered
+          // rather than a button that silently does nothing (ticket 07).
+          onStop={() =>
+            askOpen ? setAskStopRequest({ nonce: Date.now() }) : askStreams.abortAll()
+          }
+          runInFlight={backendRunning}
+        />
+
+        <div
+          className="app-shell__body"
+          // Whether the panels share the row with the canvas or float over it,
+          // decided by what is open rather than by a breakpoint (55.4). Four
+          // panels at 1280 used to leave ~140px of canvas, silently.
+          //
+          // Three panels now, not four. `launch-readiness` 39's `data-palette-open`
+          // used to ride here so the Workflows drawer could stand *beside* the
+          // palette instead of on top of it when both floated at `left: 0`.
+          // 189 made Workflows a popover, so it is no longer a left panel, no
+          // longer in this row, and cannot claim an address the palette also
+          // wants. The attribute and its CSS rule are gone with their argument
+          // rather than left describing code that does not exist.
+          data-overlay={mustOverlay || undefined}
         >
-          <CanvasStage shortcuts={shellShortcuts} showGrid={showGrid} onNotify={onNotify} />
-          {/* Over the canvas, not in the topbar: it is a fact about *this
+          {paletteOpen ? <Palette onNotify={onNotify} /> : null}
+
+          <main
+            className="app-shell__canvas"
+            // Ask/Inspector float over the canvas rather than sharing its row
+            // when overlaying (55.4), so the canvas element stays full width —
+            // anything centred on it, like the empty-state copy, was centring
+            // on space the panels sit on top of (76). This tells the canvas how
+            // much of its right edge is actually covered.
+            style={
+              {
+                '--canvas-empty-inset-right': `${rightOverlayWidth(mustOverlay, {
+                  ask: askOpen,
+                  inspector: inspectorOpen,
+                })}px`,
+                // launch-readiness 39: the palette floats over the canvas at
+                // `left: 0` in overlay mode too — the empty-state hint needs
+                // the same inset on the left that Ask/Inspector already get on
+                // the right (76), or a narrow window centres it behind the
+                // palette. The Workflows drawer used to be summed in here as a
+                // second left-hand panel; 189 made it a popover, which is
+                // transient and dismisses on the first click anywhere else, so
+                // it is no longer something the empty state has to make room
+                // for.
+                '--canvas-empty-inset-left': `${leftOverlayWidth(mustOverlay, {
+                  palette: paletteOpen,
+                })}px`,
+              } as CSSProperties
+            }
+          >
+            <CanvasStage shortcuts={shellShortcuts} showGrid={showGrid} onNotify={onNotify} />
+            {/* Over the canvas, not in the topbar: it is a fact about *this
               document*, and it appears and disappears with a navigation —
               the topbar's contents are fixed chrome. */}
-          <DrillBanner />
-          {paper ? <Minimap /> : null}
-          <ShortcutsDrawer
-            shortcuts={paper?.shortcuts ?? []}
-            portTypes={workbench.registry.portTypes.list()}
-          />
-          <AccessibilityCheck />
-        </main>
+            <DrillBanner />
+            {paper ? <Minimap /> : null}
+            <ShortcutsDrawer
+              shortcuts={paper?.shortcuts ?? []}
+              portTypes={workbench.registry.portTypes.list()}
+            />
+            <AccessibilityCheck />
+          </main>
 
-        {askOpen || inspectorOpen ? (
-          // Grouped so the narrow-window overlay rule (AppShell.css) can lay
-          // both out side by side instead of stacking them at an identical
-          // `right: 0`, which made whichever mounted second (Inspector)
-          // silently intercept every click meant for the other.
-          <div className="app-shell__right-panels">
-            {askOpen ? (
-              <AskPanel
-                notice={askNotice}
-                focusNonce={askFocusNonce}
-                runRequest={askRunRequest}
-                stopRequest={askStopRequest}
-                streams={askStreams}
-                openHistory={INTERRUPTED_RUN !== null}
-                onRunningChange={(running) => {
-                  setBackendRunning(running);
-                  // Ticket 08: a backend-streamed run has no local engine to
-                  // fire `run:start`, so this is where the canvas learns a new
-                  // run has begun and the follow latch may be released.
-                  if (running) paper?.follower.runStarted();
-                }}
-              />
-            ) : null}
-            {inspectorOpen ? <Inspector /> : null}
-          </div>
-        ) : null}
-        {workflowManagerOpen ? (
+          {askOpen || inspectorOpen ? (
+            // Grouped so the narrow-window overlay rule (AppShell.css) can lay
+            // both out side by side instead of stacking them at an identical
+            // `right: 0`, which made whichever mounted second (Inspector)
+            // silently intercept every click meant for the other.
+            <div className="app-shell__right-panels">
+              {askOpen ? (
+                <AskPanel
+                  notice={askNotice}
+                  focusNonce={askFocusNonce}
+                  runRequest={askRunRequest}
+                  stopRequest={askStopRequest}
+                  streams={askStreams}
+                  openHistory={INTERRUPTED_RUN !== null}
+                  onRunningChange={(running) => {
+                    setBackendRunning(running);
+                    // The first run of the tab brings the dock up; after that
+                    // the user's own answer stands. See `dockDecided`.
+                    if (running && !dockDecided.current) setTimelineOpen(true);
+                    // Ticket 08: a backend-streamed run has no local engine to
+                    // fire `run:start`, so this is where the canvas learns a new
+                    // run has begun and the follow latch may be released.
+                    if (running) paper?.follower.runStarted();
+                  }}
+                />
+              ) : null}
+              {inspectorOpen ? <Inspector /> : null}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Centred on the button that opened it, and bounded by the stage
+            rather than by the window (`launch-readiness` 189). `stageResized`
+            is the part that makes this and the dock one job: drag the dock's
+            edge and the stage shortens without a single `resize` event
+            firing, so a popover listening to the window would hang over the
+            timeline. */}
+        <Popover
+          open={workflowManagerOpen}
+          anchorRef={workflowsAnchorRef}
+          onClose={() => setWorkflowManagerOpen(false)}
+          label="Workflows"
+          bounds={stageBounds}
+          subscribe={stageResized}
+        >
           <WorkflowManager
             open={workflowManagerOpen}
             onClose={() => setWorkflowManagerOpen(false)}
             onNotify={onNotify}
           />
-        ) : null}
+        </Popover>
       </div>
+
+      {timelineOpen ? (
+        <RunDock
+          view={shownRun}
+          height={dockHeight}
+          onHeightChange={resizeDock}
+          onClose={closeDock}
+        />
+      ) : null}
 
       {credentialsOpen ? <CredentialsDialog onClose={() => setCredentialsOpen(false)} /> : null}
       {mcpServersOpen ? <McpServersDialog onClose={() => setMcpServersOpen(false)} /> : null}

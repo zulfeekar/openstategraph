@@ -26,6 +26,7 @@ export {
 } from './Indicators';
 export { Panel, PanelHeader, PanelBody, PanelFooter, PanelSection, PanelEmpty } from './Panel';
 export { Tabs, type TabDefinition } from './Tabs';
+export { Popover, type PopoverProps } from './Popover';
 export { Pill, type PillProps } from './Pill';
 export {
   ThinkingStack,

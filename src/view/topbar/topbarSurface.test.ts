@@ -28,12 +28,29 @@ describe('the toolbar', () => {
     // It used to be `flex: none` inside a row that held two more buttons
     // beside it, so the toolbar's surface stopped short of the window and the
     // last two controls floated on the canvas background. Ticket 06 fixed that
-    // by deleting the row — which is what these three assertions pin. Width
-    // now comes from the shell's own cross-axis stretch and needs no `flex`
-    // at all; see the height test below for why asserting `flex: 1 1 auto`
-    // here (as this test did until ticket 24) pinned the bug rather than the
-    // fix.
-    expect(shell).toMatch(/<div className="app-shell">\s*<TopBar/);
+    // by deleting the row — which is what these assertions pin. Width now
+    // comes from the enclosing column's cross-axis stretch and needs no
+    // `flex` at all; see the height test below for why asserting
+    // `flex: 1 1 auto` here (as this test did until ticket 24) pinned the bug
+    // rather than the fix.
+    //
+    // **The column is `app-shell__stage`, not `app-shell`, since
+    // `memory-and-replay` 51** — and that is a deliberate restructure with
+    // this red test attached rather than a tidy-up that slipped past it. The
+    // run dock is a *sibling* of everything the app used to be, so that
+    // everything now needs a name: the stage wraps the top bar, the palette,
+    // the canvas and the inspector, and the dock stands under it. Push, not
+    // overlay. The stage is a `flex-direction: column` that stretches its
+    // children across, exactly as `.app-shell` did, so the property this test
+    // was written to protect is unchanged — what moved is which element
+    // provides it, and the next two assertions below are what keep the dock
+    // from quietly becoming a fourth thing floating over the canvas.
+    expect(shell).toMatch(/<div className="app-shell__stage" ref=\{stageRef\}>\s*<TopBar/);
+    expect(shellCss).toMatch(/\.app-shell__stage\s*\{[^}]*flex-direction:\s*column/);
+    // The dock is outside the stage. Inside it, it would be a panel in the
+    // canvas's row and every promise `RunDock` makes about pushing rather
+    // than covering would be false.
+    expect(shell).toMatch(/<\/div>\s*\n\s*\{timelineOpen \? \(\s*\n\s*<RunDock/);
     expect(shellCss).not.toContain('app-shell__workflow-btn');
     expect(shell).not.toContain('app-shell__topbar-row');
   });
@@ -93,6 +110,51 @@ describe('the toolbar', () => {
   it('routes to the workflow list by name, not by an unlabelled icon', () => {
     expect(topbar).toMatch(/>\s*Workflows\s*</);
     expect(topbar).toContain('onWorkflowsToggle');
+  });
+
+  it('is what the workflow list hangs off, rather than the far edge of the window', () => {
+    // `launch-readiness` 189. The list was a panel docked to the opposite side
+    // of the screen from the button that opened it — measured at 1440px, the
+    // button's centre at x=691 and the panel's left edge at x=1120, which is
+    // why the owner's report was that it "opens on the right". Pinned here as
+    // placement, like Create New and Save above: the arithmetic is unit-tested
+    // in `popoverAnchor`'s stead by `useFloating.test.ts`, and what has no
+    // seam in a `node` environment is that the trigger and the surface are
+    // attached to each other at all.
+    expect(topbar).toContain('ref={workflowsAnchorRef}');
+    expect(shell).toMatch(/<Popover[\s\S]{0,300}anchorRef=\{workflowsAnchorRef\}/);
+    // Bounded by the stage and told when the stage moves — the half that makes
+    // this ticket and the timeline one job. A popover measured against the
+    // window would hang over the dock, and no `resize` event would ever say so.
+    expect(shell).toMatch(/<Popover[\s\S]{0,400}bounds=\{stageBounds\}/);
+    expect(shell).toMatch(/<Popover[\s\S]{0,400}subscribe=\{stageResized\}/);
+    // And it is not a docked panel any more, in either surface.
+    // The attribute, not the word: the shell still *says* `data-palette-open`
+    // in the comment recording why it went, which is the point.
+    expect(shell).not.toMatch(/data-palette-open=/);
+    expect(shellCss).not.toContain('.workflow-manager');
+  });
+
+  it('carries the run timeline’s control, with the surface itself below', () => {
+    // `memory-and-replay` 51. The owner asked for the timeline as "a section
+    // on the top panel"; a scrubbable multi-lane chart does not fit in a 48px
+    // header strip, so the toolbar carries the toggle and the dock carries the
+    // pixels. Both halves pinned, because either alone is a different feature.
+    expect(topbar).toContain('onTimelineToggle');
+    expect(topbar).toMatch(/label="Toggle run timeline"/);
+    // In the one binding table that also feeds the shortcuts drawer, never an
+    // inline handler — the rule that keeps a working shortcut discoverable.
+    expect(shell).toMatch(/keys: 'Mod\+Shift\+L',\s*\n\s*label: 'Toggle run timeline'/);
+    // And it toggles from the previous value rather than from a captured one.
+    // Written the other way first, the binding table listed `timelineOpen` as
+    // a dependency, its identity changed on every toggle, and the keyboard
+    // feature kept the closure it had installed on mount: the shortcut opened
+    // the dock once and could never close it again. Found in a browser, since
+    // a stale closure inside a `useMemo` is invisible to a source read.
+    expect(shell).toMatch(
+      /const toggleDock = useCallback\(\(\) => \{[\s\S]{0,160}\(value\) => !value/,
+    );
+    expect(shell).not.toMatch(/run: \(\) => showDock\(/);
   });
 
   it('keeps Ask in the toolbar rather than beside it', () => {

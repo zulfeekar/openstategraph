@@ -28,13 +28,23 @@ import { LAYOUT, NODE } from '@design/tokens';
  */
 export const MIN_CANVAS_WIDTH = NODE.width * 2;
 
-/** What each panel costs the row when it is open. */
+/**
+ * What each panel costs the row when it is open.
+ *
+ * **Three, not four.** The Workflows drawer was the fourth and is gone from
+ * this table, because `launch-readiness` 189 made it a popover: it floats over
+ * the stage, dismisses on the first click anywhere else, and takes no column
+ * out of the row at all. Summing it here after that change would have made
+ * every panel narrow the canvas by 320px that nothing was occupying — the
+ * exact inverse of the defect (55.4) this module was written to fix, and just
+ * as silent. `LAYOUT.drawerWidth` still exists and is still the popover's
+ * width; what changed is who has to make room for it.
+ */
 export const PANEL_WIDTH = {
   palette: LAYOUT.paletteWidth,
   /** Both right-hand panels are `--layout-inspector-width` wide. */
   ask: LAYOUT.inspectorWidth,
   inspector: LAYOUT.inspectorWidth,
-  workflows: LAYOUT.drawerWidth,
 } as const;
 
 export type PanelName = keyof typeof PANEL_WIDTH;
@@ -77,22 +87,25 @@ export function rightOverlayWidth(
 }
 
 /**
- * How much of the canvas's left edge the left-hand panels cover when they
- * overlay it instead of sharing the row (launch-readiness 39).
+ * How much of the canvas's left edge the palette covers when it overlays the
+ * canvas instead of sharing the row (launch-readiness 39).
  *
- * The palette is a `panel--left` exactly like the Workflows drawer, and
- * `AppShell.css`'s `[data-overlay] > .panel--left` rule floats it at
- * `left: 0` the same way Ask/Inspector float at `right: 0` — but nothing
- * told the canvas's empty-state copy about it, so a narrow window left the
- * hint centred behind the palette instead of beside it. Mirrors
- * `rightOverlayWidth`: when the palette and the drawer are both open, the
- * drawer stands beside the palette (`left: var(--layout-palette-width)`), so
- * together they cover the sum.
+ * `AppShell.css`'s `[data-overlay] > .panel--left` rule floats the palette at
+ * `left: 0` the same way Ask/Inspector float at `right: 0` — but nothing told
+ * the canvas's empty-state copy about it, so a narrow window left the hint
+ * centred behind the palette instead of beside it. Mirrors
+ * `rightOverlayWidth`.
+ *
+ * **39's second half is gone, deliberately and with its argument.** This used
+ * to sum the Workflows drawer too, and `AppShell.css` carried a rule standing
+ * it beside the palette (`left: var(--layout-palette-width)`) because two left
+ * panels floating at one address meant whichever painted last won. 189 made
+ * Workflows a popover — it is no longer a `panel--left`, it is not in
+ * `app-shell__body`'s flow, and it cannot claim `left: 0` — so the collision
+ * that rule resolved can no longer happen, and a sentence describing it would
+ * be one more of the ones this repository has spent a week finding.
  */
-export function leftOverlayWidth(
-  overlay: boolean,
-  open: Pick<OpenPanels, 'palette' | 'workflows'>,
-): number {
+export function leftOverlayWidth(overlay: boolean, open: Pick<OpenPanels, 'palette'>): number {
   if (!overlay) return 0;
-  return (open.palette ? PANEL_WIDTH.palette : 0) + (open.workflows ? PANEL_WIDTH.workflows : 0);
+  return open.palette ? PANEL_WIDTH.palette : 0;
 }

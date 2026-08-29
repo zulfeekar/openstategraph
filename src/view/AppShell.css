@@ -6,6 +6,26 @@
   background: var(--color-bg-canvas);
 }
 
+/* The stage — everything that was the app before there was a dock: the top
+ * bar, the palette, the canvas, the inspector.
+ *
+ * It exists so the run dock (`memory-and-replay` 51) can be its **sibling**
+ * rather than another thing floating over the canvas. Push, not overlay: a
+ * time axis is read *while* watching the thing it measures, so covering the
+ * canvas with it would be covering the answer with the question. Every other
+ * panel in this app overlays when the room runs out; this one shortens the
+ * stage instead, which is why it is here and not in `app-shell__body`.
+ *
+ * `min-height: 0` is load-bearing, not tidiness: without it a flex item
+ * refuses to shrink below its content and the dock would push the canvas off
+ * the bottom of the window instead of taking room from it. */
+.app-shell__stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .app-shell__body {
   display: flex;
   flex: 1 1 auto;
@@ -58,13 +78,6 @@
 
 .app-shell__body[data-overlay] > .panel--left {
   left: 0;
-}
-
-/* The Workflows drawer is a left panel too, so floating it at `left: 0` put
- * it exactly on top of the palette — two panels, one address, whichever
- * painted last winning. It stands beside the palette instead. */
-.app-shell__body[data-overlay][data-palette-open] > .workflow-manager {
-  left: var(--layout-palette-width);
 }
 
 .app-shell__body[data-overlay] > .app-shell__right-panels {
