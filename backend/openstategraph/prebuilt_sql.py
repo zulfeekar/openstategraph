@@ -10,18 +10,26 @@ Safety is the driver's, not string matching (the chinook lesson): the
 connection is opened ``mode=ro`` so SQLite itself refuses writes however a
 statement is spelled, and the database path must resolve inside
 ``workflows/`` — a canvas field can never reach an arbitrary host file.
+
+Two files' worth of that claim, not one. ``mode=ro`` is about the file it
+opens; the *model-authored* string reaching :meth:`SqlQueryTool._execute`
+could still reach a second one through ``ATTACH`` or ``VACUUM INTO``, both of
+which the URI form makes writable. The connection therefore comes from
+``openstategraph.readonly_sqlite``, which denies that family at the same
+driver level and for the same reason — still nothing here parses SQL
+(`the-boundary-nobody-checked/06`).
 """
 
 from __future__ import annotations
 
 import sqlite3
-from contextlib import closing
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.readonly_sqlite import readonly_closing, sql_error_text
 from openstategraph.workflows_root import workflows_root
 
 DEFAULT_MAX_ROWS = 200
@@ -46,15 +54,9 @@ def _resolve_database(configured: str) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
-def _connect(path: Path) -> closing[sqlite3.Connection]:
-    """A read-only connection that the `with` block actually CLOSES.
-
-    `contextlib.closing`, not the bare connection: sqlite3's own context
-    manager is a *transaction* manager — it commits or rolls back and leaves
-    the descriptor open. Every caller here reads and exits, so what they want
-    from `with` is a close, and they were not getting one.
-    """
-    return closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True))
+#: The one seam. Read-only, one file, and a `with` block that closes — the
+#: argument for all three is `openstategraph.readonly_sqlite`.
+_connect = readonly_closing
 
 
 def _markdown(headers: list[str], rows: list[tuple[Any, ...]]) -> str:
@@ -181,13 +183,18 @@ class SqlQueryTool(_SqlExplorerBase):
         if db is None:
             return self._refusal()
         cap = min(args.max_rows or self.row_cap, self.row_cap)
-        try:
-            with _connect(db) as conn:
+        with _connect(db) as conn:
+            try:
                 cursor = conn.execute(args.query)
                 headers = [d[0] for d in cursor.description or []]
                 rows = cursor.fetchmany(cap + 1)
-        except sqlite3.Error as exc:
-            return ToolResult.failure(f"SQL error: {exc}")
+            except sqlite3.Error as exc:
+                # `sql_error_text`, not `str(exc)`: a refused second file
+                # reports as `not authorized`, which names nothing to do next.
+                return ToolResult.failure(sql_error_text(
+                    conn, exc,
+                    instead="write a single SELECT against the tables "
+                            "sql_list_tables reports."))
         truncated = len(rows) > cap
         content = _markdown(headers, [tuple(r) for r in rows[:cap]]) if headers else "(no result set)"
         if truncated:

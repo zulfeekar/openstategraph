@@ -375,6 +375,16 @@ paragraph saying why the keyword has no default: `RunBurst.audience` was
 written *"so a reader can refuse"* and the reader had nothing to refuse with.
 Four lines on the reading half of what this module already stores — its one
 reason to change — not a new concern.
+
+**528 -> 529** (`the-boundary-nobody-checked/06`). One import line. Its two
+read-only opens spelled `sqlite3.connect(f"file:{target}?mode=ro", uri=True)`
+by hand, which is the URI form that also lets `ATTACH` and `VACUUM INTO` open
+a second file for writing; they now call the one seam,
+`readonly_sqlite.readonly_connection`, which denies that at the driver. The
+SQL here is module-pinned and no model string reaches it, so this module was
+never the way in — it is routed through the seam anyway because the
+alternative is an exemption list, and an exemption list is how the seventh
+call site inherits the hole in silence.
 """
 
 #: Eight modules, derived and then argued for one at a time. Nothing in this
@@ -390,7 +400,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_mcp.py": Recorded(750, PREBUILT_MCP),
     "mcp_server.py": Recorded(654, MCP_SERVER),
     "api/routes/workflows.py": Recorded(546, ROUTES_WORKFLOWS),
-    "run_sinks.py": Recorded(528, RUN_SINKS),
+    "run_sinks.py": Recorded(529, RUN_SINKS),
 }
 
 
