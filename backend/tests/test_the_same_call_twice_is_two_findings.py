@@ -1,0 +1,355 @@
+"""The owner's sentence, taken apart into the findings it actually contains.
+
+> *3.5 mins, 4 tool calls, called 3 same tools -> answers one different ->
+> answer correct -> move to next execution step*
+
+That reads as one observation and is three detectors and a label
+(`a-run-that-teaches/01`). This file pins the two that are findings, the one
+that is not, and the label that cannot be computed at all.
+
+**A and B do not share a detector, and the reason is the remedy.** The same
+call answered the same way is *waste* — a lap the run did not need, whose fix
+is usually a note the agent already had. The same call answered *differently*
+is *information*: either the world moved between the calls, which belongs in a
+lens declaration, or the tool is non-deterministic. Reporting the second as
+waste would delete the interesting case, so they are two names and neither
+inherits the other's remedy.
+
+**What the real store said, and it decided two of the rules below.** Run over
+the two `runs.sqlite` files this machine actually holds — 39 turns across
+`stress-review`, `stress-deep`, `stress-parallel-drop`, `stress-bad-*` and
+`cpl-nl2sql`:
+
+- **A fired 12 times**, including the instance the owner watched:
+  `service_registry {"service": "checkout-api"}`, twice in one `stress-deep`
+  run, byte-identical result both times. One `stress-review` run asked
+  `service_registry {"service": "ledger-svc"}` **four** times in 78 seconds.
+- **B fired zero times** — and three times before the argument rule below,
+  every one of them false. That is the whole evidence for it.
+- **`RunRecord.statements` was `[]` on all 39 rows**, `cpl-nl2sql` included. It
+  is the source the ticket named first and it holds nothing on this machine,
+  because it admits only an argument some recogniser accepted as a *statement*.
+  So the calls come from the checkpointer, through `read_thread`, and this file
+  says so rather than leaving the next reader to rediscover it.
+"""
+
+from __future__ import annotations
+
+import inspect
+from typing import Any
+
+from langchain_core.messages import AIMessage, ToolMessage
+
+from openstategraph.api.audience import Audience
+from openstategraph.run_findings import (
+    REDUNDANT_TOOL_CALL,
+    UNSTABLE_TOOL_RESULT,
+    normalised_arguments,
+    run_findings,
+)
+from openstategraph.run_sinks import RunRecord
+
+THREAD = "run-1"
+
+
+class _Stub:
+    """One stored checkpoint, holding the cumulative message channel."""
+
+    def __init__(self, step: int, messages: list[Any]) -> None:
+        self.config = {"configurable": {"thread_id": THREAD, "checkpoint_ns": ""}}
+        self.checkpoint = {
+            "id": f"cp-{step}",
+            "ts": f"2026-08-29T16:0{step}:00+00:00",
+            "channel_values": {"messages": list(messages)},
+            "updated_channels": ["messages"],
+        }
+        self.metadata = {"step": step, "source": "loop", "workflow_slug": "stress-deep"}
+        self.pending_writes = ()
+
+
+class _Saver:
+    """A saver holding exactly these checkpoints, newest first as LangGraph's is."""
+
+    def __init__(self, tuples: list[Any]) -> None:
+        self._tuples = list(reversed(tuples))
+
+    def list(self, config: Any, *, limit: int = 200) -> list[Any]:
+        return self._tuples[:limit]
+
+
+def _call(call_id: str, name: str, args: dict[str, Any]) -> AIMessage:
+    return AIMessage(
+        content="",
+        tool_calls=[{"id": call_id, "name": name, "args": args, "type": "tool_call"}],
+    )
+
+
+def _answer(call_id: str, name: str, text: str) -> ToolMessage:
+    return ToolMessage(content=text, tool_call_id=call_id, name=name)
+
+
+def _thread(*exchanges: tuple[str, str, dict[str, Any], str]) -> list[Any]:
+    """A thread whose every superstep asks one tool and gets one answer back.
+
+    The message channel is cumulative — every checkpoint holds the whole
+    history — so each step is built from everything before it.
+    """
+    messages: list[Any] = []
+    tuples: list[Any] = []
+    for step, (call_id, name, args, result) in enumerate(exchanges):
+        messages = [*messages, _call(call_id, name, args)]
+        tuples.append(_Stub(step * 2, messages))
+        messages = [*messages, _answer(call_id, name, result)]
+        tuples.append(_Stub(step * 2 + 1, messages))
+    return tuples
+
+
+def _record(**overrides: Any) -> RunRecord:
+    fields: dict[str, Any] = {
+        "kind": "run",
+        "at": "2026-08-29T16:09:46+02:00",
+        "workflow_slug": "stress-deep",
+        "thread_id": THREAD,
+        "seconds": 13.002,
+        "attempts": 1,
+    }
+    fields.update(overrides)
+    return RunRecord(**fields)
+
+
+def _findings(tuples: list[Any], records: list[RunRecord] | None = None) -> list[Any]:
+    return run_findings(
+        [_Saver(tuples)],
+        records if records is not None else [_record()],
+        audience=Audience.DEVELOPER,
+    )
+
+
+class TestTheSameCallAnsweredTheSameWay:
+    """A, and it is waste."""
+
+    def test_it_is_named_for_the_waste_and_not_for_the_difference(self) -> None:
+        found = _findings(
+            _thread(
+                ("c1", "service_registry", {"service": "checkout-api"}, "owner: payments"),
+                ("c2", "service_registry", {"service": "checkout-api"}, "owner: payments"),
+            )
+        )
+        assert [finding.name for finding in found] == [REDUNDANT_TOOL_CALL]
+        assert found[0].tool == "service_registry"
+        assert found[0].calls == 2
+        assert found[0].distinct_results == 1
+
+    def test_one_call_is_not_a_finding(self) -> None:
+        assert (
+            _findings(
+                _thread(("c1", "service_registry", {"service": "checkout-api"}, "owner"))
+            )
+            == []
+        )
+
+    def test_two_different_tools_asked_alike_are_two_calls(self) -> None:
+        assert (
+            _findings(
+                _thread(
+                    ("c1", "service_registry", {"service": "a"}, "same"),
+                    ("c2", "change_policy", {"service": "a"}, "same"),
+                )
+            )
+            == []
+        )
+
+
+class TestTheSameCallAnsweredDifferently:
+    """B, and it is information — the more valuable of the two."""
+
+    def test_it_is_its_own_name_and_carries_every_answer_it_saw(self) -> None:
+        found = _findings(
+            _thread(
+                ("c1", "service_registry", {"service": "ledger-svc"}, "oncall: Ada"),
+                ("c2", "service_registry", {"service": "ledger-svc"}, "oncall: Bo"),
+            )
+        )
+        assert [finding.name for finding in found] == [UNSTABLE_TOOL_RESULT]
+        assert found[0].distinct_results == 2
+        assert len(found[0].result_digests) == 2
+
+    def test_a_run_never_reports_one_pair_as_both(self) -> None:
+        found = _findings(
+            _thread(
+                ("c1", "service_registry", {"service": "a"}, "one"),
+                ("c2", "service_registry", {"service": "a"}, "two"),
+                ("c3", "change_policy", {"clause": "all"}, "CP-1"),
+                ("c4", "change_policy", {"clause": "all"}, "CP-1"),
+            )
+        )
+        assert sorted(finding.name for finding in found) == [
+            REDUNDANT_TOOL_CALL,
+            UNSTABLE_TOOL_RESULT,
+        ]
+
+
+class TestWhatCountsAsTheSameCall:
+    """The rule, and the two things it deliberately misses."""
+
+    def test_key_order_is_not_a_difference(self) -> None:
+        assert normalised_arguments('{"a": 1, "b": 2}') == normalised_arguments(
+            '{"b": 2, "a": 1}'
+        )
+
+    def test_whitespace_is_not_a_difference(self) -> None:
+        assert normalised_arguments('{"a":  1}') == normalised_arguments('{"a": 1}')
+
+    def test_list_order_is_a_difference_because_it_is_one(self) -> None:
+        assert normalised_arguments('{"a": [1, 2]}') != normalised_arguments(
+            '{"a": [2, 1]}'
+        )
+
+    def test_a_spelling_the_model_chose_is_a_different_call(self) -> None:
+        """What it misses, stated as a test rather than as a paragraph.
+
+        `{"service": "billing-service"}` and `{"service_name": "Billing"}` are
+        one question to a person and two calls here. Both are in the real
+        store. Closing that gap needs the tool's own schema, and a normaliser
+        that guessed would report a run for asking two genuinely different
+        things.
+        """
+        assert normalised_arguments('{"service": "billing"}') != normalised_arguments(
+            '{"service_name": "billing"}'
+        )
+
+    def test_arguments_that_were_never_recorded_are_not_a_call(self) -> None:
+        """The rule the real store bought, and it cost three false findings.
+
+        `_ToolCallReader` reports a `ToolMessage` whose request is gone with no
+        arguments at all — a truncated history, or a thread joined mid-run.
+        Grouped on `""` those calls are "the same call" by construction, and
+        their results differ because they answered different questions. Every
+        B on this machine's two stores was one of these, and all three
+        disappear when an unknown argument stops counting as a known one.
+        """
+        messages: list[Any] = [
+            _answer("gone-1", "service_registry", "checkout-api"),
+            _answer("gone-2", "service_registry", "ledger-svc"),
+        ]
+        tuples = [_Stub(0, messages[:1]), _Stub(1, messages)]
+        assert _findings(tuples) == []
+
+
+class TestHowLongItTookIsNotAFinding:
+    """C, argued rather than shipped.
+
+    `launch-readiness/109` measured 97-99% of a turn as model latency the owner
+    chose — 14.02 s wall against 0.14 s of ours. A detector reporting *the
+    model was slow* fires every night and names nothing anyone can fix.
+
+    A per-workflow baseline is the only honest form and the real store cannot
+    carry one: `stress-review` spans 7.35 s to 78.40 s over six runs (10.7x),
+    `stress-parallel-drop` 2.20 s to 7.34 s over eleven (3.3x). An outlier rule
+    over that spread reports the spread.
+
+    So duration survives where the owner put it — attached to the observation,
+    as the size of what the waste cost — and never as an alarm of its own.
+    """
+
+    def test_no_finding_is_named_for_a_duration(self) -> None:
+        found = _findings(
+            _thread(
+                ("c1", "service_registry", {"service": "a"}, "same"),
+                ("c2", "service_registry", {"service": "a"}, "same"),
+            ),
+            [_record(seconds=3600.0)],
+        )
+        assert {finding.name for finding in found} == {REDUNDANT_TOOL_CALL}
+
+    def test_a_slow_run_with_nothing_repeated_says_nothing(self) -> None:
+        assert (
+            _findings(
+                _thread(("c1", "service_registry", {"service": "a"}, "one")),
+                [_record(seconds=3600.0, attempts=9)],
+            )
+            == []
+        )
+
+    def test_the_duration_rides_on_the_finding_it_explains(self) -> None:
+        found = _findings(
+            _thread(
+                ("c1", "service_registry", {"service": "a"}, "same"),
+                ("c2", "service_registry", {"service": "a"}, "same"),
+            ),
+            [_record(seconds=78.404, attempts=3)],
+        )
+        assert found[0].runs[0].seconds == 78.404
+        assert found[0].runs[0].attempts == 3
+        assert found[0].thread_tool_calls == 2
+
+
+class TestWhoMayReadOne:
+    """A finding quotes machinery, so it inherits the boundary that gates it."""
+
+    def test_the_audience_has_no_default(self) -> None:
+        parameter = inspect.signature(run_findings).parameters["audience"]
+        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        assert parameter.default is inspect.Parameter.empty
+
+    def test_a_customer_is_told_nothing_rather_than_told_less(self) -> None:
+        tuples = _thread(
+            ("c1", "service_registry", {"service": "a"}, "same"),
+            ("c2", "service_registry", {"service": "a"}, "same"),
+        )
+        assert (
+            run_findings([_Saver(tuples)], [_record()], audience=Audience.CUSTOMER) == []
+        )
+
+    def test_the_result_is_never_quoted_back(self) -> None:
+        """A digest proves the equality; the text is the customer's data."""
+        found = _findings(
+            _thread(
+                ("c1", "service_registry", {"service": "a"}, "owner: payments-team"),
+                ("c2", "service_registry", {"service": "a"}, "owner: payments-team"),
+            )
+        )
+        rendered = found[0].model_dump_json()
+        assert "payments-team" not in rendered
+        assert found[0].result_digests
+
+
+class TestItReadsAndOnlyReads:
+    def test_the_module_can_neither_delete_nor_export(self) -> None:
+        """`run_sinks` is under this assertion and a reader of it inherits it.
+
+        The store is local by default and no network exporter ships at all —
+        absent, not disabled. A detector is the first thing anybody would be
+        tempted to hang one off, so the refusal is pinned at the detector too.
+        """
+        source = inspect.getsource(
+            __import__("openstategraph.run_findings", fromlist=["x"])
+        ).lower()
+        for forbidden in (
+            "delete",
+            "drop ",
+            "vacuum",
+            "prune",
+            "sweep",
+            "expire",
+            "purge",
+            "import requests",
+            "import httpx",
+            "import urllib",
+        ):
+            assert forbidden not in source, forbidden
+
+
+class TestNothingFoundIsAnAnswer:
+    def test_a_thread_the_savers_do_not_hold_is_silence(self) -> None:
+        assert run_findings([_Saver([])], [_record()], audience=Audience.DEVELOPER) == []
+
+    def test_a_row_with_no_thread_is_skipped_rather_than_guessed_at(self) -> None:
+        assert (
+            run_findings(
+                [_Saver(_thread(("c1", "t", {"a": 1}, "x"), ("c2", "t", {"a": 1}, "x")))],
+                [_record(thread_id="")],
+                audience=Audience.DEVELOPER,
+            )
+            == []
+        )
