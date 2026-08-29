@@ -119,8 +119,15 @@ def test_the_compiler_threads_the_channel_the_way_it_threads_agent_files() -> No
     The pairing is the point: every place `agent_files` is seeded or written
     back, `async_tasks` is too. They are one mechanism with two channels, and a
     future edit that remembers only one is the defect this catches.
+
+    Read out of `compile/nodes/agent.py`, which is where the agent family has
+    been written since `docs-and-gaps/03`. It was `node_runtime.py`, and both
+    channels left it together — a walk still naming that file would have gone
+    on parsing a module with no agent builder in it and finding neither.
     """
-    source = (BACKEND / "openstategraph" / "compile" / "node_runtime.py").read_text()
+    source = (
+        BACKEND / "openstategraph" / "compile" / "nodes" / "agent.py"
+    ).read_text()
     tree = ast.parse(source)
     names = {
         node.value

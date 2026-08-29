@@ -200,14 +200,14 @@ IDENTITY_LITERAL_SITES: dict[str, str] = {
     "loader.py": "writer",
     "mcp_server.py": "writer",
     "api/routes/runs.py": "writer",
-    # The mount family is the writer — it builds the child's `configurable`
-    # block — and it moved to its own module in `docs-and-gaps/03`. What is
-    # left in `node_runtime.py` reads `thread_id` and `workflow_slug` through
-    # the accessor like the four below it, so the classification moved with
-    # the code rather than the entry being left pointing at a file that no
-    # longer does the thing it was classified for.
+    # Both of `node_runtime.py`'s old reasons for being in this table moved
+    # out with their families (`docs-and-gaps/03`), and they were two
+    # different reasons: the mount *builds* a child's `configurable` block,
+    # and the agent's async subagent forwards the identity it was handed. The
+    # classifications went with the code rather than being left pointing at a
+    # file that no longer does either thing.
     "compile/nodes/mount.py": "writer",
-    "compile/node_runtime.py": "inherit",
+    "compile/nodes/agent.py": "inherit",
     "memory.py": "accessor-caller",
     "api/streaming.py": "accessor-caller",
     "abc/narration.py": "accessor-caller",

@@ -217,13 +217,14 @@ CLASSIFIED: dict[str, str] = {
     # starts nothing: a `thread_id` handed to `checkpointer.list` is a lookup
     # key, not a claim about who is running (`organisms-first-class` 64).
     "compile/paused_mount.py": "read",
-    # An async subagent's `ainvoke`. It forwards the identity the middleware
+    # An async subagent's `ainvoke`, in the agent family since
+    # `docs-and-gaps/03`. It forwards the identity the middleware
     # was handed, unchanged and only when there is one — the child needs
     # `workflow_slug` and `thread_id` or a memory-scoped tool inside it
     # resolves both to nothing, and `memory.workflow_scope_slug` says a
     # nameless run *shares* a key. Not a door: it starts no run of ours and
     # decides no key.
-    "compile/node_runtime.py": "inherit",
+    "compile/nodes/agent.py": "inherit",
 }
 
 
