@@ -153,6 +153,16 @@ subtask several times, for confidence).
 > would mean throwing one desk's work away, since `answer` is
 > `LATEST_NONEMPTY` and one branch would silently win.
 >
+> **And a document that draws no join no longer loses a desk either**
+> (`launch-readiness/174`). The obvious drawing — a desk per branch, an Output
+> per desk, no `function.format_report` anywhere — used to publish one desk's
+> answer and say nothing about the other, nine times over two documents. Every
+> Output that finishes is now published, joined in the order the document draws
+> them, with a developer-channel warning naming the exits. The join node is
+> still the right tool when you want the *report* — a title, a section per
+> desk, a shape you chose; what changed is that forgetting it costs you a
+> layout rather than half the work.
+>
 > Two things below are still true and still worth reading. **A supervisor
 > fan-out is the right tool when the sections are decided by the request** —
 > it dispatches *N* instances of one worker with task identity, which drawn

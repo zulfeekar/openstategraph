@@ -914,10 +914,13 @@ class WorkflowRuns:
         # therefore reported on `/api/runs`, `/api/runs/stream` and
         # `load_workflow`, and shipped silently on the one door a customer's
         # own LLM actually calls to run a workflow.
+        from openstategraph.compile.state import published_answer
+
         health = run_health_from_state(final)
 
         return {
-            "answer": str(final.get("answer") or ""),
+            # The whole answer, every exit included (`launch-readiness/174`).
+            "answer": published_answer(final),
             "decisions": {k: str(v) for k, v in (final.get("decisions") or {}).items()},
             "outputs": {k: str(v) for k, v in (final.get("outputs") or {}).items()},
             "attempts": int(final.get("attempts") or 0),

@@ -44,6 +44,7 @@ from typing import Any, Iterable
 
 from openstategraph.developer_channel import transcript_text
 from openstategraph.compile.workflow_compiler import node_failure_warnings
+from openstategraph.compile.state import published_answer
 from openstategraph.api.schemas import (
     ThreadHistoryResponse,
     ThreadStep,
@@ -204,7 +205,10 @@ def _summarize(thread_id: str, tuple_: Any, *, steps: int) -> ThreadSummary:
         updated_at=str((tuple_.checkpoint or {}).get("ts") or ""),
         steps=steps,
         question=_text(values.get("question")),
-        answer=_text(values.get("answer")),
+        # A stored thread is read back through the same seam a live run is
+        # published through, so a resumed conversation cannot show a different
+        # answer from the one the run door gave (`launch-readiness/174`).
+        answer=_text(published_answer(values)),
         status="paused" if _is_paused(tuple_) else "finished",
         # The same sentinel `node_failure_warnings` reports on a live run
         # (`cli.run_exit_code`'s channel), read back from `outputs` here —

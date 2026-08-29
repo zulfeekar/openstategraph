@@ -310,7 +310,12 @@ def run_workflow(
     # the raw values, so a fence a customer talked the model into arrived
     # in `outputs["agent-sql"]` while `answer` was spotless. Every surface
     # renders `outputs` per node, so that is the same leak one field along.
-    prose, suggestion = split_suggestion(str(final.get("answer") or ""))
+    # `published_answer`, never `final["answer"]`: see `launch-readiness/174`.
+    # This door and the streaming one published different halves of one run.
+    from openstategraph.compile.state import published_answer
+
+    whole_answer = published_answer(final)
+    prose, suggestion = split_suggestion(whole_answer)
     from openstategraph.compile.workflow_compiler import (
         RUN_FAILED_ANSWER,
         redact_failure_markers,
@@ -364,7 +369,7 @@ def run_workflow(
         # and the run's shape fills the silence when it did not
         # (`every-workflow-green` 35).
         capability_gap=capability_door(
-            str(final.get("answer") or ""), suggestion, final.get("tool_use")
+            whole_answer, suggestion, final.get("tool_use")
         ),
         redactions=redaction_report(final.get("redactions")),
         # What the run actually executed (`one-chinook-honest/30`). Read off

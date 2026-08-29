@@ -559,6 +559,7 @@ class CompiledWorkflow:
         """One finished `invoke` as a `RunResult` — the assembly `ask` and
         `resume` share, so a run cannot report its health differently
         depending on which door started it."""
+        from openstategraph.compile.state import published_answer
         from openstategraph.compile.workflow_compiler import run_health_from_state
 
         outputs = final.get("outputs") or {}
@@ -568,7 +569,11 @@ class CompiledWorkflow:
         # per source added to `run_health`, and each time by re-listing.
         health = run_health_from_state(final)
         return RunResult(
-            str(final.get("answer") or ""),
+            # `published_answer`, never `final["answer"]` — a document may
+            # legitimately finish at more than one Output, and this door used
+            # to publish whichever one the scheduler landed last
+            # (`launch-readiness/174`).
+            published_answer(final),
             decisions=final.get("decisions") or {},
             outputs=outputs,
             # A warning about how the workflow was *built* explains one about
