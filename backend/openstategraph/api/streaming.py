@@ -988,6 +988,11 @@ RESUME_SEEDED_KEYS: tuple[str, ...] = (
     "tool_use",
     "redactions",
     "budget_stops",
+    # Which exits finished before the pause (`launch-readiness/174`). A run
+    # that answered at one Output, waited at an approval and answered at
+    # another must publish both halves, and this door has no frames from the
+    # first segment to rebuild it from.
+    "published",
 )
 
 
@@ -1399,6 +1404,7 @@ async def _run_frames(
     one failure.
     """
     from openstategraph.compile.node_runtime import RESET, keep_latest_nonempty
+    from openstategraph.compile.state import published_answer
     from openstategraph.run_identity import run_identity
 
     # The turn this run is being written down in — opened and closed by
@@ -1482,6 +1488,13 @@ async def _run_frames(
     #: one both shipped UIs read (`production-ready` 97).
     retries: dict[str, Any] = {}
     outputs: dict[str, str] = {}
+    #: output node id -> `{"title", "order"}` for every Output that finished
+    #: (`launch-readiness/174`). Folded like `forced`, and **flat only** — a
+    #: mounted child runs its own Output, and a child's exit is not this run's
+    #: exit; joining one in would publish a mount's answer twice. See the
+    #: `prefix` guard at the fold below, which is the same guard `into_outputs`
+    #: makes for the same reason.
+    published: dict[str, Any] = {}
     #: The same two, for everything below the outermost document — keyed by
     #: mount path (`wf-music/agent-sql`), which is the vocabulary the frames'
     #: `path`, the address bar and `MountAddress` already use. Additive, so a
@@ -1523,6 +1536,7 @@ async def _run_frames(
     folded: dict[str, Any] = {
         "decisions": decisions,
         "outputs": outputs,
+        "published": published,
         "nested_outputs": nested_outputs,
         "forced": forced,
         "unrouted": unrouted,
@@ -1718,6 +1732,14 @@ async def _run_frames(
                             if k != RESET
                         }
                     )
+                    if not prefix:
+                        published.update(
+                            {
+                                k: v
+                                for k, v in (update.get("published") or {}).items()
+                                if k != RESET
+                            }
+                        )
                     if "attempts" in update:
                         attempts = max(0, int(update["attempts"]))
                     task_ids = list((update.get("worker_results") or {}).keys())
@@ -2111,6 +2133,12 @@ async def _run_frames(
     # door has instead of a returned `RunResult`: `folded` is already the
     # mapping `run_health_from_state` reads below, and `attempts`/`answer` are
     # the two the fold keeps as scalars.
+    # **The whole answer, not the last exit to finish** — `launch-readiness/174`,
+    # and this door is where the defect was ugliest: the same run published the
+    # cost desk here and the risk desk on `/api/runs`, because `keep_latest_nonempty`
+    # over the frames and `LATEST_NONEMPTY` over the state race independently.
+    # One seam, so they cannot.
+    answer = published_answer(dict(folded, answer=answer))
     turn.record(
         dict(folded, attempts=attempts, answer=answer),
         warnings=_built_warnings(plan, runtime),

@@ -63,6 +63,27 @@ keep_latest_nonempty = reducer_for(Reducer.LATEST_NONEMPTY)
 NO_MODEL_MARKER = "[no model was configured for this step]"
 
 
+#: What an output node says when it reached the end with nothing to say.
+#:
+#: A named constant, not a literal at the one site that writes it, because a
+#: *consumer* has to be able to tell this apart from a real answer: `run`
+#: exited 0 for a workflow whose mount did not resolve, since "is the answer
+#: empty" was being asked of a sentence saying it was (`production-ready` 53).
+#:
+#: It used to end "Check the run trace to see which step returned nothing" —
+#: printed directly below the line that already names the step, pointing at a
+#: trace the CLI cannot open. Advice a surface cannot honour is worse than
+#: none, so the honest floor is the first sentence alone.
+#:
+#: Here rather than in `node_runtime.py`, which defined it until
+#: `launch-readiness/174`, for `NO_MODEL_MARKER`'s reason: it is a *value
+#: written into `RunState`*, and `published_answer` below — the seam that
+#: assembles a run's answer out of the state — has to be able to recognise it
+#: without importing the runtime. `node_runtime` re-exports it, so its own
+#: readers and the tests that import it from there did not have to move.
+NO_ANSWER_PRODUCED = "The workflow finished without producing an answer."
+
+
 #: How few supersteps must be left before a cycle stops asking for another lap
 #: (`organisms-first-class` 56).
 #:
@@ -142,6 +163,30 @@ class RunState(TypedDict, total=False):
     #: node id -> that node's textual output, so a downstream node can read it.
     outputs: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     answer: Annotated[str, reducer_for(Reducer.LATEST_NONEMPTY)]
+    #: output node id -> `{"title", "order"}` for every Output node that
+    #: actually finished this run (`launch-readiness/174`).
+    #:
+    #: **Which exits ran is not a question `answer` can be asked.** A reducer
+    #: is handed one update at a time, and LangGraph applies two updates
+    #: landing in one superstep exactly as it applies two landing in
+    #: successive ones — `f(f(current, u1), u2)` — so `LATEST_NONEMPTY` cannot
+    #: tell a *supersession* (a mount writes `answer`, the Output downstream
+    #: writes it again) from a *race* (two desks of a `matchMode: "all"`
+    #: router finish together). Live, nine times over two documents, the race
+    #: kept one desk's answer and no door said the other desk had produced
+    #: one. This channel is what makes the two distinguishable after the run,
+    #: which is the earliest moment they can be.
+    #:
+    #: The text is deliberately *not* stored here: `outputs[node_id]` already
+    #: holds exactly what this node published, and a second copy is a second
+    #: thing to keep true. What is here is what `outputs` cannot say — that
+    #: this id is an **exit**, what its author called it, and where it sits in
+    #: the document, so a join of several is ordered by the drawing rather
+    #: than by whichever task the scheduler happened to finish first.
+    #:
+    #: MERGE, and every key has exactly one writer — its own node — so the
+    #: single-writer argument `revisions` and `forced` rest on holds here too.
+    published: Annotated[dict[str, Any], reducer_for(Reducer.MERGE)]
     #: Same hazard, same fix as `answer`: this document alone has four
     #: `_grader` instances (one per intent), each writing `feedback` on
     #: every step — "" on pass, real text on revise. Found live: two
@@ -396,6 +441,89 @@ def _silent_member_note(task_id: str, state: RunState) -> str:
 def _upstream_text(state: RunState, node_ids: list[str]) -> str:
     outputs = state.get("outputs") or {}
     return "\n".join(outputs[n] for n in node_ids if n in outputs)
+
+
+def published_exits(state: Any) -> list[tuple[str, str]]:
+    """`(node id, text)` for every exit that finished this run with something
+    to say, in the order the document draws them.
+
+    Ordered by the drawing rather than by arrival, because arrival order is a
+    property of the scheduler: two exits of a `matchMode: "all"` router finish
+    in one superstep and whichever task got there first would otherwise decide
+    what a reader sees first. `order` is the node's index in the document, so
+    the reader gets the desks top to bottom.
+
+    Three kinds of row are dropped, and each drop is the difference between a
+    join and a mess: an exit that produced nothing, an exit that published the
+    `NO_ANSWER_PRODUCED` floor (appending *"the workflow finished without
+    producing an answer"* to an answer that exists would be a false sentence
+    about a true one), and an exit whose text is one another exit already
+    published — two Outputs fed by one node are one answer drawn twice.
+
+    Tolerant about its input for `run_health`'s reason: the doors read state
+    off different shapes and any of them can hand over `None`.
+    """
+    rows = state.get("published") if hasattr(state, "get") else None
+    outputs = (state.get("outputs") if hasattr(state, "get") else None) or {}
+    if not isinstance(rows, dict) or not isinstance(outputs, dict):
+        return []
+
+    def position(row: Any) -> int:
+        if isinstance(row, dict):
+            try:
+                return int(row.get("order"))  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return 0
+        return 0
+
+    found: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for node_id, row in sorted(
+        ((k, v) for k, v in rows.items() if k != RESET),
+        key=lambda item: (position(item[1]), str(item[0])),
+    ):
+        text = str(outputs.get(node_id) or "")
+        if not text.strip() or text.strip() == NO_ANSWER_PRODUCED or text in seen:
+            continue
+        seen.add(text)
+        found.append((str(node_id), text))
+    return found
+
+
+def published_answer(state: Any) -> str:
+    """A run's answer as a reader must receive it — `launch-readiness/174`.
+
+    **The one seam every door reads the answer through**, and the reason it is
+    a seam rather than a line in each of them is the defect it fixes: five
+    doors each wrote `str(final.get("answer") or "")`, and a document whose
+    parallel router opened two desks handed *different* halves to different
+    doors of the same run — the streaming door published the cost desk and the
+    blocking door the risk desk, measured. `test_a_runs_diagram_opens_its_mounts.py`
+    is the precedent for the shape and
+    `test_every_door_reads_the_whole_answer.py` is the test that fails when a
+    sixth door writes its own.
+
+    One exit, which is every document in `examples/` and every document
+    anybody has drawn on purpose, returns `answer` untouched — byte for byte,
+    including the `NO_ANSWER_PRODUCED` floor and `127`'s substitution notice.
+    Two or more, and the answer is the join, which is `_upstream_text`'s join
+    exactly: `"\n"`, no labels, in document order. That is not a new
+    rendering — it is the rendering the platform already produces when both
+    desks are wired into **one** Output, which is the drawing `capacityRule`
+    forbids and which has always answered correctly. Making the permitted
+    drawing and the forbidden one produce the same string is the whole point:
+    until now the reachable shape was the lossy one.
+
+    `every-workflow-green` 27 met this loss one node upstream and answered it
+    the same way — by *gathering* the branches into `function.format_report`
+    rather than by refusing the drawing. This is that answer at the last node,
+    where it needs nothing of the author.
+    """
+    answer = str((state.get("answer") if hasattr(state, "get") else "") or "")
+    exits = published_exits(state)
+    if len(exits) < 2:
+        return answer
+    return "\n".join(text for _node_id, text in exits)
 
 
 def _upstream_verdict(state: RunState, node_ids: list[str]) -> dict[str, str]:

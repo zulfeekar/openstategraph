@@ -262,6 +262,7 @@ def run_health(
     retries: Any = None,
     tool_use: Any = None,
     budget_stops: Any = None,
+    published: Any = None,
 ) -> RunHealth:
     """The one place a run's health is assembled, for **both** doors.
 
@@ -291,6 +292,7 @@ def run_health(
     # under any other name goes missing from that door on the day it lands.
     used = tool_use if isinstance(tool_use, dict) else {}
     starved = budget_stops if isinstance(budget_stops, dict) else {}
+    exits = published if isinstance(published, dict) else {}
     return RunHealth(
         failures=node_failure_warnings(flat) + node_failure_warnings(nested),
         silent=(
@@ -302,6 +304,7 @@ def run_health(
             + step_budget_warnings(starved)
             + unrouted_decision_warnings(lost)
             + retry_warnings(retried)
+            + several_exits_warnings(exits, flat)
         ),
         published_rejected=bool(exhausted),
     )
@@ -1179,6 +1182,48 @@ def step_budget_warnings(budget_stops: Mapping[str, Any]) -> list[str]:
         for record in overruled
     )
     return lines
+
+
+def several_exits_warnings(published: Mapping[str, Any], outputs: Any) -> list[str]:
+    """Runs in which more than one Output node finished — `launch-readiness/174`.
+
+    `matchMode: "all"` is the platform's own parallel-router feature and its
+    field hint invites the drawing: a desk on each branch, an Output on each
+    desk. Both desks then run, both Outputs finish, and `answer` is
+    `LATEST_NONEMPTY`, so one of the two answers used to be kept and no door
+    said the other had been produced. Nine live runs across two documents.
+
+    **The answer is no longer the silence's other half**: `published_answer`
+    joins the exits, so nothing is withheld from the reader any more. What
+    stays worth saying is that the answer arrived in parts and *which* nodes
+    made them — a fact about the drawing, which is what this channel carries.
+
+    Hence `silent` rather than `failures`, and hence the developer channel
+    rather than both audiences. `published_rejected` is on both because a
+    customer handed a rejected answer has a fact they cannot otherwise learn;
+    a customer handed both halves has lost nothing, and node ids are not their
+    vocabulary (`launch-readiness/25`).
+
+    The author's own title leads where there is one, because that is the word
+    on the card. The node id follows it either way — this sentence is read by
+    someone about to go and look at the drawing.
+    """
+    rows = published if isinstance(published, Mapping) else {}
+    from openstategraph.compile.state import published_exits
+
+    finished = published_exits({"published": dict(rows), "outputs": outputs})
+    if len(finished) < 2:
+        return []
+
+    def named(node_id: str) -> str:
+        row = rows.get(node_id)
+        title = str(row.get("title") or "").strip() if isinstance(row, Mapping) else ""
+        return f'"{title}" ({node_id})' if title else f'"{node_id}"'
+
+    return [
+        "This run finished at more than one Output and every answer is "
+        f"published, joined in the order they are drawn: {', '.join(named(n) for n, _ in finished)}."
+    ]
 
 
 def unrouted_decision_warnings(unrouted: Mapping[str, Any]) -> list[str]:

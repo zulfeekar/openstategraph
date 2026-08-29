@@ -148,6 +148,8 @@ from openstategraph.compile.state import (  # noqa: F401
     RESET,
     STEP_BUDGET_FLOOR,
     RunState,
+    published_answer,
+    published_exits,
     _silent_member_note,
     _thread_question,
     _upstream_text,
@@ -157,6 +159,7 @@ from openstategraph.compile.state import (  # noqa: F401
     keep_max,
     merge_decisions,
 )
+from openstategraph.compile.state import NO_ANSWER_PRODUCED as _NO_ANSWER_PRODUCED
 from openstategraph.compile.static_source import (
     STATIC_TEXT_NODE_TYPES,
     StaticSource,
@@ -164,18 +167,10 @@ from openstategraph.compile.static_source import (
     resolve_static_sources,
 )
 
-#: What the output node says when it reached the end with nothing to say.
-#:
-#: A named constant, not a literal at the one site that writes it, because a
-#: *consumer* has to be able to tell this apart from a real answer: `run`
-#: exited 0 for a workflow whose mount did not resolve, since "is the answer
-#: empty" was being asked of a sentence saying it was (ticket 53).
-#:
-#: It used to end "Check the run trace to see which step returned nothing" —
-#: printed directly below the line that already names the step, pointing at a
-#: trace the CLI cannot open. Advice a surface cannot honour is worse than
-#: none, so the honest floor is the first sentence alone.
-NO_ANSWER_PRODUCED = "The workflow finished without producing an answer."
+# Moved to `compile/state.py` by `launch-readiness/174` and re-exported here,
+# exactly as `NO_MODEL_MARKER` is: it is a value written into `RunState`, and
+# `published_answer` has to recognise it without importing this module.
+NO_ANSWER_PRODUCED = _NO_ANSWER_PRODUCED
 
 #: Node-type prefixes whose step writes text that did not exist before it ran.
 #:
@@ -1891,6 +1886,12 @@ class NodeRuntime:
                 # starting clean, understating what changed and, worse, still
                 # carrying a `queried` claim from a run that is over.
                 "tool_use": {RESET: ""},
+                # Which exits finished is a fact about *this* turn
+                # (`launch-readiness/174`). A checkpointed thread that carried
+                # turn one's exits forward would have turn two's single desk
+                # joined onto a stale second one — the very silence this
+                # channel was added to end, inverted.
+                "published": {RESET: ""},
             }
             prior = state.get("messages") or []
             already_recorded = bool(
@@ -5026,7 +5027,11 @@ class NodeRuntime:
                     "cycle costs a superstep per lap. A loop that never settles needs a "
                     "grader that can pass it, not more supersteps." + overruled
                 ) from exc
-            answer = final.get("answer", "")
+            # The child is a run, so it is read through the run seam: a mounted
+            # document with two exits of its own would otherwise lose one on
+            # its way into the parent, which is `launch-readiness/174` one
+            # level down and invisible from the parent entirely.
+            answer = published_answer(final)
             # The child's loop cost is part of the parent's story: without
             # this, a Team that revised twice reports attempts=0 (ticket 60).
             update: dict[str, Any] = {"outputs": {node_id: answer}, "answer": answer}
@@ -5144,6 +5149,14 @@ class NodeRuntime:
     def _output(self, node_id: str, _node: dict[str, Any], plan: CompiledPlan) -> Any:
         """Collects whatever reached it as the run's answer."""
         upstream = [src for src, dst in plan.edges if dst == node_id]
+        # What this exit is called and where it sits, read from the document
+        # once at build time so the run carries no lookup (`launch-readiness/174`).
+        # `self._types` is built in document order, which is the order a reader
+        # sees the desks drawn in and the order `published_answer` joins them.
+        exit_row = {
+            "title": str(_node.get("title") or ""),
+            "order": list(self._types).index(node_id) if node_id in self._types else 0,
+        }
         conditional_upstream = [
             src for src, dests in plan.conditional.items() if node_id in dests.values()
         ]
@@ -5231,7 +5244,16 @@ class NodeRuntime:
             # card beside a chat bubble that had one. Reported by a tester on
             # `?w=concierge`: "the end node answer remaining empty while the
             # answer is already produced."
-            update: dict[str, Any] = {"answer": answer, "outputs": {node_id: answer}}
+            # `published` says *this exit finished*, which is the one thing
+            # `outputs` cannot say and `answer` cannot be asked. See
+            # `RunState.published`: a document may legitimately have two exits
+            # that both complete, and until this row existed the run kept one
+            # answer and no door could tell that from a run with one exit.
+            update: dict[str, Any] = {
+                "answer": answer,
+                "outputs": {node_id: answer},
+                "published": {node_id: exit_row},
+            }
             if answer:
                 # The thread record's other half (ticket 73): the answer is
                 # logged where every path converges, agent or not.

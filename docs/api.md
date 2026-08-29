@@ -215,6 +215,34 @@ The same rows come back from `POST /api/runs` on `developer.statements`, and
 from the Python door as `RunResult.statements` — which has no audience, since a
 caller holding the process holds the run.
 
+### `answer` when a run finished at more than one Output
+
+A document may legitimately have several exits, and a `route.classifier` set to
+*Run every match* is the ordinary way to get one: a desk per branch, an Output
+per desk, both desks running in the same superstep. **Every exit that finished
+is in `answer`**, joined with a newline in the order the document draws them —
+which is the same text the workflow produces when both desks are wired into a
+*single* Output instead, because that has always been one node's several
+producers joined the same way.
+
+Until `launch-readiness/174` it was not: `answer` kept whichever exit the
+scheduler settled last, `warnings` was empty, and the other exit's finished
+answer sat in `outputs` with nothing pointing at it — so a run that answered
+half a two-part question and a run that answered all of it were the same
+response. Worse, the two doors disagreed: the same run published the cost desk
+on `/api/runs/stream` and the risk desk on `/api/runs`.
+
+A run with several exits carries one **developer-channel** warning naming them,
+in the author's own titles. It is a report about how the answer was reached,
+never a failure — it does not reach `failures` and does not move
+`openstategraph run`'s exit code. Nothing is withheld from the customer
+channel, which is why the warning stays on the developer one:
+`published_rejected` is on both audiences because a customer handed a rejected
+answer has a fact they could not otherwise learn, and a customer handed both
+halves has lost nothing.
+
+A single-exit document — every shipped example — is untouched, byte for byte.
+
 Two things follow that a client should not try to work around:
 
 - **`answer` never contains a suggestion fence, for any audience.** The
