@@ -90,7 +90,7 @@ import time
 from contextlib import contextmanager
 from typing import Any, Iterator, Mapping, Sequence
 
-from openstategraph.run_sinks import RunRecord, RunSinkRegistry, now, publish
+from openstategraph.run_sinks import RunBurst, RunRecord, RunSinkRegistry, now, publish
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,9 @@ class RunTurn:
         registry: RunSinkRegistry | None = None,
         silent: bool = False,
     ) -> None:
-        self._identity = {
+        # `dict[str, Any]`, not `dict[str, str]`: this is spread into
+        # `RunRecord(...)`, whose fields are no longer all strings.
+        self._identity: dict[str, Any] = {
             "workflow_slug": workflow_slug or "",
             "thread_id": thread_id or "",
             "session_id": session_id or "",
@@ -184,6 +186,7 @@ class RunTurn:
         warnings: Sequence[str] | None = None,
         failures: Sequence[str] | None = None,
         kind: str = RUN_KIND,
+        bursts: Sequence[RunBurst] | None = None,
     ) -> RunRecord | None:
         """Write this turn down. **At most once, and never fatal.**
 
@@ -192,6 +195,12 @@ class RunTurn:
         one that has no return value. Everything a run's own state can answer
         is answered from it here, so a door cannot fall behind a health source
         by forgetting to re-list it.
+
+        `bursts` is **how the run's output arrived** — `memory-and-replay` 47 —
+        and it is here for exactly the reason `warnings` is: it is only true
+        once the run is over, and only one door can know it. A door that never
+        streamed passes nothing, which is not a gap: a blocking call produced
+        no chunks, and no cadence is the honest record of that.
 
         `warnings` and `failures` are the door's own compile-time halves, and
         they are accepted **here** as well as at `run_turn` because some of
@@ -214,6 +223,8 @@ class RunTurn:
             if failures is not None:
                 self._failures = list(failures)
             record = self._assemble(state or {}, answer, question, kind)
+            if bursts:
+                record.bursts = list(bursts)
         except Exception as exc:  # noqa: BLE001 - a row is never worth a run
             logger.warning("A run record could not be assembled: %s", exc)
             return None

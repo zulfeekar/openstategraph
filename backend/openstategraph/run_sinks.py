@@ -148,12 +148,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import base64
 import sqlite3
 import time
+import zlib
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer, field_validator
 
 from openstategraph.run_identity import RUN_IDENTITY_KEYS
 
@@ -165,12 +167,14 @@ __all__ = [
     "JsonlRunSink",
     "RUN_STORE_FILE_NAME",
     "RUN_STORE_PATH_ENV",
+    "RunBurst",
     "RunRecord",
     "RunSinkRegistry",
     "SqliteRunSink",
     "default_run_sink_registry",
     "now",
     "publish",
+    "read_run_bursts",
     "read_runs",
     "reset_run_sink_registry",
     "run_sink_registry",
@@ -210,6 +214,221 @@ RUN_STORE_FILE_NAME = "runs.sqlite"
 #
 # What an entry point would add is registration without a start-up hook, which
 # is a convenience for a `pip install`, not the seam itself.
+
+
+class RunBurst(BaseModel):
+    """One contiguous burst of model output, with the cadence it arrived at.
+
+    `memory-and-replay` 47, and the row that lets a play button claim a
+    measurement instead of inventing one. A burst is **one node's output of one
+    block kind, uninterrupted** — the model's reasoning and its answer are two
+    bursts, a tool's result is a third, and a mounted child's is a fourth.
+
+    ## Why the chunks are packed into a row rather than being rows
+
+    The ticket assumed a tradeoff between perfect cadence and disk, and there
+    is none. Measured against four real `gpt-oss:120b-cloud` runs, a row per
+    chunk costs 26-107 KiB per run and a burst row costs 5-8 KiB for **the same
+    information** — because what a per-chunk row pays for is not the cadence,
+    it is repeating one node's identity 242 to 1014 times. So the identity is
+    paid once here, and `cadence` carries every chunk's own offset and length,
+    delta-encoded. `replay()` gives the chunks back exactly as they arrived.
+
+    That matters more than the bytes: a burst spans a node's whole output, and
+    inside one the measured inter-chunk gaps run from 0 ms to 555 ms. A record
+    holding only a first and last offset would leave a replay interpolating,
+    with a measured p99 error of 470 ms — half a second of stall rendered as
+    smooth typing, in a surface whose whole claim is *the Truth*.
+
+    ## What it may be asked, and what it may not
+
+    Every field here is measured. `first_ms`/`last_ms` and every offset in
+    `replay()` are the same server-side `elapsedMs` the frame carried on the
+    wire (`api/frame_clock.py`) — relative to the stream opening, monotonic,
+    and saying nothing about *when* the run happened. The wall anchor is the
+    run row's `at`, exactly as it is for a live frame; nothing here restates
+    it, so nothing here can disagree with it.
+
+    A run with **no** bursts has no cadence — an old row, a workflow with no
+    model in it, a store from before this ticket. That is an absence and it is
+    an answer; it is never a run that took zero milliseconds.
+    """
+
+    #: The canvas node id whose output this is, and its subgraph namespace.
+    node: str = ""
+    namespace: list[str] = Field(default_factory=list)
+
+    #: `text` | `reasoning` — which kind of text, exactly as the `token` frame's
+    #: `block` says it. Two blocks are never one burst: a reasoning model's
+    #: deliberation and its answer arrive interleaved from one content list,
+    #: and folding them together is what ticket 23 exists to have separated.
+    block: str = "text"
+
+    #: Who produced it — `model`, `tool`. The `token` frame's `kind`.
+    kind: str = ""
+
+    #: The customer channel refused this text. **The bytes are not here**, and
+    #: not because they were filtered out: the recorder reads the wire, and
+    #: `_token_frame` empties a withheld frame's content before the frame is
+    #: built. The flag is kept for the reason the frame keeps it — a withheld
+    #: burst still says a node was working, so a customer's replay shows the
+    #: stall instead of a hole.
+    withheld: bool = False
+
+    #: Which audience's stream produced this. Stored so a reader can refuse:
+    #: a developer run's bursts carry developer content, and `38` already found
+    #: what happens when a replay door forgets to ask.
+    audience: str = ""
+
+    #: The frame `seq` of the first and last chunk. The wire's own dense
+    #: counter, so a gap here reads as a dropped frame, which a clock cannot
+    #: express.
+    first_seq: int = 0
+    last_seq: int = 0
+
+    #: Milliseconds from the stream opening to the first and last chunk.
+    first_ms: int = 0
+    last_ms: int = 0
+
+    #: How many chunks, and how many characters they carried. Stored rather
+    #: than derived, for `run_sinks`' own stated reason: a person with
+    #: `sqlite3` should be able to ask *how chatty was this node* in SQL.
+    chunks: int = 0
+    chars: int = 0
+
+    #: The burst's text, concatenated. **The same rule as `RunRecord.answer`,
+    #: inherited rather than re-decided** — this is a customer's data, the
+    #: local store keeps it, and a sink that carries rows off the machine
+    #: writes a count instead.
+    text: str = ""
+
+    #: Every chunk's own offset and length, delta-encoded. `replay()` is how it
+    #: is read; nothing else should decode it.
+    cadence: bytes = b""
+
+    #: Recording stopped here — the run produced more bursts than `BURST_CAP`.
+    #: True on the last burst kept and nowhere else, so a reader can say *the
+    #: recording ends here* rather than *the run ended here*. A bound on
+    #: memory during a runaway loop, never a sweep of anything written.
+    capped: bool = False
+
+    @field_serializer("cadence")
+    def _cadence_out(self, value: bytes) -> str:
+        """Base64 on the way out, so a record is JSON.
+
+        Not decoration. `IRunSink` exists so a third party can write these rows
+        wherever they like, and the obvious way to do that is
+        `json.dumps(record.model_dump())` — which raises on `bytes`. A contract
+        that cannot survive its own obvious use is a trap, and this is the same
+        `runs export` relies on to carry the cadence out of a store somebody is
+        about to truncate.
+        """
+        return base64.b64encode(value).decode("ascii")
+
+    @field_validator("cadence", mode="before")
+    @classmethod
+    def _cadence_in(cls, value: Any) -> bytes:
+        """And back in, so the round trip closes. A blob this build cannot
+        decode costs the per-chunk detail and not the burst — `replay`'s rule,
+        applied one layer earlier."""
+        if isinstance(value, bytes):
+            return value
+        if isinstance(value, str):
+            try:
+                return base64.b64decode(value, validate=True)
+            except (ValueError, TypeError):
+                return b""
+        return b""
+
+    def duration_ms(self) -> int:
+        """How long this burst took. Measured, and `0` genuinely means instant
+        — a one-chunk burst arrived at one moment. *Unknown* is the absence of
+        the burst, never a zero on it."""
+        return max(0, self.last_ms - self.first_ms)
+
+    def replay(self) -> list[tuple[int, str]]:
+        """`(elapsedMs, text)` for every chunk, exactly as it arrived.
+
+        The claim this whole record exists to make good. Decoded from
+        `cadence`; a blob this build cannot read costs the per-chunk detail and
+        not the burst, because a replay that shows the whole burst at its first
+        offset is degraded and a replay that raises is gone.
+        """
+        offsets, lengths = _decode_cadence(self.cadence)
+        if not offsets or len(offsets) != len(lengths):
+            return [(self.first_ms, self.text)] if self.chunks else []
+        out: list[tuple[int, str]] = []
+        at = 0
+        elapsed = self.first_ms
+        for step, length in zip(offsets, lengths):
+            elapsed += step
+            out.append((elapsed, self.text[at : at + length]))
+            at += length
+        return out
+
+
+def _encode_cadence(offsets: list[int], lengths: list[int]) -> bytes:
+    """One burst's per-chunk cadence, as compactly as it is worth being.
+
+    A varint count, then that many gap varints, then that many length varints,
+    then zlib. Gaps between consecutive chunks rather than absolute offsets,
+    because a model streams in single-digit milliseconds and a gap fits in one
+    byte where an offset needs three.
+
+    **Counted, never terminated.** A separator byte was the obvious encoding
+    and is wrong here for a reason worth keeping written down: a gap of zero
+    milliseconds is the *most common* value in a real stream (a measured p50 of
+    1 ms, with runs of consecutive zeros), and it encodes as the same `0x00` a
+    terminator would. The first burst decoded would have ended at its first
+    chunk.
+    """
+    return zlib.compress(
+        _varints([len(offsets)]) + _varints(offsets) + _varints(lengths), 6
+    )
+
+
+def _decode_cadence(blob: bytes) -> tuple[list[int], list[int]]:
+    """`_encode_cadence` undone, or two empty lists. Never raises: see
+    `replay`."""
+    if not blob:
+        return [], []
+    try:
+        values = _read_varints(zlib.decompress(blob))
+    except (zlib.error, ValueError, IndexError):
+        return [], []
+    if not values:
+        return [], []
+    count = values[0]
+    if count < 0 or len(values) < 1 + 2 * count:
+        return [], []
+    return values[1 : 1 + count], values[1 + count : 1 + 2 * count]
+
+
+def _varints(values: list[int]) -> bytes:
+    out = bytearray()
+    for value in values:
+        value = max(0, int(value))
+        while True:
+            piece = value & 0x7F
+            value >>= 7
+            out.append(piece | (0x80 if value else 0))
+            if not value:
+                break
+    return bytes(out)
+
+
+def _read_varints(raw: bytes) -> list[int]:
+    """Every varint in the blob, in order."""
+    values: list[int] = []
+    value = shift = 0
+    for byte in raw:
+        value |= (byte & 0x7F) << shift
+        if byte & 0x80:
+            shift += 7
+            continue
+        values.append(value)
+        value = shift = 0
+    return values
 
 
 class RunRecord(BaseModel):
@@ -292,6 +511,19 @@ class RunRecord(BaseModel):
     #: those are two columns of one row here — `statements` and `decisions` —
     #: which is precisely the argument that it is not a second store.
     statements: list[dict[str, Any]] = Field(default_factory=list)
+
+    #: How the run's output actually arrived — `memory-and-replay` 47.
+    #:
+    #: **A field, not a method on `IRunSink`**, and that is this module's own
+    #: rule being used rather than bent: the Protocol is two members and closed
+    #: at birth, and the extension point is this model. A sink somebody shipped
+    #: against today's Protocol receives the cadence with nothing changed,
+    #: reads it if it wants it, and ignores it if it does not.
+    #:
+    #: Empty is the ordinary case and it is an answer, not a gap: a blocking
+    #: door streams nothing, a workflow of function nodes produces no tokens,
+    #: and every row written before this ticket has none.
+    bursts: list[RunBurst] = Field(default_factory=list)
 
     def total_tokens(self) -> int:
         """Every model's reported total for this row, added up.
@@ -443,6 +675,57 @@ _COLUMN_TYPES: dict[str, str] = {
 }
 
 
+#: The columns of the `run_bursts` table, in order — the same one-list rule
+#: `_COLUMNS` states for `runs`, and for the same reason.
+#:
+#: **A second table, argued rather than assumed.** `43` says there is one
+#: store and it is right; this is one store with two tables, which is a
+#: different claim. A burst is not a run — there are 6 to 30 of them per turn —
+#: so it cannot be a column, and a second *file* would mean two things to
+#: export, two to delete, and a `runs export` that told half the truth. Ticket
+#: 37 priced a frame table once and concluded it was not needed; that was for
+#: the profiler it built, which reads finished state. Playback needs cadence,
+#: which no finished state holds, so this reverses that conclusion out loud.
+#:
+#: `run_rowid` is `runs.rowid`, read back from the insert in the same
+#: transaction. No column is added to `runs`, deliberately: this module has no
+#: migration machinery and `CREATE TABLE IF NOT EXISTS` would leave every
+#: existing store unable to take a row.
+_BURST_COLUMNS: tuple[str, ...] = (
+    "run_rowid",
+    "ord",
+    "node",
+    "namespace",
+    "block",
+    "kind",
+    "withheld",
+    "audience",
+    "first_seq",
+    "last_seq",
+    "first_ms",
+    "last_ms",
+    "chunks",
+    "chars",
+    "text",
+    "cadence",
+    "capped",
+)
+
+_BURST_TYPES: dict[str, str] = {
+    "run_rowid": "INTEGER",
+    "ord": "INTEGER",
+    "withheld": "INTEGER",
+    "first_seq": "INTEGER",
+    "last_seq": "INTEGER",
+    "first_ms": "INTEGER",
+    "last_ms": "INTEGER",
+    "chunks": "INTEGER",
+    "chars": "INTEGER",
+    "cadence": "BLOB",
+    "capped": "INTEGER",
+}
+
+
 class SqliteRunSink:
     """The default sink: a table on the machine that ran the workflow.
 
@@ -503,11 +786,25 @@ class SqliteRunSink:
         values = [_column(record, name) for name in _COLUMNS]
         placeholders = ",".join("?" for _ in _COLUMNS)
         try:
+            # **One transaction, both tables.** A run row whose bursts are
+            # missing would be a run that says it streamed nothing, which is a
+            # different and wrong answer rather than a smaller one; so the
+            # cadence lands with its row or neither does.
             with connection:
-                connection.execute(
+                cursor = connection.execute(
                     f"INSERT INTO runs ({','.join(_COLUMNS)}) VALUES ({placeholders})",
                     values,
                 )
+                if record.bursts:
+                    burst_placeholders = ",".join("?" for _ in _BURST_COLUMNS)
+                    connection.executemany(
+                        f"INSERT INTO run_bursts ({','.join(_BURST_COLUMNS)}) "
+                        f"VALUES ({burst_placeholders})",
+                        [
+                            _burst_row(cursor.lastrowid, order, burst)
+                            for order, burst in enumerate(record.bursts)
+                        ],
+                    )
         except sqlite3.Error as exc:
             logger.warning("Could not write the run record to %s: %s", self.path, exc)
 
@@ -552,6 +849,21 @@ class SqliteRunSink:
                 )
                 connection.execute(
                     "CREATE INDEX IF NOT EXISTS runs_workflow_at ON runs (workflow_slug, at)"
+                )
+                # The cadence table (`memory-and-replay` 47). Created here, on
+                # the same first row, so the two tables cannot exist apart.
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS run_bursts ("
+                    + ",".join(
+                        f"{name} {_BURST_TYPES.get(name, 'TEXT')}"
+                        for name in _BURST_COLUMNS
+                    )
+                    + ")"
+                )
+                # The one question this table is asked: *this run, in order*.
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS run_bursts_run "
+                    "ON run_bursts (run_rowid, ord)"
                 )
         except (OSError, sqlite3.Error) as exc:
             logger.warning("Could not open the run store at %s: %s", self.path, exc)
@@ -600,6 +912,11 @@ class JsonlRunSink:
             # or expensive run always wants and never had. Safe to write where
             # the answer is not: a count carries no customer data.
             "usage": record.usage,
+            # How many bursts of output the run produced — a shape, not the
+            # words. The cadence table's text is the answer text by another
+            # road (`memory-and-replay` 47), so it obeys `answer`'s rule here
+            # exactly: a file that gets committed and emailed carries a count.
+            "bursts": len(record.bursts),
         }
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -677,6 +994,7 @@ def read_runs(
     user_email: str | None = None,
     kind: str | None = None,
     limit: int = 100,
+    with_bursts: bool = False,
 ) -> list[RunRecord]:
     """Rows back out of the local store, newest first. The same rows, as objects.
 
@@ -684,6 +1002,13 @@ def read_runs(
     table `SqliteRunSink` writes rather than assembling a view of its own —
     which is what keeps one store one store. A developer with `sqlite3` and a
     model with `--json` are looking at the same bytes.
+
+    `with_bursts` attaches each row's cadence (`memory-and-replay` 47). **Off
+    by default, and that is not timidity**: a listing prints a line per run and
+    a burst list is 6 to 30 objects per row, so paying for it to render a table
+    would make the cheap question expensive. `runs export` asks for it, because
+    an export that dropped the cadence would leave a person truncating a store
+    on the strength of a file that had not carried everything.
 
     **A store that was never written is not an error.** A fresh install has no
     runs, and *no runs* is an answer; so is a file this build cannot read, which
@@ -713,15 +1038,53 @@ def read_runs(
         return []
     try:
         rows = connection.execute(
-            f"SELECT {','.join(_COLUMNS)} FROM runs{where} ORDER BY at DESC, rowid DESC LIMIT ?",
+            f"SELECT rowid,{','.join(_COLUMNS)} FROM runs{where} "
+            "ORDER BY at DESC, rowid DESC LIMIT ?",
             [*values, max(1, limit)],
         ).fetchall()
+        records = [_record(row[1:]) for row in rows]
+        if with_bursts:
+            # Keyed by `runs.rowid`, never by `thread_id`: a thread is a
+            # conversation and holds many turns, so filtering by it would give
+            # every turn the whole conversation's cadence.
+            _attach_bursts(connection, [row[0] for row in rows], records)
     except sqlite3.Error as exc:
         logger.warning("Could not read the run store at %s: %s", target, exc)
         return []
     finally:
         connection.close()
-    return [_record(row) for row in rows]
+    return records
+
+
+def _attach_bursts(
+    connection: sqlite3.Connection,
+    rowids: list[Any],
+    records: list[RunRecord],
+) -> None:
+    """Each row's cadence onto the record that produced it, in one query.
+
+    A store written before `memory-and-replay` 47 has no `run_bursts` table,
+    and every row in every store has runs that predate capture. Both are *no
+    cadence*, which is an answer — so this leaves the records alone rather than
+    failing the listing that asked.
+    """
+    if not rowids:
+        return
+    placeholders = ",".join("?" for _ in rowids)
+    try:
+        rows = connection.execute(
+            f"SELECT run_rowid,{','.join(_BURST_COLUMNS[2:])} FROM run_bursts "
+            f"WHERE run_rowid IN ({placeholders}) ORDER BY run_rowid, ord",
+            rowids,
+        ).fetchall()
+    except sqlite3.Error as exc:
+        logger.debug("No run cadence available: %s", exc)
+        return
+    by_run: dict[Any, list[RunBurst]] = {}
+    for row in rows:
+        by_run.setdefault(row[0], []).append(_burst(row[1:]))
+    for rowid, record in zip(rowids, records):
+        record.bursts = by_run.get(rowid, [])
 
 
 def _column(record: RunRecord, name: str) -> Any:
@@ -734,6 +1097,112 @@ def _column(record: RunRecord, name: str) -> Any:
     if name == "failed":
         return int(value)
     return value
+
+
+def _burst_row(run_rowid: int | None, order: int, burst: RunBurst) -> tuple[Any, ...]:
+    """One burst, as the table stores it. `_column`'s counterpart, and kept
+    beside it for the same reason the two column lists are kept beside each
+    other."""
+    return (
+        run_rowid,
+        order,
+        burst.node,
+        json.dumps(burst.namespace),
+        burst.block,
+        burst.kind,
+        int(burst.withheld),
+        burst.audience,
+        burst.first_seq,
+        burst.last_seq,
+        burst.first_ms,
+        burst.last_ms,
+        burst.chunks,
+        burst.chars,
+        burst.text,
+        burst.cadence,
+        int(burst.capped),
+    )
+
+
+def _burst(row: tuple[Any, ...]) -> RunBurst:
+    """One stored row, back as the object that wrote it. Tolerant in exactly
+    the way `_record` is: a namespace that will not parse costs the namespace,
+    never the burst."""
+    fields: dict[str, Any] = {}
+    for name, value in zip(_BURST_COLUMNS[2:], row):
+        if name == "namespace":
+            try:
+                fields[name] = json.loads(value) if value else []
+            except (TypeError, ValueError):
+                fields[name] = []
+            continue
+        if name in ("withheld", "capped"):
+            fields[name] = bool(value)
+            continue
+        if name == "cadence":
+            fields[name] = bytes(value) if value else b""
+            continue
+        if value is not None:
+            fields[name] = value
+    return RunBurst(**fields)
+
+
+def read_run_bursts(
+    path: Path | str | None = None,
+    *,
+    thread_id: str | None = None,
+    workflow_slug: str | None = None,
+    session_id: str | None = None,
+    limit: int = 200,
+) -> list[RunBurst]:
+    """How a stored run's output arrived, oldest first — `read_runs`' other half.
+
+    Joined back through `runs.rowid`, so the filters are the ones a caller
+    already knows: a thread, a workflow, a session. Ordered by the run row and
+    then by position within it, which is the order the chunks were produced in.
+
+    **A store with no cadence is not an error and not a zero.** A fresh
+    install, a workflow with no model in it, and every run recorded before this
+    ticket all return `[]` — an absence a caller must render as *unknown*
+    rather than as an instant run. So must a file this build cannot read, which
+    warns and returns nothing rather than taking down the panel that asked.
+    """
+    target = Path(path) if path is not None else run_store_path()
+    if target is None or not target.exists():
+        return []
+
+    clauses, values = [], []
+    for column, wanted in (
+        ("thread_id", thread_id),
+        ("workflow_slug", workflow_slug),
+        ("session_id", session_id),
+    ):
+        if wanted:
+            clauses.append(f"runs.{column} = ?")
+            values.append(wanted)
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+
+    try:
+        connection = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+    except sqlite3.Error as exc:
+        logger.warning("Could not open the run store at %s: %s", target, exc)
+        return []
+    try:
+        rows = connection.execute(
+            f"SELECT {','.join('run_bursts.' + name for name in _BURST_COLUMNS[2:])} "
+            "FROM run_bursts JOIN runs ON runs.rowid = run_bursts.run_rowid"
+            f"{where} ORDER BY run_bursts.run_rowid, run_bursts.ord LIMIT ?",
+            [*values, max(1, limit)],
+        ).fetchall()
+    except sqlite3.Error as exc:
+        # A store written before this ticket has no `run_bursts` table at all.
+        # No cadence is the answer there, exactly as it is for a run that
+        # streamed nothing.
+        logger.debug("No run cadence available in %s: %s", target, exc)
+        return []
+    finally:
+        connection.close()
+    return [_burst(row) for row in rows]
 
 
 def _record(row: tuple[Any, ...]) -> RunRecord:

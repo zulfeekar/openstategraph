@@ -14,6 +14,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from openstategraph.api.diagram import workflow_mermaid  # noqa: E402
+from openstategraph.api.burst_recorder import BurstRecorder  # noqa: E402
 from openstategraph.api.frame_clock import (  # noqa: E402
     FRAME_CLOCK_FIELDS,
     frame_stamp,
@@ -919,6 +920,32 @@ def _frame_interruptible(frame: str, previous: bool) -> bool:
     return previous if value is None else bool(value)
 
 
+def _record_chunk(recorder: BurstRecorder, frame: str) -> None:
+    """Fold a `token` frame into this run's cadence (`memory-and-replay` 47).
+
+    Read off the finished frame rather than threaded out of the fold, and that
+    is the same choice `_frame_interruptible` above makes for the same reason:
+    `_sse` is the one place a frame is built, and a parallel channel carrying a
+    copy of fields the frame already has is the duplication this repository
+    keeps paying for.
+
+    It also buys the audience boundary for nothing. What is recorded is
+    literally what the client received, so a withheld chunk — already emptied
+    by `_token_frame` before the frame existed — has no text here to leak. The
+    boundary is upstream of the recorder rather than repeated inside it.
+
+    The prefix test comes first so the ~1000 non-token frames of a real run
+    cost a string comparison and not a JSON parse.
+    """
+    if not frame.startswith("event: token\n"):
+        return
+    try:
+        payload = json.loads(frame.split("data: ", 1)[1])
+    except (IndexError, ValueError):  # pragma: no cover - `_sse` cannot emit this
+        return
+    recorder.chunk(payload)
+
+
 def _is_terminal(frame: str) -> bool:
     """True if this SSE frame is one of the three that end a stream."""
     return any(frame.startswith(f"event: {name}\n") for name in TERMINAL_EVENTS)
@@ -1081,6 +1108,15 @@ async def _stream_run(
             question=_question_asked(graph_input),
         )
     )
+    # **How this run's output arrived** (`memory-and-replay` 47). Per stream,
+    # like the clock above and for the same reason. Fed below from the frames
+    # this wrapper is already walking, and read by `_run_frames` when it writes
+    # the row — which is safe by generator semantics: the fold cannot reach its
+    # terminal frame until every frame before it has been consumed here.
+    #
+    # The audience travels with the bursts because a developer run's cadence
+    # carries developer content, and a reader has to be able to refuse it.
+    recorder = BurstRecorder(audience=getattr(audience, "value", str(audience)))
     frames = _run_frames(
         graph,
         graph_input,
@@ -1094,6 +1130,7 @@ async def _stream_run(
         store,
         run_context,
         turn=turn,
+        recorder=recorder,
     )
     ended = False
     # What a stop would do to the step in flight, kept as the frames go past
@@ -1105,6 +1142,7 @@ async def _stream_run(
         async for frame in frames:
             ended = ended or _is_terminal(frame)
             cancellable = _frame_interruptible(frame, cancellable)
+            _record_chunk(recorder, frame)
             yield frame
     except (GeneratorExit, asyncio.CancelledError):
         # Stop, pressed, or the client hung up. Nothing may be yielded from
@@ -1284,6 +1322,7 @@ async def _run_frames(
     store: Any = None,
     run_context: Mapping[str, Any] | None = None,
     turn: "RunTurn | None" = None,
+    recorder: "BurstRecorder | None" = None,
 ) -> Any:
     """Drives one `graph.astream()` call and yields SSE frames.
 
@@ -1980,6 +2019,10 @@ async def _run_frames(
             dict(folded, attempts=attempts, answer=answer),
             warnings=_built_warnings(plan, runtime),
             kind=STOPPED_KIND,
+            # A stopped run keeps its cadence too — it is the row that says
+            # *how far it got before the reader walked away*, which is exactly
+            # what a stopped run is asked afterwards.
+            bursts=recorder.bursts() if recorder else None,
         )
         raise
     finally:
@@ -2011,6 +2054,7 @@ async def _run_frames(
     turn.record(
         dict(folded, attempts=attempts, answer=answer),
         warnings=_built_warnings(plan, runtime),
+        bursts=recorder.bursts() if recorder else None,
     )
     if snapshot.next:
         interrupts = snapshot.tasks[0].interrupts if snapshot.tasks else ()

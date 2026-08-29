@@ -1205,19 +1205,31 @@ def cmd_runs_export(args: argparse.Namespace) -> int:
     So neither is dropped: the rows live in sqlite, and this command hands them
     to anything that wants a file. Same rows, no second store.
 
+    **It carries the cadence too.** A run's burst rows are the other half of
+    what the store holds (`memory-and-replay` 47), and they are in the JSON —
+    the per-chunk offsets base64'd, because that is what makes a `RunRecord`
+    survive `json.dumps` at all.
+
     **This is also the honest half of an unbounded default.** The store keeps
     every run for as long as the file exists, deliberately — see
     `run_sinks.SqliteRunSink` for why age alone never drops a conversation. What
     a person does when it grows large is export it and then truncate, and this
     is the export. **Nothing in this CLI deletes a run**: truncation is
-    `sqlite3 "$(openstategraph runs path)" "DELETE FROM runs WHERE at < '2026-01-01'"`,
-    or deleting the file — both of which a person does on purpose, to their own
+    `sqlite3 "$(openstategraph runs path)" "DELETE FROM runs WHERE at < '2026-01-01'"`
+    — and its `run_bursts` rows go with `DELETE FROM run_bursts WHERE run_rowid
+    NOT IN (SELECT rowid FROM runs)` — or deleting the file — both of which a person does on purpose, to their own
     machine, having already got the rows out.
     """
     from openstategraph.run_sinks import read_runs, run_store_path
 
     path = run_store_path(getattr(args, "workflows_root", None))
-    rows = read_runs(path, limit=args.limit)
+    # **With the cadence** (`memory-and-replay` 47), because this is what a
+    # person runs before truncating: an export that carried the answer but not
+    # how it arrived would let somebody delete a recording on the strength of a
+    # file that had not saved it. `runs list` deliberately does not ask — a
+    # table prints one line per run, and 6 to 30 burst objects a row would make
+    # the cheap question expensive.
+    rows = read_runs(path, limit=args.limit, with_bursts=True)
     payload = json.dumps([row.model_dump() for row in rows], indent=2)
 
     if not args.to:
