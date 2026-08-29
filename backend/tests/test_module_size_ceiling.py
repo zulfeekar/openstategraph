@@ -183,25 +183,35 @@ class Recorded:
 
 
 NODE_RUNTIME = """
-The file this ticket found, and the only entry here with a split already
-written for it. `docs-and-gaps/03` is open and `partially` resolved, carrying a
-recommended order for the remaining seams — `mount_overrides.py`, then
-`reporting.py`, then the `compile/nodes/` rewrite last against a test written
-first. None of that moves here and this number is not a substitute for it.
+The file this ticket found, and the entry whose split is now being executed
+against this number rather than beside it. `docs-and-gaps/03` had a recommended
+order — `mount_overrides.py`, then `reporting.py`, then the `compile/nodes/`
+rewrite last — and every step of it has re-recorded here on the way past:
+2,039 code lines, then 1,944, 1,829, 1,750, and now 1,434 with the first four
+node families living in their own modules under `compile/nodes/`.
 
-What the number is for is the growth. The split of 2026-08-22 moved 401 lines
-out; the week that followed put more than fifteen hundred back, with a second
-extraction landing in between, and no one knew until somebody ran `wc -l`
-against a ticket charted at 1,639. Two thousand and thirty-nine code lines is
-what that history costs today, recorded exactly so the next fifteen hundred
-arrive as a red test rather than as a discovery.
+What the number was for is the growth, and it is worth restating now that it is
+being used the other way. The split of 2026-08-22 moved 401 lines out; the week
+that followed put more than fifteen hundred back, with a second extraction
+landing in between, and no one knew until somebody ran `wc -l` against a ticket
+charted at 1,639. The ratchet is exact in both directions precisely so that a
+shrink has to be claimed out loud, in the same diff as the code that earned it,
+instead of being noticed a week later or not at all.
 
-The module does pass every rule `CLAUDE.md` states in words. It has a
-one-sentence description; it has one reason to change (it is the node
-builders); `NodeRuntime` the class is at 8 public members and under the class
-ceiling by name. That a file can pass all of that at 5,331 physical lines is
-the asymmetry this entry exists to make visible, and the argument for having a
-length measure at all rather than trusting the ones already written down.
+The module still passes every rule `CLAUDE.md` states in words, which is the
+asymmetry this entry exists to make visible: it has a one-sentence description;
+it has one reason to change (it is the node builders); `NodeRuntime` the class
+is at 8 public members and under the class ceiling by name. A file could pass
+all of that at 5,331 physical lines, and did.
+
+**What is left here is not a queue of unmoved families.** It is the registry
+itself and the resolution every family shares — model resolution, reasoning
+effort, the middleware slot table, prompt composition, tool binding, capability
+reporting and the `_report_*` diagnostics — plus the families still to move. A
+number driven below the shared part by pushing that resolution down into the
+families would buy this table a better figure and cost the codebase the
+anti-duplication rule, so the honest floor is well above the 500 ceiling and
+this entry is expected to keep its argument after the last family leaves.
 """
 
 CLI = """
@@ -370,7 +380,7 @@ number is here to make that visible when a fourth one lands.
 #: hand-picked pins were found to cover only the classes somebody had already
 #: worried about.
 RECORDED: dict[str, Recorded] = {
-    "compile/node_runtime.py": Recorded(1750, NODE_RUNTIME),
+    "compile/node_runtime.py": Recorded(1434, NODE_RUNTIME),
     "cli.py": Recorded(1099, CLI),
     "compile/workflow_compiler.py": Recorded(890, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(959, STREAMING),

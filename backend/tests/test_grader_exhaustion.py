@@ -65,7 +65,7 @@ class _StubGrader:
 def _grader_run(monkeypatch: Any, *, max_attempts: int = 3) -> Any:
     runtime = NodeRuntime(model=None)
     monkeypatch.setattr(
-        "openstategraph.compile.node_runtime.Grader",
+        "openstategraph.compile.nodes.grader.Grader",
         lambda **_kwargs: _StubGrader(),
     )
     node = {

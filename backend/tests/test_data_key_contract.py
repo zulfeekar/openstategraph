@@ -62,8 +62,26 @@ NODE_PARAM = "node"
 class _Reads(ast.NodeVisitor):
     """Literal `data` keys read in one function body."""
 
-    def __init__(self, runtime: NodeRuntime, names: set[str], seen: set[Any]) -> None:
+    def __init__(
+        self,
+        runtime: NodeRuntime,
+        names: set[str],
+        seen: set[Any],
+        scope: dict[str, Any],
+    ) -> None:
         self.runtime = runtime
+        #: The module globals a bare name in *this* body resolves against.
+        #:
+        #: It used to be `node_runtime`'s, unconditionally, which was true
+        #: while every factory lived in that one module. The families moved to
+        #: `compile/nodes/` (`docs-and-gaps/03`) and the extractor follows
+        #: them: resolving `_text` against the module a factory *left* would
+        #: keep passing only because the name happens to be re-exported there,
+        #: and would resolve the wrong object the day the two differ. A
+        #: contract that reads a different function from the one that runs is
+        #: the "green and blind" failure this file's own honesty check exists
+        #: to refuse.
+        self.scope = scope
         self.names = set(names)
         self.seen = seen
         self.keys: set[str] = set()
@@ -96,7 +114,7 @@ class _Reads(ast.NodeVisitor):
 
     def visit_Subscript(self, node: ast.Subscript) -> None:
         if self._is_data(node.value):
-            key = _literal_key(node.slice)
+            key = _literal_key(node.slice, self.scope)
             if key is not None:
                 self.keys.add(key)
             else:
@@ -106,7 +124,7 @@ class _Reads(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:
         func = node.func
         if isinstance(func, ast.Attribute) and func.attr == "get" and self._is_data(func.value):
-            key = _literal_key(node.args[0]) if node.args else None
+            key = _literal_key(node.args[0], self.scope) if node.args else None
             if key is not None:
                 self.keys.add(key)
             else:
@@ -118,11 +136,11 @@ class _Reads(ast.NodeVisitor):
     def _visit_delegate(self, node: ast.Call, func: ast.expr) -> None:
         """A call handed the data dict: `_text(data, "k")`, or a helper."""
         second = node.args[1] if len(node.args) > 1 else None
-        key = _literal_key(second)
+        key = _literal_key(second, self.scope)
         if key is not None:
             self.keys.add(key)
             return
-        target = _resolve(func, self.runtime)
+        target = _resolve(func, self.runtime, self.scope)
         if target is None:
             self.opaque.add(ast.unparse(node))
             return
@@ -132,7 +150,7 @@ class _Reads(ast.NodeVisitor):
         self.opaque |= opaque
 
 
-def _literal_key(node: ast.expr | None) -> str | None:
+def _literal_key(node: ast.expr | None, scope: dict[str, Any]) -> str | None:
     """The string a key expression names — literal, or a module constant.
 
     A shared key spelled once as a constant (`REASONING_EFFORT_KEY`, imported
@@ -144,16 +162,22 @@ def _literal_key(node: ast.expr | None) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.Name):
-        value = getattr(node_runtime, node.id, None)
+        value = scope.get(node.id, getattr(node_runtime, node.id, None))
         if isinstance(value, str):
             return value
     return None
 
 
-def _resolve(func: ast.expr, runtime: NodeRuntime) -> Callable[..., Any] | None:
-    """The Python object a called name refers to, module-level or on the runtime."""
+def _resolve(
+    func: ast.expr, runtime: NodeRuntime, scope: dict[str, Any]
+) -> Callable[..., Any] | None:
+    """The Python object a called name refers to, module-level or on the runtime.
+
+    `scope` is the calling body's own module globals — see `_Reads.scope`.
+    """
     if isinstance(func, ast.Name):
-        return getattr(node_runtime, func.id, None)
+        found = scope.get(func.id)
+        return found if found is not None else getattr(node_runtime, func.id, None)
     if (
         isinstance(func, ast.Attribute)
         and isinstance(func.value, ast.Name)
@@ -189,7 +213,12 @@ def _reads(
         tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
     except (OSError, TypeError, SyntaxError):  # pragma: no cover - source is present here
         return set(), set()
-    visitor = _Reads(runtime, {data_param} if data_param else set(), seen)
+    visitor = _Reads(
+        runtime,
+        {data_param} if data_param else set(),
+        seen,
+        getattr(fn, "__globals__", node_runtime.__dict__),
+    )
     visitor.visit(tree)
     return visitor.keys, visitor.opaque
 

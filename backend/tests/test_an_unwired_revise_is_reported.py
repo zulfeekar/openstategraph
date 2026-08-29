@@ -96,7 +96,7 @@ def _grader(monkeypatch: Any, conditional: dict[str, str], *, passes: bool = Fal
     """`(runtime, run)` for one grader whose wired destinations are `conditional`."""
     runtime = NodeRuntime(model=None)
     monkeypatch.setattr(
-        "openstategraph.compile.node_runtime.Grader",
+        "openstategraph.compile.nodes.grader.Grader",
         lambda **_kwargs: _StubGrader(passes),
     )
     plan = CompiledPlan()

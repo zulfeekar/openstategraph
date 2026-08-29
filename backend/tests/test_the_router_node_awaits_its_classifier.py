@@ -26,7 +26,11 @@ import threading
 import time
 from typing import Any
 
-import openstategraph.compile.node_runtime as node_runtime_module
+# The router family moved to `compile/nodes/router.py` (`docs-and-gaps/03`) and
+# the substitutions below moved with it. `node_runtime` still re-exports
+# `Router`, so patching it there would keep passing while binding a name the
+# builder no longer reads — a substitution that proves nothing.
+import openstategraph.compile.nodes.router as router_module
 from openstategraph.abc.router import Classification, Router
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import CompiledPlan, WorkflowCompiler
@@ -72,7 +76,7 @@ def _plan() -> CompiledPlan:
 
 def _built(monkeypatch: Any, model: Any = None, **data: Any) -> Any:
     _RecordingRouter.doors = []
-    monkeypatch.setattr(node_runtime_module, "Router", _RecordingRouter)
+    monkeypatch.setattr(router_module, "Router", _RecordingRouter)
     runtime = NodeRuntime(model=model or RespondingModel([], default="billing"))
     node = {
         "id": "r1",
@@ -167,7 +171,7 @@ class TestTheRouterBodyIsACoroutine:
         other assertion here.
         """
         _RecordingRouter.doors = []
-        monkeypatch.setattr(node_runtime_module, "Router", _RecordingRouter)
+        monkeypatch.setattr(router_module, "Router", _RecordingRouter)
         runtime = NodeRuntime(model=_classifying())
         node = {
             "id": "r1",
@@ -283,7 +287,7 @@ class _NarratingSyncRouter(Router):
 
 
 def _narration_from(monkeypatch: Any, router_cls: Any, door: str) -> list[Any]:
-    monkeypatch.setattr(node_runtime_module, "Router", router_cls)
+    monkeypatch.setattr(router_module, "Router", router_cls)
     runtime = NodeRuntime(model=_classifying("billing", "the billing desk"))
     document = _document()
     graph = WorkflowCompiler().build(document, RunState, runtime.factory(document))
@@ -390,7 +394,7 @@ class TestOnlyTheAwaitedClassificationIsCancelled:
     def _graph(self, monkeypatch: Any, router_cls: Any) -> Any:
         _started.clear()
         _completed.clear()
-        monkeypatch.setattr(node_runtime_module, "Router", router_cls)
+        monkeypatch.setattr(router_module, "Router", router_cls)
         runtime = NodeRuntime(model=_classifying("billing", "the billing desk"))
         document = _document()
         return WorkflowCompiler().build(document, RunState, runtime.factory(document))

@@ -36,7 +36,17 @@ if TYPE_CHECKING:
 from langchain_core.runnables.config import ensure_config
 from langgraph.errors import GraphRecursionError
 
-from openstategraph.abc.grader import Grader, Verdict
+# `Grader` and `Router` are used by their families now (`compile/nodes/`) and
+# are re-exported here for the reason every other name carved out of this
+# module is: both were importable from `node_runtime` before the split, and the
+# seam is ours while an importer's spelling is not. Nothing here calls them.
+#
+# What a re-export does **not** survive is a substitution.
+# `monkeypatch.setattr(node_runtime, "Grader", …)` rebinds this name and not
+# the one `nodes/grader.py` resolves, so the four ladder-substituting tests
+# moved their patch target to the family module rather than keep patching a
+# name the builder no longer reads.
+from openstategraph.abc.grader import Grader  # noqa: F401
 from openstategraph.errors import StepBudgetExhausted
 from openstategraph.step_budget import (
     DEFAULT_STEP_BUDGET,
@@ -45,12 +55,9 @@ from openstategraph.step_budget import (
     workflow_step_budget,
 )
 from openstategraph.abc.orchestrator import BaseOrchestrator, orchestrator_for
-from openstategraph.abc.router import Router
+from openstategraph.abc.router import Router  # noqa: F401
 from openstategraph.abc.tool_notes import (
-    UnverifiedAnswer,
-    notes_for_grader,
     notes_for_reader,
-    peek_notes,
     record_notes,
     take_notes,
 )
@@ -83,21 +90,15 @@ from openstategraph.compile.grounding import (
     gated_by,
     reaches_without_passing,
 )
-from openstategraph.counted_rows import check_row_counts_in_prose
-from openstategraph.table_coverage import check_zero_outside_coverage
-from openstategraph.grounded_numbers import MODEL_AUTHORED, check_numbers_in_prose
 from openstategraph.compile.reducers import RESET as _RESET  # noqa: F401
 from openstategraph.validation import MOUNT_NODE_TYPES
 from openstategraph.compile.reducers import Reducer, reducer_for  # noqa: F401
 from openstategraph.compile.workflow_compiler import (
-    CAPABILITY_UNAVAILABLE_ANSWER,
     GUARD_CHECK_TYPE,
     GUARDRAIL_TYPE,
     CompiledPlan,
     failure_marker,
-    step_budget_floor_for,
-    unbound_capability_claim,
-    unrun_query_claim,
+    unrun_query_claim,  # noqa: F401 — re-exported; `test_a_cited_query_that_never_ran` imports it from here
 )
 # Re-exported, not merely used: `context.py` was carved out of this module and
 # every one of these names was importable from here before the move. The seam
@@ -169,6 +170,7 @@ from openstategraph.compile.runtime_services import (  # noqa: F401
     chinook_tool_registry,
 )
 from openstategraph.compile.fields import _replaces_rules, _summarizes  # noqa: F401
+from openstategraph.compile.nodes.guard import _BUILT_IN_CHECKS  # noqa: F401
 from openstategraph.compile.grounding import _PRODUCES_CONTENT  # noqa: F401
 # Re-exported for the same reason the names below are: `reporting.py` was
 # carved out of this module (`docs-and-gaps/03`) and every one of these was
@@ -192,6 +194,7 @@ from openstategraph.compile.mount_overrides import (  # noqa: F401
     _merge_override_maps,
     apply_mount_overrides,
 )
+from openstategraph.compile.nodes import approval, grader, guard, router
 from openstategraph.compile.static_source import (
     STATIC_TEXT_NODE_TYPES,
     StaticSource,
@@ -205,30 +208,6 @@ from openstategraph.compile.static_source import (
 NO_ANSWER_PRODUCED = _NO_ANSWER_PRODUCED
 
 
-#: Checks `guard.check` can name without a package function behind them
-#: (`launch-readiness` 151).
-#:
-#: **One entry, and the registry exists because one entry could not fit the
-#: existing contract.** `fn(text) -> str` is the narrow, serialisable seam
-#: every `function.*` node uses, and it is right: a function with access to
-#: raw graph state would be a second place for control flow to hide. But F3
-#: asks *did anything this run retrieved contain this number*, which is a
-#: question about the evidence, not about the text — so it is core's to
-#: answer, with the wider signature, rather than a contract widened for
-#: everybody. A package function of the same name still wins, so this is a
-#: default and not a reservation.
-#: A **second** entry (`launch-readiness` 165), on the same argument and a
-#: different axis. `numbers_in_prose` asks where a number came from;
-#: `row_counts_in_prose` asks what it counted — a bare `COUNT(*)` returns rows,
-#: and the run that published *"1,454,449 dark vessels"* had retrieved that
-#: number honestly, so 151's gate passed it correctly. Both need the evidence
-#: rather than the text, which is what keeps them here.
-
-_BUILT_IN_CHECKS: dict[str, Any] = {
-    "numbers_in_prose": check_numbers_in_prose,
-    "row_counts_in_prose": check_row_counts_in_prose,
-    "zero_outside_coverage": check_zero_outside_coverage,
-}
 
 
 #: `workflow_compiler.ROUTER_TYPE`, restated here rather than imported: this
@@ -626,6 +605,19 @@ class NodeRuntime:
             )
         for warning in family_warnings:
             self.diagnostics.record(Finding.CAPABILITY_FAILED, warning)
+
+    # ------------------------------------------------------------------
+    # The node families. Each lives in its own module under `compile/nodes/`
+    # and is bound here rather than defined here (`docs-and-gaps/03`). A
+    # function assigned in a class body is a method, so every call site and
+    # every `inspect.getsource` census still sees exactly what it saw before —
+    # which is the whole reason it is a binding and not a delegating wrapper.
+    # `compile/nodes/__init__.py` carries the argument in full.
+    _router = router._router
+    _grader = grader._grader
+    _guardrail = guard._guardrail
+    _guard_check = guard._guard_check
+    _human_approval = approval._human_approval
 
     def _register_node_types(self) -> NodeTypeRegistry:
         """One registration point per node type this build implements.
@@ -2059,698 +2051,9 @@ class NodeRuntime:
 
         return AsyncTaskMiddleware(subagents=specs, desk_factory=desk_factory)
 
-    def _router(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """Classifies, and writes the branch for the conditional edge to read.
 
-        `tier` (react/deep/custom) was declared on `RouterNode.ts` but never
-        read here — found by the same field diff that caught the grader's
-        equivalent gap before this file's own `_DeepAgentAsChatModel` comment
-        was written. `tier: "deep"` now does exactly what it already does
-        for the grader: wraps the classifying model in a compiled deep agent
-        rather than teaching `BaseRouter` about one.
-        """
-        data = node.get("data") or {}
-        branches = _branch_entries(data.get("branches"))
-        base_model = self._resolve_model(data, node_id)
-        # A router streams the branch NAME it chose, which QA read glued to the
-        # sentence beside it. The fold blanks it for a customer; `nostream`
-        # stops it being produced at all (ticket 21). Two spellings because the
-        # deep tier cannot take a bound model — see `_DeepAgentAsChatModel`.
-        classifying_model = silence_tokens(base_model)
-        if _text(data, "tier") == "deep" and base_model is not None:
-            classifying_model = _DeepAgentAsChatModel(
-                base_model, name=f"router_{node_id}", tags=(NOSTREAM_TAG,)
-            )
-        upstream = [src for src, dst in plan.edges if dst == node_id]
-        skills = plan.skill_bindings.get(node_id, [])
-        # `workflow-gallery` 48: a grader downstream of this router's branches
-        # may send a `revise` verdict back here rather than onto a branch
-        # agent directly (`docs/decisions/router-feedback-input.md` — "feedback
-        # follows the branch"). This router is the direct target, so the
-        # unwidened check is right: it does not need `_feedback_sources`'
-        # router-relay case, only the same direct check every feedback-trusting
-        # node has always made.
-        feedback_sources = self._direct_feedback_sources(node_id, plan)
 
-        def router_for(skill: str, run_ctx: str = "") -> Router:
-            """Built per skill value, for the same reason `_agent` is: the
-            wired text arrives through state, not through the document.
 
-            The branch validation `Router.__init__` performs still happens at
-            compile time via the construction below, so a router with no
-            branches is rejected when the graph is built, not on first run.
-            """
-            return Router(
-                branches,
-                fallback=_text(data, "fallback") or None,
-                rules=_text(data, "rules"),
-                skill=skill,
-                replace_rules=_replaces_rules(data),
-                model=classifying_model,
-                match_mode=_text(data, "matchMode") or "best",
-                context=run_ctx,
-            )
-
-        prebuilt = router_for("")
-
-        async def run(state: RunState) -> dict[str, Any]:
-            """`async def` since `async-first/14`, and the reason is the model
-            call two levels down `aclassify`.
-
-            Phase D (`async-first/06`) migrated the four *longest* families and
-            left this one out as short. Measured rather than reasoned about,
-            "short" turned out to be the wrong axis: under `astream` plus
-            `task.cancel()` the stream stopped in under a millisecond and this
-            node's five-second classification **ran to completion anyway** —
-            `stop_when_client_leaves`' own "abandons rather than cancels",
-            billed. The property that decides the win is whether the closure
-            holds a model call at all, not how long that call takes; the seam
-            document's node measurable in nothing is `_static_text`, which
-            makes none.
-
-            The replay below still asks no model, which is a call not made
-            rather than a call awaited.
-            """
-            turn = _upstream_text(state, upstream) or state.get("question", "")
-            # The conversation is what the classification needs (ticket 11) —
-            # and *only* the classification. What this node produced is a
-            # decision about `turn`; the history it read is not its work, and
-            # publishing it made every earlier turn look like this turn's
-            # evidence. Ticket 24, traced in-process: a turn that ran no SQL
-            # at all had a previous turn's query recovered from this field,
-            # which on an `expects: "refusal"` case scores
-            # `should_have_refused` for a run that never touched the database.
-            # The branch downstream reads `messages` for its history anyway,
-            # so it loses nothing and stops being handed the transcript twice.
-            # A trusted `revise` here does not reclassify: it re-dispatches to
-            # whichever branch this router's own last decision named, which is
-            # the whole mechanism (`workflow-gallery` 48). Skipping
-            # `router.classify()` is not merely an optimisation — a fresh
-            # classification could legally choose a *different* branch than
-            # the one that wrote the rejected draft (the model is not
-            # deterministic), which would hand the grader's correction to a
-            # desk that never saw the question. The same trust rule every
-            # feedback-consuming node already applies: only a source whose
-            # revise/rejected edge names this node AND whose latest decision
-            # still stands.
-            decisions = state.get("decisions") or {}
-            replaying = any(
-                decisions.get(src) in ("revise", "rejected") for src in feedback_sources
-            )
-            replay_branch = decisions.get(node_id) if replaying else None
-            if replay_branch:
-                return {
-                    "decisions": {node_id: replay_branch},
-                    "outputs": {node_id: turn},
-                }
-
-            classified = (
-                _thread_question(state) if turn == state.get("question", "") else turn
-            )
-            skill = _wired_skill(state, skills, self.static_sources)
-            # `prebuilt` is the compile-time construction, kept for the common
-            # case where nothing varies per run. A wired skill or a run-context
-            # block does vary, so either one forces a rebuild.
-            run_ctx = self._run_context_section()
-            router = router_for(skill, run_ctx) if (skill or run_ctx) else prebuilt
-            decision = await router.aclassify(classified)
-            return {
-                # The conditional edge dispatches on the *stable id* — the
-                # `branch:<id>` port the canvas edge actually leaves from —
-                # while the model classified by human-readable *name*.
-                # `route_key` is the one place that mapping lives.
-                "decisions": {node_id: router.route_key(decision.branch)},
-                # Every branch it matched — **always**, one label or five
-                # (`launch-readiness/175`, question 3). It used to be written
-                # only when more than one matched, which made an absent row
-                # mean either "this router took one branch" or "nothing here
-                # reports branches", and a door publishing it could not tell
-                # the two apart. One key per router that ran costs nothing and
-                # removes the ambiguity. The compiler's dispatch is unmoved: a
-                # one-item list has always been unwrapped back to a plain
-                # label there, so the graph takes the identical path.
-                "routes": {node_id: [router.route_key(b) for b in decision.branches]},
-                "outputs": {node_id: turn},
-            }
-
-        return run
-
-    def _grader(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """Judges, and chooses `pass` or `revise`.
-
-        The card's `tier` field (react/deep/custom) previously did nothing on
-        this side — `Grader.grade()` always made one bare chat-model call
-        regardless of what a developer picked. `tier: "deep"` now actually
-        builds a `create_deep_agent` for the judgement, via
-        `_DeepAgentAsChatModel` rather than by teaching `BaseGrader` about
-        deep agents.
-        """
-        data = node.get("data") or {}
-        base_model = self._resolve_model(data, node_id)
-        # See the router's line: a grader streams `FAIL Include the SQL SELECT
-        # statement…` onto the end of a finished answer.
-        grading_model = silence_tokens(base_model)
-        if _text(data, "tier") == "deep" and base_model is not None:
-            grading_model = _DeepAgentAsChatModel(
-                base_model, name=f"grader_{node_id}", tags=(NOSTREAM_TAG,)
-            )
-        raw_rubric = data.get("rubric")
-        rubric_rows = [
-            {"criterion": str(row.get("criterion") or row.get("name") or ""),
-             "required": bool(row.get("required", True))}
-            for row in raw_rubric
-        ] if isinstance(raw_rubric, list) else []
-        cap = int(data.get("maxAttempts") or self.services.max_attempts)
-        # Both sources, because a **conditional** upstream is not in
-        # `plan.edges` (`launch-readiness` 165). A `guard.check`'s `pass` and
-        # another grader's `pass` are conditional edges, so a grader reading
-        # only `plan.edges` sees no candidate at all and rejects with "The
-        # answer is empty" — without a model call, so nothing in the trace
-        # says why. Found by wiring 165's gate into `cpl-mcp` and running it:
-        # four live runs, four empty answers, the full draft sitting in
-        # `outputs[guard1]` the whole time.
-        #
-        # `_guard_check` was written after this and already reads both. That
-        # is the asymmetry, not a difference between the two node kinds:
-        # `diagnostics.py` tells people to put a guard between a step and the
-        # output, and every graph that has a grader on that path — the
-        # ordinary NL2SQL shape — silently emptied its answer for following
-        # the advice.
-        upstream = [src for src, dst in plan.edges if dst == node_id]
-        upstream += [
-            src
-            for src, dests in plan.conditional.items()
-            if node_id in dests.values() and src not in upstream
-        ]
-        skills = plan.skill_bindings.get(node_id, [])
-        # Whether this grader can actually send anything back
-        # (`workflow-gallery` 31). Read from the plan at build time, which is
-        # the only place both the node id and the drawn destinations are known
-        # — `_router_for` sees the destinations and cannot write state, and the
-        # node sees the state and would otherwise not know what was drawn.
-        #
-        # Reported and not refused: a grader used as a recorder is a legal
-        # graph, and `support-triage` ships exactly that on purpose because
-        # `agent.feedback` is `maxConnections: 1` and a revise edge behind a
-        # three-way classifier would have to pick one desk.
-        revise_wired = "revise" in (plan.conditional.get(node_id) or {})
-        if not revise_wired:
-            self.diagnostics.record(Finding.UNWIRED_REVISE, node_id)
-        # How few supersteps this grader may see and still stop safely — one
-        # more lap, then the whole `pass` tail (`organisms-first-class` 59).
-        # Read from the plan here, at build time, for the same reason
-        # `revise_wired` is: the drawn destinations are known here and the
-        # state is known inside `run`, and neither place knows both.
-        floor = step_budget_floor_for(plan, node_id)
-
-        def grader_for(skill: str, run_ctx: str = "") -> Grader:
-            """A grader is cheap to build, so it is built per skill value.
-
-            The skill text arrives through *state* (the port's upstream node
-            writes it), so it cannot be known at compile time — the same
-            reason `_agent` rebuilds. With nothing wired this is one
-            construction per invocation of a plain dataclass-ish object, and
-            with something wired it is the only correct order of events.
-            """
-            return Grader(
-                criteria=_text(data, "criteria"),
-                rubric=rubric_rows,
-                skill=skill,
-                replace_defaults=_replaces_rules(data),
-                model=grading_model,
-                context=run_ctx,
-            )
-
-        async def run(state: RunState) -> dict[str, Any]:
-            """`async def` since `async-first/14`, awaiting `agrade`.
-
-            The same measurement as `_router` above, and this is the family it
-            matters most for: **a grader runs every lap of a revision loop**,
-            so "short" describes one call and never a run. Before this, a
-            cancelled run left the judgement's model call in flight and paid
-            for it.
-
-            The deterministic prelude is untouched and still answers first —
-            `BaseGrader._verdict_without_a_model` is shared by both doors on
-            purpose, so an empty candidate is rejected here with no model
-            consulted through either.
-            """
-            # The best candidate *this* grader has already seen, when the
-            # producer has just gone quiet (`one-chinook-honest` 25).
-            #
-            # A revise lap can return less than the lap before it — the traced
-            # run refused honestly on attempt one and returned `""` on two and
-            # three — and an empty candidate at the cap would publish nothing
-            # over an answer the workflow genuinely produced.
-            #
-            # `outputs[node_id]` is this node's own last outcome, so the text
-            # kept is the one this grader judged, on the branch that reached
-            # it, this turn — `_input` resets `outputs` at the turn boundary
-            # with every other per-run channel.
-            #
-            # **Not `state["answer"]`, which is what this line used to read.**
-            # That saved the traced run only by accident of shape: the
-            # document has one agent, so the graph-wide answer happened to be
-            # that agent's own attempt one. `_agent` already refuses the same
-            # key a few hundred lines up, and names why — in a multi-agent
-            # document it "may belong to somebody else". Measured, it does: a
-            # chain whose *second* agent returned nothing had this grader
-            # judge, force-pass and publish the **first** agent's text as the
-            # second's answer, with `outputs[a2]` still empty beside it.
-            previous = str((state.get("outputs") or {}).get(node_id) or "")
-            candidate = _upstream_text(state, upstream) or previous
-            # `launch-readiness/154`. This grader judges the producing node's
-            # raw text, and `127`'s disclosure is appended after it by
-            # `_output` — so a criterion like *"say which sense you used"* was
-            # judged against a document that did not contain the sentence the
-            # reader would actually get, and could burn a whole revise lap to
-            # obtain it.
-            #
-            # **Peeked, never taken.** `take_notes` drains, and a grader that
-            # drained the rail would delete the reader's disclosure — `154`'s
-            # fix causing `127`'s defect. And it rides in the generated
-            # *Context* layer, never in the candidate: what this node publishes
-            # is still exactly what the producer wrote.
-            seen = peek_notes()
-            sections = (
-                self._run_context_section(),
-                notes_for_grader(seen, unsent_values=_values_never_sent(state, seen)),
-            )
-            grader = grader_for(
-                _wired_skill(state, skills, self.static_sources),
-                "\n\n".join(part for part in sections if part),
-            )
-
-            # A deterministic check the *grader* cannot make, because it needs
-            # the run and a `BaseGrader` sees only the candidate
-            # (`production-ready` 95). "The answer shows a SELECT and nothing
-            # ever sent one" is a fact about `tool_use`, so it is answered here
-            # and dressed as an ordinary `Verdict.reject` — which is what makes
-            # it print like every other rule-based rejection, `check` and all.
-            #
-            # It belongs beside `deterministic_checks` in spirit and cannot
-            # live there in code: putting state on `BaseGrader.grade` would
-            # teach the grader ladder about `tool_use`, and a grader is a
-            # judgement over a text.
-            unrun = unrun_query_claim(candidate, state.get("tool_use"), upstream)
-            # The second fact of the same kind, and the one this node used to
-            # be blind to (`launch-readiness` 103). An agent whose drawn
-            # capabilities all resolved to nothing did not answer the question;
-            # it reported its own brokenness in the answer slot, and a refusal
-            # is trivially grounded, so both criteria passed it and a broken
-            # run shipped with the confidence of a working one.
-            #
-            # It is read before the model for the reason the whole
-            # deterministic prelude is: this is a fact, and paying a judgement
-            # to notice it would be slower, costlier and less reliable — and a
-            # model can be talked out of a fact.
-            blocked = unbound_capability_claim(state.get("tool_use"), upstream)
-            # Spelled as a statement rather than the conditional expression it
-            # was: `await` is legal in a ternary and reads as though both arms
-            # might be awaited, and the whole point of the `unrun` arm is that
-            # no model is asked.
-            if blocked:
-                verdict = Verdict.reject(blocked, check="unbound_capability")
-            elif unrun:
-                verdict = Verdict.reject(unrun, check="unrun_query")
-            else:
-                verdict = await grader.agrade(
-                    candidate, question=state.get("question", "")
-                )
-
-            # Budget check before routing: a grader that keeps rejecting must
-            # still let the run finish with an honest answer rather than spin.
-            #
-            # Counted **per grader**, against this node's own row in
-            # `revisions`, and incremented here rather than at every agent
-            # (`workflow-gallery` 21). `judged` includes the candidate in hand,
-            # so `maxAttempts: 1` means the first candidate is also the last —
-            # which is what the graph-wide check happened to do for the single
-            # -agent loop, and the shape every other graph did not get.
-            judged = int((state.get("revisions") or {}).get(node_id, 0)) + 1
-
-            # The *other* budget, and the one that used to end the run with an
-            # exception rather than an answer (`organisms-first-class` 56).
-            #
-            # `maxAttempts` above is this grader's own lap count; the **step
-            # budget** (`recursion_limit`) is the workflow's ceiling on
-            # supersteps, and a lap costs one per node on the cycle — so a cap
-            # the step budget cannot pay for is an ordinary drawing, not an
-            # exotic one. Before this, that graph raised
-            # `GraphRecursionError` and every door lost the answer the
-            # workflow had already produced.
-            #
-            # Read off `remaining_steps`, which LangGraph populates; the docs
-            # call this proactive read the recommended approach over catching
-            # the error outside, because the graph completes normally. `None`
-            # when a caller invoked the compiled graph without the managed key
-            # in play, and then this changes nothing.
-            remaining = state.get("remaining_steps")
-            starved = isinstance(remaining, int) and remaining <= floor
-            exhausted = judged >= cap or starved
-            # `blocked` forces the `pass` branch and the ticket says why: a
-            # retry with the same missing capability produces the same refusal
-            # and burns the budget. The branch is the *edge*, not the verdict —
-            # what travels along it is replaced below.
-            branch = "pass" if verdict.passed or exhausted or blocked else "revise"
-
-            # The ceiling reports itself when it has nothing to hand on.
-            #
-            # Forcing `pass` at the cap is right — a loop that cannot finish is
-            # worse than a mediocre answer — but when the last attempt produced
-            # *nothing*, passing an empty string makes every surface downstream
-            # claim success and show a blank. Found live in the editor: a
-            # mounted analyst exhausted three attempts and the chat panel said
-            # "No answer was produced" directly above "3 attempts before the
-            # grader passed it", which is two contradictory sentences and no way
-            # to act on either.
-            #
-            # Only when the candidate is empty. A candidate the grader merely
-            # disliked is still the answer the workflow produced, and replacing
-            # it with our commentary would be worse than passing it on.
-            outcome = candidate
-            if blocked:
-                # **Not the model's prose.** The refusal was correct and it is
-                # still not an answer — and it named internal tool ids on a
-                # customer surface to say so, which is the platform's job and
-                # not a model's. `CAPABILITY_UNAVAILABLE_ANSWER` says the one
-                # thing the refusal could not say honestly about itself: this
-                # is not an answer to the question that was asked.
-                #
-                # This is the one case that replaces a *non-empty* candidate.
-                # The rule below — a candidate the grader merely disliked is
-                # still what the workflow produced — holds against a judgement.
-                # It cannot hold against a fact that says the producer had
-                # nothing to produce from.
-                outcome = CAPABILITY_UNAVAILABLE_ANSWER
-            elif branch == "pass" and not candidate.strip() and not verdict.passed:
-                # Which ceiling was hit changes what a reader can do about it:
-                # a cap is a number on this card, the step budget is a number
-                # on the workflow. Saying "after 500 attempts" for a run that
-                # made four laps would be a false sentence.
-                outcome = (
-                    "I could not produce an answer before the workflow's step "
-                    "budget ran out. The last review said: "
-                    f"{verdict.feedback or 'no reason given'}"
-                ) if starved else (
-                    f"I could not produce an answer after {cap} "
-                    f"{'attempt' if cap == 1 else 'attempts'}. "
-                    f"The last review said: {verdict.feedback or 'no reason given'}"
-                )
-
-            # A pass the budget forced, not one the grader gave. `feedback`
-            # is cleared on a pass, so without this the rejection is discarded
-            # here and no surface can ever report it (`every-workflow-green`
-            # 09). What is published does not change.
-            update: dict[str, Any] = {
-                "decisions": {node_id: branch},
-                "revisions": {node_id: judged},
-                "feedback": "" if branch == "pass" else verdict.feedback,
-                "outputs": {node_id: outcome},
-                # The judgement itself, beside the branch it produced. Written
-                # unconditionally — unlike `forced` and `unrouted`, whose
-                # presence is the signal — because a downstream reader asking
-                # "what did the machine think of this text" needs an answer for
-                # an ordinary pass too (`workflow-gallery` 32).
-                #
-                # `reason` first, `feedback` as the fallback: `Verdict` splits
-                # them deliberately (the reason explains the verdict to a human,
-                # the feedback is written for the agent that must retry), and a
-                # deterministic rejection fills only one of the two.
-                # `check` names *which* deterministic check rejected the
-                # candidate, and is empty for every model judgement — which is
-                # what makes the grader's two paths distinguishable downstream
-                # (`production-ready` 92). `Verdict.failed_check` had named it
-                # since the field was added and it was dropped here, so a
-                # rejection costing 0.021 ms and one costing two seconds
-                # produced byte-identical frames and ticket 84 spent a session
-                # plus a live model run establishing which had happened.
-                #
-                # The marker travels beside the reason rather than instead of
-                # it: the check name is an internal token an open set of
-                # subclasses may extend (`test_grader.py`'s stricter grader
-                # adds `no_figure`; this node adds `unrun_query`), so no
-                # reader may map it to a sentence — the sentence is `reason`,
-                # and `check` is only the fact that no model was asked.
-                "verdicts": {
-                    node_id: {
-                        "verdict": "pass" if verdict.passed else "revise",
-                        "reason": verdict.reason or verdict.feedback,
-                        "check": verdict.failed_check,
-                    }
-                },
-            }
-            if blocked:
-                # Deliberately neither `forced` nor `budget_stops`: both name a
-                # ceiling that was hit, and no ceiling was hit here. The
-                # developer-facing sentence for this is
-                # `Finding.CAPABILITY_FAILED`, recorded by `_bind_tools` at
-                # compile time — which is earlier, more specific, and already
-                # reaches the run response, the CLI and `CompiledWorkflow`.
-                pass
-            elif branch == "pass" and not verdict.passed:
-                # A budget stop is a force-pass too, and the *publication* is
-                # identical — so it stays out of `forced`, whose sentence
-                # names the attempts cap. Two ceilings, two sentences, one
-                # channel (`workflow_compiler.step_budget_warnings`).
-                if starved:
-                    update["budget_stops"] = {node_id: remaining}
-                else:
-                    update["forced"] = {node_id: verdict.feedback or ""}
-            # A verdict with nowhere to go. `_router_for` will fall back to the
-            # first declared destination — correct, and it must not be the only
-            # thing that happens. Only on `revise`: at the cap the branch is
-            # `pass`, the answer really was published, and `forced` above is
-            # already the sentence for that (gallery ticket 22's case, which is
-            # a different mechanism and stays a different key).
-            if branch == "revise" and not revise_wired:
-                update["unrouted"] = {node_id: branch}
-            return update
-
-        return run
-
-    def _human_approval(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """Pauses the run and waits for a person, via LangGraph's own `interrupt()`.
-
-        Same node-decides/edge-dispatches split as the router and the
-        grader — this node *decides* `approved`/`rejected`, and the
-        compiler's conditional edge (`workflow_compiler.py`) *dispatches* on
-        whichever label it wrote to `state["decisions"]`. The difference
-        from the grader is only *who* decides: a human, resumed via
-        `Command(resume=...)`, instead of an LLM's own judgement.
-
-        `interrupt()` requires the compiled graph to have a checkpointer
-        (`WorkflowCompiler.build`'s `checkpointer` param) — without one,
-        LangGraph raises before this ever pauses. Calling it more than once
-        per node invocation is the documented anti-pattern (a resume re-runs
-        the node from its own start), which is exactly why this calls it
-        **exactly once**, unconditionally, rather than inside a retry loop.
-        """
-        # Recorded as the executor is built, so a caller one level up can ask
-        # whether this document waits for anybody (`organisms-first-class` 65).
-        self._holds_a_gate = True
-        # The gate is the only node that can ask whether it is *below* the
-        # thing it claims to authorise (`launch-readiness` 121).
-        self._report_late_approval(node_id, plan)
-        data = node.get("data") or {}
-        message = _text(data, "message") or "Approve this result?"
-        upstream = [src for src, dst in plan.edges if dst == node_id]
-        # A grader reaches a gate along its `pass` branch, which is a
-        # **conditional** edge and therefore absent from `plan.edges` — the
-        # list above is empty for the shape this whole feature is about
-        # (`workflow-gallery` 32, found by running it: the verdict was in state
-        # and the lookup had nowhere to look). Static producers first, so the
-        # node that actually wrote the candidate is preferred where both exist.
-        producers = upstream + [
-            src
-            for src, branches in (plan.conditional or {}).items()
-            if node_id in (branches or {}).values()
-        ]
-
-        def run(state: RunState) -> dict[str, Any]:
-            from langgraph.types import interrupt
-
-            candidate = _upstream_text(state, upstream) or state.get("answer", "")
-            payload = {"message": message, "candidate": candidate}
-            judgement = _upstream_verdict(state, producers)
-            if judgement:
-                payload.update(judgement)
-            decision = interrupt(payload)
-
-            approved = isinstance(decision, dict) and decision.get("decision") == "approve"
-            feedback = ""
-            if not approved:
-                note = (decision or {}).get("feedback", "") if isinstance(decision, dict) else ""
-                feedback = rejection_feedback(str(note))
-            return {
-                "decisions": {node_id: "approved" if approved else "rejected"},
-                "feedback": feedback,
-                "outputs": {node_id: candidate},
-            }
-
-        return run
-
-    def _guardrail(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """Applies a PII/content policy, and decides `allowed` or `blocked`.
-
-        A **real state-transforming graph node**, not middleware and not a
-        degenerate agent. Ticket 01 asked whether `PIIMiddleware`'s detection
-        is separable, and it is: `RedactionRule` is public, its resolved form
-        applies to a plain string, so `abc.guardrail` borrows every detector
-        and every strategy from the library without importing an agent.
-
-        ## Position is the scope, and this is where that stops being a slogan
-
-        There is no `apply_to_input` / `apply_to_output` flag here, and there
-        must never be one — the map settled that the canvas already says which
-        direction an instance is, and a flag that can disagree with the wire
-        is the `advisor`/`audience` defect again (`api/audience.py`). What
-        makes an outbound instance behave differently is not configuration: it
-        is that by the time it runs there is a settled `answer` and a
-        populated `outputs` map for its policy to reach, and an inbound one
-        has neither. One behaviour; the wire decides the consequence.
-
-        ## Why it scrubs more than its own output
-
-        `outputs` is not private state. `api/audience.py`'s table puts
-        `decisions` / `outputs` on the **customer's** `done` frame — they are
-        facts about their own turn — and every surface renders the map per
-        node. So an outbound guard that rewrote only its own text would hand
-        a customer a clean answer beside `outputs["agent-sql"]` carrying the
-        59 real addresses `SELECT Email FROM Customer` returned. Scrubbing
-        every entry it can see is not spooky action: it is this node doing
-        exactly what its card says, at the confluence, which is the same
-        argument `_output`'s never-blank floor makes.
-
-        ## What it cannot reach, stated rather than implied
-
-        `token` frames. The agent streams its prose while it is still typing
-        and this node runs afterwards, so the live wire is already past. That
-        is not a gap to paper over here — LangChain draws the identical line
-        and answers the second half with `PIIMiddleware(apply_to_output=True)`,
-        whose stream transformer sits *inside* the agent. Middleware on the
-        agent base, never a node; see `.scratch/guardrails/map.md`.
-        """
-        from openstategraph.abc.guardrail import Guardrail
-
-        data = node.get("data") or {}
-        raw_policy = data.get("policy")
-        policy = [row for row in raw_policy if isinstance(row, dict)] if isinstance(
-            raw_policy, list
-        ) else []
-        guardrail = Guardrail(rules=policy, refusal=_text(data, "blockedMessage"))
-        # Compile time, not run time (guardrails ticket 05). A `detector` is
-        # the one regex a developer writes, and until this line nothing looked
-        # at it until `screen()` did — so a missing `)` was an exception in the
-        # middle of somebody's run rather than a sentence beside the card that
-        # caused it. `problems()` parses the patterns and reads the strategies;
-        # it compiles nothing of LangChain's and matches nothing, so a document
-        # pays a parse per row for the whole class of "this row is not the
-        # protection it looks like".
-        for entity, problem in guardrail.problems():
-            self.diagnostics.record(
-                Finding.INVALID_GUARDRAIL_RULE, node_id, entity, problem
-            )
-        upstream = [src for src, dst in plan.edges if dst == node_id]
-        # A guard placed after another guard, a grader or an approval arrives
-        # over a *conditional* edge, which `plan.edges` does not carry — the
-        # same situation `_output` and `_subgraph` already handle.
-        conditional_upstream = [
-            src for src, dests in plan.conditional.items() if node_id in dests.values()
-        ]
-        #: The nodes whose `outputs` entry this guard may rewrite — see the
-        #: scrub below. Resolved once, at build time, because the document's
-        #: types do not change during a run.
-        producers = {
-            candidate
-            for candidate, node_type in self._types.items()
-            if node_type.startswith(_PRODUCES_CONTENT)
-        }
-
-        def run(state: RunState) -> dict[str, Any]:
-            text = _upstream_text(state, upstream + conditional_upstream) or state.get(
-                "question", ""
-            )
-            try:
-                screening = guardrail.screen(text)
-            except ValueError as exc:
-                # A table naming a strategy nobody implements, or a custom
-                # entity with no pattern. Reported as this node's output
-                # rather than raised: a card that claims a protection it
-                # cannot deliver must be loud (`errors.py`), and taking the
-                # whole run down would be a denial of service written by a
-                # typo. It is deliberately NOT passed through — a guardrail
-                # that fails open is the one failure mode worse than noisy.
-                return {
-                    "decisions": {node_id: "blocked"},
-                    "outputs": {node_id: failure_marker(node_id, str(exc))},
-                }
-
-            update: dict[str, Any] = {
-                "decisions": {node_id: "blocked" if screening.blocked else "allowed"},
-                "outputs": {node_id: screening.text},
-            }
-            if screening.redactions:
-                update["redactions"] = {
-                    node_id: [
-                        {"entity": r.entity, "strategy": r.strategy, "count": r.count}
-                        for r in screening.redactions
-                    ]
-                }
-            if not screening.changed:
-                return update
-
-            # A block scrubs exactly as a redaction does, and that was found
-            # by a test rather than reasoned about: stopping at "the offending
-            # text does not continue" left `outputs["in1"]` — the input node's
-            # own echo — carrying the card number onto the customer's `done`
-            # frame. Harmless when the customer typed it and a disclosure the
-            # moment the blocked text is the *model's* answer, which is the
-            # outbound instance of this very node. One rule, both outcomes.
-
-            # What is already settled, brought into line with the policy.
-            # Only the entries it actually changes are written, so a guard
-            # finding nothing costs one key.
-            #
-            # **How far the scrub reaches depends on the verdict, and the
-            # scope was found by a live run rather than reasoned about.**
-            # Scrubbing every entry made an outbound guard rewrite
-            # `outputs["in1"]` — the echo of the user's own question — to
-            # `[REDACTED_EMAIL]`, in a document whose inbound card says
-            # `email → pass`. That protects nobody (ticket 02's asymmetry:
-            # inbound PII is the user's own, they typed it) and it destroys
-            # the evidence that the machine ever received the true address,
-            # which is the whole thing this design is for.
-            #
-            # So a transforming rule covers what was **produced** — an input
-            # echoes, a router forwards, a guard rewrites; none of them
-            # invent, and none is what an outbound policy exists to catch.
-            # A **block** covers everything, because the two say different
-            # things: `redact` means the reader must not see it, and `block`
-            # means this workflow must not hold it at all — including in a
-            # checkpointed trace that outlives the run.
-            reach = (state.get("outputs") or {}).items()
-            scrubbed = {
-                key: screened
-                for key, value in reach
-                if (screening.blocked or key in producers)
-                and isinstance(value, str)
-                and (screened := guardrail.screen(value).text) != value
-            }
-            if scrubbed:
-                update["outputs"] = {**scrubbed, **update["outputs"]}
-            # Written **only** when there is already an answer to correct.
-            # `answer` is `keep_latest_nonempty`, so writing it unconditionally
-            # would make an inbound guard announce the user's own question as
-            # the run's answer on any path where the agent produced nothing.
-            settled = str(state.get("answer") or "")
-            if settled:
-                corrected = guardrail.screen(settled).text
-                if corrected != settled:
-                    update["answer"] = corrected
-            return update
-
-        return run
 
     def _orchestrator(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
         """Splits its instruction into subtasks and writes the plan to state.
@@ -3399,147 +2702,6 @@ class NodeRuntime:
 
         return run
 
-    def _guard_check(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
-        """A grader's mechanical sibling (`launch-readiness` 65).
-
-        Answers the same `pass`/`revise` question a grader does, over the
-        same conditional-edge shape (`workflow_compiler.py` routes
-        `GUARD_CHECK_TYPE` exactly where it routes `GRADER_TYPE`), but by
-        calling a package function instead of a model — the decision was
-        already made deterministically and for free by
-        e.g. `function.validate_sql`, and this node hands its verdict back
-        without paying for a model call to re-emit it.
-
-        The function contract is the same `fn(text: str) -> str` every
-        `function.*` node already uses (`_discovered_function`): an empty
-        return is a pass, a non-empty return is both the `revise` reason and
-        the feedback text sent upstream. No new contract, no new registry —
-        `check` just names one of the same functions by its short name (the
-        part after `function.`).
-
-        Termination mirrors the grader's own two ceilings exactly, because a
-        guard that always emitted `revise` would violate "a cycle must
-        contain a conditional edge that can end it": `maxAttempts` (this
-        node's own lap budget, forcing a pass once exhausted) and the step
-        budget floor (`step_budget_floor_for`, forcing a pass before the
-        graph's own recursion limit would raise). A mechanical lap is cheaper
-        than a model lap, so a runaway is more likely here, not less — which
-        is exactly why both ceilings apply here unweakened.
-        """
-        data = node.get("data") or {}
-        check_name = _text(data, "check").strip()
-        fn = self.services.functions.get(f"function.{check_name}") if check_name else None
-        # `launch-readiness` 151. F3 — *every number in the prose appears in a
-        # result row* — cannot be a package function, and that is why it sat
-        # unwritten for three days: `fn(text) -> str` sees the candidate and
-        # nothing else, and this check needs the **evidence** as well. So core
-        # supplies it, with the wider signature, and a package function of the
-        # same name still wins — an adopter overrides by writing one.
-        built_in = _BUILT_IN_CHECKS.get(check_name) if fn is None else None
-        model_authored = frozenset(
-            candidate_id
-            for candidate_id, candidate_type in self._types.items()
-            if candidate_type.startswith(MODEL_AUTHORED)
-        )
-        upstream = [src for src, dst in plan.edges if dst == node_id]
-        conditional_upstream = [
-            src for src, dests in plan.conditional.items() if node_id in dests.values()
-        ]
-        cap = int(data.get("maxAttempts") or self.services.max_attempts)
-        revise_wired = "revise" in (plan.conditional.get(node_id) or {})
-        if not revise_wired:
-            self.diagnostics.record(Finding.UNWIRED_REVISE, node_id)
-        floor = step_budget_floor_for(plan, node_id)
-
-        def run(state: RunState) -> dict[str, Any]:
-            candidate = _upstream_text(state, upstream + conditional_upstream) or state.get(
-                "question", ""
-            )
-            if fn is None and built_in is None:
-                self.diagnostics.record(Finding.UNRESOLVED_FUNCTION, f"guard.check:{check_name}")
-                return {
-                    "decisions": {node_id: "pass"},
-                    "outputs": {node_id: candidate},
-                    "feedback": "",
-                }
-
-            try:
-                if built_in is not None:
-                    reason = built_in(candidate, state, model_authored)
-                elif fn is not None:
-                    reason = fn(candidate)
-                else:  # pragma: no cover - the branch above returns first
-                    reason = ""
-            except Exception as exc:
-                reason = f"{type(exc).__name__}: {exc}"
-            reason = reason.strip() if isinstance(reason, str) else str(reason or "")
-
-            judged = int((state.get("revisions") or {}).get(node_id, 0)) + 1
-            remaining = state.get("remaining_steps")
-            starved = isinstance(remaining, int) and remaining <= floor
-            exhausted = judged >= cap or starved
-            passed = not reason
-            branch = "pass" if passed or exhausted else "revise"
-
-            update: dict[str, Any] = {
-                "decisions": {node_id: branch},
-                "revisions": {node_id: judged},
-                "feedback": "" if branch == "pass" else reason,
-                "outputs": {node_id: candidate},
-                "verdicts": {
-                    node_id: {
-                        "verdict": "pass" if passed else "revise",
-                        "reason": reason,
-                        "check": check_name,
-                    }
-                },
-            }
-
-            # `launch-readiness/167`. A ceiling that forces `pass` while the
-            # objection still stands publishes **the very figure the check
-            # refused**, and nothing anywhere says so: the verdict is recorded,
-            # the branch is `pass`, and the customer meets an answer that reads
-            # exactly like one that cleared the gate. Measured live on
-            # 2026-08-28 — lap 2 rejected *"1,454,449 vessels"* and the output
-            # node published it.
-            #
-            # **The pass is correct and is not changed.** `_grader` argues it
-            # and the argument holds harder here, because a mechanical lap is
-            # cheaper than a model lap and a runaway is more likely: a loop
-            # that cannot finish is worse than a mediocre answer, and refusing
-            # to publish turns a ceiling into a dead run, which is what
-            # `Grader.normalise` warns against. Only the silence was the
-            # defect, and it was silent on **both** channels.
-            #
-            # Two ceilings, two keys, exactly as on `_grader` — a `maxAttempts`
-            # cap is a number on this card and the step budget is a number on
-            # the workflow, so a reader's next move differs and one sentence
-            # for both would be false about one of them.
-            if branch == "pass" and not passed:
-                if starved:
-                    update["budget_stops"] = {node_id: remaining}
-                else:
-                    update["forced"] = {node_id: reason}
-                # And the reader's own rail, because the developer channel is
-                # not where the customer is. `record_notes` renders through
-                # `_output` whether or not the model mentions it — the same
-                # mechanism `127` built and `103` reused, and the reason both
-                # exist: a model asked to disclose discloses most of the time.
-                #
-                # The check's `reason` is deliberately **not** carried. It is
-                # developer text written for a model to act on and it names
-                # tables and statements; `143`'s sentence-shape rule binds
-                # anything reaching a customer. What travels is the one fact
-                # the machinery can state honestly about itself.
-                record_notes([UnverifiedAnswer(check=check_name, starved=bool(starved))])
-            # A verdict with nowhere to go — the same fallback `_grader`
-            # records, and only on `revise`: at the ceiling the branch is
-            # `pass` and the two keys above are already the sentence for that.
-            if branch == "revise" and not revise_wired:
-                update["unrouted"] = {node_id: branch}
-            return update
-
-        return run
 
     def _resolve_vocabulary(self, node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
         """*What is this word called here?* — answered before the model runs.
