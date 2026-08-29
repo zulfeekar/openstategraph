@@ -86,6 +86,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
+import sys
 import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Iterator, Mapping, Sequence
@@ -339,10 +340,10 @@ def run_turn(
         registry=registry,
     )
     token = _open_turn.set(turn)
+    meter = get_usage_metadata_callback()
     try:
-        with get_usage_metadata_callback() as usage:
-            turn._usage = usage
-            yield turn
+        turn._usage = meter.__enter__()
+        yield turn
     finally:
         turn._usage = None
         # **Best effort, and deliberately so.** An async generator does not get
@@ -352,10 +353,46 @@ def run_turn(
         # `ValueError`. The guard it protects is context-local by nature: a
         # context that never saw the `set` has nothing to reset, which is the
         # correct state already.
+        #
+        # **And this reset is the measurement, not only the cleanup**
+        # (`launch-readiness` 180). Whether it raises answers the question the
+        # line below has to ask — *am I being closed in the context that opened
+        # me?* — using our own token, in this context, a microsecond earlier.
+        # Nothing else can answer it: a string match on somebody else's
+        # exception message is not a contract, and neither is an installed
+        # version number.
+        elsewhere = False
         try:
             _open_turn.reset(token)
         except ValueError:  # pragma: no cover - depends on the ASGI driver
+            elsewhere = True
             _open_turn.set(None)
+
+        # **The meter is entered and exited by hand, because its exit is not
+        # ours to trust across a context boundary** (`launch-readiness` 180).
+        #
+        # `get_usage_metadata_callback` mints a fresh `ContextVar` per call and
+        # `set`s it on entry. On `langchain-core` 1.5.3 its exit is
+        # `set(None)`; on 1.6.1 — which this package's `langchain-core>=1.0,<2`
+        # allows, and which is what a machine resolving that range installs
+        # today — it is `reset(token)` inside a `finally`, to stop a later model
+        # call accumulating into a closed handler (their #38989). That is a
+        # correct fix for a synchronous caller and fatal for this one: measured
+        # over a real socket, every streamed run died at `turn_stack.close()`
+        # *after* its last frame, so the client got a truncated body rather than
+        # an error it could read.
+        #
+        # So the cross-context reset is tolerated and nothing else is. Closed
+        # where it was opened, a `ValueError` from the meter is the meter's own
+        # and still propagates. Closed elsewhere, the failed reset leaves the
+        # handler bound in a context that is about to be discarded with the task
+        # that made it — which is the state 1.5.3 shipped for four minor
+        # versions, not a leak this introduces.
+        try:
+            meter.__exit__(*sys.exc_info())
+        except ValueError:
+            if not elsewhere:
+                raise
 
 
 def budget_exhausted(
