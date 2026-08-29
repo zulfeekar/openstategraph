@@ -123,6 +123,12 @@ class RunState(TypedDict, total=False):
     #: `tool_use` records what happened, and what happened does not un-happen,
     #: so a repeat lap's row is merged into the standing one rather than
     #: overwriting it.
+    #:
+    #: `ran` names tools in our own vocabulary, and a deep agent's delegation
+    #: appears there as `delegate:<worker>` rather than as `deepagents`' one
+    #: `task` tool (`launch-readiness` 178, `openstategraph/delegations.py`).
+    #: MERGE_ROWS matters twice over for that entry: a revision lap must not
+    #: overwrite the record of a delegation that already happened.
     tool_use: Annotated[dict[str, Any], reducer_for(Reducer.MERGE_ROWS)]
     #: router node id -> **every** branch label it matched, when that router
     #: runs in `matchMode: "all"` (`every-workflow-green` 27).
