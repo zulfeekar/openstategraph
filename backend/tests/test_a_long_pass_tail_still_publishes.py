@@ -309,11 +309,14 @@ class TestTheFloorIsDerivedFromTheDrawing:
 
     def test_a_cycle_in_the_tail_stays_bounded(self, tmp_path: Path) -> None:
         """A `pass` branch that loops back makes "longest path" unbounded.
-        The walk is capped, so the answer is a number rather than a hang."""
-        from openstategraph.compile.workflow_compiler import (
-            STEP_BUDGET_WALK_CAP,
-            step_budget_floor_for,
-        )
+
+        The bound used to be `STEP_BUDGET_WALK_CAP`, a fixed depth, and it did
+        not bound the *cost* of finding the answer at all
+        (`the-cost-of-one-more` 01). The walk condenses the graph now, so the
+        bound is the drawing's own size: a lap and a tail can each visit every
+        node once and no more.
+        """
+        from openstategraph.compile.workflow_compiler import step_budget_floor_for
 
         package = _one_node_tail(tmp_path)
         payload = json.loads((package / "workflow.json").read_text())
@@ -323,5 +326,6 @@ class TestTheFloorIsDerivedFromTheDrawing:
              "target": {"nodeId": "draft1", "portId": "feedback"}}
         )
         (package / "workflow.json").write_text(json.dumps(payload))
-        floor = step_budget_floor_for(self._plan(package), "grader1")
-        assert 3 <= floor <= 2 * STEP_BUDGET_WALK_CAP
+        plan = self._plan(package)
+        floor = step_budget_floor_for(plan, "grader1")
+        assert 3 <= floor <= 2 * len(plan.nodes)
