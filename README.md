@@ -98,10 +98,13 @@ openstategraph run ./my-workflow "How many invoices are there?"
 **The real PyPI upload has not happened yet** — the release pipeline
 (`docs/releasing.md`) stops at TestPyPI pending a human approval that has not
 been clicked, and this file will not print a command that silently fails.
-A release candidate **is** on TestPyPI now and installs in ~13 s (measured
-2026-08-23, without the `ollama` extra below): `pip install --index-url
-https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/
-"openstategraph[server,ollama]==0.3.0rc2"` — the `--extra-index-url` is mandatory,
+A release candidate **is** on TestPyPI now and installs in ~13 s (timing
+measured 2026-08-23, without the `ollama` extra below): `pip install
+--index-url https://test.pypi.org/simple/ --extra-index-url
+https://pypi.org/simple/ "openstategraph[server,ollama]==0.3.0rc7"` — the
+version is pinned in full because pip excludes pre-releases from an unpinned
+requirement, and `backend/tests/test_the_first_command_a_stranger_copies.py`
+fails the day it stops naming the shipped one. The `--extra-index-url` is mandatory,
 because TestPyPI carries no `pydantic` 2.x and a naive install fails on that
 dependency with no mention of the missing index. A version published in the
 last few minutes can hit a second trap: pip caches the simple-index page, so

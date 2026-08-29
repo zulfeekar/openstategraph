@@ -47,7 +47,9 @@ openstategraph serve --open
 ```
 
 > **That first line does not work yet.** `openstategraph` is not on PyPI —
-> `0.3.0rc1` reached TestPyPI and the publish gate has not been approved. Until
+> the release candidates reach TestPyPI and the publish gate has not been
+> approved; `backend/README.md`'s first block is the two-index command that
+> works today. Until
 > it is, build and install the same artifact from a checkout; the recipe is in
 > [Be honest about the install](#be-honest-about-the-install) below, and the
 > other two lines are unchanged. This line is written as the shape it takes

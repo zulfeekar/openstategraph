@@ -6,8 +6,33 @@ compiled LangGraph object that runs, streams, checkpoints and deploys
 anywhere Python runs, with or without this package's editor.
 
 ```bash
-pip install "openstategraph[ollama]"
+pip install --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            "openstategraph[ollama]==0.3.0rc7"
 ```
+
+That is the line that works today, and the two flags are both load-bearing.
+**`openstategraph` is not on PyPI yet** — the release train
+(`../docs/releasing.md`) stops at TestPyPI pending a human approval nobody has
+clicked, so `pip install "openstategraph[ollama]"` returns a 404 that reads
+like the reader's mistake rather than ours. `--extra-index-url` is mandatory
+because TestPyPI carries no `pydantic` 2.x, and pip blames the dependency
+instead of the missing index. The version is named in full because pip
+excludes pre-releases from an unpinned requirement — the same trap
+[`../docs/building-an-atom.md`](../docs/building-an-atom.md) records for a
+plugin's `>=` specifier.
+
+Once the PyPI gate is approved this collapses back to the one line it should
+always have been:
+
+```bash
+pip install "openstategraph[ollama]"          # once published
+```
+
+Either way you can install the identical artifact from a checkout —
+`pip install -e "backend[ollama]"` from the repository root, or build the
+wheel with `python3 -m build backend` — which is what CI's `clean-install`
+job does, into an empty virtualenv outside the repository.
 
 ```python
 from openstategraph import load_workflow
