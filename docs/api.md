@@ -93,13 +93,37 @@ endpoints emit the identical vocabulary and one parser handles both.
 
 | Event | Meaning | Payload |
 | --- | --- | --- |
-| `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `interruptible`, `path`, `pathSlugs`, `output`, and `check` with `reason` **only when a grader rejected the candidate without invoking a model** |
-| `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `block` (`text`/`reasoning`), `usage` (`{inputTokens, outputTokens, totalTokens}` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply** |
-| `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `detail` (developer only, else `null`), `current`, `total` (both `int` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs` |
-| `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`async`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace` |
-| `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate**, plus `check` when that verdict cost no model call |
-| `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run** |
-| `error` | **terminal** — the run failed | `threadId`, `detail` |
+| `update` | a graph step reported | `node`, `namespace`, `taskId`, `internal`, `activeNode`, `interruptible`, `path`, `pathSlugs`, `output`, and `check` with `reason` **only when a grader rejected the candidate without invoking a model**, plus `seq` and `elapsedMs` |
+| `token` | a chunk of model (or node) text | `node`, `namespace`, `content`, `block` (`text`/`reasoning`), `usage` (`{inputTokens, outputTokens, totalTokens}` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs`, `kind` (`ai`/`tool`), `tool` (`{name, callId}`), and `withheld: true` **only when the text was machinery, not the reply**, plus `seq` and `elapsedMs` |
+| `progress` | a step said something about itself *while working* | `node`, `namespace`, `message`, `detail` (developer only, else `null`), `current`, `total` (both `int` or `null`), `activeNode`, `interruptible`, `path`, `pathSlugs`, plus `seq` and `elapsedMs` |
+| `spawn` | the run created a child worker or subagent | `kind` (`fanout`/`subagent`/`async`/`subgraph`), `parent`, `label`, `instruction`, `taskId`, `namespace`, plus `seq` and `elapsedMs` |
+| `interrupt` | **terminal** — a `human.approval` node paused the run | `threadId`, `node`, `message`, `candidate`, and `verdict` (`pass`/`revise`) with `reason` **only when a grader produced the candidate**, plus `check` when that verdict cost no model call, plus `seq` and `elapsedMs` |
+| `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run**, plus `seq` and `elapsedMs` |
+| `error` | **terminal** — the run failed | `threadId`, `detail`, plus `seq` and `elapsedMs` |
+
+#### Every frame says when it happened — `seq` and `elapsedMs`
+
+Two fields on all seven, minted by the server as it builds the frame.
+
+`seq` counts from `0` and is dense, so recorded order is recoverable without
+trusting a clock, and a gap is a dropped frame rather than a quiet run.
+
+`elapsedMs` is an integer count of **milliseconds since this run's stream
+opened**, taken from a monotonic clock. Three things it deliberately is not:
+
+- **Not the time you received it.** It measures the server producing the
+  frame. A client that wants to show what the *user* experienced — a stalled
+  network included — must measure arrival itself; the two answer different
+  questions and neither substitutes for the other.
+- **Not a wall clock.** A run crossing a clock correction would otherwise
+  appear to run backwards. The wall time a run belongs to is the run record's
+  own ISO stamp, which agrees with the checkpoints; nothing here restates it.
+- **Not absolute.** An offset is smaller, is what a scrubber needs, and says
+  nothing about *when* the run happened — a recorded stream can be replayed
+  without disclosing that.
+
+Both fields are identical for a customer and a developer: a cadence is not a
+disclosure.
 
 #### `spawn.parent` is a hint, not an address
 
