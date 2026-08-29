@@ -90,21 +90,30 @@ The answer is yes, four times.
 
 ### Their events beside ours
 
-Ours is the seven-name vocabulary in `FRAME_FIELDS`
+Ours **was** the seven-name vocabulary in `FRAME_FIELDS`
 (`backend/openstategraph/api/streaming.py`) and `docs/api.md` § *The event
-streams*.
+streams*. It is **ten** now — this survey is what added the other three, and
+the table below is left as it was read on 2026-08-29 rather than rewritten,
+because a dated reading that quietly updates itself is no longer evidence of
+anything. The four *Missing* rows it found are marked where they were closed;
+what closed them is in "The tickets this produced" at the end.
+
+The tense matters more than the count. Until 2026-08-30 this sentence still
+said "seven" while eight were shipping, because `54` landed without coming
+back here — which is the stale-claim defect `CLAUDE.md` records twice and the
+reason the number now sits beside the word that dates it.
 
 | AG-UI event | Ours | Reading |
 | --- | --- | --- |
-| `RUN_STARTED` (`threadId`, `runId`, `parentRunId`) | — | **Missing.** We emit nothing when a run begins; `threadId` first reaches the client on a *terminal* frame. A reader who disconnects mid-run never learns the id of the thread they were watching |
-| `RUN_FINISHED` (`threadId`, `runId`, `result`, `usage`) | `done` | Synonym — **except `usage`.** Ours carries no run-level cost |
+| `RUN_STARTED` (`threadId`, `runId`, `parentRunId`) | `started` *(53)* | **Was missing.** We emit nothing when a run begins; `threadId` first reaches the client on a *terminal* frame. A reader who disconnects mid-run never learns the id of the thread they were watching |
+| `RUN_FINISHED` (`threadId`, `runId`, `result`, `usage`) | `done` | Synonym — **except `usage`**, which `56` added. Ours carried no run-level cost |
 | `RUN_ERROR` (`message`, `code`, `usage`) | `error` (`threadId`, `detail`) | Synonym. They add a machine-readable `code` and, again, the cost of the failed run |
 | `STEP_STARTED` (`stepName`) | — | **Missing**, and independently found by `memory-and-replay` 48 reading LangGraph's `tasks` stream mode. Two sources, one gap |
 | `STEP_FINISHED` | `update` | Synonym. Ours is far richer — `namespace`, `taskId`, `internal`, `activeNode`, `path`, `pathSlugs`, `output` |
 | `TEXT_MESSAGE_START` / `TEXT_MESSAGE_END` (`messageId`, `role`) | — | **Missing.** Our `token` frames stream with no message boundary; a consumer infers one from a change of `node`. That inference is exactly what 47's chunk-coalescing would otherwise have to invent |
 | `TEXT_MESSAGE_CONTENT` (`messageId`, `delta`) | `token`, `block: "text"` | Synonym. Theirs keys by `messageId`; ours by `node` + `namespace` |
 | `TEXT_MESSAGE_CHUNK` | — | Convenience sugar for start-content-end. Not applicable |
-| `TOOL_CALL_START` (`toolCallId`, `toolCallName`) | `spawn`, but only for four tools | **Near-miss, and the near part is the problem.** `_SPAWNING_TOOLS` produces a `spawn` for `fanout` / `subagent` / `async` / `subgraph` only. An ordinary tool — a SQL query, an HTTP call — gets **no invocation frame at all**. Its *output* arrives later as `token` with `kind: "tool"`. So we have a tool-result vocabulary and no tool-invocation vocabulary, which is precisely the shape of a forty-second stall nothing on the wire explains |
+| `TOOL_CALL_START` (`toolCallId`, `toolCallName`) | `spawn` for four tools, `invoked` *(55)* for the rest | **Was a near-miss, and the near part was the problem.** `_SPAWNING_TOOLS` produces a `spawn` for `fanout` / `subagent` / `async` / `subgraph` only. An ordinary tool — a SQL query, an HTTP call — gets **no invocation frame at all**. Its *output* arrives later as `token` with `kind: "tool"`. So we have a tool-result vocabulary and no tool-invocation vocabulary, which is precisely the shape of a forty-second stall nothing on the wire explains |
 | `TOOL_CALL_ARGS` (`delta`) | — | Missing. Deliberate-adjacent: `spawn.instruction` carries a snippet for the four spawning tools. Streaming arguments as deltas is a feature we have not wanted |
 | `TOOL_CALL_END` | — | Missing, and follows `TOOL_CALL_START` |
 | `TOOL_CALL_RESULT` (`toolCallId`, `content`) | `token` with `kind: "tool"`, `tool: {name, callId}` | Half-synonym. Ours is a *chunk of text*, theirs is a *result object*. Ours carries the call id, so the join exists |
@@ -174,15 +183,24 @@ contract change later:
 
 Filed on the `memory-and-replay` map rather than built here.
 
-- **53 — a run says nothing when it starts.** `RUN_STARTED`. `threadId` first
-  reaches a client on a terminal frame.
+All four are now resolved, and each kept the borrowed *name* while refusing the
+borrowed *shape* wherever ours knew something theirs does not — which is what
+decision 3 above was asking for.
+
+- **53 — a run says nothing when it starts.** `RUN_STARTED`. Resolved: a
+  `started` frame, `seq: 0`, carrying `threadId` — and **no `runId`**, because
+  this installation identifies a turn and the warning in this very document is
+  what stopped a second identifier being invented.
 - **54 — a spawn is announced and never closed.** `SUBAGENT_FINISHED` /
-  `SUBAGENT_ERROR`. Blocks 50, which needs both ends of a bar.
+  `SUBAGENT_ERROR`. Resolved: one `settled` frame with an `outcome`, not two
+  kinds, because our `error` is terminal for the whole run.
 - **55 — an ordinary tool call has no invocation frame.** `TOOL_CALL_START`.
-  Only the four spawning tools announce themselves.
+  Resolved: an `invoked` frame. `TOOL_CALL_ARGS` was declined outright and
+  `TOOL_CALL_END` was not needed — a tool's result already carries the
+  `callId`, so the bar has two ends without a second frame.
 - **56 — what the run cost is nowhere on the wire.** `RUN_FINISHED.usage` and
-  `RUN_ERROR.usage`. Per-token `usage` exists and is developer-only; no total
-  survives, and a failed run's cost is lost entirely.
+  `RUN_ERROR.usage`. Resolved: `usage` on **all three** terminal frames —
+  theirs has no `interrupt`, and a paused run has been paid for too.
 
 `STEP_STARTED` is deliberately **not** a fifth ticket: `memory-and-replay` 48
 already owns it, from the other direction — LangGraph's `tasks` stream mode
