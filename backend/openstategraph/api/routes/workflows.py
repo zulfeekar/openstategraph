@@ -16,9 +16,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from openstategraph.api.audience import resolve as resolve_audience
+from openstategraph.api.auth import shared_deployment_reason
 from openstategraph.api.catalogue_events import CatalogueEvent, ChangeReason
 from openstategraph.api.deps import Services
 from openstategraph.api.model_resolution import workflow_default_model
@@ -644,7 +645,9 @@ def export_workflow_as_plugin(services: Services, slug: str) -> PluginExportResp
     summary="Generate this workflow's knowledge docs",
     tags=["Knowledge"],
 )
-def build_knowledge(services: Services, slug: str, request: KnowledgeBuildRequest) -> KnowledgeBuildResponse:
+def build_knowledge(
+    services: Services, slug: str, request: KnowledgeBuildRequest, http: Request
+) -> KnowledgeBuildResponse:
     """'Build second brain' (knowledge layer): one doc per topic, written
     to `workflows/<slug>/knowledge/` by every registered builder whose
     source material exists in this workflow — SQL tables today, codebase
@@ -669,7 +672,11 @@ def build_knowledge(services: Services, slug: str, request: KnowledgeBuildReques
     # Model precedence mirrors the run endpoints: explicit request >
     # document settings.model > environment default.
     model = knowledge_build.resolve_build_model(
-        request.model or workflow_default_model(document), request.credentials
+        request.model or workflow_default_model(document),
+        request.credentials,
+        # Same gate as the run doors: a browser key configures a laptop,
+        # never a team's server (`auth.shared_deployment_reason`).
+        refused_because=shared_deployment_reason(http),
     )
     try:
         report = knowledge_build.run_build(

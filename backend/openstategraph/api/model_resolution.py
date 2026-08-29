@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Callable, MutableMapping
 
@@ -11,6 +12,21 @@ from openstategraph.providers import (
     credential_env_vars,
     provider_catalogue,
 )
+
+logger = logging.getLogger(__name__)
+
+#: Variables already announced, so a busy server does not repeat itself once a
+#: run a minute. Process-wide because the fact it reports is process-wide: the
+#: value is in `os.environ` from the first fill until the process ends.
+_ANNOUNCED: set[str] = set()
+
+
+def _say_once(message: str) -> None:
+    """One WARNING per distinct sentence, per process. Never a value."""
+    if message in _ANNOUNCED:
+        return
+    _ANNOUNCED.add(message)
+    logger.warning(message)
 
 #: The Ollama model to use — a **cloud** model, never a local one.
 #:
@@ -176,11 +192,18 @@ def accepted_credential_keys() -> frozenset[str]:
     every later run in that process sent the operator's key and the user's
     prompt to it.
 
-    A key a client sends can only ever lose to the server's own, so it is
-    harmless. An address is not that kind of value, so it is not forwardable at
-    all. Nothing in the product sends one: the editor's
+    An address is not the kind of value a client may ever set, so it is not
+    forwardable at all. Nothing in the product sends one: the editor's
     `collectRuntimeCredentials` reads each provider's `runtimeCredentialKey`,
     which is always a `*_API_KEY`.
+
+    **This paragraph used to end "a key a client sends can only ever lose to
+    the server's own, so it is harmless", and that was the ticket-03 defect
+    stated as a reassurance.** It is true only where the server has a key of
+    its own; where it has none the client's key *wins by default* and stays
+    won. A key is still forwardable — the deployment decides, in
+    `apply_credentials`' `refused_because` — but it is not harmless, and the
+    set this function returns is a list of names, never a safety argument.
     """
     return frozenset(name for name in credential_env_vars() if _is_secret(name))
 
@@ -195,35 +218,88 @@ ACCEPTED_CREDENTIAL_KEYS = credential_env_vars()
 def apply_credentials(
     credentials: dict[str, str] | None,
     env: MutableMapping[str, str] | None = None,
+    *,
+    refused_because: str | None,
 ) -> list[str]:
-    """Fills in **absent** provider credentials from a request, and no others.
+    """Fills in **absent** provider credentials from a request, on a machine
+    where the caller is the operator — and on no other.
 
     The editor stores keys in the browser (`CredentialsDialog`), so without
     this a key pasted there does nothing for a backend run. It is applied as a
-    *fallback*, never an override, and the direction is deliberate:
+    *fallback*, never an override:
 
     - A server-side env var is deployment configuration, chosen by whoever
       operates the server. A browser value arrives from a client on every
-      request, and `os.environ` is process-global rather than request-scoped —
-      if the client won, one request could silently repoint a shared
-      deployment at another account's key for every later run in that process.
+      request, so it may not overwrite one.
     - So the rule is: absent → fill; present → leave alone.
+
+    **That rule stops the second client and not the first, which is why
+    `refused_because` exists** (`the-boundary-nobody-checked/03`). `os.environ`
+    is process-global and nothing here pops it, so on a server whose operator
+    configured *no* provider key — the entire reason the dialog exists — the
+    first request to arrive fills it and **becomes the configuration**. From
+    then on "present → leave alone" protects that one browser's key from every
+    other caller until restart: every teammate's runs authenticate as them,
+    every customer's question reaches their vendor account under their logging
+    and their organisation's data-processing agreement, and rotating the key or
+    revoking their access to the machine changes nothing.
+
+    The module already knew this shape. `accepted_credential_keys` records that
+    taking `OLLAMA_HOST` from a request was *"a redirection dressed as a
+    fallback … every later run in that process sent the operator's key and the
+    user's prompt to it"*, and removed **addresses** from the accepted set. The
+    identical sentence is true of the key, and was not followed through.
+
+    So the accepted set is unchanged and the *deployment* is the question.
+    `refused_because` is keyword-only and **has no default**, deliberately: the
+    defect was a permissive default (`env=None` meaning the whole process), and
+    a second one would be the same bug with a second name. Every door that
+    accepts a request body passes `auth.shared_deployment_reason(request)`; the
+    two internal callers that have no request — the CLI's knowledge build, and
+    a unit test injecting its own `env` — pass `None` and say so by doing it.
+
+    A refusal drops the credentials and lets the run proceed. It is not a 4xx:
+    a shared deployment whose operator *did* configure a key was already
+    ignoring these values, and turning that into an error would break a working
+    server to make a point. When there is no operator key the run reaches
+    `MissingProviderKey`, whose message already names the variable to set.
+
+    Both outcomes are said out loud, once per process per variable — a fill
+    because the value now serves every later run, a drop because a person
+    pasted a key and is entitled to know it was not used. Names only.
 
     Returns the **names** that were filled, never the values. Nothing here
     logs, returns or echoes a credential value.
     """
-    target: MutableMapping[str, str] = os.environ if env is None else env
     accepted = accepted_credential_keys()
+    offered = [
+        name
+        for name, value in (credentials or {}).items()
+        if name in accepted and isinstance(value, str) and value.strip()
+    ]
+    if refused_because is not None:
+        for name in offered:
+            _say_once(
+                f"{name} was supplied in a request body and dropped: {refused_because}. "
+                "A credential a client sends would become this process's own until "
+                "restart, and every later caller's runs would bill to it. Set "
+                f"{name} in the server's environment instead — see docs/deploying.md."
+            )
+        return []
+
+    target: MutableMapping[str, str] = os.environ if env is None else env
     filled: list[str] = []
-    for name, value in (credentials or {}).items():
-        if name not in accepted:
-            continue
-        if not isinstance(value, str) or not value.strip():
-            continue
+    for name in offered:
         if target.get(name):
             continue  # already configured server-side — configuration wins
-        target[name] = value.strip()
+        target[name] = str((credentials or {})[name]).strip()
         filled.append(name)
+        _say_once(
+            f"{name} was taken from a request body and is now this process's "
+            "own until it restarts, so every later run on this server uses it. "
+            "Accepted because this deployment has no shared token, no proxy in "
+            "front of it, and the caller is on this machine."
+        )
     return filled
 
 

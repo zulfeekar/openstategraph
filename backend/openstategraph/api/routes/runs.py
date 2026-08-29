@@ -27,6 +27,7 @@ from openstategraph.api.audience import (
     split_suggestion,
     with_capability_notice,
 )
+from openstategraph.api.auth import shared_deployment_reason
 from openstategraph.api.deps import PrincipalId, Services
 from openstategraph.executed_statements import statements_executed
 from openstategraph.api.diagram import workflow_mermaid
@@ -186,9 +187,10 @@ def run_workflow(
     # Before the document is compiled or a model built: a slug this
     # deployment does not have is a 404, not a directory it goes looking for.
     slug = _known_slug(services, request.workflow_slug)
-    # Browser-held keys, applied only where the server has none — see
-    # `apply_credentials` for why the server's own env always wins.
-    apply_credentials(request.credentials)
+    # Browser-held keys, applied only where the server has none *and* the
+    # caller is the operator — see `apply_credentials` and
+    # `auth.shared_deployment_reason` for why a shared server takes none.
+    apply_credentials(request.credentials, refused_because=shared_deployment_reason(http))
     # Model precedence: explicit request > the document's own
     # settings.model > environment default. A workflow that names its
     # model runs the same everywhere it is opened.
@@ -497,8 +499,9 @@ async def run_workflow_stream(
     document = normalize_document(request.workflow)
     # Same gate as `/api/runs`, and before the same work — see `_known_slug`.
     slug = _known_slug(services, request.workflow_slug)
-    # Browser-held keys, fallback-only (see `apply_credentials`).
-    apply_credentials(request.credentials)
+    # Browser-held keys, fallback-only and single-user-only (see
+    # `apply_credentials` and `auth.shared_deployment_reason`).
+    apply_credentials(request.credentials, refused_because=shared_deployment_reason(http))
     model = _build_model(request.model, document)
 
     # The caller's run context, refused here or not at all. A 422 rather than
@@ -623,8 +626,9 @@ async def resume_workflow_stream(
     # A resume binds the same package the run it continues did, so it is
     # gated the same way — see `_known_slug`.
     slug = _known_slug(services, request.workflow_slug)
-    # Browser-held keys, fallback-only (see `apply_credentials`).
-    apply_credentials(request.credentials)
+    # Browser-held keys, fallback-only and single-user-only (see
+    # `apply_credentials` and `auth.shared_deployment_reason`).
+    apply_credentials(request.credentials, refused_because=shared_deployment_reason(http))
     model = _build_model(request.model, document)
 
     compiler = WorkflowCompiler()

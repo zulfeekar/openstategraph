@@ -744,8 +744,10 @@ class WorkflowRuns:
         """Compile and run, synchronously — the `/api/runs` path, no streaming.
 
         Credentials are never accepted over MCP: the model resolves from the
-        server's own environment, exactly as `apply_credentials` guarantees the
-        server's env always wins.
+        server's own environment, which is the strongest form of the rule
+        `apply_credentials` applies to the HTTP doors — there, a request
+        credential is taken only on a machine whose caller is the operator, and
+        here there is no channel to take one through at all.
         """
         from openstategraph.api.model_resolution import resolve_model, workflow_default_model
         from openstategraph.chat_model import build_chat_model

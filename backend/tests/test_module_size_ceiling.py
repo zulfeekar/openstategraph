@@ -349,9 +349,22 @@ narrower than the API it adapts."* This is the server end of that same surface
 — `WorkflowFileClient`'s eighteen members are these routes seen from the
 browser — so the two numbers move together and neither is free to shrink alone.
 
-At 546 code lines it is the smallest entry in this table and the one closest to
+At 551 code lines it is the smallest entry in this table and the one closest to
 the ceiling, which makes it the useful canary: if the catalogue grows a second
 concern, this is where it shows up first and this number is what says so.
+
+**546 → 551** (`the-boundary-nobody-checked/03`): `build_knowledge` took the
+request object and passes `auth.shared_deployment_reason(http)` down to
+`resolve_build_model`, so a browser-supplied provider key cannot configure a
+shared server through the knowledge door either. Five lines, and the canary is
+not firing: this is the *same* concern the three run doors took in the same
+commit — every door that accepts a `credentials` body asks the one question —
+not a second one arriving in the catalogue. The seam considered and rejected
+was a FastAPI dependency (`RefusedBecause = Annotated[str | None, Depends(...)]`)
+that would have removed the argument from all four call sites at once; it costs
+one line per door and hides *which* doors take a credential behind a type
+alias, which is the thing a reader of this ticket most needs to be able to
+grep for.
 """
 
 RUN_SINKS = """
@@ -423,7 +436,7 @@ RECORDED: dict[str, Recorded] = {
     "api/streaming.py": Recorded(959, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(654, MCP_SERVER),
-    "api/routes/workflows.py": Recorded(546, ROUTES_WORKFLOWS),
+    "api/routes/workflows.py": Recorded(551, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(578, RUN_SINKS),
 }
 
