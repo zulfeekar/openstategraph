@@ -359,13 +359,18 @@ class TestTheSupervisorsRulesAreWritable:
         # The planner is built inside the step, not in the factory: the wired
         # skill text can vary by run, and the per-run notes sink must not be
         # shared between two runs of one graph (ticket 15).
-        monkey = node_runtime.orchestrator_for
-        node_runtime.orchestrator_for = _spy_for  # type: ignore[misc]
+        #
+        # Installed on `compile/nodes/orchestration.py`, which is where the
+        # supervisor resolves the name since `docs-and-gaps/03`.
+        from openstategraph.compile.nodes import orchestration
+
+        monkey = orchestration.orchestrator_for
+        orchestration.orchestrator_for = _spy_for  # type: ignore[misc]
         try:
             step = runtime.builder_for("orchestrate.supervisor")("sup", node, CompiledPlan())
             drive_node(step, {"question": "anything"})
         finally:
-            node_runtime.orchestrator_for = monkey  # type: ignore[misc]
+            orchestration.orchestrator_for = monkey  # type: ignore[misc]
 
         assert captured and captured[0] == "Send anything numeric to the analyst."
 

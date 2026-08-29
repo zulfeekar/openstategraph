@@ -41,7 +41,11 @@ import threading
 import time
 from typing import Any
 
-import openstategraph.compile.node_runtime as node_runtime_module
+# The supervisor and worker families moved to `compile/nodes/orchestration.py`
+# (`docs-and-gaps/03`) and the substitutions below moved with them: the
+# builder resolves `orchestrator_for` in its own module now, so patching the
+# name where it used to live would bind nothing the planner ever reads.
+import openstategraph.compile.nodes.orchestration as orchestration_module
 from openstategraph.abc.orchestrator import BaseOrchestrator, Orchestrator
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import CompiledPlan, WorkflowCompiler
@@ -77,7 +81,7 @@ class _RecordingPlanner(Orchestrator):
 def _built(monkeypatch: Any, **data: Any) -> Any:
     _RecordingPlanner.doors = []
     monkeypatch.setattr(
-        node_runtime_module,
+        orchestration_module,
         "orchestrator_for",
         lambda **kwargs: _RecordingPlanner(**kwargs),
     )
@@ -279,7 +283,7 @@ class _NarratingSyncPlanner(BaseOrchestrator):
 
 def _narration_from(monkeypatch: Any, planner_cls: Any, door: str) -> list[Any]:
     monkeypatch.setattr(
-        node_runtime_module, "orchestrator_for", lambda **kwargs: planner_cls(**kwargs)
+        orchestration_module, "orchestrator_for", lambda **kwargs: planner_cls(**kwargs)
     )
     runtime = NodeRuntime(model=RespondingModel([], default="worked"))
     document = _document()
@@ -419,7 +423,7 @@ class TestOnlyTheAwaitedPlannerIsCancelled:
         _started.clear()
         _completed.clear()
         monkeypatch.setattr(
-            node_runtime_module,
+            orchestration_module,
             "orchestrator_for",
             lambda **kwargs: planner_cls(**kwargs),
         )

@@ -329,7 +329,11 @@ class TestArchetypeDescriptionsAreNeverBlind:
         rule through the real roster instead: a worker that states its role
         keeps it *even while holding a tool*, and only a silent worker is
         described by what it holds."""
-        import openstategraph.compile.node_runtime as runtime_module
+        # `compile/nodes/orchestration.py` since `docs-and-gaps/03`: the
+        # supervisor resolves `orchestrator_for` in its own module, so the
+        # spy has to be installed there rather than where the builder used
+        # to be written.
+        import openstategraph.compile.nodes.orchestration as runtime_module
 
         document = two_archetype_document(
             weather={"role": "Forecasts only — never country facts."},

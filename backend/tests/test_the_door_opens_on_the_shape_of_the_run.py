@@ -200,13 +200,22 @@ class TestBoundMeansWiredOnTheCanvas:
     """
 
     def _factory(self, name: str) -> str:
+        """One builder's source, wherever its body lives.
+
+        It used to be read out of `node_runtime.py`'s `NodeRuntime` class
+        body, which was the whole of the answer while the builders were
+        written there. `_worker` left for `compile/nodes/orchestration.py` in
+        the `docs-and-gaps/03` split, so this reads the bound attribute
+        instead: a function assigned in a class body is a method, and
+        `inspect.getsource` follows it to its own file.
+        """
         import ast as _ast
+        import textwrap
 
-        from openstategraph.compile import node_runtime as module
+        from openstategraph.compile.node_runtime import NodeRuntime
 
-        tree = _ast.parse(Path(inspect.getfile(module)).read_text(encoding="utf-8"))
-        (cls,) = [n for n in _ast.walk(tree) if isinstance(n, _ast.ClassDef) and n.name == "NodeRuntime"]
-        (fn,) = [m for m in cls.body if isinstance(m, _ast.FunctionDef) and m.name == name]
+        source = textwrap.dedent(inspect.getsource(getattr(NodeRuntime, name)))
+        (fn,) = _ast.parse(source).body
         return _ast.unparse(fn)
 
     def test_the_snapshot_is_taken_before_the_ambient_tools_arrive(self) -> None:
