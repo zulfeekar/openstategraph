@@ -189,7 +189,10 @@ def test_an_unmapped_paused_node_passes_through_under_its_own_name() -> None:
 def test_a_stream_that_raises_mid_fold_ends_with_error() -> None:
     frames = list(_run(_Graph(raise_at=1)))
 
-    assert _events(frames) == ["update", "error"]
+    # `started` leads every stream since `memory-and-replay` 53 — including
+    # this one, which is the point of it: a run that dies has still told the
+    # client which thread it died in.
+    assert _events(frames) == ["started", "update", "error"]
     assert "the model provider hung up" in frames[-1]
 
 
@@ -197,7 +200,7 @@ def test_a_stream_that_raises_before_its_first_frame_still_ends_with_error() -> 
     """Nothing yielded yet is still a stream the client is waiting on."""
     frames = list(_run(_Graph(raise_at=0)))
 
-    assert _events(frames) == ["error"]
+    assert _events(frames) == ["started", "error"]
 
 
 def test_a_failure_after_the_loop_ends_with_error() -> None:
@@ -323,7 +326,7 @@ def test_a_fold_that_ends_without_saying_how_is_reported_as_an_error(
     with caplog.at_level(logging.ERROR, logger="openstategraph.api.streaming"):
         frames = _run(_Graph())
 
-    assert _events(frames) == ["update", "error"]
+    assert _events(frames) == ["started", "update", "error"]
     assert "without a terminal frame" in caplog.text
 
 

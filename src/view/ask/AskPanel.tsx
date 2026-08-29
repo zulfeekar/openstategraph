@@ -1030,6 +1030,34 @@ export function AskPanel({
             all.map((turn) => (turn.id === id ? { ...turn, progress: line, spoke: true } : turn)),
           );
           scrollToEnd();
+        } else if (event.type === 'started') {
+          // The thread, at the *start* of the run (`memory-and-replay` 53).
+          //
+          // Every line below that calls `remember` is on a terminal path — the
+          // `error` branch, the settled outcome, the resume — so continuity
+          // was something this panel acquired only if the run reached an
+          // ending. A dropped connection or a closed laptop lid took the
+          // conversation with it, and the next question arrived with no
+          // antecedent. It is the same call; what changed is that it can now
+          // be made before anything can go wrong.
+          remember(event.threadId);
+        } else if (event.type === 'invoked') {
+          // A tool was asked for, and the answer has not come back yet
+          // (`memory-and-replay` 55).
+          //
+          // It moves the glow and does nothing else, for exactly the reason
+          // the `progress` branch below gives: it is one of the frames that
+          // arrive while a node is *still working*, and on a slow tool it is
+          // the frame at the front of the silence. What the tool eventually
+          // says arrives as a `token` frame carrying the same `callId`, and
+          // that is what fills the card — a row written here as well would be
+          // the same call rendered twice.
+          const invokedTarget = frameTarget(event, hasNode, openAddress());
+          if (invokedTarget && invokedTarget !== queuedActive) {
+            seen.add(invokedTarget);
+            activate(invokedTarget, null);
+            queuedActive = invokedTarget;
+          }
         } else if (event.type === 'error') {
           // The one terminal frame that does not arrive as an outcome — the
           // client settles it into `Err(detail)`, which carries prose and not

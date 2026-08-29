@@ -82,6 +82,10 @@ def test_closing_the_consumer_exits_the_generator_and_closes_the_graph_stream() 
     graph = _RecordingGraph(CHUNKS)
     frames = FoldPump(_run(graph))
 
+    # Two frames, because the run now opens with one (`memory-and-replay` 53).
+    # The first pull is still the pull that drives the graph: `started` is
+    # minted without suspending and handed over on the far side of it.
+    assert frames.next().startswith("event: started")
     assert frames.next().startswith("event: update")
     assert graph.closed is False
 

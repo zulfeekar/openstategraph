@@ -159,6 +159,13 @@ export interface RunRequest {
 
 export interface RunResult extends RunFrameStamp {
   /**
+   * What this run cost, one row per model — or `null`, which means this
+   * reader is not told (`memory-and-replay` 56). `[]` means no model was
+   * called. On all three terminal shapes, including the failed one: the
+   * tokens a run burned before it died are the ones most worth counting.
+   */
+  readonly usage: readonly RunUsage[] | null;
+  /**
    * The thread this run happened in — send it as `threadId` on the next
    * question to make that question a follow-up.
    *
@@ -340,6 +347,14 @@ export interface GuardrailRedaction {
  */
 export interface RunInterrupted extends RunFrameStamp {
   readonly interrupted: true;
+  /**
+   * What this run cost, one row per model — or `null`, which means this
+   * reader is not told (`memory-and-replay` 56). `[]` means no model was
+   * called. On all three terminal shapes, including the failed one: the
+   * tokens a run burned before it died are the ones most worth counting.
+   */
+  readonly usage: readonly RunUsage[] | null;
+
   readonly threadId: string;
   readonly message: string;
   readonly candidate: string;
@@ -450,6 +465,28 @@ export interface TokenUsage {
 }
 
 /**
+ * What one model cost across a **whole run** (`memory-and-replay` 56).
+ *
+ * Deliberately not `TokenUsage`, though the three counts are the same three.
+ * `TokenUsage` is one message's cost and rides a `token` frame; this rides a
+ * terminal frame, names the model it is about, and arrives as a list — a run
+ * that used a grader on one provider and an agent on another has two prices,
+ * and one summed integer hides that.
+ *
+ * The numbers are the providers' own, metered across the turn, so they include
+ * model calls whose chunks produced no `token` frame at all. Never compute
+ * this by summing the frames you saw: you will be wrong if you joined late,
+ * wrong if you reconnected, and short by every call that streamed nothing.
+ */
+export interface RunUsage {
+  /** The provider's own name for the model — not a canvas node. */
+  readonly model: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+}
+
+/**
  * One frame of `/api/runs/stream`'s Server-Sent-Events feed.
  *
  * `node`/`namespace`/`taskId` mirror the backend's own finding (verified
@@ -467,6 +504,63 @@ export interface TokenUsage {
 export type SpawnKind = 'fanout' | 'subagent' | 'async' | 'subgraph';
 
 export type RunStreamEvent =
+  | ({
+      /**
+       * The run has begun (`memory-and-replay` 53). Always the first frame of
+       * a stream and always `seq: 0`.
+       *
+       * Take `threadId` from here rather than waiting for the ending. The
+       * terminal frames name it too, but a client that only reads it there
+       * learns it at the same moment it learns there is nothing left to watch
+       * — and a client whose connection drops mid-run never learns it at all,
+       * so it cannot resume the thread or look the run up afterwards.
+       *
+       * There is no run id beside it: this runtime identifies a *turn*, not a
+       * run, and a second identifier would be a second name for one thing.
+       */
+      readonly type: 'started';
+      readonly threadId: string;
+    } & RunFrameStamp)
+  | ({
+      /**
+       * A node asked an ordinary tool to do something (`memory-and-replay`
+       * 55) — the *question*, where a `token` frame with `kind: 'tool'` is the
+       * answer.
+       *
+       * It arrives when the call is made rather than when it returns, which is
+       * the whole point: measured on a workflow with an eight-second tool, the
+       * longest silences of a 91-second run were all that tool running with
+       * nothing on the wire.
+       *
+       * There is no closing frame, because one already exists: the `token`
+       * frame carrying this tool's result repeats `callId` in `tool.callId`,
+       * so pair on that to time the call.
+       *
+       * The four spawning tools do not appear here — a `task` or
+       * `start_async_task` call is a `spawn`, and one tool call never arrives
+       * twice under two different words.
+       */
+      readonly type: 'invoked';
+      /** The canvas node that made the call. */
+      readonly node: string;
+      readonly namespace: readonly string[];
+      /**
+       * The tool's own name, or `''` when it was withheld — a tool's name is
+       * its own disclosure, so a customer never reads one here or on the
+       * `token` frame that carries its result.
+       */
+      readonly name: string;
+      /** Joins this to the tool's result frame, or `''` when withheld. */
+      readonly callId: string;
+      /**
+       * True when `name` and `callId` were emptied for this reader, so
+       * "not for you" and "the server had nothing to say" stay distinct.
+       */
+      readonly withheld: boolean;
+      readonly activeNode: string;
+      readonly path: readonly string[];
+      readonly pathSlugs: readonly string[];
+    } & RunFrameStamp)
   | ({
       readonly type: 'update';
       readonly node: string;
@@ -800,6 +894,14 @@ export type RunStreamEvent =
       readonly type: 'error';
       readonly detail: string;
       /**
+       * What this run cost, one row per model — or `null`, which means this
+       * reader is not told (`memory-and-replay` 56). `[]` means no model was
+       * called. On all three terminal shapes, including the failed one: the
+       * tokens a run burned before it died are the ones most worth counting.
+       */
+      readonly usage: readonly RunUsage[] | null;
+
+      /**
        * The thread the failed run happened in (ticket 11's disclosure, ticket
        * 17's use). A failure is still a turn: the question reached the graph
        * and the `messages` channel may already hold it, so a client that
@@ -1107,6 +1209,11 @@ export class RuntimeClient implements IRuntimeClient {
         // distinction `RunFrameStamp` draws for a backend that predates it.
         seq: null,
         elapsedMs: null,
+        // The blocking door publishes no run cost either (`memory-and-replay`
+        // 56 is about the frames). `null` is the same answer it is on a
+        // customer's terminal frame — no claim — rather than `[]`, which would
+        // say this run called no model.
+        usage: null,
         // `RunResponse` does not carry one today; see `RunResult.threadId`.
         threadId: asString(payload['thread_id']),
         answer: asString(payload['answer']),
@@ -1220,7 +1327,29 @@ export class RuntimeClient implements IRuntimeClient {
         return;
       }
 
-      if (eventName === 'update') {
+      if (eventName === 'started') {
+        onEvent({
+          ...asFrameStamp(payload),
+          type: 'started',
+          threadId: asString(payload['threadId']),
+        });
+      } else if (eventName === 'invoked') {
+        onEvent({
+          ...asFrameStamp(payload),
+          type: 'invoked',
+          node: asString(payload['node']),
+          namespace: Array.isArray(payload['namespace']) ? payload['namespace'].map(asString) : [],
+          name: asString(payload['name']),
+          callId: asString(payload['callId']),
+          // Emitted only when it is true, exactly as `withheld` is on a
+          // `token` frame; a backend that predates the field reads as "not
+          // withheld", which is what every frame was before it existed.
+          withheld: payload['withheld'] === true,
+          activeNode: asString(payload['activeNode']) || asString(payload['node']),
+          path: asPath(payload['path']),
+          pathSlugs: asPath(payload['pathSlugs'], { keepBlanks: true }),
+        });
+      } else if (eventName === 'update') {
         onEvent({
           ...asFrameStamp(payload),
           type: 'update',
@@ -1320,11 +1449,13 @@ export class RuntimeClient implements IRuntimeClient {
           type: 'error',
           detail: failure,
           threadId: asString(payload['threadId']),
+          usage: asRunUsage(payload['usage']),
         });
       } else if (eventName === 'interrupt') {
         outcome = {
           ...asFrameStamp(payload),
           interrupted: true,
+          usage: asRunUsage(payload['usage']),
           threadId: asString(payload['threadId']),
           message: asString(payload['message']),
           candidate: asString(payload['candidate']),
@@ -1340,6 +1471,7 @@ export class RuntimeClient implements IRuntimeClient {
           // measured it — the number a duration line should quote, and the
           // end a scrubber needs.
           ...asFrameStamp(payload),
+          usage: asRunUsage(payload['usage']),
           threadId: asString(payload['threadId']),
           answer: asString(payload['answer']),
           decisions: asRecord(payload['decisions']),
@@ -1604,6 +1736,28 @@ function asFrameStamp(payload: Record<string, unknown>): RunFrameStamp {
     seq: typeof payload['seq'] === 'number' ? payload['seq'] : null,
     elapsedMs: typeof payload['elapsedMs'] === 'number' ? payload['elapsedMs'] : null,
   };
+}
+
+/**
+ * A terminal frame's `usage` list — the whole run's cost, per model.
+ *
+ * `null` is the **audience boundary**: a customer is told nothing about what a
+ * run cost, exactly as `usage` is `null` on their `token` frames. `[]` is a
+ * measurement — the run called no model. A client that collapsed the two would
+ * report an input-only workflow and a customer identically.
+ */
+function asRunUsage(value: unknown): readonly RunUsage[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.map((entry) => {
+    const row = asRecordOfUnknown(entry);
+    const count = (key: string): number => (typeof row[key] === 'number' ? row[key] : 0);
+    return {
+      model: asString(row['model']),
+      inputTokens: count('inputTokens'),
+      outputTokens: count('outputTokens'),
+      totalTokens: count('totalTokens'),
+    };
+  });
 }
 
 /** A `token` frame's `usage` object, with a missing count read as zero. */

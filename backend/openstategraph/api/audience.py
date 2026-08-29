@@ -477,3 +477,62 @@ def with_capability_notice(prose: str, warnings: Sequence[str], audience: Audien
     if not notice:
         return prose
     return f"{prose.rstrip()}\n\n{notice}" if prose.strip() else notice
+
+
+def run_usage(
+    spent: Mapping[str, Any], audience: Audience
+) -> list[dict[str, Any]] | None:
+    """What the whole run cost, per model — or `None`, which is the boundary.
+
+    `memory-and-replay` 56. `token.usage` is one message's cost and only a
+    developer's; nothing carried a **total**, so a client that wanted "what did
+    this run cost" had to sum every frame it happened to see — wrong if it
+    joined late, wrong if it reconnected, and impossible for a failed run,
+    whose `error` frame carried no numbers at all.
+
+    **A measurement, not a sum.** `spent` is `RunTurn.spent()`, which is
+    LangChain's own `get_usage_metadata_callback` for the whole turn: the
+    provider's numbers, keyed by model, including model calls whose chunks
+    never produced a `token` frame. Adding the frames up here would be the same
+    arithmetic done in a worse place, and would miss those.
+
+    **A list, because a run can use more than one model.** A grader on one
+    provider and an agent on another have two prices and one summed integer
+    hides that. Sorted by model name so two recordings of one run compare
+    equal. It also cannot be confused with `token.usage`, which is one flat
+    object — same word on two frames, two shapes a typed client keeps apart.
+
+    **`None` for a customer, and `[]` for a run that called no model.** They
+    are different claims and `docs/api.md` already promises the first in
+    writing: a customer's `tokens` reads *"`null`, always, exactly as `usage`
+    is on a customer's stream"*. The key is present either way, for the reason
+    `progress.detail` is — an omitted key would make "not for you" and "nobody
+    spent anything" one wire shape.
+
+    Total by construction, exactly as `TokenUsage` is and for the same reason:
+    this is third-party metadata, so a malformed reading costs its own row's
+    numbers and never the frame a client is waiting for.
+    """
+    if audience is not Audience.DEVELOPER:
+        return None
+
+    def count(reading: Mapping[str, Any], key: str) -> int:
+        try:
+            return int(reading.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    rows: list[dict[str, Any]] = []
+    for model in sorted(spent):
+        reading = spent[model]
+        if not isinstance(reading, Mapping):
+            continue
+        rows.append(
+            {
+                "model": str(model),
+                "inputTokens": count(reading, "input_tokens"),
+                "outputTokens": count(reading, "output_tokens"),
+                "totalTokens": count(reading, "total_tokens"),
+            }
+        )
+    return rows

@@ -3,6 +3,24 @@
 ## Unreleased
 
 ### Added
+- **Three additions to the run stream's published vocabulary**
+  (`memory-and-replay` 53, 55, 56), taken together because the seam is priced
+  once — `FRAME_FIELDS` → `docs/openapi.json` → `RuntimeClient.ts`, pinned by
+  `contractDrift.test.ts`.
+  - `started` is now the first frame of every stream, always `seq: 0`, and it
+    carries `threadId`. The id used to reach a client only on a *terminal*
+    frame — measured live, frame 377 of 377 — so a connection that dropped
+    mid-run lost the thread it was watching and could not resume or look it up.
+  - `invoked` says an ordinary tool was asked for, before its answer comes
+    back. Only four spawning tools announced themselves before; everything else
+    — a SQL query, an HTTP call, anything a package puts in `tools/` — was
+    silent until its result arrived. Join it to that result on `callId`. A
+    customer's copy is blanked and marked `withheld`, as a tool's identity
+    already is on `token` frames.
+  - `usage` on `done`, `interrupt` and `error` — what the whole run cost, one
+    row per model, from the providers' own meter rather than a sum of the
+    frames a client happened to see. Developer-only; a customer reads `null`.
+    A failed run is priced too, which is the half most easily lost.
 - `StepBudgetExhausted` is exported from the top-level package, beside
   `RunProducedNothing`. It is now raised by the **library** door as well as at
   a mount boundary, so a caller of `.ask()` has a name to catch

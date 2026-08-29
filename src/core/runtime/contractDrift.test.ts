@@ -125,7 +125,19 @@ const IGNORED_BY_DESIGN: Record<string, readonly string[]> = {
   // the answer, not the run, and `docs/api.md` introduces it as exactly that.
   // Teaching a reader to handle the progress frames is the *next* page's job;
   // making this one handle seven events would cost it the property it is for.
-  'docs/examples/minimal-client.html': ['update', 'progress', 'spawn', 'settled'],
+  // `started` and `invoked` joined the list for the same reason and are
+  // asserted in the contract's own order: the page renders the answer, and
+  // neither the run opening nor a tool being asked for is part of an answer.
+  // `started` is the one worth a second thought — it carries `threadId`, which
+  // a client needs for a *second* turn — and this page has no second turn.
+  'docs/examples/minimal-client.html': [
+    'started',
+    'update',
+    'progress',
+    'spawn',
+    'settled',
+    'invoked',
+  ],
 };
 
 /**
@@ -353,7 +365,7 @@ describe('the client and the published contract', () => {
 
       // Anti-vacuity: an extractor that matched nothing would make the loop
       // below a statement about no frames and no fields.
-      expect(Object.keys(declared)).toHaveLength(8);
+      expect(Object.keys(declared)).toHaveLength(10);
       expect(declared['token']).toContain('withheld');
 
       for (const [name, fields] of Object.entries(declared)) {
