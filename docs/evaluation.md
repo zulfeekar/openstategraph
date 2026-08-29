@@ -24,6 +24,18 @@ different clock**:
 > An eval's verdict is a **destination**. A scorecard, consumed by a human or a
 > CI gate, kept and diffed against the next one.
 
+### And a third thing, which is neither
+
+`scripts/run_the_gallery.py` asks every package in the gallery one question and
+reports what came back. It is not an eval: there is no dataset, no reference
+output and no score — the verdict is *answered / refused / paused / empty /
+errored*, with the attempts and the routing decisions beside it. It is the
+smoke test the gallery had no other way to get, because twenty-two of the
+twenty-four examples are covered by tests that deliberately need no model at
+all, and one defect (`launch-readiness/185`) lived entirely below that line.
+Hand-run, never CI, for the reason every driver in `scripts/` is: it spends
+real money. `docs/decisions/asking-the-whole-gallery.md` is what it found.
+
 The code says it more precisely than prose can. `BaseGrader.grade()` runs its
 deterministic checks first and only then asks a model
 (`backend/openstategraph/abc/grader.py`); `runner._grade()` **judges** without

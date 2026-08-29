@@ -29,7 +29,8 @@ from openstategraph.compile.context import (
     held_tools_context,
 )
 from openstategraph.compile.fields import _replaces_rules
-from openstategraph.compile.reporting import _final_text, tool_report
+from openstategraph.compile.reporting import tool_report
+from openstategraph.compile.silent_turn import text_or_ask_again
 from openstategraph.compile.state import (
     _thread_question,
     _upstream_text,
@@ -450,7 +451,12 @@ def _worker(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
         ).build()
         result = await agent.ainvoke({"messages": [HumanMessage(content=instruction)]})
         out = result.get("messages") or []
-        text = _final_text(out)
+        # The same second ask `_agent` makes, for the same measured reason
+        # (`launch-readiness/185`), and this is the site whose silence
+        # `silent_node_warnings` already has a sentence for: a member that
+        # ran its tools and then wrote nothing leaves one section of the
+        # joined report empty, and the join has no way to fill it.
+        text = await text_or_ask_again(out, model)
         return {
             "worker_results": {task_id: text if isinstance(text, str) else str(text)},
             # What this worker was refused, keyed by **node** id and not by
