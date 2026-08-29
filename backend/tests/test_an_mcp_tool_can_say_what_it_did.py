@@ -33,6 +33,7 @@ moment a model called it.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,30 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from openstategraph import load_workflow
 from openstategraph import prebuilt_mcp
 from openstategraph.abc.tool_notes import take_notes
+
+#: The ask written for a server owner, read rather than paraphrased.
+#:
+#: `launch-readiness/168`. Its whole content is a claim about this file's
+#: subject — *declare a `next_step` and the platform carries it, with no change
+#: on our side* — and a claim in a document has no way to fail. Reading it here
+#: gives it one.
+DECLARING_A_NEXT_STEP = (
+    Path(__file__).resolve().parents[2] / "docs" / "declaring-a-next-step.md"
+).read_text(encoding="utf-8")
+
+
+def _example_payload_from(markdown: str) -> dict[str, Any]:
+    """The first fenced JSON block in a document, parsed.
+
+    The document is written for a reader, so its example is the thing a server
+    owner will copy. Lifting it out rather than restating it is what makes the
+    test fail when the example drifts, which is the only drift that matters.
+    """
+    match = re.search(r"```json\n(.*?)\n```", markdown, re.DOTALL)
+    assert match, "the document must carry a copyable JSON example"
+    payload = json.loads(match.group(1))
+    assert isinstance(payload, dict)
+    return payload
 
 THREAD = "157-thread"
 ANSWER = "Twelve vessels loaded there."
@@ -468,6 +493,41 @@ class TestACallTheServerCalledUnretryable:
         _, model = _run(tmp_path, None)
 
         assert "not retryable" in model.tool_messages()
+
+    def test_the_document_written_for_a_server_owner_is_the_thing_that_works(
+        self, tmp_path: Path, remote
+    ) -> None:
+        """`launch-readiness/168`. `docs/declaring-a-next-step.md` is an ask
+        addressed to somebody else's team, and an ask nobody here can run is
+        the shape this repository has been wrong in twice: a claim in prose
+        with no way to fail. So the document's own example payload is lifted
+        out of it and put through the real wrapper.
+
+        It also pins the two sentences that make the ask worth making — that
+        the server's destination arrives **ahead** of the platform's
+        prohibition, and that a `next_step` is addressed to the model and
+        never published to a reader.
+        """
+        example = _example_payload_from(DECLARING_A_NEXT_STEP)
+        assert example["notes"][0]["kind"] == "next_step"
+        remote(json.dumps(example))
+
+        answer, model = _run(tmp_path, None)
+
+        told = model.tool_messages()
+        destination = example["notes"][0]["text"]
+        assert destination in told
+        assert "not retryable" in told
+        # Declared first, ours after — the document says so in as many words.
+        assert told.index(destination) < told.index("not retryable")
+        # A `next_step` is a corrective, so it never reaches the answer.
+        assert destination not in answer
+
+    def test_the_document_names_exactly_the_kinds_a_server_may_declare(self) -> None:
+        # The document tells a stranger's team what is accepted. A fourth kind
+        # added here and not there is an ask that has quietly gone stale.
+        named = set(re.findall(r"`(next_step|substitution|source_choice)`", DECLARING_A_NEXT_STEP))
+        assert named == set(prebuilt_mcp._NOTE_KINDS)
 
     def test_a_server_that_declared_its_own_corrective_keeps_it(
         self, tmp_path: Path, remote
