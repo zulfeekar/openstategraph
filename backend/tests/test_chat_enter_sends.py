@@ -46,3 +46,35 @@ class TestEnterSendsInTheComposer:
         body = _keydown_handler()
 
         assert "&& !e.shiftKey" in body
+
+
+class TestTheComposerSaysWhichKeySends:
+    """`/chat` bound Enter and never said so; the Ask panel says so and does.
+
+    launch-readiness/173 re-filed 36 after a second stranger run, and the
+    binding turned out to be intact on both surfaces — the report was an
+    artifact of the automation's `Return` key name, which arrives with no
+    identity at all (`key: ""`, `code: ""`, `keyCode: 0`), while its `Enter`
+    name arrives populated and sends. What survived the investigation is the
+    one thing 173's "Done when" asks for that was genuinely missing: an
+    invisible convention. The editor's Ask panel tells a developer *"Type a
+    question above, then press Send or Enter"* on its Send control; `/chat`,
+    the surface a non-developer meets first, said nothing on either control.
+
+    An inconsistency between the two surfaces is worse than either
+    behaviour, so the customer surface gets the sentence too.
+    """
+
+    def _send_button(self) -> str:
+        page = _page()
+        start = page.index('<button id="send"')
+        return page[start : page.index(">", start) + 1]
+
+    def test_the_send_control_names_the_key_that_sends(self) -> None:
+        assert "Enter" in self._send_button()
+
+    def test_it_names_the_key_that_does_not(self) -> None:
+        # Shift+Enter is the half a multi-line composer needs stated: a
+        # reader told only "Enter sends" has been told their newline is
+        # unreachable.
+        assert "Shift" in self._send_button()
