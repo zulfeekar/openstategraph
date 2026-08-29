@@ -524,3 +524,28 @@ a support thread:
 That is `MCP_GROUPING_GUIDE` in `src/nodes/tools/mcpServerFields.ts`, quoted
 here rather than restated so the two copies cannot drift apart — a test pins
 the quote (`src/nodes/tools/mcpDocsGuide.test.ts`).
+
+### Credentials, sessions, and what happens when you rotate one
+
+A row names an **environment variable**, never a value — `tokenEnv` in the
+document, the value in `.env`. Two things follow that are worth knowing before
+you deploy this.
+
+**Two rows for one URL are two sessions, and the variable is what separates
+them.** A personal token and an organisation token pointed at the same vendor
+are a real configuration, and they get their own connection each. The session
+pool is keyed by transport, URL, header names and *the variable each row reads
+from* — names only, so nothing derived from a credential is ever in a key, a
+log line or a traceback. Two cards naming the same server with the same
+variable still share one session, which is what the pool is for.
+
+**A rotated credential is picked up on the next run, not mid-run.** Sessions
+are held open for the life of the process, so the value a session opened with
+is the one it keeps using. Compiling a document re-reads the environment — the
+run doors compile per run — and if a row's value has changed, the pooled
+session is closed and reopened with the new one before the next call goes out.
+What that does *not* cover is a run
+already in flight — a token revoked underneath it will fail that run's calls
+with the server's own 401, which is a protocol error and is deliberately not
+retried. Rotate between runs, and restart the server only if you have also
+changed which variable a row reads from while it was running.

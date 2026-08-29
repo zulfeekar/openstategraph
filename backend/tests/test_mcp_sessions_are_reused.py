@@ -234,3 +234,184 @@ class TestTheAtomUsesASession:
         assert isinstance(seen["session"], mcp_sessions.McpSessionProxy)
         assert seen["connection"] is None
         mcp_sessions._POOL.clear()
+
+
+class TestTwoRowsDifferingOnlyByCredential:
+    """The half of `pool_key`'s docstring that had no test — and was false.
+
+    `resolve_auth_headers` spells every bearer credential as the one header
+    name `Authorization`, so two rows for one URL naming two *different*
+    environment variables produced the identical key. The pool handed the
+    second row the first row's proxy, and `McpSessionProxy.__init__` had
+    already frozen the first row's header value: the org token's tools ran on
+    the personal token, silently.
+
+    The fake values below are the assertion as much as the setup. Nothing in
+    a key, a repr or a log line may contain one.
+    """
+
+    PERSONAL = "sec05-personal-value-must-never-be-logged"
+    ORG = "sec05-org-value-must-never-be-logged"
+
+    def _rows(self) -> tuple[Any, Any]:
+        from openstategraph import prebuilt_mcp
+
+        personal = prebuilt_mcp.McpServerDefinition(
+            name="GitHub (personal)",
+            url="https://api.githubcopilot.com/mcp/",
+            auth=prebuilt_mcp.McpAuth(
+                kind=prebuilt_mcp.AUTH_BEARER, token_env="SEC05_PERSONAL_TOKEN"
+            ),
+        )
+        org = prebuilt_mcp.McpServerDefinition(
+            name="GitHub (org)",
+            url="https://api.githubcopilot.com/mcp/",
+            auth=prebuilt_mcp.McpAuth(
+                kind=prebuilt_mcp.AUTH_BEARER, token_env="SEC05_ORG_TOKEN"
+            ),
+        )
+        return personal, org
+
+    def test_the_key_separates_them(self) -> None:
+        personal, org = self._rows()
+        headers = {"Authorization": f"Bearer {self.PERSONAL}"}
+
+        one = mcp_sessions.pool_key(
+            personal.connection(headers),
+            credential_source=personal.auth.credential_source(),
+        )
+        two = mcp_sessions.pool_key(
+            org.connection({"Authorization": f"Bearer {self.ORG}"}),
+            credential_source=org.auth.credential_source(),
+        )
+
+        assert one != two
+        assert "SEC05_PERSONAL_TOKEN" in one
+        for key in (one, two):
+            assert self.PERSONAL not in key
+            assert self.ORG not in key
+
+    def test_two_rows_naming_two_variables_get_two_proxies(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Through discovery, which is the layer the defect actually bit at.
+
+        The key could change and the pool still collapse, so the assertion the
+        ticket asks for is on the proxies rather than on the string.
+        """
+        from openstategraph import prebuilt_mcp
+
+        monkeypatch.setenv("SEC05_PERSONAL_TOKEN", self.PERSONAL)
+        monkeypatch.setenv("SEC05_ORG_TOKEN", self.ORG)
+
+        handed: list[Any] = []
+
+        async def fake_load(session: Any, **_kwargs: Any) -> list[Any]:
+            handed.append(session)
+            return []
+
+        import langchain_mcp_adapters.tools as vendor_tools
+
+        monkeypatch.setattr(vendor_tools, "load_mcp_tools", fake_load)
+        mcp_sessions._POOL.clear()
+        try:
+            for definition in self._rows():
+                headers, problem = prebuilt_mcp.resolve_auth_headers(
+                    definition.auth, server_name=definition.name
+                )
+                assert problem is None
+                asyncio.run(prebuilt_mcp._discover_tools(definition, headers, timeout=5.0))
+
+            assert handed[0] is not handed[1]
+            assert (
+                handed[1]._connection["headers"]["Authorization"]
+                == f"Bearer {self.ORG}"
+            )
+        finally:
+            mcp_sessions._POOL.clear()
+
+    def test_one_row_asked_for_twice_is_still_one_session(self) -> None:
+        """The pooling this must not cost: same URL, same variable, one session."""
+        personal, _ = self._rows()
+        headers = {"Authorization": f"Bearer {self.PERSONAL}"}
+        source = personal.auth.credential_source()
+
+        assert mcp_sessions.pool_key(
+            personal.connection(headers), credential_source=source
+        ) == mcp_sessions.pool_key(
+            personal.connection(dict(headers)), credential_source=source
+        )
+
+    def test_no_credential_value_reaches_a_key_a_repr_or_a_log(
+        self, sessions: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The property that must not regress, asserted rather than described.
+
+        A digest of the value was the obvious reach and was rejected for this:
+        anything derived from a secret and put in a key is in every repr and
+        traceback the pool appears in. What the key carries is the *name* of
+        the variable the value is read from.
+        """
+        import logging
+
+        personal, _ = self._rows()
+        headers = {"Authorization": f"Bearer {self.PERSONAL}"}
+        with caplog.at_level(logging.DEBUG, logger="openstategraph.mcp_sessions"):
+            proxy = mcp_sessions.session_proxy(
+                personal.connection(headers),
+                timeout=5.0,
+                credential_source=personal.auth.credential_source(),
+            )
+            mcp_sessions.run_on_mcp_loop(proxy.call_tool("a"))
+
+        surfaces = [proxy.key, repr(proxy), repr(mcp_sessions._POOL), caplog.text]
+        for surface in surfaces:
+            assert self.PERSONAL not in surface, surface
+        assert "SEC05_PERSONAL_TOKEN" in proxy.key
+
+
+class TestARotatedCredentialIsPickedUp:
+    def test_the_next_discovery_reopens_with_the_new_value(
+        self, sessions: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A rotation changes the value, not the identity — so the key cannot
+        evict, and only the proxy can. It adopts the newest values for its own
+        identity and drops the session it opened with the old ones."""
+        connection = {
+            "url": "https://rotate.test/mcp",
+            "transport": "streamable_http",
+            "headers": {"Authorization": "Bearer sec05-old-value"},
+        }
+        first = mcp_sessions.session_proxy(
+            connection, timeout=5.0, credential_source="bearer:SEC05_ROTATING"
+        )
+        mcp_sessions.run_on_mcp_loop(first.call_tool("a"))
+        assert sessions.count("initialize") == 1
+
+        rotated = {**connection, "headers": {"Authorization": "Bearer sec05-new-value"}}
+        second = mcp_sessions.session_proxy(
+            rotated, timeout=5.0, credential_source="bearer:SEC05_ROTATING"
+        )
+
+        assert second is first, "a rotation is the same server, not a new one"
+        mcp_sessions.run_on_mcp_loop(second.call_tool("b"))
+        assert sessions.count("initialize") == 2, "the old session was not dropped"
+        assert second._connection["headers"]["Authorization"] == "Bearer sec05-new-value"
+
+    def test_an_unchanged_credential_does_not_reopen(self, sessions: Any) -> None:
+        connection = {
+            "url": "https://steady.test/mcp",
+            "transport": "streamable_http",
+            "headers": {"Authorization": "Bearer sec05-same-value"},
+        }
+        proxy = mcp_sessions.session_proxy(
+            connection, timeout=5.0, credential_source="bearer:SEC05_STEADY"
+        )
+        mcp_sessions.run_on_mcp_loop(proxy.call_tool("a"))
+        again = mcp_sessions.session_proxy(
+            dict(connection), timeout=5.0, credential_source="bearer:SEC05_STEADY"
+        )
+        mcp_sessions.run_on_mcp_loop(again.call_tool("b"))
+
+        assert again is proxy
+        assert sessions.count("initialize") == 1
