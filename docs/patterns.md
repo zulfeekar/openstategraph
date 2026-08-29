@@ -210,8 +210,8 @@ node, not a new node type — ask for it.
 ### Why the intuitive shape cannot work
 
 `function.format_report` **ignores its incoming edges**. Its runtime reads two
-state keys and nothing else (`backend/openstategraph/compile/node_runtime.py`,
-`_format_report_function`): `worker_results`, keyed by subtask id, and
+state keys and nothing else
+(`backend/openstategraph/compile/nodes/functions.py`, `_format_report_function`): `worker_results`, keyed by subtask id, and
 `subtasks`. It reports the intersection, and renders `_No results._` when that
 intersection is empty.
 
