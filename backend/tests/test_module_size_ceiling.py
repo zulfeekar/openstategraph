@@ -370,7 +370,7 @@ number is here to make that visible when a fourth one lands.
 #: hand-picked pins were found to cover only the classes somebody had already
 #: worried about.
 RECORDED: dict[str, Recorded] = {
-    "compile/node_runtime.py": Recorded(1829, NODE_RUNTIME),
+    "compile/node_runtime.py": Recorded(1750, NODE_RUNTIME),
     "cli.py": Recorded(1099, CLI),
     "compile/workflow_compiler.py": Recorded(890, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(959, STREAMING),

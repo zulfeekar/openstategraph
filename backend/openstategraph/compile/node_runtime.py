@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Callable, Literal
 
@@ -34,7 +33,6 @@ if TYPE_CHECKING:
     # `name-defined` (`organisms-first-class` 47).
     from openstategraph.compile.composition import MountedGraph
 
-from langgraph.constants import TAG_NOSTREAM
 from langchain_core.runnables.config import ensure_config
 from langgraph.errors import GraphRecursionError
 
@@ -153,6 +151,25 @@ from openstategraph.compile.state import (  # noqa: F401
     merge_decisions,
 )
 from openstategraph.compile.state import NO_ANSWER_PRODUCED as _NO_ANSWER_PRODUCED
+# Four more seams from the same split (`docs-and-gaps/03`), re-exported for the
+# reason every block below is: every one of these was importable from here
+# before the move, and the seam is ours while an importer's spelling is not.
+# `ToolRegistry`, `PackageAssets`, `RuntimeServices` and `chinook_tool_registry`
+# are named in this module's `__all__` and reached by name across the tests.
+from openstategraph.compile.token_stream import (  # noqa: F401
+    MACHINERY_NODE_TYPES,
+    NOSTREAM_TAG,
+    silence_tokens,
+)
+from openstategraph.compile.deep_tier import _DeepAgentAsChatModel  # noqa: F401
+from openstategraph.compile.runtime_services import (  # noqa: F401
+    PackageAssets,
+    RuntimeServices,
+    ToolRegistry,
+    chinook_tool_registry,
+)
+from openstategraph.compile.fields import _replaces_rules, _summarizes  # noqa: F401
+from openstategraph.compile.grounding import _PRODUCES_CONTENT  # noqa: F401
 # Re-exported for the same reason the names below are: `reporting.py` was
 # carved out of this module (`docs-and-gaps/03`) and every one of these was
 # importable from here before the move, `_final_text` and `_values_never_sent`
@@ -187,13 +204,6 @@ from openstategraph.compile.static_source import (
 # `published_answer` has to recognise it without importing this module.
 NO_ANSWER_PRODUCED = _NO_ANSWER_PRODUCED
 
-#: Node-type prefixes whose step writes text that did not exist before it ran.
-#:
-#: Used by the unguarded-exit check, and by nothing else, so it is stated as
-#: what that question needs rather than as a general taxonomy. Inputs echo,
-#: routers and graders and approvals forward, guardrails rewrite — none of
-#: them invent, so none of them is what an outbound policy exists to catch.
-_PRODUCES_CONTENT: tuple[str, ...] = ("agent.", "orchestrate.", "function.", "workflow.")
 
 #: Checks `guard.check` can name without a package function behind them
 #: (`launch-readiness` 151).
@@ -220,36 +230,6 @@ _BUILT_IN_CHECKS: dict[str, Any] = {
     "zero_outside_coverage": check_zero_outside_coverage,
 }
 
-#: Node types whose streamed text is machinery, not the reply.
-#:
-#: The compiler is what knows a node's type, so it is what answers this; who
-#: is entitled to *see* machinery is `api/audience.AnswerChannel`'s question
-#: and stays there. Two layers, one fact each — the same split
-#: `developer_channel` already makes for the suggestion fence.
-#:
-#: Each entry earns its place from a frame QA read on screen (ticket 25):
-#:
-#: - `route.classifier` streams the branch NAME it chose — `music_store`,
-#:   `data_query`, `general`, arriving glued to the sentence beside it.
-#: - `route.grader` streams its verdict and rubric complaint — `FAIL Include
-#:   the SQL SELECT statement...` on the end of a finished answer.
-#: - `input.text` writes the turn's `HumanMessage` (see `_input`), so the
-#:   question rides this stream and reads as the beginning of the reply.
-#: - `input.markdown` / `input.skill` are static text sources: an instruction
-#:   file or a skill, addressed to a model and to nobody else.
-#:
-#: `agent.llm`, `orchestrate.*` and `output.formatted` are deliberately
-#: absent. Their prose IS the reply being written, and watching it appear is
-#: the only thing that makes a 70-second run bearable.
-MACHINERY_NODE_TYPES: frozenset[str] = frozenset(
-    {
-        "input.text",
-        "input.markdown",
-        "input.skill",
-        "route.classifier",
-        "route.grader",
-    }
-)
 
 #: `workflow_compiler.ROUTER_TYPE`, restated here rather than imported: this
 #: module already spells the literal out at each call site it needs
@@ -258,79 +238,6 @@ MACHINERY_NODE_TYPES: frozenset[str] = frozenset(
 ROUTER_NODE_TYPE = "route.classifier"
 
 
-#: LangGraph's own tag for "run this model, but keep its tokens off the
-#: `messages` stream". Read from the library rather than retyped, because a
-#: misspelling here is silent — the invocation simply keeps streaming.
-NOSTREAM_TAG: str = TAG_NOSTREAM
-
-
-def silence_tokens(model: Any) -> Any:
-    """The same model, with its tokens omitted from `stream_mode="messages"`.
-
-    `MACHINERY_NODE_TYPES` above records *which* nodes produce text nobody
-    asked to read; `api/audience.AnswerChannel` then empties their frames on
-    the way out. That works, and its tests are untouched — but it is a curtain
-    in front of a door. The bytes are still generated, streamed across the
-    subgraph boundary and folded before anything blanks them, and a developer
-    audience receives every one of them.
-
-    LangGraph publishes the door. `pregel/_messages.py` gates the whole
-    forward on `TAG_NOSTREAM not in tags`, so an invocation carrying the tag
-    never reaches the stream at all.
-
-    **This does not replace the fold**, and nothing here removes it. The fold
-    guards three things the tag cannot: a mounted child's nodes (whose models
-    this compiler never resolved), a tool's raw payload (a `ToolMessage`, not
-    a model invocation), and the hand-rolled stand-ins this codebase passes
-    around, which have no `with_config` at all. Those degrade to exactly
-    today's behaviour, which is why the fallback below returns the model
-    untouched rather than raising.
-
-    Tags are **merged here, by hand, because the library replaces them.**
-    Measured on the installed langchain-core 1.5.3 rather than assumed:
-
-        r.with_config(tags=["mine"]).with_config(tags=["nostream"])
-        # RunnableBinding config -> {'tags': ['nostream']}
-
-    — `mine` is gone. Reasoning effort already binds these models
-    (`_apply_effort`), so the naive spelling would silently drop a caller's
-    tags on exactly the nodes this touches. Existing tags are read from both
-    spellings for the same reason: a `BaseChatModel` carries them on `.tags`,
-    a `RunnableBinding` in `.config["tags"]`, and both shapes reach here.
-
-    **Every probe below is inside the `try`, and that is load-bearing rather
-    than defensive habit.** `chat_model.UnconfiguredProvider` stands in for a
-    model this machine has no credential for, and its rule is stated as *"a
-    provider is required at the moment a model is used, not at the moment one
-    is built"* — which it enforces by raising from `__getattr__`. So a bare
-    `getattr(model, "with_config", None)` does not return `None` there, it
-    raises `MissingProviderKey` **at compile time**, turning a workflow whose
-    router never runs into one that cannot be built. Caught live by
-    `test_behind_the_scenes.py`, not reasoned about here first.
-
-    Any failure therefore leaves the model exactly as it was: a model that
-    cannot be tagged still streams, which is today's behaviour, and the
-    sentinel goes on raising at the moment it is genuinely used, with its own
-    message rather than one from here.
-    """
-    if model is None:
-        return None
-    try:
-        with_config = getattr(model, "with_config", None)
-        if not callable(with_config):
-            return model
-        bound = getattr(model, "config", None)
-        existing = tuple(
-            getattr(model, "tags", None)
-            or (bound.get("tags") if isinstance(bound, dict) else None)
-            or ()
-        )
-        if NOSTREAM_TAG in existing:
-            return model
-        return with_config(tags=[*existing, NOSTREAM_TAG])
-    except Exception:  # noqa: BLE001 — a model that cannot be tagged is not an error
-        logger.debug("could not tag a model %s; its tokens still stream", NOSTREAM_TAG)
-        return model
 
 
 #: Maps a tool node type to the Python tool that implements it.
@@ -341,76 +248,8 @@ def silence_tokens(model: Any) -> Any:
 #: rather than a crash.
 logger = logging.getLogger(__name__)
 
-ToolRegistry = dict[str, Any]
 
 
-def chinook_tool_registry() -> ToolRegistry:
-    """The Chinook workflow's tools, keyed by node type."""
-    from tools.chinook import ExecuteSqlTool, GetTableSchemaTool, ListTablesTool
-
-    return {
-        "tool.chinook-get-schema": GetTableSchemaTool(),
-        "tool.chinook-get-all-tables": ListTablesTool(),
-        "tool.chinook-execute-sql": ExecuteSqlTool(),
-    }
-
-
-class _DeepAgentAsChatModel:
-    """Makes a compiled deep agent look like the chat model `BaseGrader.grade()`
-    expects — a bare `.invoke(messages) -> object with .content`.
-
-    `BaseGrader` (`openstategraph/abc/grader.py`) is deliberately model-agnostic: it
-    knows nothing about `create_deep_agent`, tiers, or LangChain harness
-    tiers, and should not have to. So the adaptation lives here, at the
-    compiler/runtime boundary, rather than teaching the grader ladder about a
-    concrete agent construction — the same boundary rule CLAUDE.md states for
-    cross-family concerns (a collaborator, not a shared ancestor).
-
-    Built fresh **per grading call**, not once at compile time, because the
-    system prompt — `messages[0]` — varies with the question being judged
-    (`BaseGrader.resolve_system_prompt` appends it as context). Mirrors the
-    worker's own fix for the identical shape of problem: `create_agent`'s
-    `system_prompt=` construction parameter is the proven-working way to
-    deliver a directive prompt, not a hand-assembled message list.
-    """
-
-    def __init__(self, model: Any, name: str, tags: tuple[str, ...] = ()) -> None:
-        self._model = model
-        self._name = name
-        #: Applied to the *invocation*, never bound onto the model — see
-        #: `invoke`. Empty by default; the machinery nodes pass `nostream`.
-        self._tags = tuple(tags)
-
-    def invoke(self, messages: list[Any]) -> Any:
-        from openstategraph._extras import require_extra
-
-        create_deep_agent = require_extra(
-            "deepagents", "deep", "the deep-agent grader"
-        ).create_deep_agent
-
-        system_prompt = messages[0].content if messages else ""
-        candidate_message = messages[-1]
-        agent = create_deep_agent(
-            # Deliberately the model as resolved, with nothing bound onto it.
-            # `create_deep_agent` does not accept a `RunnableBinding` here: a
-            # non-`BaseChatModel` is treated as a model *identifier*, and the
-            # failure is `AttributeError: 'RespondingModel' object has no
-            # attribute 'count'` from deep inside the string handling — a
-            # sentence that names neither this call nor the binding that
-            # caused it. So a tag that must reach this tier travels on the
-            # invocation below instead, where LangChain propagates it down to
-            # the child LLM run, which is the run `nostream` is read from.
-            model=self._model,
-            tools=[],
-            system_prompt=system_prompt,
-            name=self._name,
-        )
-        result = agent.invoke(
-            {"messages": [candidate_message]}, config={"tags": list(self._tags)}
-        )
-        out = result.get("messages") or []
-        text = _final_text(out)
-        return SimpleNamespace(content=text if isinstance(text, str) else str(text))
 
 
 
@@ -473,18 +312,6 @@ def _safe_model_name(model: Any) -> str:
 
 
 
-
-
-def _replaces_rules(data: dict[str, Any]) -> bool:
-    """`rulesMode` — the one extend/replace switch every prompted node has.
-
-    `criteriaMode` is the grader's older spelling of the same field and is
-    still read, so documents saved before the skill layer keep their behaviour
-    exactly (`docs/decisions/skill-layer.md` records the generalisation and
-    the condition for dropping this fallback). It is a *fallback*, never a
-    second setting: `rulesMode` wins wherever both appear.
-    """
-    return (_text(data, "rulesMode") or _text(data, "criteriaMode")) == "replace"
 
 
 #: The share of a model's own context window at which it summarizes. The
@@ -553,113 +380,7 @@ SUMMARIZE_KEEP: tuple[Literal["messages"], int] = ("messages", 20)
 _NO_DISCLOSURE = SimpleNamespace(contributions={}, backend=None, disclosed=())
 
 
-def _summarizes(data: dict[str, Any]) -> bool:
-    """Whether this agent manages its own context. **Default: yes.**
 
-    Absent means on, which is the owner's decision of 2026-08-15 and is what
-    makes the 22 shipped examples — none of which mentions the key — summarize
-    at all. An explicit `false` still means off, and that is not a rounding
-    error: the editor materialises every field default into `data`, so a
-    document saved before the default flipped carries a literal
-    `"summarize": false`. Reading absent-as-on and false-as-off keeps the
-    promise `withMigratedRulesMode` states on the TypeScript side — opening a
-    document must never change what it does.
-    """
-    value = data.get("summarize")
-    return True if value is None else bool(value)
-
-
-@dataclass(frozen=True)
-class PackageAssets:
-    """Everything one workflow package contributes to a runtime.
-
-    The child-subgraph contract (ticket 67, completed properly after the
-    user found the gap live): a routed child must run with its OWN package's
-    assets — tools, functions, skills AND middleware. The first version
-    loaded only tools+functions; skills stayed inherited from the parent, so
-    the Architect routed through the concierge ran without its interview
-    skill or document grammar and composed blind.
-    """
-
-    tools: ToolRegistry
-    functions: dict[str, Any]
-    skills_context: str = ""
-    workflow_middleware: dict[str, Any] | None = None
-    #: The package directory whose `knowledge/` powers ambient knowledge
-    #: seeking (see `NodeRuntime.knowledge_package_dir`). A child gets ITS
-    #: OWN package's knowledge, never the parent's — the same isolation as
-    #: skills after the ticket-67 lesson.
-    knowledge_dir: Any = None
-    #: The package directory whose `skills/*.md` a child's agents disclose
-    #: progressively. Same isolation, same reason: a routed child discloses
-    #: its own package's skills or none at all.
-    skills_dir: Any = None
-
-
-@dataclass(frozen=True)
-class RuntimeServices:
-    """Everything a `NodeRuntime` collaborates with, as one named object.
-
-    Ticket 72's parameter-object fix: the keyword constructor had grown to
-    nine parameters and every new capability (store, skills, workflow
-    middleware...) widened it again at two production call sites and the
-    child-runtime clone. New capabilities now land HERE once; `NodeRuntime`'s
-    keyword form remains as the test-facing compatibility surface.
-    """
-
-    model: Any = None
-    #: Non-optional, with an empty default. `NodeRuntime` normalises `None`
-    #: to `{}` on the way in, so the stored object never holds one — and
-    #: while these were declared optional, every read inside the class had to
-    #: be written as though it might be (reviews-2026-08-14 ticket 07).
-    #: `document_loader`, `package_loader` and `memory_store` stay optional
-    #: because for those, absent genuinely means something: no subgraph
-    #: resolution, no memory.
-    tools: ToolRegistry = field(default_factory=dict)
-    functions: dict[str, Any] = field(default_factory=dict)
-    document_loader: Callable[[str], dict[str, Any]] | None = None
-    package_loader: Callable[[str], 'PackageAssets'] | None = None
-    #: Long-term memory — LangGraph's `BaseStore`, what `compile(store=)` is
-    #: given and what the prebuilt `save_memory`/`search_memory` tools write
-    #: to. **Named `memory_store`, and typed, on purpose** (install-experience
-    #: ticket 12): it was `store: Any`, one word from `WorkflowServices.store`
-    #: (the filesystem `WorkflowStore`, packages on disk), and the statement
-    #: `store = services.store` appeared verbatim in this file and in
-    #: `mcp_server.py` meaning opposite objects. `Any` made swapping them a
-    #: one-token edit mypy accepted, the downstream guard is a bare
-    #: `is not None`, and the two classes share exactly one method name
-    #: (`delete`, different arity) — so the failure surfaced at run time,
-    #: inside LangGraph, naming no code of ours.
-    memory_store: 'BaseStore | None' = None
-    #: What the document's `settings.memory` declared (ticket 03). The
-    #: default is every scope enabled, so a document with no block behaves
-    #: exactly as it did before the block existed.
-    memory: MemorySettings = field(default_factory=MemorySettings)
-    skills_context: str = ""
-    workflow_middleware: dict[str, Any] = field(default_factory=dict)
-    #: The open workflow's package directory, for ambient knowledge seeking
-    #: (a non-empty `knowledge/` under it auto-binds the lookup tool).
-    knowledge_package_dir: Any = None
-    #: The open workflow's package directory, for **progressive skill
-    #: disclosure** (`launch-readiness/111`). The same value as
-    #: `knowledge_package_dir` today and deliberately a separate field: that
-    #: one is the second brain and carries an override
-    #: (`knowledge_dir_override`) that must never redirect where skills are
-    #: read from, and two capabilities sharing one field is how an override
-    #: aimed at one silently moves the other.
-    skills_package_dir: Any = None
-    #: `load_workflow(knowledge_dir=...)`'s explicit override — the directory
-    #: of topic files itself, replacing the `<package>/knowledge` convention.
-    #: Deliberately NOT inherited by a child subgraph: a routed child seeks
-    #: its own second brain (ticket 67's isolation lesson), and an override
-    #: aimed at the parent must not silently redirect the child's.
-    knowledge_dir_override: Any = None
-    max_attempts: int = 3
-    #: The editor-advisor tool catalogue, or "" for a normal run. See
-    #: `advisor_context` — one field rather than a `bool` + the text it needs,
-    #: because a flag and its data can disagree and this pair never should:
-    #: an advisor with nothing to suggest is not an advisor.
-    advisor_catalog: str = ""
 
 
 class NodeRuntime:
