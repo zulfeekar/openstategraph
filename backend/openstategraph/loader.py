@@ -54,6 +54,8 @@ if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
     from langgraph.store.base import BaseStore
 
+    from openstategraph.run_sinks import RunSinkRegistry
+
 logger = logging.getLogger(__name__)
 
 #: Supersteps, not iterations — see CLAUDE.md. Matches the editor's own
@@ -111,7 +113,7 @@ class CompiledWorkflow:
     #: The vendor-neutral document that was compiled, envelope already peeled.
     document: dict[str, Any] = field(default_factory=dict)
     #: Where `ask()` appends one JSON line per run, or None for no trace.
-    #: Set through `load_workflow(..., trace_file=...)`; see `_append_trace`
+    #: Set through `load_workflow(..., trace_file=...)`; see `_publish_run`
     #: for exactly what is written and — more importantly — what is not.
     trace_file: Path | None = None
 
@@ -369,7 +371,14 @@ class CompiledWorkflow:
             # Read inside the block: the manager clears the variable on exit.
             spent = dict(usage.usage_metadata)
         result = self._result(final, spent, thread)
-        self._append_trace(question, result, time.monotonic() - started)
+        self._publish_run(
+            question,
+            result,
+            time.monotonic() - started,
+            thread_id=thread,
+            user_email=user_email or "",
+            session_id=session_id or "",
+        )
         return self._answered(result)
 
     def pause(self, thread_id: str) -> dict[str, Any] | None:
@@ -485,7 +494,14 @@ class CompiledWorkflow:
             )
             spent = dict(usage.usage_metadata)
         result = self._result(final, spent, thread_id)
-        self._append_trace(f"resume:{decision}", result, time.monotonic() - started)
+        self._publish_run(
+            f"resume:{decision}",
+            result,
+            time.monotonic() - started,
+            thread_id=thread_id,
+            user_email=user_email or "",
+            session_id=session_id or "",
+        )
         return self._answered(result)
 
     def _config(
@@ -597,7 +613,7 @@ class CompiledWorkflow:
         about what a failed run is would be the same defect one surface along.
         A legally empty answer still returns, and so does a paused run.
 
-        Raised **after** `_append_trace`, deliberately: a failed run is the one
+        Raised **after** `_publish_run`, deliberately: a failed run is the one
         most worth having in the trace file.
         """
         from openstategraph.errors import RunProducedNothing
@@ -625,46 +641,83 @@ class CompiledWorkflow:
             payload["mount"] = chain
         return payload
 
-    def _append_trace(self, question: str, result: RunResult, seconds: float) -> None:
-        """One JSON line per run, appended to `trace_file`. Never fatal.
+    def _publish_run(
+        self,
+        question: str,
+        result: RunResult,
+        seconds: float,
+        *,
+        thread_id: str = "",
+        user_email: str = "",
+        session_id: str = "",
+    ) -> None:
+        """Write this run down, wherever the person installing this said to.
 
-        **A file sink, not a tracing framework.** LangSmith and OpenTelemetry
-        exist; this is the thing you attach to a support ticket, and inventing
-        a span model to compete with them would be inventing an abstraction we
-        do not have.
+        **This was `_append_trace`**, and until `memory-and-replay/43` it was a
+        hardcoded branch: one destination, a JSON-lines file, reachable only
+        through `trace_file=`. That was already a sink — it was simply the only
+        one, and it was welded in, so an operator who wanted these rows in
+        their own store had no answer but to fork.
 
-        **The answer text is deliberately not written — only its length.** A
-        trace file gets committed, emailed and pasted into issues, and an
-        answer is the one field in a run that reliably contains a customer's
-        data. `decisions` and `attempts` are what tell you *which way the graph
-        went*, which is what a wrong answer is diagnosed from; the answer
-        itself you already have in front of you.
+        Now the destinations are a registry and the row is a `RunRecord`. The
+        trace file still exists and still behaves identically; it is
+        `run_sinks.JsonlRunSink`, registered for this workflow when a path was
+        named. **The default sink writes sqlite on this machine and nothing
+        reaches a network** — `CLAUDE.md`'s *never send a user's graph to a
+        third party* decides that, and it is why no vendor exporter ships even
+        disabled.
 
-        A path that cannot be written **warns and returns**. A trace is
-        diagnostics: losing it must never lose the run that produced it.
+        Never fatal, for the reason it never was: losing a trace must never
+        lose the run that produced it. `publish` isolates each sink
+        individually, so a collector being down cannot cost the local store its
+        row either.
         """
+        from openstategraph.run_sinks import RunRecord, now, publish
+
+        record = RunRecord(
+            at=now(),
+            workflow_slug=self.slug or "",
+            thread_id=thread_id,
+            user_email=user_email,
+            session_id=session_id,
+            question=question,
+            answer=str(result),
+            seconds=round(seconds, 3),
+            attempts=result.attempts,
+            decisions=result.decisions,
+            warnings=result.warnings,
+            failed=bool(result.failures),
+            usage=result.usage,
+            # Copied from the channel that already scrubbed them, never
+            # re-derived off `tool_use` here: `executed_statements` holds the
+            # rule that a credential-bearing argument is not recorded at all,
+            # and a second reader of that state would be a second chance to
+            # publish the argument map by accident.
+            statements=result.statements,
+        )
+        publish(record, registry=self._run_sinks())
+
+    def _run_sinks(self) -> "RunSinkRegistry":
+        """This process's sinks, plus this workflow's trace file if it has one.
+
+        The process registry is memoised because a sink holds a connection, and
+        rebuilding it per run would open a sqlite handle per run — the leak
+        `close()` above exists to have fixed once already. The trace file is
+        per-workflow rather than per-process (it arrives as a `load_workflow`
+        keyword), and `JsonlRunSink` holds nothing open, so composing a fresh
+        registry around the shared sinks costs a dict and keeps `trace_file`
+        exactly as local as it has always been.
+        """
+        from openstategraph.run_sinks import JsonlRunSink, RunSinkRegistry, run_sink_registry
+
+        registry = run_sink_registry()
         if self.trace_file is None:
-            return
-        line = {
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            "slug": self.slug,
-            "question": question,
-            "decisions": result.decisions,
-            "attempts": result.attempts,
-            "warnings": result.warnings,
-            "seconds": round(seconds, 3),
-            "answer_chars": len(result),
-            # Tokens, per model — the one number a support ticket about a
-            # slow or expensive run always wants and never had. Safe to write
-            # where the answer is not: a count carries no customer data.
-            "usage": result.usage,
-        }
-        try:
-            self.trace_file.parent.mkdir(parents=True, exist_ok=True)
-            with self.trace_file.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(line) + "\n")
-        except OSError as exc:
-            logger.warning("Could not write the run trace to %s: %s", self.trace_file, exc)
+            return registry
+        combined = RunSinkRegistry()
+        for name, sink in registry.list():
+            combined.register(name, sink)
+        combined.upsert("trace-file", JsonlRunSink(self.trace_file))
+        return combined
 
     def as_tool(self, *, name: str | None = None, description: str | None = None) -> BaseTool:
         """This whole workflow, as one LangChain tool your existing agent can call.
@@ -825,7 +878,7 @@ def load_workflow(
 
     `trace_file` appends one JSON line per `ask()` — question, slug,
     decisions, attempts, warnings, duration and the answer's **length**, never
-    the answer text (see `CompiledWorkflow._append_trace` for why). A path
+    the answer text (see `run_sinks.JsonlRunSink` for why). A path
     that cannot be written warns; it never fails a run.
 
     **Unresolved capabilities never raise.** They land on `.warnings` and log

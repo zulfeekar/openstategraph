@@ -212,6 +212,15 @@ IDENTITY_LITERAL_SITES: dict[str, str] = {
     # a document written against this desk needs no migration the day an Agent
     # Protocol desk replaces it. This module reads no run config at all.
     "async_tasks.py": "transport",
+    # `memory-and-replay/43`. The run store's **columns** are the four identity
+    # keys, for the same reason `api/threads.py` is classified here: a stored
+    # row is a lookup key for a run that has already finished, never a claim
+    # about a run in progress. The row is *built* from a config the door
+    # already read — this module never touches `configurable` — and `_COLUMNS`
+    # splices `RUN_IDENTITY_KEYS` rather than respelling the four names, so the
+    # table cannot drift from the accessor even though the model's own fields
+    # must be declared to be typed at all (exactly `api/schemas.py`'s case).
+    "run_sinks.py": "checkpoint",
     "api/threads.py": "checkpoint",
     "compile/paused_mount.py": "checkpoint",
 }

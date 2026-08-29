@@ -49,6 +49,15 @@ os.environ.setdefault("OPENSTATEGRAPH_CHECKPOINT_PATH", "memory")
 # clears this through `monkeypatch`.
 os.environ.setdefault("OPENSTATEGRAPH_MEMORY_PATH", "memory")
 
+# And the run store, the third durable file under `state_dir()`, opted out of by
+# the same mechanism and for the same reason (`memory-and-replay` 43). Note what
+# this does *not* do: it does not unregister the default sink. The suite still
+# exercises `SqliteRunSink` on every run that reaches `ask()` — it simply writes
+# to an in-memory database rather than into this checkout. A switch that removed
+# the sink instead would leave the shipped default untested, which is the
+# failure mode `test_persisted_checkpointer.py` exists to avoid one file along.
+os.environ.setdefault("OPENSTATEGRAPH_RUN_STORE_PATH", "memory")
+
 #: A predicate over the model's incoming context, and the reply to give.
 RouteRule = tuple[Callable[[str], bool], str]
 
@@ -241,6 +250,26 @@ def _fresh_provider_catalogue():
     reset_provider_catalogue()
     yield
     reset_provider_catalogue()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_run_sinks():
+    """The same rule again, for the third process-lifetime cache.
+
+    `run_sinks.run_sink_registry()` memoises because a sink holds a connection
+    — rebuilding it per run would open a sqlite handle per run. That is correct
+    in a process and wrong across tests: a sink one test registers would
+    receive every later test's runs, and the sqlite sink's connection would
+    outlive the `state_dir` a test had monkeypatched underneath it.
+
+    The registry is what `43` calls a fresh one being constructible for, and
+    this fixture is the reason that property was worth having.
+    """
+    from openstategraph.run_sinks import reset_run_sink_registry
+
+    reset_run_sink_registry()
+    yield
+    reset_run_sink_registry()
 
 
 @pytest.fixture(autouse=True)

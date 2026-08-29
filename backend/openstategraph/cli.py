@@ -1135,6 +1135,123 @@ def _thread_savers(args: argparse.Namespace) -> tuple[Any, Any]:
     return services, thread_queries.savers_for(services, getattr(args, "workflow", None))
 
 
+def cmd_runs_list(args: argparse.Namespace) -> int:
+    """What this machine has run, out of the local run store.
+
+    **The complement of `threads list`, not a replacement for it**, and the
+    difference is worth stating because two commands over "past runs" is
+    exactly the kind of pair that becomes one confusing thing:
+
+    - `threads list` reads the **checkpointer**, which holds the conversation —
+      every superstep, resumable, and the authority on what a run *said*.
+    - `runs list` reads the **run store**, one row per finished turn, which
+      holds what a run *cost* and what it *executed*. That is the shape the
+      checkpointer cannot answer without rebuilding a graph and scanning every
+      checkpoint of every thread, and it is the shape `guardrails/07` needs
+      before a cost ceiling can be argued for at all.
+
+    Both are local files under `state_dir()`, and neither sends anything
+    anywhere (`memory-and-replay` 43).
+    """
+    from openstategraph.run_sinks import read_runs, run_store_path
+
+    path = run_store_path(getattr(args, "workflows_root", None))
+    rows = read_runs(
+        path,
+        workflow_slug=args.workflow,
+        thread_id=args.thread,
+        session_id=args.session,
+        limit=args.limit,
+    )
+
+    if args.json:
+        # The same rows a developer just queried, for a model or a script —
+        # which is what makes "teach the model to identify gaps" mechanisable
+        # rather than aspirational.
+        print(json.dumps([row.model_dump() for row in rows], indent=2))
+        return EXIT_OK
+    if path is None:
+        print("the run store is in memory for this process — nothing is kept")
+        return EXIT_OK
+    if not rows:
+        print(f"no runs recorded yet in {path}")
+        return EXIT_OK
+    for row in rows:
+        tokens = row.total_tokens()
+        # `-` rather than `0`: an empty `usage` means nobody reported, and
+        # that is *unknown*, never a claim that the run was free.
+        spent = str(tokens) if row.usage else "-"
+        label = "failed" if row.failed else row.kind
+        print(
+            f"{row.at}  {row.thread_id:24}  {row.workflow_slug or '-':20}  "
+            f"{label:8}  {row.seconds:6.2f}s  {spent:>8} tok  {row.question[:48]}"
+        )
+    print(f"\n{len(rows)} row(s) from {path} — query it directly with sqlite3")
+    return EXIT_OK
+
+
+def cmd_runs_export(args: argparse.Namespace) -> int:
+    """The store as a JSON array — the answer to *"or JSON"*, as a file.
+
+    **SQLite is the store and JSON is the export, and that split is the whole
+    argument.** The owner asked for "SQLite or JSON"; taken as an exclusive
+    choice, each answer loses something the other has. A JSON file is greppable
+    and diffable and needs no migration, and it is also rewritten whole on every
+    append, unsafe when two processes run at once, and unable to answer *what
+    has this workflow spent* without a program. Sqlite is queryable, concurrent
+    and indexed, and is what `checkpoints.sqlite` already is — one storage
+    technology under `state_dir()` rather than two.
+
+    So neither is dropped: the rows live in sqlite, and this command hands them
+    to anything that wants a file. Same rows, no second store.
+
+    **This is also the honest half of an unbounded default.** The store keeps
+    every run for as long as the file exists, deliberately — see
+    `run_sinks.SqliteRunSink` for why age alone never drops a conversation. What
+    a person does when it grows large is export it and then truncate, and this
+    is the export. **Nothing in this CLI deletes a run**: truncation is
+    `sqlite3 "$(openstategraph runs path)" "DELETE FROM runs WHERE at < '2026-01-01'"`,
+    or deleting the file — both of which a person does on purpose, to their own
+    machine, having already got the rows out.
+    """
+    from openstategraph.run_sinks import read_runs, run_store_path
+
+    path = run_store_path(getattr(args, "workflows_root", None))
+    rows = read_runs(path, limit=args.limit)
+    payload = json.dumps([row.model_dump() for row in rows], indent=2)
+
+    if not args.to:
+        print(payload)
+        return EXIT_OK
+    destination = Path(args.to)
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(payload + "\n", encoding="utf-8")
+    except OSError as exc:
+        return _error(f"could not write {destination}: {exc}")
+    print(f"wrote {len(rows)} run(s) to {destination}")
+    return EXIT_OK
+
+
+def cmd_runs_path(args: argparse.Namespace) -> int:
+    """Where the local run store is, so a person can point `sqlite3` at it.
+
+    A command rather than a documented path, because the answer genuinely
+    varies: `state_dir()` resolves differently inside a checkout, on an
+    installed wheel, and under `OPENSTATEGRAPH_STATE_DIR`, and telling somebody
+    a path that is right for our checkout and wrong for their install is how a
+    query nobody can run gets written into a document.
+    """
+    from openstategraph.run_sinks import run_store_path
+
+    path = run_store_path(getattr(args, "workflows_root", None))
+    if path is None:
+        print("memory")
+        return EXIT_OK
+    print(path)
+    return EXIT_OK
+
+
 def cmd_threads_list(args: argparse.Namespace) -> int:
     """Past runs this deployment stored — read from the checkpointer, not a log."""
     from openstategraph.api import threads as thread_queries
@@ -1735,6 +1852,36 @@ def build_parser() -> argparse.ArgumentParser:
     thread_show.add_argument("--workflows-root", dest="workflows_root")
     thread_show.add_argument("--json", action="store_true")
     thread_show.set_defaults(handler=cmd_threads_show)
+
+    runs = subparsers.add_parser(
+        "runs", help="what this machine has run — the local run store, with what it cost"
+    )
+    run_store_commands = runs.add_subparsers(dest="runs_command", required=True)
+
+    runs_list = run_store_commands.add_parser(
+        "list", help="one row per finished turn, newest first"
+    )
+    runs_list.add_argument("--workflow", help="only this workflow slug")
+    runs_list.add_argument("--thread", help="only this thread_id (one conversation)")
+    runs_list.add_argument("--session", help="only this session_id (spans threads)")
+    runs_list.add_argument("--limit", type=int, default=25)
+    runs_list.add_argument("--workflows-root", dest="workflows_root")
+    runs_list.add_argument("--json", action="store_true")
+    runs_list.set_defaults(handler=cmd_runs_list)
+
+    runs_export = run_store_commands.add_parser(
+        "export", help="the same rows as JSON — run this before truncating a large store"
+    )
+    runs_export.add_argument("--to", help="write to this file instead of stdout")
+    runs_export.add_argument("--limit", type=int, default=100000)
+    runs_export.add_argument("--workflows-root", dest="workflows_root")
+    runs_export.set_defaults(handler=cmd_runs_export)
+
+    runs_path = run_store_commands.add_parser(
+        "path", help="print the run store's path, for sqlite3"
+    )
+    runs_path.add_argument("--workflows-root", dest="workflows_root")
+    runs_path.set_defaults(handler=cmd_runs_path)
 
     knowledge = subparsers.add_parser("knowledge", help="the package's second brain")
     knowledge_commands = knowledge.add_subparsers(dest="knowledge_command", required=True)
