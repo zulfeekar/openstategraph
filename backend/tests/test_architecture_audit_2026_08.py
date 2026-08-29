@@ -180,12 +180,25 @@ class TestQuestionChannelIsSingleWriter:
     channel gains a reducer the day someone makes a node write it."""
 
     def test_no_node_factory_writes_question(self) -> None:
-        import inspect
+        """Counted over every module a node family can be written in.
 
-        from openstategraph.compile import node_runtime
+        It used to read `node_runtime.py` alone, which was the whole of the
+        answer while every builder lived there; the families moved to
+        `compile/nodes/` (`docs-and-gaps/03`) and took the one legal write
+        with them. Counting the package instead of the file is what keeps a
+        second writer from arriving in a module this line never named — the
+        exact way a census stops being one.
+        """
+        from pathlib import Path
 
-        source = inspect.getsource(node_runtime)
+        import openstategraph.compile as compile_package
+
+        root = Path(compile_package.__path__[0])
+        sources = [root / "node_runtime.py", *sorted((root / "nodes").glob("*.py"))]
+        written = sum(
+            path.read_text(encoding="utf-8").count('"question":') for path in sources
+        )
         # The single legal write is the subgraph mount's explicit input
         # mapping (`captured.invoke({"question": ...})`) — an invoke input,
         # not a state update returned by a node.
-        assert source.count('"question":') == 1
+        assert written == 1

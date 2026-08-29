@@ -189,13 +189,25 @@ def _ledger_document() -> dict[str, Any]:
 #: CLI field carrying an identity across a wire, which is not a read of the
 #: run. `checkpoint` — an identity read back off a *stored* checkpoint (its
 #: config or its metadata), which is a lookup key for a run that has already
-#: finished, not a claim about the run in progress.
+#: finished, not a claim about the run in progress. `inherit` — builds a
+#: `configurable` block out of an identity it was *handed*, deciding no key
+#: and claiming nothing; sanctioned on a writer's argument because it is a
+#: writer with less authority, and spelled the same way in
+#: `test_every_run_door_carries_identity.py` so one module is not two things
+#: in two censuses.
 IDENTITY_LITERAL_SITES: dict[str, str] = {
     "run_identity.py": "accessor",
     "loader.py": "writer",
     "mcp_server.py": "writer",
     "api/routes/runs.py": "writer",
-    "compile/node_runtime.py": "writer",
+    # Both of `node_runtime.py`'s old reasons for being in this table moved
+    # out with their families (`docs-and-gaps/03`), and they were two
+    # different reasons: the mount *builds* a child's `configurable` block,
+    # and the agent's async subagent forwards the identity it was handed. The
+    # classifications went with the code rather than being left pointing at a
+    # file that no longer does either thing.
+    "compile/nodes/mount.py": "writer",
+    "compile/nodes/agent.py": "inherit",
     "memory.py": "accessor-caller",
     "api/streaming.py": "accessor-caller",
     "abc/narration.py": "accessor-caller",
@@ -338,7 +350,7 @@ class TestNoFifthReaderCanForget:
         sanctioned = {
             module
             for module, kind in IDENTITY_LITERAL_SITES.items()
-            if kind in {"accessor", "writer", "checkpoint"}
+            if kind in {"accessor", "writer", "checkpoint", "inherit"}
         }
         offenders = sorted(
             module

@@ -331,3 +331,61 @@ holds exactly one `configurable` literal (`{"workflow_slug"}`), and
 `str(content)`. Moving the mount builder moves the first assertion's subject;
 both tests name the path as a **constant**, so the module list has to move with
 the code or the guard silently stops guarding.
+
+### What executing steps 3 and 4 measured (2026-08-29)
+
+The split is done. `compile/node_runtime.py` is **569 code lines** (5,331
+physical at its worst; the measure that governs it is code lines, and
+`backend/tests/test_module_size_ceiling.py` records the number exactly). Every
+node family this build implements now lives in its own module under
+`compile/nodes/`: `agent`, `approval`, `functions`, `grader`, `guard`, `io`,
+`memory`, `mount`, `orchestration`, `resolvers`, `router`.
+
+**The membership differs from the design above, and deliberately.** That plan
+grouped by mechanism — `deciders.py` for router, grader and approval together;
+`fanout.py` for orchestrator, worker *and* `format_report`. What was actually
+built groups by reason to change, which put `format_report` beside discovered
+functions (the fact that matters there is the precedence between them, not
+that both fan anything out) and gave approval its own file (its one reason to
+change is LangGraph's `interrupt()` contract, which nothing else shares).
+`io.py` is the design's `io.py` unchanged.
+
+**The binding mechanism is not the one the plan assumed either.** Step 4 was
+written as *"rebind its thirteen entries … from bound methods to those module
+functions, inside `_register_node_types`"* — a registry of free functions. What
+shipped binds each family function as a class attribute (`_router =
+router._router`), because five source censuses run `inspect.getsource` over
+`NodeRuntime._builders` and more than a dozen tests call `runtime._agent(...)`
+directly. A `functools.partial` or a delegating wrapper would have left every
+one of those green and blind. `compile/nodes/__init__.py` carries the full
+argument, including why the first parameter is still spelled `self`.
+
+**What the split actually cost was censuses, not code.** Eleven test modules
+name a module by path or read a class's source, and each had to be taught the
+new home or made to follow the code:
+
+- Ladder substitutions — `Router`, `Grader`, `orchestrator_for` — patched on
+  `node_runtime`, which still re-exports all three. A re-export does not
+  survive a substitution: six sites across four modules were binding a name
+  the builder no longer reads.
+- `test_the_worker_records_what_it_was_refused.py`,
+  `test_the_door_opens_on_the_shape_of_the_run.py` and
+  `test_public_surface_ceiling.py` parsed `NodeRuntime`'s class body. All
+  three follow bound functions to their own source now, so a family that
+  leaves keeps being censused and one that arrives is picked up with no edit.
+  The last of those was a real hole: `last_bound_tools` is `NodeRuntime`'s
+  seventh public member and vanished from the count the moment `_agent` did.
+- The two identity tables and `test_a_budget_overrun_speaks_our_words.py`'s
+  `CATCHERS` were the ones this document warned about above, and the warning
+  held: `node_runtime.py`'s two identity entries turned out to be two
+  different facts that went to two different modules.
+- `test_architecture_audit_2026_08.py`'s own single-writer pin on `question`
+  counts the package now rather than one file.
+
+**Where it stops, and why that is not zero.** What is left is the registry and
+the resolution every family shares — model resolution, reasoning effort, the
+middleware slot table, prompt composition, tool binding, capability reporting
+and the `_report_*` diagnostics — plus `__init__` and `factory`. It is still
+over the 500-line module ceiling and stays a recorded exception: pushing that
+resolution down into the families would buy the table a better number and cost
+the codebase the anti-duplication rule `CLAUDE.md` states as non-negotiable.

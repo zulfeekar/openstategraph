@@ -58,11 +58,28 @@ def assigned_to_self(cls: type) -> set[str]:
     `__init__` is the usual place and not the only one, which is exactly the
     defect this replaced: an attribute a method adds is as reachable as one the
     constructor adds, and considerably easier to add without noticing.
+
+    **And a method need not be written in the class body.** A function assigned
+    in a class body is a method, which is how `NodeRuntime` binds the node
+    families it keeps in `compile/nodes/` (`docs-and-gaps/03`). Reading only
+    `inspect.getsource(cls)` would stop seeing every attribute those add — the
+    census going quiet exactly where the code went, and `last_bound_tools`,
+    written by `_agent`, is the live instance of it. So the scan follows each
+    bound function to its own source.
     """
+    sources = []
     try:
-        source = textwrap.dedent(inspect.getsource(cls))
+        sources.append(textwrap.dedent(inspect.getsource(cls)))
     except (OSError, TypeError):  # pragma: no cover — no source (C, REPL)
         return set()
+    for value in vars(cls).values():
+        if not inspect.isfunction(value) or value.__module__ == cls.__module__:
+            continue
+        try:
+            sources.append(textwrap.dedent(inspect.getsource(value)))
+        except (OSError, TypeError):  # pragma: no cover — no source
+            continue
+    source = "\n".join(sources)
     found: set[str] = set()
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Assign):

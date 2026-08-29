@@ -70,6 +70,11 @@ class TestNobodyReadsItTheOldWay:
         "backend/openstategraph/abc/orchestrator.py",
         "backend/openstategraph/api/streaming.py",
         "backend/openstategraph/compile/node_runtime.py",
+        # `_final_text` — the caller the deleted copy had — left for
+        # `compile/reporting.py` in the `docs-and-gaps/03` split. The scan
+        # follows it: a census that goes on naming the file the code left
+        # is green and blind, which is the defect this file is about.
+        "backend/openstategraph/compile/reporting.py",
     ]
 
     def test_no_call_site_stringifies_message_content(self) -> None:
@@ -141,8 +146,11 @@ class TestTheAgentAnswerReaderUsesTheSharedOne:
     def test_final_text_reads_content_through_content_text(self, monkeypatch) -> None:
         from langchain_core.messages import AIMessage
 
-        from openstategraph.compile import node_runtime
+        # `reporting`, not `node_runtime`: the function moved there and the
+        # patch has to land where the name it calls is resolved. Patching the
+        # re-export would pass without proving anything.
+        from openstategraph.compile import reporting
 
-        monkeypatch.setattr(node_runtime, "content_text", lambda content: "via the shared reader")
+        monkeypatch.setattr(reporting, "content_text", lambda content: "via the shared reader")
 
-        assert node_runtime._final_text([AIMessage(content="raw")]) == "via the shared reader"
+        assert reporting._final_text([AIMessage(content="raw")]) == "via the shared reader"

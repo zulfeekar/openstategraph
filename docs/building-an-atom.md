@@ -95,7 +95,7 @@ defaults and validation all derive from it.*
 #### A key your Python factory reads must be a key some field declares
 
 The field schema is the **only** way a value gets into a node's `data`. So a
-factory in `node_runtime.py` that reads `data["x"]` when no field is keyed `x`
+factory under `compile/nodes/` that reads `data["x"]` when no field is keyed `x`
 is reading a value nothing can ever write — and it does not fail, it reads `""`
 forever. That defect shipped three times: the model picker (declared on
 `agent.llm` only, read for six types), the Worker's rules mode (read nowhere,
@@ -1160,7 +1160,7 @@ def fn(text: str) -> str: ...
 ```
 
 Three facts, all load-bearing, recorded at `_discovered_function` in
-[`node_runtime.py`](../backend/openstategraph/compile/node_runtime.py):
+[`compile/nodes/functions.py`](../backend/openstategraph/compile/nodes/functions.py):
 
 - **It transforms the node's upstream text.** Nothing else reaches it.
 - **It gets no model and no state — deliberately.** Ticket 35: *code is

@@ -303,7 +303,9 @@ def _package_root() -> Path:
 
 #: Where LangGraph's exhaustion may be *named*, and what each one does with it.
 #:
-#: `compile/node_runtime.py` is the mount boundary (`organisms-first-class` 60).
+#: `compile/nodes/mount.py` is the mount boundary (`organisms-first-class` 60).
+#: It was `compile/node_runtime.py` until the mount family moved into its own
+#: module (`docs-and-gaps/03`); this list is why that move could not be silent.
 #: `run_doors.py` is the blocking driver every door but one goes through.
 #: `api/streaming.py` is that one — it drives `astream` itself.
 #: `run_journal.py` holds the translation and the row.
@@ -313,7 +315,7 @@ def _package_root() -> Path:
 #: shape `test_a_runs_diagram_opens_its_mounts.py` uses for `draw_mermaid`.
 CATCHERS: frozenset[str] = frozenset(
     {
-        "compile/node_runtime.py",
+        "compile/nodes/mount.py",
         "run_doors.py",
         "api/streaming.py",
         "run_journal.py",

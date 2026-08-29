@@ -105,3 +105,12 @@ def gated_by(plan: Any, types: Mapping[str, str], gate_type: str) -> set[str]:
     move. What a placed gate actually verifies is the run-time half's job.
     """
     return {node_id for node_id in plan.nodes if types.get(node_id, "") == gate_type}
+
+
+#: Node-type prefixes whose step writes text that did not exist before it ran.
+#:
+#: Used by the unguarded-exit check, and by nothing else, so it is stated as
+#: what that question needs rather than as a general taxonomy. Inputs echo,
+#: routers and graders and approvals forward, guardrails rewrite — none of
+#: them invent, so none of them is what an outbound policy exists to catch.
+_PRODUCES_CONTENT: tuple[str, ...] = ("agent.", "orchestrate.", "function.", "workflow.")

@@ -193,12 +193,18 @@ def _ask_configurable_keys() -> set[str]:
 #: set `ask()` builds. `read` — code that *reads* `configurable` back, or
 #: addresses a checkpoint thread, which is not an identity claim. `mount` — the
 #: one deliberate partial: a child inherits the parent's identity and overrides
-#: `workflow_slug` alone (`CLAUDE.md`, "State flows down").
+#: `workflow_slug` alone (`CLAUDE.md`, "State flows down"). `inherit` — passes
+#: the identity it was handed through unchanged, claiming nothing and
+#: overriding nothing, which is the only shape weaker than `mount`.
 CLASSIFIED: dict[str, str] = {
     "loader.py": "run",
     "mcp_server.py": "run",
     "api/routes/runs.py": "run",
-    "compile/node_runtime.py": "mount",
+    # The mount family moved out of `node_runtime.py` (`docs-and-gaps/03`).
+    # Both halves of this file's interest in it moved too: the classification
+    # here, and the literal read by name in
+    # `test_a_mount_overrides_only_the_workflow_slug` below.
+    "compile/nodes/mount.py": "mount",
     "api/threads.py": "read",
     "generated_module_contract.py": "read",
     # The one accessor every other reader now goes through
@@ -211,6 +217,14 @@ CLASSIFIED: dict[str, str] = {
     # starts nothing: a `thread_id` handed to `checkpointer.list` is a lookup
     # key, not a claim about who is running (`organisms-first-class` 64).
     "compile/paused_mount.py": "read",
+    # An async subagent's `ainvoke`, in the agent family since
+    # `docs-and-gaps/03`. It forwards the identity the middleware
+    # was handed, unchanged and only when there is one — the child needs
+    # `workflow_slug` and `thread_id` or a memory-scoped tool inside it
+    # resolves both to nothing, and `memory.workflow_scope_slug` says a
+    # nameless run *shares* a key. Not a door: it starts no run of ours and
+    # decides no key.
+    "compile/nodes/agent.py": "inherit",
 }
 
 
@@ -274,7 +288,7 @@ class TestNoFifthDoorCanForget:
         that "completes" this dict to four keys would sever the child from the
         person the run is for.
         """
-        module = _package_root() / "compile/node_runtime.py"
+        module = _package_root() / "compile/nodes/mount.py"
         tree = ast.parse(module.read_text(encoding="utf-8"))
         literals = [
             {k.value for k in value.keys if isinstance(k, ast.Constant)}

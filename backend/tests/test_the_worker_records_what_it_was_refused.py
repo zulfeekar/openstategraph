@@ -25,10 +25,9 @@ from __future__ import annotations
 
 import ast
 import inspect
-from pathlib import Path
+import textwrap
 
 import openstategraph.abc.agent as agent_module
-from openstategraph.compile import node_runtime as node_runtime_module
 from openstategraph.compile.node_runtime import NodeRuntime, RunState, RuntimeServices
 from openstategraph.compile.workflow_compiler import CompiledPlan, suggestion_from_rejection
 
@@ -125,20 +124,26 @@ class TestEveryToolBindingFactoryRecords:
     """
 
     def _factories(self) -> dict[str, ast.FunctionDef]:
-        source = Path(inspect.getfile(node_runtime_module)).read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        (cls,) = [
-            n
-            for n in ast.walk(tree)
-            if isinstance(n, ast.ClassDef) and n.name == "NodeRuntime"
-        ]
+        """Every builder that binds tools, wherever its body now lives.
+
+        This used to parse `node_runtime.py` and read `NodeRuntime`'s class
+        body, which was the whole of the answer while every builder was
+        written there. The families moved to `compile/nodes/`
+        (`docs-and-gaps/03`), so the census follows the code instead of the
+        file: it walks the builders `NodeRuntime` actually dispatches to and
+        parses each one's own source. A family that leaves this file keeps
+        being censused, and one that arrives is picked up without an edit
+        here — which is the point, because a census that names a module by
+        path goes green and blind the day the code walks out of it.
+        """
         binders = {}
-        for member in cls.body:
-            if not isinstance(member, ast.FunctionDef):
+        for factory in dict.fromkeys(NodeRuntime(model=None)._builders.values()):
+            source = inspect.getsource(factory)
+            if "self._bind_tools(" not in source:
                 continue
-            text = ast.unparse(member)
-            if "self._bind_tools(" in text:
-                binders[member.name] = member
+            (fn,) = ast.parse(textwrap.dedent(source)).body
+            assert isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+            binders[factory.__name__] = fn
         return binders
 
     def test_the_census_finds_the_families_it_is_supposed_to(self) -> None:

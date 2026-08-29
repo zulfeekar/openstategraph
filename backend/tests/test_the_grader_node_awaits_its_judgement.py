@@ -34,7 +34,11 @@ import threading
 import time
 from typing import Any
 
-import openstategraph.compile.node_runtime as node_runtime_module
+# The grader family moved to `compile/nodes/grader.py` (`docs-and-gaps/03`) and
+# the substitutions below moved with it. `node_runtime` still re-exports
+# `Grader`, so patching it there would keep passing while binding a name the
+# builder no longer reads — a substitution that proves nothing.
+import openstategraph.compile.nodes.grader as grader_module
 from openstategraph.abc.grader import Grader, Verdict
 from openstategraph.compile.node_runtime import NodeRuntime, RunState
 from openstategraph.compile.workflow_compiler import CompiledPlan, WorkflowCompiler
@@ -78,7 +82,7 @@ def _plan() -> CompiledPlan:
 
 def _built(monkeypatch: Any, model: Any = None, **data: Any) -> Any:
     _RecordingGrader.doors = []
-    monkeypatch.setattr(node_runtime_module, "Grader", _RecordingGrader)
+    monkeypatch.setattr(grader_module, "Grader", _RecordingGrader)
     runtime = NodeRuntime(model=model or any_chat_model())
     node = {"id": "g1", "type": "route.grader", "data": data}
     return runtime._grader("g1", node, _plan())
@@ -300,7 +304,7 @@ class _NarratingSyncGrader(Grader):
 
 
 def _narration_from(monkeypatch: Any, grader_cls: Any, door: str) -> list[Any]:
-    monkeypatch.setattr(node_runtime_module, "Grader", grader_cls)
+    monkeypatch.setattr(grader_module, "Grader", grader_cls)
     runtime = NodeRuntime(model=RespondingModel([(GRADER, "PASS")], default="answer"))
     document = _document()
     graph = WorkflowCompiler().build(document, RunState, runtime.factory(document))
@@ -436,7 +440,7 @@ class TestOnlyTheAwaitedJudgementIsCancelled:
     def _graph(self, monkeypatch: Any, grader_cls: Any) -> Any:
         _started.clear()
         _completed.clear()
-        monkeypatch.setattr(node_runtime_module, "Grader", grader_cls)
+        monkeypatch.setattr(grader_module, "Grader", grader_cls)
         runtime = NodeRuntime(model=RespondingModel([], default="an answer"))
         document = _document()
         return WorkflowCompiler().build(document, RunState, runtime.factory(document))
