@@ -73,7 +73,7 @@ HOMES: dict[str, tuple[tuple[str, ...], bool]] = {
     "_thread_question": (("compile/state.py",), True),
     "_upstream_text": (("compile/state.py",), True),
     "_text": (("compile/fields.py", "api/threads.py"), True),
-    "_final_text": (("compile/node_runtime.py",), False),
+    "_final_text": (("compile/reporting.py",), False),
     "Classification": (("abc/router.py",), False),
 }
 
