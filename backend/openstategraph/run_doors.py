@@ -260,11 +260,46 @@ def invoke_run(
     duplication rule failing. A `RunLoop` is safe there for the same reason
     by construction: it never runs on the caller's thread at all.
     """
-    if loop is not None:
-        return loop.run(lambda: graph.ainvoke(payload, config, **extra))
+    # **The one place a blocking door's overrun is translated**
+    # (`launch-readiness/176`). Every door but the streaming one reaches the
+    # graph through here, and each of them wraps its own call in
+    # `except Exception` — `POST /api/runs` turns it into a 502, MCP into an
+    # `error` string — so an exception raised inside the graph never reaches
+    # the `run_turn` block that a door opened around it. A catch at any of
+    # them would have been three catches; a catch here is one, and it is the
+    # frame that actually drove the graph.
+    #
+    # The config is why this frame and not another: `recursion_limit` is a
+    # standalone key on it, and `run_identity` reads the workflow's slug off
+    # it, so the sentence gets its number and its subject without a door
+    # having to remember to hand them over — a parameter a fifth door could
+    # forget is the defect this ticket is, one layer up.
+    #
+    # `StepBudgetExhausted` is caught beside LangGraph's own because the mount
+    # boundary raises it from *inside* the graph: it has been worded since
+    # `organisms-first-class` 60 and it has never left a row in the store
+    # either. `budget_exhausted` keeps a sentence that is already ours and
+    # writes the row for both.
+    from langgraph.errors import GraphRecursionError
 
-    # Imported inside the call: `import openstategraph` must stay cheap, and
-    # `openstategraph.abc` re-exports the whole ladder surface at import time.
-    from openstategraph.abc.async_doors import to_completion
+    from openstategraph.errors import StepBudgetExhausted
+    from openstategraph.run_identity import run_identity
+    from openstategraph.run_journal import budget_exhausted
 
-    return to_completion(lambda: graph.ainvoke(payload, config, **extra))
+    try:
+        if loop is not None:
+            return loop.run(lambda: graph.ainvoke(payload, config, **extra))
+
+        # Imported inside the call: `import openstategraph` must stay cheap,
+        # and `openstategraph.abc` re-exports the whole ladder surface at
+        # import time.
+        from openstategraph.abc.async_doors import to_completion
+
+        return to_completion(lambda: graph.ainvoke(payload, config, **extra))
+    except (GraphRecursionError, StepBudgetExhausted) as exc:
+        settings = config if isinstance(config, dict) else {}
+        raise budget_exhausted(
+            exc,
+            budget=settings.get("recursion_limit"),
+            workflow=run_identity(settings).get("workflow_slug", ""),
+        ) from exc

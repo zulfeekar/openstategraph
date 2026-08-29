@@ -597,6 +597,30 @@ except RunProducedNothing as nothing:
         print(f"{node} did not run: {reason}")
 ```
 
+**A run that spends its whole step budget raises too, and it is a different
+error.** `StepBudgetExhausted` means the graph was still running perfectly
+well when its ceiling stopped it — a cycle that never settled, not a step that
+failed. It carries no `.result`, because there is no finished run to attach:
+the invoke was abandoned mid-flight. The sentence names the workflow and the
+budget, and says what a superstep costs, which is what you need to decide
+between raising the number and fixing the loop:
+
+```python
+from openstategraph import StepBudgetExhausted
+
+try:
+    answer = workflow.ask("Review this change", recursion_limit=20)
+except StepBudgetExhausted as spent:
+    print(spent)   # names the workflow, the budget, and what a lap costs
+```
+
+Set the budget with `recursion_limit=` on `.ask()`, or once in the package's
+`settings.recursionLimit`. Raising it is the right answer only when the
+workflow genuinely needs more laps; a grader that can never pass will exhaust
+any number. The **graceful** case is not this error at all — a grader that
+sees the budget running low stops asking for another lap, takes its `pass`
+edge, and publishes what it had, with a note on `.warnings`.
+
 **The split is the point, and it is why `.warnings` is not what a script
 should test.** A node that produced nothing is a report about *how* the answer
 was reached, not a claim the run failed — a workflow may legally answer with

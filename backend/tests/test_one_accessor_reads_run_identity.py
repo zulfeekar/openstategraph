@@ -204,6 +204,11 @@ IDENTITY_LITERAL_SITES: dict[str, str] = {
     # conversation, so this module reads `thread_id` — through the accessor,
     # like the three above it.
     "abc/deep_tier_offload.py": "accessor-caller",
+    # `launch-readiness/176`. The blocking driver names the workflow whose
+    # step budget ran out, so its sentence has a subject — read through the
+    # accessor off the config it was handed, like the four above it, never
+    # out of `configurable` itself.
+    "run_doors.py": "accessor-caller",
     "api/schemas.py": "transport",
     "cli.py": "transport",
     # `async-first/08`. `TaskRecord.thread_id` is the **child's** conversation
@@ -245,6 +250,7 @@ ACCESSOR_CALLERS: tuple[str, ...] = (
     "abc/narration.py",
     "abc/tool_notes.py",
     "abc/deep_tier_offload.py",
+    "run_doors.py",
 )
 
 

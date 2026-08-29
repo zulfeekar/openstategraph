@@ -304,6 +304,36 @@ without one of the three means *the connection dropped*, and an aborted
 `fetch` means *you stopped it*. Never a silent success, and never a spinner
 that runs forever.
 
+#### When the step budget runs out
+
+A run that laps a cycle until its **step budget** is spent ends as an `error`
+frame on the stream, and as a `502` from `POST /api/runs`. Handle it like any
+other failure — there is nothing a client can retry that would go differently
+— but the sentence is worth showing, because it is the one failure whose cause
+is the *drawing* rather than the model or the network:
+
+```
+The workflow "review-board" spent its whole step budget of 50 supersteps
+without reaching an answer. A step budget counts supersteps, not laps round a
+loop: every node on a cycle costs a superstep per lap, and a lap that fans out
+costs one for each branch that runs — so a supervisor with three workers and a
+grader spends five supersteps a lap, not one. A loop that never settles needs
+a grader that can pass it, or an exit its own state can reach, rather than a
+bigger number here.
+```
+
+`recursion_limit` on the request sets that budget (see `openapi.json` for its
+range); the workflow's own `settings.recursionLimit` sets it when the request
+does not. A **customer**-audience stream gets the generic failure sentence
+instead, like every other error — the wording above names how the workflow is
+built, which is a developer's business.
+
+There is no LangGraph vocabulary in any of it, on purpose. The runtime's own
+exception advises raising the limit and links its own troubleshooting page;
+that advice is usually wrong here — a loop that cannot settle will not settle
+with more supersteps — so it is translated at the two places a graph is
+driven rather than repeated at four surfaces.
+
 #### `interruptible` — what Stop would actually do
 
 `true` if closing the connection **cancels** the node this frame names;

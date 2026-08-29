@@ -24,6 +24,15 @@ the answer the workflow had already produced was thrown away — with
 LangGraph's own advice to raise the number, which is the opposite of what this
 module's callers tell a user.
 
+**When the guard cannot fire, the ceiling is still ours to explain**
+(`launch-readiness/176`). `56` needs a few supersteps of slack, and a cycle
+with no grader in it has no guard at all, so the hard exhaustion is reachable
+on any document. `step_budget_exhausted_message` below is the sentence it gets,
+translated at the two places a graph is driven — `run_doors.invoke_run` for
+every blocking door, `api/streaming` for the one that drives its own stream —
+so no surface repeats a vendor's advice to raise a number this module exists
+to bound.
+
 **A mount runs on this number too, and may only ask for less**
 (`organisms-first-class` 60 and 61). A mounted child is a separate `invoke`
 with a fresh superstep counter and the *run's* ceiling, inherited through the
@@ -198,6 +207,53 @@ def composition_step_budget(ceiling: int, mounts: Mapping[str, Any]) -> int:
         branch = cap_step_budget(ceiling, getattr(mount, "saved_step_budget", None))
         total += composition_step_budget(branch, getattr(mount, "mounts", None) or {})
     return total
+
+
+def step_budget_exhausted_message(budget: int | None, *, workflow: str = "") -> str:
+    """What a run that spent its whole budget is told — the **top** graph's
+    sentence, and the only one.
+
+    `launch-readiness/176`. The mount boundary has had ours since
+    `organisms-first-class` 60; a document without a mount — the common case —
+    still got LangGraph's, whose every clause is out of this product's
+    vocabulary: `recursion_limit` is a vendor type name on a user surface
+    (portability guardrail 4), *"you can increase the limit"* is the advice
+    this module's whole first half exists to contradict, and the
+    `docs.langchain.com` URL sends an adopter off-product to debug a document
+    we compiled.
+
+    The wording lives **here** rather than at the two catch sites because this
+    module already owns the vocabulary — "supersteps, not iterations" is its
+    opening line, and CLAUDE.md forbids the other label anywhere a user reads.
+    Two sentences in two places is two chances for the second one to say "max
+    iterations".
+
+    **It names the budget and it does not name the loop.** The number is the
+    one fact LangGraph's sentence carried that was worth keeping, and it is
+    knowable wherever this is called from — the config the run was driven with.
+    *Which* cycle overran is not: the blocking driver has no returned state at
+    all when `ainvoke` raises, so a message that named the loop would name it
+    on one door and go quiet on the others. `176` decided against that
+    explicitly — a promise kept sometimes is worse than one never made. What
+    can be said in every case is what a superstep costs, which is what a reader
+    needs to size the next run.
+
+    `budget` may be `None` where the caller genuinely does not know it; the
+    clause is then dropped rather than guessed.
+    """
+    subject = (
+        f'The workflow "{workflow}" spent' if workflow else "This run spent"
+    )
+    ceiling = f" of {budget} supersteps" if budget is not None else ""
+    return (
+        f"{subject} its whole step budget{ceiling} without reaching an answer. "
+        "A step budget counts supersteps, not laps round a loop: every node on "
+        "a cycle costs a superstep per lap, and a lap that fans out costs one "
+        "for each branch that runs — so a supervisor with three workers and a "
+        "grader spends five supersteps a lap, not one. A loop that never "
+        "settles needs a grader that can pass it, or an exit its own state can "
+        "reach, rather than a bigger number here."
+    )
 
 
 def read_budget_stop(value: Any) -> tuple[Any, list[dict[str, Any]]]:
