@@ -47,8 +47,24 @@ export interface RunDescription {
   readonly statusLabel: string;
 }
 
-export function describeRun(run: PastRun, now: number): RunDescription {
-  const parts = [run.userEmail.trim(), run.sessionId.trim()].filter(Boolean);
+/**
+ * `sitting` is the session id of the tab doing the reading.
+ *
+ * It exists because `memory-and-replay/45` gave `session_id` a writer. Before
+ * that the field was `""` on every run and this line printed nothing; after it,
+ * printing the raw value would put an opaque `sess-…` token under every row of
+ * a panel whose identity line means *who asked*. The id itself is not
+ * information to a reader — **whether it is theirs** is. So a run from this
+ * tab's own sitting says nothing, and one from another says so in words.
+ *
+ * Omitted means *this reader has no sitting* (a script, a test, a browser with
+ * site data blocked), and then no run can be told apart from the reader's own —
+ * so none of them claim to be.
+ */
+export function describeRun(run: PastRun, now: number, sitting = ''): RunDescription {
+  const session = run.sessionId.trim();
+  const elsewhere = session !== '' && sitting !== '' && session !== sitting;
+  const parts = [run.userEmail.trim(), elsewhere ? 'another sitting' : ''].filter(Boolean);
   const when = relativeTime(run.updatedAt, now);
   const steps = `${run.steps} ${run.steps === 1 ? 'step' : 'steps'}`;
   return {

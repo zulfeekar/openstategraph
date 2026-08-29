@@ -430,6 +430,72 @@ describe('RuntimeClient.runStream', () => {
     expect(body['credentials']).toEqual({ OPENAI_API_KEY: 'sk-from-the-browser' });
   });
 
+  /**
+   * `memory-and-replay/45`. `session_id` was declared on `RunRequest`, carried
+   * into `configurable` by all four doors, persisted into every checkpoint and
+   * filterable on three surfaces — and this client never sent one, so it was
+   * `""` on every real run and `?session_id=` matched the whole listing.
+   *
+   * It is minted by the client, not the caller: `runBody` exists because three
+   * hand-copied bodies were not equally tested, and a field every send must
+   * carry belongs in the builder rather than in whichever call site remembers.
+   */
+  it('sends the sitting this tab is in, so a session filter has something to match', async () => {
+    let sent = '';
+    const client = new RuntimeClient(
+      'http://rt',
+      (_url, init) => {
+        sent = String(init?.body ?? '');
+        return Promise.resolve(streamedResponse(sseBody(FRAMES), 5));
+      },
+      () => 'sess-abc123',
+    );
+
+    await client.runStream({ workflow: {}, question: 'q' }, () => {});
+
+    expect((JSON.parse(sent) as Record<string, unknown>)['session_id']).toBe('sess-abc123');
+  });
+
+  it('sends it on the blocking door and on a resume as well', async () => {
+    // One builder, three doors — a resumed run is the same sitting as the run
+    // it resumes, and a row that lost the label halfway would split one turn
+    // across two sessions.
+    const bodies: string[] = [];
+    const client = new RuntimeClient(
+      'http://rt',
+      (_url, init) => {
+        bodies.push(String(init?.body ?? ''));
+        return Promise.resolve(streamedResponse(sseBody(FRAMES), 5));
+      },
+      () => 'sess-abc123',
+    );
+
+    await client.resume({ threadId: 't-1', workflow: {}, decision: 'approve' }, () => {});
+
+    expect(bodies.map((b) => (JSON.parse(b) as Record<string, unknown>)['session_id'])).toEqual([
+      'sess-abc123',
+    ]);
+  });
+
+  it('omits it when this browser has nowhere to remember a sitting', async () => {
+    // A private window with site data blocked. Empty is what the field already
+    // means everywhere else — *this caller named no session* — and sending
+    // `""` would be a value that looks named and matches nothing.
+    let sent = '';
+    const client = new RuntimeClient(
+      'http://rt',
+      (_url, init) => {
+        sent = String(init?.body ?? '');
+        return Promise.resolve(streamedResponse(sseBody(FRAMES), 5));
+      },
+      () => '',
+    );
+
+    await client.runStream({ workflow: {}, question: 'q' }, () => {});
+
+    expect(JSON.parse(sent) as Record<string, unknown>).not.toHaveProperty('session_id');
+  });
+
   it('omits every optional field when it was not given', async () => {
     // The other half: a key that is always present would make a deployment
     // with server-side configuration look like one being overridden.

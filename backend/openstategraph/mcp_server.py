@@ -827,7 +827,13 @@ class WorkflowRuns:
         #   correct, loud degradation memory ticket 01 installed. Binding a
         #   name nobody authenticated would be worse than not binding one.
         # - `session_id` scopes thread *listing*, which is a browser-tab
-        #   concept. There is no session here to name.
+        #   concept. There is no session here to name. `memory-and-replay/45`
+        #   gave that field a writer — the editor mints one per tab — and
+        #   decided this door keeps `""`: a per-call mint would be a synonym
+        #   for `thread_id`, which is minted per call two lines below, and a
+        #   session grouping exactly one thread groups nothing. Pinned, so the
+        #   absence reads as a decision rather than an oversight, by
+        #   `tests/test_a_sitting_is_named_by_the_browser.py`.
         #
         # They are still written, as empty strings, rather than omitted: the
         # key set is what a reader compares across doors, and an absent key is

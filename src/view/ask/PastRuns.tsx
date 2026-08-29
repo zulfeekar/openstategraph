@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { History, RotateCcw } from 'lucide-react';
 import { Button, Icon, PanelEmpty } from '@design/primitives';
 import { RuntimeClient, type PastRun, type PastRunHistory } from '@core/runtime/RuntimeClient';
+import { browserSessionId } from '@core/runtime/browserSession';
 import {
   describeRun,
   laneTitle,
@@ -156,7 +157,11 @@ function RunRow({
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const described = describeRun(run, at);
+  // This tab's own sitting, so a row from it does not announce one
+  // (`memory-and-replay/45`). Read here rather than threaded down from the
+  // panel: it is a constant for the tab, and `browserSessionId` is a cheap
+  // `sessionStorage` read that mints nothing new.
+  const described = describeRun(run, at, browserSessionId());
   // Shown whenever there is something to say beyond "it finished cleanly" —
   // paused, failed, or both — never a bare "finished" tacked onto every row.
   const showStatus = run.status === 'paused' || run.failed;

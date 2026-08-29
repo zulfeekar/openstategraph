@@ -74,10 +74,32 @@ describe('describeRun', () => {
   it('shows identity only when the run carried it', () => {
     expect(describeRun(run(), NOW).identity).toBe('');
     expect(describeRun(run({ userEmail: 'me@example.com' }), NOW).identity).toBe('me@example.com');
-    expect(describeRun(run({ sessionId: 'sess-7' }), NOW).identity).toBe('sess-7');
+  });
+
+  /**
+   * `memory-and-replay/45`. The session id used to be `""` on every run, so
+   * this line printed nothing; now that it is written, printing it raw would
+   * stamp an opaque `sess-…` under every row. What a reader can use is not the
+   * token, it is whether the run is theirs.
+   */
+  it('says nothing about a run from the reader’s own sitting', () => {
+    expect(describeRun(run({ sessionId: 'sess-7' }), NOW, 'sess-7').identity).toBe('');
+  });
+
+  it('says a run came from another sitting, in words rather than in a token', () => {
+    expect(describeRun(run({ sessionId: 'sess-7' }), NOW, 'sess-9').identity).toBe(
+      'another sitting',
+    );
     expect(
-      describeRun(run({ userEmail: 'me@example.com', sessionId: 'sess-7' }), NOW).identity,
-    ).toBe('me@example.com · sess-7');
+      describeRun(run({ userEmail: 'me@example.com', sessionId: 'sess-7' }), NOW, 'sess-9')
+        .identity,
+    ).toBe('me@example.com · another sitting');
+  });
+
+  it('claims nothing when the reader has no sitting to compare against', () => {
+    // A script, a test, or a browser with site data blocked. Nothing can be
+    // told apart from the reader's own run, so nothing pretends to be.
+    expect(describeRun(run({ sessionId: 'sess-7' }), NOW).identity).toBe('');
   });
 
   it('reads a paused run as resumable and a finished one as done', () => {

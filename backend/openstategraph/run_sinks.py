@@ -102,11 +102,21 @@ the editor already treats as conversation identity; `session_id` and
 them. All four names are read from `run_identity.RUN_IDENTITY_KEYS` rather than
 spelled again here.
 
-One honest caveat, recorded because it will otherwise be rediscovered as a bug:
-**nothing populates `session_id` today.** It is declared on `RunRequest`,
-carried into `configurable`, persisted, and filterable — and the MCP door
-hardcodes `""` while the editor never sends one. The column is therefore
-usually empty, and that is a gap in the *writer*, not in this key.
+That caveat had a sequel and it is now closed (`memory-and-replay/45`). Until
+then **nothing populated `session_id`**: declared, carried, persisted,
+filterable, and `""` on every real run, because the editor's client never sent
+one — a gap in the *writer*, not in this key. The writer is
+`src/core/runtime/browserSession.ts`, which mints one per browser tab in
+`sessionStorage` and sends it on all three HTTP doors.
+
+Two things about that value are worth knowing here, because this column is
+where they surface. It is **the client's to mint**, which is not a breach of
+`principal.py`'s refusal of `user_email`: that rule names values which are
+client-supplied *and privilege-bearing*, and a session label keys no namespace
+and gates nothing. And it is still **empty on the MCP door**, correctly — an
+MCP call has no browser tab, and a per-call mint would make the column a
+synonym for `thread_id`. So an empty cell means *this run had no sitting*
+rather than *nobody wrote one down*.
 
 ## A query and JSON, and they are the same rows
 

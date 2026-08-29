@@ -185,8 +185,25 @@ whichever door a run came through.
 | --- | --- | --- | --- |
 | `thread_id` | the **checkpointer** — conversation continuity, and what a `human.approval` resume addresses | `threadId` on the run request | `ask(thread_id=…)`, or `configurable` |
 | `user_email` | **long-term user memory**, namespace `("memories", <email>)` | **you may not send it** — the server determines it, and a request that carries it is a 422 | `ask(user_email=…)`, or `configurable`. Here *you are* the server |
-| `session_id` | thread listing and filtering. **No runtime behaviour** | `sessionId` on the run request | `ask(session_id=…)`, or `configurable` |
+| `session_id` | thread listing and filtering. **No runtime behaviour** | `session_id` in the run body. The editor's own client mints one per **browser tab** and sends it on every run, so hosting our server needs no wiring | `ask(session_id=…)`, or `configurable` |
 | `workflow_slug` | **workflow memory**, namespace `("workflow-memory", <slug>)`, and the provenance stamp on an app-scope deposit | sent with the run | **needs no argument** — `ask()` takes it from the package, and the §3 loop takes it from `workflow.slug` |
+
+**`session_id` is the one identity key a client mints, and that is deliberate**
+(`memory-and-replay/45`). The rule below is not *the server owns identity*, it
+is *the server owns anything that grants* — `user_email` keys a per-person
+memory namespace, so a client naming the person could read that person's
+memories. A session label keys nothing, gates nothing and changes no run; the
+worst a forged one achieves is grouping your own rows under a name you chose.
+`thread_id` settles it by precedent: a client has always minted that, and a
+thread *selects a checkpoint to continue*.
+
+Its lifetime is **one browser tab** — `sessionStorage`, so it survives a reload
+and a crash restore, is not shared with a second tab, and dies when the tab
+does. That is what *this sitting* means, and it is deliberately not a login:
+who a person is over time is `user_email`'s question. Two doors leave it empty
+on purpose and both are honest — an MCP call has no tab, and a browser with
+site data blocked has nowhere to remember one. Empty means *this run named no
+sitting*, never *the writer forgot*.
 
 The asymmetry on `user_email` is deliberate and is the only one: over HTTP the
 identity of the person is the server's to establish, so accepting it from a

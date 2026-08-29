@@ -1,4 +1,5 @@
 import { Err, Ok, type Result } from '@core/kernel/Result';
+import { browserSessionId } from './browserSession';
 import { McpRegistryClient } from './McpRegistryClient';
 import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
 
@@ -914,19 +915,36 @@ const yieldToPaint = (): Promise<void> =>
  * editor silently lost its tool registry or its developer channel. With one
  * builder there is one thing to get right and one thing to test.
  */
-function runBody(request: {
-  model?: string;
-  recursionLimit?: number;
-  workflowSlug?: string;
-  credentials?: Readonly<Record<string, string>>;
-  audience?: string;
-}): Record<string, unknown> {
+function runBody(
+  request: {
+    model?: string;
+    recursionLimit?: number;
+    workflowSlug?: string;
+    credentials?: Readonly<Record<string, string>>;
+    audience?: string;
+  },
+  /**
+   * The sitting these runs belong to — **the client's to mint, and not the
+   * caller's to pass** (`memory-and-replay/45`).
+   *
+   * It is here rather than on `RunRequest` for the reason this builder exists
+   * at all: a field every send must carry cannot depend on which of three call
+   * sites remembered it. `browserSession.ts` argues why a client is entitled to
+   * mint this one when `principal.py` refuses it `user_email`.
+   *
+   * Empty is omitted, never sent as `""`. Empty already means *this caller
+   * named no session* on every surface that reads the field, and a sent `""`
+   * would be a named session that matches nothing.
+   */
+  sessionId: string = '',
+): Record<string, unknown> {
   return {
     ...(request.model ? { model: request.model } : {}),
     ...(request.recursionLimit != null ? { recursion_limit: request.recursionLimit } : {}),
     ...(request.workflowSlug ? { workflow_slug: request.workflowSlug } : {}),
     ...(request.credentials ? { credentials: request.credentials } : {}),
     ...(request.audience ? { audience: request.audience } : {}),
+    ...(sessionId ? { session_id: sessionId } : {}),
   };
 }
 
@@ -934,6 +952,13 @@ export class RuntimeClient implements IRuntimeClient {
   constructor(
     private readonly baseUrl: string = runtimeBaseUrl(),
     private readonly fetchImpl: FetchLike = (url, init) => fetch(url, init),
+    /**
+     * Injected exactly as `fetchImpl` is, and for the same reason: a browser
+     * global in a constructor default keeps the seam testable without one.
+     * Read per send rather than captured once, so a client built before
+     * storage was reachable is not stuck at empty for the tab's lifetime.
+     */
+    private readonly sessionId: () => string = browserSessionId,
   ) {
     this.mcp = new McpRegistryClient(baseUrl, fetchImpl);
   }
@@ -959,7 +984,7 @@ export class RuntimeClient implements IRuntimeClient {
     const body = {
       workflow: request.workflow,
       question: request.question,
-      ...runBody(request),
+      ...runBody(request, this.sessionId()),
       ...(request.threadId ? { thread_id: request.threadId } : {}),
     };
 
@@ -1015,7 +1040,7 @@ export class RuntimeClient implements IRuntimeClient {
     const body = {
       workflow: request.workflow,
       question: request.question,
-      ...runBody(request),
+      ...runBody(request, this.sessionId()),
       ...(request.threadId ? { thread_id: request.threadId } : {}),
     };
     return this.streamFrom(`${this.baseUrl}/api/runs/stream`, body, onEvent, options);
@@ -1031,7 +1056,7 @@ export class RuntimeClient implements IRuntimeClient {
       workflow: request.workflow,
       decision: request.decision,
       ...(request.feedback ? { feedback: request.feedback } : {}),
-      ...runBody(request),
+      ...runBody(request, this.sessionId()),
     };
     return this.streamFrom(`${this.baseUrl}/api/runs/resume`, body, onEvent, options);
   }

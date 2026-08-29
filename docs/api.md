@@ -1113,6 +1113,12 @@ newest first, filterable by `workflow_slug`, `user_email` (case-folded, like
 the memory namespace) and `session_id`; `GET /api/threads/{id}` returns one run
 checkpoint by checkpoint.
 
+`session_id` groups the threads of one **sitting** — the editor mints one per
+browser tab and sends it on every run, so it spans the several conversations a
+person has in one visit. It is empty for a run that had no tab behind it (an
+MCP call, a script), and an empty filter value is not a filter: it lists
+everything.
+
 ```json
 {
   "threads": [
