@@ -472,6 +472,27 @@ The nine exposed tools: `get_node_vocabulary`, `compile_workflow`,
   a hosted child, or an agent bound to a package-local tool, resolves to
   nothing. Valid topology, real capability gap — it comes back as a `warning`,
   never silently.
+- **`run_workflow` is a run door, and it answers to an audience you do not
+  choose.** It is the fourth of them, beside `POST /api/runs`,
+  `POST /api/runs/stream` and the CLI, and until
+  `the-boundary-nobody-checked/08` it was the only one that took no audience at
+  all: the capability fence stayed welded into `answer` and into every value of
+  `outputs`, and `warnings` — plan findings, unresolved capabilities, run
+  failures and silent nodes, sentences naming node ids and unbound tool types —
+  rode the payload unconditionally. By default you now get a **customer's**
+  payload: `answer`, `decisions`, `routes`, `outputs`, `attempts`,
+  `published_rejected`, `mermaid` in the workflow author's own vocabulary, and
+  **no `warnings` key at all** — absent, not empty, so nothing can be read out
+  of a payload that was never entitled to carry any. A degraded run still says
+  so, in one sentence appended to `answer`.
+
+  Start the server with `OPENSTATEGRAPH_AUDIENCE=developer` and it adds
+  `warnings` and `suggestion`. **There is deliberately no `audience` argument
+  on the tool.** The thing filling in a tool's arguments here is a model, and a
+  boundary a model can name is the `advisor` request flag that
+  `openstategraph/api/audience.py` exists to have deleted. The declaration is
+  the deployment's, in the same environment variable that caps every other
+  door, where a person can see it and change it.
 - **`run_workflow` is synchronous and unstreamed.** No token streaming, and no
   resume *tool*. A `human.approval` node does now pause properly — the run
   compiles against the same durable checkpointer the HTTP API uses — and

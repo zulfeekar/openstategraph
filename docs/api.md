@@ -322,6 +322,15 @@ Two things follow that a client should not try to work around:
   no per-user authorization here, for the same reason `docs/deploying.md`
   gives about the shared token — it answers "is this stranger allowed in",
   never "who is this".
+- **On the MCP run door the same variable does not cap the audience, it
+  *is* the audience** (`the-boundary-nobody-checked/08`). `run_workflow` has no
+  request to cap: the client filling in its arguments is a model, so the tool
+  takes no `audience` field and never will. It reads
+  `OPENSTATEGRAPH_AUDIENCE` directly, and **unset means `customer`** rather
+  than "the caller decides" — for a door whose caller cannot name an audience,
+  the absence of a permission is not a permission. An MCP deployment that is an
+  authoring workbench sets `OPENSTATEGRAPH_AUDIENCE=developer`. See
+  [The MCP layer](mcp.md) §7.
 
 `mermaid` deliberately stays on both audiences: it is the compiled topology
 that a chat page draws its live flow diagram from, and

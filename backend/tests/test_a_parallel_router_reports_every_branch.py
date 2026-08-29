@@ -28,6 +28,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from openstategraph.api.main import create_app
+from openstategraph.api.audience import Audience
 
 
 def _node(node_id: str, node_type: str, **data: Any) -> dict[str, Any]:
@@ -235,7 +236,9 @@ class TestTheMcpDoor:
         )
         services = WorkflowServices(workflows_root=Path("."))
         result = WorkflowRuns(services).run(
-            document=two_desk_document(), question="cost and risk please"
+            document=two_desk_document(),
+            question="cost and risk please",
+            audience=Audience.CUSTOMER,
         )
 
         assert result["error"] is None, result

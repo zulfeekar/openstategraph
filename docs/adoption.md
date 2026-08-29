@@ -778,7 +778,7 @@ things you asked for is how a list that matters gets ignored.
 | Skills context | discovery produces *text*, not an object. Injecting it would be prompt authoring, and the prompt is composed — preamble, context, your rules, output contract — not handed over |
 | `retry` / `timeout` / `cache` policies | per LangGraph these are `add_node` parameters, so they belong to the **workflow document** and compile to graph assembly. Putting them on the loader would be a second spelling of one feature |
 | The trace sink | `trace_file` is a file sink on purpose. A pluggable tracer would be us inventing a span model to compete with LangSmith and OpenTelemetry, which already exist and which `.graph` reaches directly |
-| Advisor mode | editor-only, per call, and it must never be reachable from `/chat` or MCP |
+| Advisor mode | editor-only, per call, and it must never be reachable from `/chat` or MCP. MCP's `run_workflow` is a run door and answers to an audience like the other three; a server started without `OPENSTATEGRAPH_AUDIENCE=developer` returns a customer's payload, with no `warnings` key and no fence — see [The MCP layer](mcp.md) §7 |
 
 #### The three with nuance the table cannot hold
 

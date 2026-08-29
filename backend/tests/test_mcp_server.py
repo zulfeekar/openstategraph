@@ -30,6 +30,7 @@ from openstategraph.mcp_server import (
     WorkflowRuns,
     build_mcp_server,
 )
+from openstategraph.api.audience import Audience
 
 
 def _linear_document() -> dict[str, Any]:
@@ -579,7 +580,9 @@ class TestRuns:
         for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST"):
             monkeypatch.delenv(var, raising=False)
 
-        result = WorkflowRuns(services).run(document=_linear_document(), question="hello")
+        result = WorkflowRuns(services).run(
+            document=_linear_document(), question="hello", audience=Audience.CUSTOMER
+        )
 
         assert result["answer"] == "hello"
         assert result["mermaid"].strip()
@@ -602,7 +605,9 @@ class TestRuns:
 
         monkeypatch.setattr(chat_model, "build_chat_model", never)
 
-        result = WorkflowRuns(services).run(document={"version": 2, "nodes": []}, question="hi")
+        result = WorkflowRuns(services).run(
+            document={"version": 2, "nodes": []}, question="hi", audience=Audience.CUSTOMER
+        )
 
         assert result["error"] == "The document does not compile."
         assert result["findings"] == ["The document needs a non-empty 'nodes' list."]
@@ -610,12 +615,15 @@ class TestRuns:
     def test_it_runs_a_saved_slug(self, services: WorkflowServices) -> None:
         WorkflowLibrary(services).save_draft("one", "One", _linear_document())
 
-        assert WorkflowRuns(services).run(slug="one", question="hi")["answer"] == "hi"
+        answer = WorkflowRuns(services).run(
+            slug="one", question="hi", audience=Audience.CUSTOMER
+        )["answer"]
+        assert answer == "hi"
 
     def test_it_needs_either_a_slug_or_a_document(
         self, services: WorkflowServices
     ) -> None:
-        error = WorkflowRuns(services).run(question="hi")["error"]
+        error = WorkflowRuns(services).run(question="hi", audience=Audience.CUSTOMER)["error"]
 
         # It must say which two things, or it is not an answer to the caller.
         assert "slug" in error and "document" in error
@@ -626,7 +634,10 @@ class TestRuns:
         """`recursion_limit` counts supersteps, not iterations, and an
         unbounded one from an untrusted client is a denial-of-service knob."""
         result = WorkflowRuns(services).run(
-            document=_linear_document(), question="hi", recursion_limit=10_000
+            document=_linear_document(),
+            question="hi",
+            recursion_limit=10_000,
+            audience=Audience.CUSTOMER,
         )
 
         assert result["recursion_limit"] <= WorkflowRuns.MAX_RECURSION_LIMIT
@@ -698,7 +709,12 @@ class TestRuns:
             if e["source"] != {"nodeId": "grader1", "portId": "revise"}
         ]
 
-        result = WorkflowRuns(services).run(document=evaluator_optimizer, question="hi")
+        # A developer audience, deliberately: `warnings` is the authoring
+        # channel and this door only carries it for one
+        # (`the-boundary-nobody-checked/08`).
+        result = WorkflowRuns(services).run(
+            document=evaluator_optimizer, question="hi", audience=Audience.DEVELOPER
+        )
 
         assert result["error"] is None, result
         # Deliberately the run-time sentence's own words ("shipped as-is"),
@@ -746,12 +762,16 @@ class TestRuns:
             ).read_text()
         )["document"]
 
+        # Developer: the member-level sentence is an authoring warning, and
+        # this door carries `warnings` for one audience only
+        # (`the-boundary-nobody-checked/08`).
         result = WorkflowRuns(services).run(
             document=document,
             question=(
                 "Research what a new engineer needs access on day one; "
                 "write a 30-minute onboarding agenda for them."
             ),
+            audience=Audience.DEVELOPER,
         )
 
         assert result["error"] is None, result

@@ -152,6 +152,28 @@ def resolve(requested: Audience | str | None) -> Audience:
     return asked
 
 
+def deployment_audience() -> Audience:
+    """The audience for a door whose caller cannot be trusted to name one.
+
+    `resolve()` is for a transport with a **client declaration** to cap — the
+    HTTP run doors, where a first-party surface says which of itself it is.
+    The MCP run door has no such client: the thing filling in the arguments is
+    a customer's own model, and an audience a model can name is the `advisor`
+    flag respelled — the boolean on the customer's own endpoint that put this
+    boundary one DevTools edit away, and that this module exists to have
+    deleted (`the-boundary-nobody-checked/08`).
+
+    So the deployment declares it, once, in the same variable that caps every
+    other door. `ceiling()` already fails closed on a typo; this puts the floor
+    under its `None`. **Unset is `CUSTOMER`** — for a caller who cannot name an
+    audience, the absence of a permission is not a permission, which is the
+    direction `visible_state` already takes for an unmarked channel. An MCP
+    deployment that is an authoring workbench sets `OPENSTATEGRAPH_AUDIENCE=developer`
+    and a person can see, change and revoke that.
+    """
+    return ceiling() or Audience.CUSTOMER
+
+
 def clean_output(value: Any) -> Any:
     """A settled text value with any developer fence split out of it.
 

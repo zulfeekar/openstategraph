@@ -36,6 +36,7 @@ from fastapi.testclient import TestClient
 from openstategraph.errors import StepBudgetExhausted
 from openstategraph.run_sinks import RunRecord, read_runs, reset_run_sink_registry
 from openstategraph.step_budget import MIN_STEP_BUDGET
+from openstategraph.api.audience import Audience
 
 #: What must not reach any surface. LangGraph's own sentence, clause by clause.
 VENDOR_WORDS: tuple[str, ...] = (
@@ -218,7 +219,10 @@ class TestTheMcpDoor:
 
         services = WorkflowServices(workflows_root=workflows_root)
         result = WorkflowRuns(services).run(
-            document=_document(), question="anything", recursion_limit=BUDGET
+            document=_document(),
+            question="anything",
+            recursion_limit=BUDGET,
+            audience=Audience.CUSTOMER,
         )
         assert result["error"], result
         _assert_ours(result["error"])
