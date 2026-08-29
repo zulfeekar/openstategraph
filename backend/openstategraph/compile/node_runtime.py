@@ -2830,8 +2830,11 @@ class NodeRuntime:
         def desk_factory() -> Any:
             # Keyed by workflow **and** node, resolved from the run rather than
             # from the compile: two documents in one process can both hold an
-            # `agent_1`, and one agent must never be able to read another's
-            # tasks. `run_identity()` answers `{}` outside a run, which keys a
+            # `agent_1`, and one agent **node** must never be able to reach
+            # another node's tasks. Two *conversations* on this same node do
+            # share this desk — that is deliberate, and the filtering happens on
+            # the read (`abc/async_task_middleware._announce`).
+            # `run_identity()` answers `{}` outside a run, which keys a
             # scripted call under `":<node id>"` — deliberate, and the only
             # honest key available when nothing has said which workflow this is.
             slug = run_identity().get("workflow_slug", "")

@@ -256,7 +256,14 @@ class AsyncTaskDesk(Protocol):
         """Stop the child. `False` if it is not held or already finished."""
 
     def tasks(self) -> list[TaskRecord]:
-        """Every record this desk holds."""
+        """Every record this desk holds — **including other conversations'**.
+
+        Not a per-conversation view, because a desk is not keyed by one (see
+        `_DESKS`). A caller serving a single conversation must intersect this
+        with the ids that conversation tracks in `ASYNC_TASKS_KEY`, or report
+        nothing at all; publishing it whole is how a customer came to be told
+        about a stranger's background workers.
+        """
 
 
 @dataclass
@@ -556,7 +563,17 @@ class InProcessTaskDesk:
 #: than the process is a desk that dies with the turn, which is the thing being
 #: fixed. The key is `<workflow slug>:<node id>` — stable across a recompile, so
 #: a saved edit does not orphan a running child, and narrow enough that one
-#: agent node can never read another's tasks.
+#: agent **node** can never reach another node's tasks.
+#:
+#: **It is not a conversation boundary, and it never was**
+#: (`the-boundary-nobody-checked/04`). There is no thread in the key, on
+#: purpose: a desk that died with the turn is the defect this registry exists
+#: to fix, and a follow-up turn has to find the desk already holding its
+#: running child. So two callers on one node share this desk, and every read
+#: that serves *one* conversation filters by the ids that conversation tracks
+#: in `ASYNC_TASKS_KEY` — which is what all five of the middleware's paths now
+#: do. Until that ticket the sentence above claimed the stronger property and
+#: `_announce` published `tasks()` to both audiences on the strength of it.
 _DESKS: dict[str, AsyncTaskDesk] = {}
 _DESKS_LOCK = threading.Lock()
 

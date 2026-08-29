@@ -222,12 +222,17 @@ def _async_task_tool(
 
 
 def async_task_status_line(records: Sequence[TaskRecord]) -> str:
-    """One deterministic sentence naming every task and where it stands.
+    """One deterministic sentence naming the tasks it is handed.
 
     Deterministic on purpose, and it is the same argument `launch-readiness/143`
     settled for narration: a model asked to summarise its own progress once
     leaked its scratchpad into a customer answer. This sentence is assembled
     from the desk's own records and no model sees it before a reader does.
+
+    `records` is what **one conversation** tracks, never the whole desk. The
+    desk holds every conversation's tasks at that node and this line rides the
+    `progress` rail, which reaches both audiences, so the narrowing matters —
+    `_announce` does it, and this function renders whatever it is given.
     """
     if not records:
         return ""
@@ -256,7 +261,11 @@ class AsyncTaskMiddleware(AgentMiddleware):
         """Exactly one of `desk` and `desk_factory`.
 
         **Why a factory at all.** The desk is keyed by workflow *and* node so
-        that one agent can never read another's tasks — and the workflow slug is
+        that one agent **node** can never reach another node's tasks — never one
+        conversation another's, which the key cannot do and does not claim
+        (`the-boundary-nobody-checked/04`; the separation between conversations
+        is `ASYNC_TASKS_KEY` on the loop's state, and `_announce` says how). The
+        workflow slug is
         a fact about the **run**, read from `run_identity()`, not about the
         compile. A desk resolved at construction would key every document
         compiled in this process under the same name. So the compiler passes a
@@ -299,18 +308,52 @@ class AsyncTaskMiddleware(AgentMiddleware):
     # -- the roster, said out loud before every model call ------------------ #
 
     def wrap_model_call(self, request: Any, handler: Callable[[Any], Any]) -> Any:
-        self._announce()
+        self._announce(request)
         return handler(request)
 
     async def awrap_model_call(
         self, request: Any, handler: Callable[[Any], Awaitable[Any]]
     ) -> Any:
-        self._announce()
+        self._announce(request)
         return await handler(request)
 
-    def _announce(self) -> None:
-        """Report the live roster on the `progress` rail. Never fails a run."""
-        line = async_task_status_line(self._desk().tasks())
+    def _announce(self, request: Any) -> None:
+        """Report **this conversation's** roster on the rail. Never fails a run.
+
+        Read out of `request.state`, not out of the desk, and that is
+        `the-boundary-nobody-checked/04`. The desk is keyed by workflow and node
+        with no thread in it, so it holds every conversation's tasks at that
+        node — and a `progress` line reaches both audiences, so rendering
+        `desk.tasks()` told one caller the archetype and status of every
+        background worker every *other* caller had running there.
+
+        **The read moved, not the key.** A desk keyed by thread would die with
+        the conversation that has not come back yet, which is the thing
+        `async_tasks._DESKS` exists to prevent — a follow-up turn has to find
+        the desk that already holds the running child. So the filter goes where
+        the other four tools already put it: `ASYNC_TASKS_KEY` on the loop's own
+        state, which is per-thread by construction. `ModelRequest` carries
+        `state` under the same attribute name `ToolRuntime` does, so
+        `_all_tracked` serves both callers rather than growing a second
+        spelling of one fact.
+
+        The ids come from state; the **statuses** still come from the desk,
+        because a row is written when a task is started and would otherwise say
+        `running` for ever.
+
+        Nothing at all is said about the tasks that were filtered out — not even
+        a count. Existence and activity are exactly what leaked, and a count
+        leaks both in miniature. Nor is anything omitted from this
+        conversation's point of view: every task it started is on the line, and
+        the rest were never its business.
+        """
+        desk = self._desk()
+        line = async_task_status_line(
+            [
+                self._touched(record, desk.status(record.task_id))
+                for record in self._all_tracked(request)
+            ]
+        )
         if line:
             report_progress(line)
 
