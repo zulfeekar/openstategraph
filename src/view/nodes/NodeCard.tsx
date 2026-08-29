@@ -25,6 +25,7 @@ import {
   useWorkbench,
 } from '@app/WorkbenchContext';
 import { resolveIcon } from '@view/icons/iconRegistry';
+import { CardSpawnedPills } from '@view/spawned/CardSpawnedPills';
 import { FieldRenderer } from './FieldRenderer';
 import { MOUNT_BADGE, isMountType } from './mountKind';
 import { resolveNodeBody } from './nodeBodyRegistry';
@@ -378,6 +379,18 @@ function NodeCardBody({ node }: { node: AbstractNodeModel }) {
           <PortRow key={entry.port.id} entry={entry} />
         ))}
       </footer>
+
+      {/* `canvas-feels-right/07`, the canvas half. Outside the card's flow on
+          purpose — see `CardSpawnedPills` — so a run that spawns three
+          workers draws three chips and does not move one pixel of anybody's
+          layout. It is written last in this element so it paints above the
+          card's own chrome; it is positioned against the `foreignObject`'s
+          box, which is the element's exact size. */}
+      <CardSpawnedPills
+        spawned={node.runtime.spawned}
+        running={status === 'running'}
+        startedBy={node.title}
+      />
 
       {pill ? (
         <span className="node__pill" data-port-row={pill.id}>

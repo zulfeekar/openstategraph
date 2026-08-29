@@ -49,6 +49,54 @@ export type NodeStatus = 'idle' | 'ready' | 'running' | 'paused' | 'success' | '
  */
 export type NodeScope = 'workflow' | 'app';
 
+/**
+ * One child a run spawned from this node, as a card can draw it.
+ *
+ * `canvas-feels-right/07`, the canvas half. Declared here rather than
+ * imported from the fold that produces it (`view/spawned/spawnedTasks.ts`)
+ * for the layering reason this directory exists: `core/` is the contract and
+ * may not depend on `view/`. The fold's own `SpawnedTask` **extends** this,
+ * so the knowledge is declared once and the extra fields it carries for the
+ * chat panel — the run's task id, the owning node — stay out of a shape the
+ * card does not need.
+ *
+ * `subgraph` is deliberately not a kind: a mounted workflow *is* a node in
+ * the saved document with a card of its own, and a chip beside it would
+ * claim runtime-only-ness about the one child that is genuinely part of the
+ * file.
+ */
+export interface SpawnedChild {
+  /** Stable across re-projections — the React key and the popover identity. */
+  readonly key: string;
+  readonly kind: 'fanout' | 'subagent' | 'async';
+  /** What to call it: an archetype, or the declared subagent type. */
+  readonly label: string;
+  /** The brief it was given, as the spawn frame carried it. */
+  readonly instruction: string;
+  /** Its own account, oldest first — what `ThinkingStack` renders. */
+  readonly lines: readonly string[];
+  /**
+   * Whether this run's stream ever carried a frame under this child's id.
+   *
+   * Not the same as `lines.length > 0`: a frame can come back carrying an
+   * empty output, and *it reported and said nothing* is a different fact from
+   * *nothing about it ever reached this stream*. Only a `fanout` child's own
+   * frames come back on this stream at all — a `subagent` returns one
+   * `ToolMessage` and an `async` runs on a desk outside the run — so an empty
+   * account for those two is correct rather than missing, and the surface
+   * says which in words.
+   */
+  readonly reported: boolean;
+  /**
+   * Whether this child outlives the run that launched it. `async` only.
+   *
+   * The other two end when this run ends, so a finished run is a finished
+   * child; a background worker's answer arrives on a later turn, which is why
+   * nothing ever calls one finished.
+   */
+  readonly detached: boolean;
+}
+
 /** Live execution result attached to a node between runs. */
 export interface NodeRuntimeState {
   readonly status: NodeStatus;
@@ -78,6 +126,26 @@ export interface NodeRuntimeState {
    * where "this is not this run's" first becomes true.
    */
   readonly narration: readonly string[];
+  /**
+   * What this run spawned *from* this node, one entry per child.
+   *
+   * `canvas-feels-right/07`. It sits beside `narration` for the same reason
+   * and by the same mechanism: the panel projects what the stream said onto
+   * the card the stream said it about, and the card is a read-only view of
+   * that. It is **runtime state, never document state** — `setNodeRuntime`
+   * is not a command, is not undoable, and is not serialised — which is how
+   * a chip can hang off a card while satisfying the ticket's *nothing is
+   * written to the graph*.
+   *
+   * The limitation this closes is `launch-readiness/140`'s own: a `Send`
+   * fan-out creates **tasks, not canvas nodes**, so three parallel workers
+   * all dispatch from one card and the canvas draws one box. Three entries
+   * here are three chips.
+   *
+   * Cleared by `IDLE_RUNTIME` at the start of the next run, exactly as
+   * `narration` is.
+   */
+  readonly spawned: readonly SpawnedChild[];
 }
 
 export const IDLE_RUNTIME: NodeRuntimeState = {
@@ -88,6 +156,7 @@ export const IDLE_RUNTIME: NodeRuntimeState = {
   durationMs: null,
   log: [],
   narration: [],
+  spawned: [],
 };
 
 /**

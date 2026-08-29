@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { showsThinking } from './settledThinking';
-import { SpawnedPills } from './SpawnedPills';
+import { SpawnedPills } from '@view/spawned/SpawnedPills';
 import { attemptsLine } from './attemptsLine';
 import { rectOfAdded } from './revealAdded';
 import { doorHeadline } from './doorHeadline';
@@ -39,6 +39,8 @@ import { entryQuestion } from '@nodes/inputs/entryQuestion';
 import { composerPlaceholder } from './composerPlaceholder';
 import { IDLE_RUNTIME } from '@core/model/contracts/node';
 import { pushNarration } from '@core/runtime/narrationStack';
+import { projectSpawned } from '@view/spawned/projectSpawned';
+import type { SpawnedTaskRow } from '@view/spawned/spawnedTasks';
 import { defaultsFrom } from '@core/model/contracts/fields';
 import { collectRuntimeCredentials } from '@core/runtime/providerCredentials';
 import { frameOwnsOutput, frameTarget } from '@core/runtime/frameTarget';
@@ -637,6 +639,28 @@ export function AskPanel({
       const openAddress = () =>
         getOpenAddress() ?? parseMountAddress(currentWorkflowSlug() ?? '') ?? undefined;
 
+      /**
+       * The rows the spawn projection folds over — the canvas half of
+       * `canvas-feels-right/07`.
+       *
+       * Accumulated here rather than read back out of `turn.activity` for
+       * one reason: `setTurns` is a React state update and this handler runs
+       * before it commits, so a projection driven off the turn would always
+       * be one frame behind — and on a two-frame fan-out, "one frame behind"
+       * is "the last worker never gets a chip". These are the same fields
+       * appended to `turn.activity` below, held where the handler can read
+       * them synchronously, exactly as `seen` and `queuedActive` are.
+       */
+      const spawnRows: SpawnedTaskRow[] = [];
+      const projectSpawnedNow = () => {
+        projectSpawned(
+          spawnRows,
+          hasNode,
+          (id) => controller.model.node(id)?.runtime.spawned ?? [],
+          (id, spawned) => controller.model.setNodeRuntime(id, { spawned }),
+        );
+      };
+
       // For the per-node duration readout the Inspector already shows (built
       // for the local preview path, which measures a real start/end) — a
       // backend-streamed run has no such pair, since LangGraph's `updates`
@@ -763,6 +787,20 @@ export function AskPanel({
           }
           // Data collection is never delayed by the animation pacing above —
           // only the visual glow is paced, not the record of what happened.
+          //
+          // `canvas-feels-right/07`: the same record, kept synchronously so
+          // the chips on the cards can be projected from it on this frame
+          // rather than on the next one. A child's own lines arrive on
+          // `update` frames carrying the task id its spawn announced.
+          if (event.taskId) {
+            spawnRows.push({
+              node: event.node,
+              taskId: event.taskId,
+              ...(event.namespace ? { namespace: event.namespace } : {}),
+              output: event.output ?? null,
+            });
+            projectSpawnedNow();
+          }
           setTurns((all) =>
             all.map((turn) =>
               turn.id === id
@@ -816,6 +854,18 @@ export function AskPanel({
           // step — so it does not move `lastFrameAt` and carries a zero
           // duration. The next real frame still measures its gap from the
           // last frame that actually ran.
+          // `canvas-feels-right/07`: a chip appears on the card the moment the
+          // run announces the child, not when its first line comes back — a
+          // `subagent` and an `async` never produce a line at all, and those
+          // are exactly the two a reader most needs told about.
+          spawnRows.push({
+            node: event.parent,
+            taskId: event.taskId,
+            ...(event.namespace ? { namespace: event.namespace } : {}),
+            output: null,
+            spawn: { kind: event.kind, label: event.label, instruction: event.instruction },
+          });
+          projectSpawnedNow();
           setTurns((all) =>
             all.map((turn) =>
               turn.id === id

@@ -51,6 +51,22 @@ export interface PillProps {
   readonly placement?: Placement;
   readonly align?: Alignment;
   readonly className?: string;
+  /**
+   * Tell this popover when its chip may have moved for a reason the DOM
+   * never raised.
+   *
+   * The canvas is the reason it exists. JointJS pans and zooms by writing an
+   * SVG transform, which fires neither `scroll` nor `resize`, so a
+   * wheel-zoom over the paper slid the card out from under an open popover
+   * while the popover stayed exactly where it was — measured live on
+   * `parallel-workers-join`, the chip moving 134 px and the popover none
+   * (`canvas-feels-right/07`). A drag-pan closes it, because that is a
+   * pointer-down outside; a wheel is not.
+   *
+   * A subscription rather than a flag, because `design/` may not know what a
+   * paper is. The chat panel passes nothing and behaves exactly as before.
+   */
+  readonly subscribeAnchorMoved?: (update: () => void) => () => void;
 }
 
 /**
@@ -69,6 +85,7 @@ export function Pill({
   placement = 'top',
   align = 'start',
   className,
+  subscribeAnchorMoved,
 }: PillProps) {
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const floatingRef = useRef<HTMLDivElement | null>(null);
@@ -80,6 +97,7 @@ export function Pill({
     align,
     offset: 6,
     enabled: open,
+    ...(subscribeAnchorMoved ? { subscribe: subscribeAnchorMoved } : {}),
   });
 
   useEffect(() => {

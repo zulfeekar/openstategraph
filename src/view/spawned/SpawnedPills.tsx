@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import { Pill, ThinkingStack } from '@design/primitives';
 import { useController } from '@app/WorkbenchContext';
-import { spawnedTasks, taskAccountNote } from './spawnedTasks';
-import type { ActivityRow } from './traceTree';
+import { SpawnedTaskPill } from './SpawnedTaskPill';
+import { spawnedTasks } from './spawnedTasks';
+import type { ActivityRow } from '@view/ask/traceTree';
 
 /**
  * What this run spawned, one pill each — the chat panel's half of
@@ -51,28 +51,9 @@ export function SpawnedPills({
           ? '1 worker this run started'
           : `${tasks.length} workers this run started`}
       </span>
-      {tasks.map((task) => {
-        const note = taskAccountNote(task);
-        return (
-          <Pill
-            key={task.key}
-            label={task.label}
-            // The one child that outlives the run says so in words, and in
-            // words only. A pulse claims *happening now*, and the moment this
-            // run ends nobody on this side has evidence either way — so the
-            // pulse stops with the run for every kind, and the async pill is
-            // simply never called finished. Animating a claim we cannot
-            // support is `140`'s own paused-dot defect wearing a new hat.
-            detail={task.detached ? 'in the background' : undefined}
-            live={running && !task.reported}
-            title={`${task.label} — started by ${task.owner}`}
-          >
-            {task.instruction ? <p className="pill-popover__brief">{task.instruction}</p> : null}
-            <ThinkingStack lines={task.lines} live={running} label={task.label} />
-            {note ? <p className="pill-popover__note">{note}</p> : null}
-          </Pill>
-        );
-      })}
+      {tasks.map((task) => (
+        <SpawnedTaskPill key={task.key} task={task} running={running} startedBy={task.owner} />
+      ))}
     </div>
   );
 }

@@ -59,8 +59,10 @@
  * account for it would be the shared-context lie the ticket forbids.
  */
 
+import type { SpawnedChild } from '@core/model/contracts/node';
+
 /** The kinds that get a pill. `subgraph` is deliberately absent — see rule 2. */
-export type SpawnedKind = 'fanout' | 'subagent' | 'async';
+export type SpawnedKind = SpawnedChild['kind'];
 
 /**
  * The shape this fold needs from an activity row.
@@ -82,37 +84,21 @@ export interface SpawnedTaskRow {
   };
 }
 
-export interface SpawnedTask {
-  /** Stable across re-folds — the React key and the popover's identity. */
-  readonly key: string;
+/**
+ * One spawned child, as this panel knows it.
+ *
+ * **Extends** the card's `SpawnedChild` rather than restating it: the canvas
+ * half of `canvas-feels-right/07` projects these onto `node.runtime.spawned`,
+ * and two hand-kept copies of one shape is the duplication-of-knowledge
+ * defect `CLAUDE.md` names. The two fields added here are the two the card
+ * has no use for — the run's own id, and which card it belongs to, which is
+ * the projection's key rather than the chip's content.
+ */
+export interface SpawnedTask extends SpawnedChild {
   /** The id the run itself uses. `null` when the frame carried none. */
   readonly taskId: string | null;
   /** The canvas node this child was launched from. */
   readonly owner: string;
-  readonly kind: SpawnedKind;
-  /** What to call it: archetype, or the declared subagent type. */
-  readonly label: string;
-  /** The brief it was given, as the spawn frame carried it. */
-  readonly instruction: string;
-  /** Its own account, oldest first — what `ThinkingStack` renders. */
-  readonly lines: readonly string[];
-  /**
-   * Whether this run's stream ever carried a frame under this task's id.
-   *
-   * Not the same as `lines.length > 0`: a frame can come back carrying an
-   * empty output, and "it reported and said nothing" is a different fact
-   * from "nothing about it ever reached this stream".
-   */
-  readonly reported: boolean;
-  /**
-   * Whether this child outlives the run that launched it.
-   *
-   * True only for `async`, and it is the whole reason `async-first/08` gave
-   * that launch a kind of its own: the other two end when this run ends, so
-   * a finished run is a finished child. A background worker's answer arrives
-   * on a *later* turn, which is why nothing here ever calls it finished.
-   */
-  readonly detached: boolean;
 }
 
 /**
@@ -225,4 +211,39 @@ export function taskAccountNote(task: {
     case 'fanout':
       return 'Nothing has come back under this task yet.';
   }
+}
+
+/**
+ * The same children, grouped by the card each one hangs off.
+ *
+ * The canvas half of `canvas-feels-right/07`. A chat panel shows the whole
+ * run at once, so `spawnedTasks` is the right shape there; a card can only
+ * draw the children *it* launched, so the canvas needs them keyed by owner.
+ * It is the same fold — one rule, two consumers — rather than a second walk
+ * over the rows with its own idea of what a child is.
+ *
+ * **A child with no card is dropped, not kept under its announced parent.**
+ * The projection writes through `setNodeRuntime`, which ignores an id it
+ * does not hold, so an unowned child would disappear with nothing able to
+ * notice. `spawnOwner` has already had its two chances — the announced
+ * parent, then the namespace head — and if neither named a node on the open
+ * document then this run is being watched from a canvas that does not
+ * contain the launcher, which is a real situation (a drill-in, a swapped
+ * document) and not an error.
+ *
+ * Insertion order is the run's own announcement order, and `Map` preserves
+ * it, so three fan-out children keep the order the run dispatched them in.
+ */
+export function spawnedByOwner(
+  rows: readonly SpawnedTaskRow[],
+  hasNode: (id: string) => boolean,
+): ReadonlyMap<string, readonly SpawnedTask[]> {
+  const byOwner = new Map<string, SpawnedTask[]>();
+  for (const task of spawnedTasks(rows, hasNode)) {
+    if (!hasNode(task.owner)) continue;
+    const held = byOwner.get(task.owner);
+    if (held) held.push(task);
+    else byOwner.set(task.owner, [task]);
+  }
+  return byOwner;
 }

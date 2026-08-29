@@ -12,6 +12,27 @@ interface FloatingOptions {
   padding?: number;
   /** Skip all measurement while closed. */
   enabled?: boolean;
+  /**
+   * An extra reason to re-measure, supplied by whoever knows about one.
+   *
+   * `scroll` and `resize` cover every way the DOM itself moves an anchor,
+   * and they are not enough on the canvas: JointJS pans and zooms by
+   * changing an SVG transform, which fires neither. A wheel-zoom over the
+   * paper therefore slid a node card out from under an open popover while
+   * the popover stayed put — measured live on `parallel-workers-join`
+   * (`canvas-feels-right/07`): the chip moved from y=406 to y=540 and the
+   * popover did not move at all.
+   *
+   * The fix belongs here as a *subscription* rather than as knowledge of the
+   * paper, because `design/` imports neither React-canvas nor JointJS. The
+   * caller hands in "tell me when the anchor may have moved" and the canvas
+   * layer is the only place that answers it — `PaperController.viewport
+   * .onChange`, which `NodeCard` already uses for exactly this reason.
+   *
+   * Returns its own unsubscribe, so a caller that re-creates the function on
+   * every render costs one re-subscription and never a leak.
+   */
+  subscribe?: (update: () => void) => () => void;
 }
 
 export interface FloatingPosition {
@@ -155,6 +176,7 @@ export function useFloating(
     offset = 6,
     padding = 8,
     enabled = true,
+    subscribe,
   }: FloatingOptions = {},
 ): FloatingPosition | null {
   const [position, setPosition] = useState<FloatingPosition | null>(null);
@@ -199,11 +221,14 @@ export function useFloating(
     // canvas viewport, which is what moves an anchored node under us.
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
+    // The third reason, and the only one the DOM cannot raise on its own.
+    const stop = subscribe?.(update);
     return () => {
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
+      stop?.();
     };
-  }, [enabled, update]);
+  }, [enabled, update, subscribe]);
 
   return position;
 }

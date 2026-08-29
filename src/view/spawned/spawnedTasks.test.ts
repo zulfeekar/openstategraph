@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { spawnedTasks, taskAccountNote, type SpawnedTaskRow } from './spawnedTasks';
+import { spawnedByOwner, spawnedTasks, taskAccountNote, type SpawnedTaskRow } from './spawnedTasks';
 
 /* ------------------------------------------------------------------ *
  * Every fixture below is a frame shape **measured on the wire** on
@@ -244,5 +244,141 @@ describe('taskAccountNote', () => {
 
   it('explains an empty fan-out account rather than showing a blank box', () => {
     expect(taskAccountNote({ kind: 'fanout', reported: false })).not.toBe('');
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * The canvas half of `canvas-feels-right/07`.
+ *
+ * The chat panel folds every child of the run into one row. A card can
+ * only draw the children *it* launched, so the projection is grouped by
+ * `owner` — and `owner` is already `spawnOwner`'s answer, which is a
+ * canvas node or nothing.
+ * ------------------------------------------------------------------ */
+
+describe('spawnedByOwner', () => {
+  it('hangs three fan-out children off the one card that dispatched them', () => {
+    // `launch-readiness/140`'s recorded limitation, stated as a test: `Send`
+    // creates tasks, not canvas nodes, so all three land on one owner. Three
+    // entries under one id is exactly what "three chips, one card" needs.
+    const byOwner = spawnedByOwner(
+      [
+        spawn({
+          node: 'lead1',
+          taskId: 'task-1',
+          spawn: { kind: 'fanout', label: 'analyst', instruction: 'Pros.' },
+        }),
+        spawn({
+          node: 'lead1',
+          taskId: 'task-2',
+          spawn: { kind: 'fanout', label: 'analyst', instruction: 'Cons.' },
+        }),
+        spawn({
+          node: 'lead1',
+          taskId: 'task-3',
+          spawn: { kind: 'fanout', label: 'analyst', instruction: 'Risks.' },
+        }),
+      ],
+      known('lead1', 'worker1'),
+    );
+
+    expect([...byOwner.keys()]).toEqual(['lead1']);
+    expect(byOwner.get('lead1')).toHaveLength(3);
+    expect(byOwner.get('lead1')?.map((child) => child.instruction)).toEqual([
+      'Pros.',
+      'Cons.',
+      'Risks.',
+    ]);
+  });
+
+  it('keeps two owners apart', () => {
+    const byOwner = spawnedByOwner(
+      [
+        spawn({
+          node: 'lead1',
+          taskId: 'task-1',
+          spawn: { kind: 'fanout', label: 'analyst', instruction: 'Pros.' },
+        }),
+        spawn({
+          node: 'agent1',
+          taskId: 'call_a',
+          spawn: { kind: 'subagent', label: 'counter', instruction: 'Count.' },
+        }),
+      ],
+      known('lead1', 'agent1'),
+    );
+
+    expect([...byOwner.keys()].sort()).toEqual(['agent1', 'lead1']);
+    expect(byOwner.get('agent1')?.[0]?.label).toBe('counter');
+  });
+
+  it('resolves a deep agent’s `parent: "model"` to the card, not to the step', () => {
+    // Rule 1, at the projection: a frame's own claim about where it is has
+    // been wrong before, and `model` is not a card anybody could hang a chip
+    // off. Grouping on the announced parent would have produced an owner no
+    // `NodeCard` will ever ask for, so the chip would simply never appear.
+    const byOwner = spawnedByOwner(
+      [
+        spawn({
+          node: 'model',
+          taskId: 'call_wzUt3jDD',
+          namespace: ['agent1:c00c273d-1f4e-4b0a-9d1c-2f6f2f0a7f11'],
+          spawn: { kind: 'subagent', label: 'counter', instruction: 'Count.' },
+        }),
+      ],
+      known('agent1'),
+    );
+
+    expect([...byOwner.keys()]).toEqual(['agent1']);
+  });
+
+  it('gives a mount no chip, because a mount already has a card', () => {
+    const byOwner = spawnedByOwner(
+      [
+        spawn({
+          node: 'team1',
+          taskId: 'task-9',
+          spawn: { kind: 'subgraph', label: 'research', instruction: 'Research.' },
+        }),
+      ],
+      known('team1'),
+    );
+
+    expect(byOwner.size).toBe(0);
+  });
+
+  it('carries each child’s own account through to the card', () => {
+    const byOwner = spawnedByOwner(
+      [
+        spawn({
+          node: 'lead1',
+          taskId: 'task-1',
+          spawn: { kind: 'fanout', label: 'analyst', instruction: 'Pros.' },
+        }),
+        step({ taskId: 'task-1', output: 'Broader talent pool.' }),
+      ],
+      known('lead1', 'worker1'),
+    );
+
+    expect(byOwner.get('lead1')?.[0]?.lines).toEqual(['Broader talent pool.']);
+    expect(byOwner.get('lead1')?.[0]?.reported).toBe(true);
+  });
+
+  it('drops a child whose owner is not on the open document', () => {
+    // A projection writes through `setNodeRuntime`, which silently ignores an
+    // unknown id — so an unowned child would vanish with no way to notice.
+    // Dropping it here makes "no card claims this" a property of the fold.
+    const byOwner = spawnedByOwner(
+      [
+        spawn({
+          node: 'somewhere-else',
+          taskId: 'task-1',
+          spawn: { kind: 'fanout', label: 'analyst', instruction: 'Pros.' },
+        }),
+      ],
+      known('lead1'),
+    );
+
+    expect(byOwner.size).toBe(0);
   });
 });

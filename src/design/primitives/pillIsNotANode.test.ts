@@ -79,3 +79,24 @@ describe('a pill survives the canvas', () => {
     expect(tsx).toMatch(/'Escape'/);
   });
 });
+
+describe('a pill keeps its popover on a chip the canvas moved', () => {
+  it('takes a subscription rather than knowing what a paper is', () => {
+    // `design/` imports neither React-canvas nor JointJS, so it cannot ask
+    // the paper anything. It is *told*, by whoever knows — which on the
+    // canvas is `CardSpawnedPills` handing in `paper.viewport.onChange`.
+    expect(tsx).toMatch(/subscribeAnchorMoved\?:\s*\(update: \(\) => void\) => \(\) => void/);
+    // Prose may name the paper — the reason is the point. Code may not
+    // reach for it.
+    expect(tsx).not.toMatch(/from '@(canvas|joint)/);
+    expect(tsx).not.toMatch(/viewport\./);
+  });
+
+  it('leaves a surface that passes nothing exactly as it was', () => {
+    // The chat panel has no such signal and needs none: its chips sit in an
+    // ordinary scrolling panel, which `scroll` and `resize` already cover.
+    expect(tsx).toMatch(
+      /\.\.\.\(subscribeAnchorMoved \? \{ subscribe: subscribeAnchorMoved \} : \{\}\)/,
+    );
+  });
+});
