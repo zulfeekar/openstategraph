@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "name": "Deep Desk",
+  "published": false,
+  "savedAt": "2026-08-29T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Deep Desk",
+    "settings": {
+      "purpose": "A deep agent with two declared subagents and one package tool, on its own, so delegation can be seen rather than inferred."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Question",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 200
+        }
+      },
+      {
+        "id": "registry",
+        "type": "tool.service-registry",
+        "title": "Service registry",
+        "data": {},
+        "position": {
+          "x": 340,
+          "y": 400
+        }
+      },
+      {
+        "id": "deep",
+        "type": "agent.llm",
+        "title": "Compliance desk",
+        "data": {
+          "tier": "deep",
+          "systemPrompt": "You decide whether a proposed production change is allowed, and who must sign it off.\n\nUse the service_registry tool for every service the request names. Hand the two named questions to your subagents rather than answering them yourself.\n\nAnswer in at most eight lines: who must approve, which registry facts forced that, and what is still unknown. Never name a service the registry does not hold.",
+          "subagents": [
+            {
+              "id": "s1",
+              "name": "data-classifier",
+              "description": "Says what data classification a change touches, and what that implies for sign-off.",
+              "systemPrompt": "You are given one service name and nothing else. Report its data classification from the service_registry tool and, in one further sentence, who that classification requires as a reviewer. Never guess.",
+              "tools": "inherit",
+              "mode": "sync"
+            },
+            {
+              "id": "s2",
+              "name": "window-checker",
+              "description": "Says whether a service may be deployed outside a change-advisory-board window.",
+              "systemPrompt": "You are given one service name and nothing else. Report its SLO and deployment style from the service_registry tool, then say in one sentence whether a change-advisory-board window is required. Never guess.",
+              "tools": "inherit",
+              "mode": "sync"
+            }
+          ]
+        },
+        "position": {
+          "x": 340,
+          "y": 200
+        }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Answer",
+        "data": {},
+        "position": {
+          "x": 700,
+          "y": 200
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "deep",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "registry",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "deep",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "deep",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      }
+    ]
+  }
+}

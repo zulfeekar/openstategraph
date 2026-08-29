@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "name": "Static Cycle",
+  "published": false,
+  "savedAt": "2026-08-29T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Static Cycle",
+    "settings": { "purpose": "An all-static cycle: A feeds B, B feeds A, and no conditional edge is anywhere in it. The editor cannot draw this because B's edge is a second producer on A's single-connection prompt port. The question is whether anything else refuses it." },
+    "nodes": [
+      { "id": "in1", "type": "input.text", "title": "Question", "data": {}, "position": { "x": 40, "y": 300 } },
+      { "id": "a", "type": "agent.llm", "title": "A", "data": { "systemPrompt": "Reply with one short sentence, then stop." }, "position": { "x": 360, "y": 300 } },
+      { "id": "b", "type": "agent.llm", "title": "B", "data": { "systemPrompt": "Reply with one short sentence, then stop." }, "position": { "x": 700, "y": 300 } },
+      { "id": "out1", "type": "output.formatted", "title": "Answer", "data": {}, "position": { "x": 1040, "y": 300 } }
+    ],
+    "edges": [
+      { "source": { "nodeId": "in1", "portId": "text" }, "target": { "nodeId": "a", "portId": "prompt" } },
+      { "source": { "nodeId": "a", "portId": "result" }, "target": { "nodeId": "b", "portId": "prompt" } },
+      { "source": { "nodeId": "b", "portId": "result" }, "target": { "nodeId": "a", "portId": "prompt" } },
+      { "source": { "nodeId": "a", "portId": "result" }, "target": { "nodeId": "out1", "portId": "result" } }
+    ]
+  }
+}
