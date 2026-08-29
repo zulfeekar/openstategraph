@@ -836,6 +836,11 @@ export function AskPanel({
                         pathSlugs: event.pathSlugs,
                         activeNode: event.activeNode,
                         durationMs,
+                        // The other clock, and the one the timeline draws
+                        // (`launch-readiness` 108). `durationMs` above is when
+                        // this tab saw the frame; this is when the server
+                        // built it.
+                        elapsedMs: event.elapsedMs,
                         output: event.output,
                         // A grader that reached its verdict without invoking a
                         // model says so here (`production-ready` 92); empty on
@@ -879,6 +884,7 @@ export function AskPanel({
                         internal: false,
                         namespace: event.namespace,
                         durationMs: 0,
+                        elapsedMs: event.elapsedMs,
                         output: null,
                         spawn: {
                           kind: event.kind,
