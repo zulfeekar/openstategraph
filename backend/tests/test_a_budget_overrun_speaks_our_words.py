@@ -50,8 +50,9 @@ VENDOR_WORDS: tuple[str, ...] = (
 #: literal, because it is the smallest number `RunRequest` will accept and a
 #: smaller one is a 422 at the HTTP doors rather than an overrun — and because
 #: no library number of LangGraph's may be written down here at all
-#: (`test_a_library_default_is_never_literalised.py`). The cycle below cannot
-#: settle at any budget, so the smallest legal one is also the cheapest.
+#: (`test_a_library_default_is_never_literalised.py`). The document below is
+#: longer than this by four supersteps, so the smallest legal budget is also
+#: the cheapest one to overrun.
 BUDGET = MIN_STEP_BUDGET
 
 
@@ -63,30 +64,47 @@ def _e(s: str, sp: str, t: str, tp: str) -> dict[str, Any]:
     return {"source": {"nodeId": s, "portId": sp}, "target": {"nodeId": t, "portId": tp}}
 
 
-def _document() -> dict[str, Any]:
-    """A cycle that can never settle, and reaches no model at all.
+#: How many `function.format_report` nodes stand between the input and the
+#: output. One superstep each, so the run needs `CHAIN + 2` and has `BUDGET`
+#: — over the ceiling by a comfortable margin and still under a tenth of a
+#: second, because not one of these nodes reaches a model.
+CHAIN = 14
 
-    Two `function.format_report` nodes feeding each other: an all-static cycle,
-    which `launch-readiness/177` is separately about *compiling*. Here it is
-    only the cheapest way to make a real graph spend a real budget without a
-    provider — the overrun is LangGraph's, raised from `ainvoke`/`astream`
-    exactly as it is on a live document.
+
+def _document() -> dict[str, Any]:
+    """A graph that is simply longer than the budget, and reaches no model.
+
+    It was a two-node all-static cycle until `launch-readiness/177` landed the
+    rule that such a document does not compile — `always_taken_cycles` puts a
+    finding on `plan.warnings`, and the MCP door refuses a document that
+    carries one before it can run. That rule is right and is not weakened
+    here; what it means is that the cheapest way to spend a real budget is no
+    longer a loop.
+
+    So: a straight chain of `CHAIN` mechanical nodes. It compiles clean
+    (`validate_document` answers `(True, [])`), it terminates in principle,
+    and it exhausts `BUDGET` supersteps before it gets to the end. The
+    overrun is LangGraph's, raised from `ainvoke`/`astream` exactly as it is
+    on a live document — which is the only property this file needs, and the
+    one a cycle was only ever a shortcut to.
     """
+    chain = [f"s{i}" for i in range(CHAIN)]
+    nodes = [_n("in1", "input.text")]
+    nodes += [_n(step, "function.format_report") for step in chain]
+    nodes.append(_n("out1", "output.formatted"))
+
+    edges = [_e("in1", "text", chain[0], "candidate")]
+    edges += [
+        _e(source, "report", target, "candidate")
+        for source, target in zip(chain, chain[1:])
+    ]
+    edges.append(_e(chain[-1], "report", "out1", "result"))
+
     return {
         "version": 2,
-        "name": "Never settles",
-        "nodes": [
-            _n("in1", "input.text"),
-            _n("a", "function.format_report"),
-            _n("b", "function.format_report"),
-            _n("out1", "output.formatted"),
-        ],
-        "edges": [
-            _e("in1", "text", "a", "candidate"),
-            _e("a", "report", "b", "candidate"),
-            _e("b", "report", "a", "candidate"),
-            _e("a", "report", "out1", "result"),
-        ],
+        "name": "Outruns its budget",
+        "nodes": nodes,
+        "edges": edges,
     }
 
 
@@ -114,7 +132,7 @@ def workflows_root(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def package(workflows_root: Path) -> Path:
-    pkg = workflows_root / "never-settles"
+    pkg = workflows_root / "outruns-its-budget"
     pkg.mkdir()
     (pkg / "workflow.json").write_text(json.dumps({"document": _document()}))
     return pkg
@@ -188,6 +206,12 @@ class TestTheStreamingDoor:
 
 
 class TestTheMcpDoor:
+    """The strictest of the four: `run` calls `validate_document` first and
+    answers *"The document does not compile."* rather than running a graph
+    with a finding on it. That is why this door — and only this door — went
+    red when `launch-readiness/177` made the old fixture a finding: the other
+    three ran it and overran exactly as before."""
+
     def test_the_error_is_ours(self, store: Path, workflows_root: Path) -> None:
         from openstategraph.api.services import WorkflowServices
         from openstategraph.mcp_server import WorkflowRuns
@@ -221,7 +245,21 @@ class TestAnOverrunIsARowOfItsOwn:
         """`failed` means a node wrote the failure sentinel; none did. A
         finished `run` it is not either — its answer is nothing, and
         `launch-readiness/99` would learn from a blank. So a kind of its own,
-        which is why `RunRecord.kind` is a tolerant string (`44`)."""
+        which is why `RunRecord.kind` is a tolerant string (`44`).
+
+        This assertion read `True` for one afternoon, and the assertion was
+        right both times. `RunTurn._assemble` derives `failed` from the
+        door's own compile failures as well as the run's
+        (`bool(self._failures or health.failures)`), and the old fixture's
+        all-static cycle had become a compile finding on `plan.warnings`
+        (`launch-readiness/177`) — which `load_workflow` carries into
+        `failure_warnings` and the library door hands to the turn. So the row
+        was reporting a document that could not compile, honestly, and the
+        thing that had changed was the fixture rather than the answer. On a
+        document that compiles, an overrun is `failed=False`: the only
+        readers of the column are `runs list`, which prints `failed` *instead
+        of* the kind and would have hidden `exhausted` outright, and the
+        editor's past-run badge."""
         from openstategraph.loader import load_workflow
         from openstategraph.run_journal import EXHAUSTED_KIND
 
