@@ -869,7 +869,12 @@ export function AskPanel({
             taskId: event.taskId,
             ...(event.namespace ? { namespace: event.namespace } : {}),
             output: null,
-            spawn: { kind: event.kind, label: event.label, instruction: event.instruction },
+            spawn: {
+              kind: event.kind,
+              label: event.label,
+              instruction: event.instruction,
+              spawnId: event.spawnId,
+            },
           });
           projectSpawnedNow();
           setTurns((all) =>
@@ -891,6 +896,7 @@ export function AskPanel({
                           kind: event.kind,
                           label: event.label,
                           instruction: event.instruction,
+                          spawnId: event.spawnId,
                         },
                       },
                     ],
@@ -899,6 +905,40 @@ export function AskPanel({
             ),
           );
           scrollToEnd();
+        } else if (event.type === 'settled') {
+          // The other end of the bar (`memory-and-replay` 54). It closes the
+          // row the spawn opened rather than adding one: a child that started
+          // and a child that stopped are one thing on this panel, and a second
+          // row would read as a second child.
+          //
+          // Matched on `spawnId` and on nothing else. The label is shared —
+          // one fan-out dispatches three `impact-analyst`s — and `taskId` is
+          // `null` for a mounted workflow, so either would close a bar the run
+          // did not close.
+          //
+          // Like the spawn, it buys no time: it moves neither `lastFrameAt`
+          // nor the glow. What it settles is what the row *says*, and the bar
+          // it belongs to is 50's to draw from the two `elapsedMs` stamps.
+          //
+          // Generic over the row rather than written twice: the panel keeps
+          // the same announcement in two shapes — the chip rows the canvas is
+          // projected from, and the trace rows the record is rendered from —
+          // and both close on the same field.
+          const closed = <T extends { readonly spawn?: { readonly spawnId?: string } }>(
+            row: T,
+          ): T =>
+            row.spawn && row.spawn.spawnId === event.spawnId
+              ? ({ ...row, spawn: { ...row.spawn, outcome: event.outcome } } as T)
+              : row;
+          for (let i = 0; i < spawnRows.length; i += 1) {
+            spawnRows[i] = closed(spawnRows[i] as SpawnedTaskRow);
+          }
+          projectSpawnedNow();
+          setTurns((all) =>
+            all.map((turn) =>
+              turn.id === id ? { ...turn, activity: turn.activity.map(closed) } : turn,
+            ),
+          );
         } else if (event.type === 'token') {
           // Tokens move the glow too (ticket 02). This is what makes the
           // highlight say "is working" instead of "has finished": an `update`

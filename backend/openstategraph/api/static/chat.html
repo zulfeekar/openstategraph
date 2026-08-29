@@ -1372,6 +1372,9 @@ async function stream(path, body, el, signal) {
   // child's own frames carry (`taskId` for a Send-dispatched worker, the
   // namespace head for a mounted subgraph).
   const tlNames = {};
+  // `spawnId` -> the row that announced that child, so the `settled` frame
+  // that closes it can finish the line it already wrote.
+  const spawnRows = {};
   /* Did this stream say how it ended? The server's contract is that every
    * stream it can still write to ends with `done`, `interrupt` or `error`
    * (see `_stream_run`). The one case it cannot cover is its own death — a
@@ -1531,7 +1534,28 @@ async function stream(path, body, el, signal) {
             // rather than a bare task id or a checkpoint namespace.
             if (d.taskId) tlNames["task:" + d.taskId] = d.label;
             if (d.namespace && d.namespace[0]) tlNames["ns:" + d.namespace[0]] = d.label;
+            if (d.spawnId) spawnRows[d.spawnId] = row;
             el.scrollIntoView({ block: "end" });
+          } else if (event === "settled") {
+            // The other end of the child (`memory-and-replay` 54). It finishes
+            // the row the spawn wrote rather than adding one: a child that
+            // started and the same child stopping are one thing to read.
+            //
+            // Joined on `spawnId` alone. A fan-out dispatches several children
+            // under one label, and a mounted workflow carries no `taskId` at
+            // all, so either would finish a row belonging to somebody else.
+            const row = spawnRows[d.spawnId];
+            // `ok` says nothing a reader needs — the row is already there and
+            // the run is already moving on. The other three are the ones that
+            // change what the row means, and `detached` is the one this page
+            // exists to say: a background worker outlives this answer.
+            const note = d.outcome === "error" ? "never ran"
+              : d.outcome === "detached" ? "still running"
+              : d.outcome === "unknown" ? "no ending recorded"
+              : "";
+            if (row && note) {
+              row.textContent = row.dataset.base + " · " + note;
+            }
           } else if (event === "token") {
             clearWaiting(); // the answer is typing itself out
             // A token frame moves the marker too (ticket 02) — and it is the

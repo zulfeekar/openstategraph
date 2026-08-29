@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 from openstategraph.api.diagram import workflow_mermaid  # noqa: E402
 from openstategraph.api.burst_recorder import BurstRecorder  # noqa: E402
+from openstategraph.delegations import DELEGATION_TOOL, delegation_outcome  # noqa: E402
 from openstategraph.api.frame_clock import (  # noqa: E402
     FRAME_CLOCK_FIELDS,
     bind_frame_clock,
@@ -193,9 +194,34 @@ def _is_tool_message(message: Any) -> bool:
 #: running and this run has already finished"* are different situations, and
 #: this file's own theme is that two situations must never render identically.
 _SPAWNING_TOOLS: dict[str, str] = {
-    "task": "subagent",
+    # Imported rather than spelled: `delegations.py` claims to be *"the one
+    # place this repository spells it"*, and until `memory-and-replay` 54 that
+    # was a second copy sitting in this dict — which matters now that the close
+    # frame below reads that module's answers back.
+    DELEGATION_TOOL: "subagent",
     "start_async_task": "async",
 }
+
+#: What a `settled` frame may say happened to a child, and the whole set.
+#:
+#: **One frame kind with a value, not two kinds** (`memory-and-replay` 54).
+#: AG-UI has `SUBAGENT_FINISHED` and `SUBAGENT_ERROR`; our `error` frame is
+#: terminal for the *whole run*, so a second frame kind that ends one child
+#: while the run continues would turn `TERMINAL_EVENTS` into a rule with an
+#: exception in it. `launch-readiness/176` settled the analogous question the
+#: same way — a new value, not a new class.
+#:
+#: - **`ok`** — the completion was observed on this stream.
+#: - **`error`** — observed, and it reported that no worker ran. A worker
+#:   reporting bad news reported it successfully; this is the tool rail
+#:   failing or `deepagents` refusing an undeclared `subagent_type`.
+#: - **`detached`** — an `async` child, still running on a desk outside this
+#:   run when the stream ended. Not a failure and not an unknown: we know
+#:   exactly what happened, and it is that the run stopped waiting.
+#: - **`unknown`** — the stream reached its end with no account of this child.
+#:   The run died, or a mount never reported. A reader may conclude nothing
+#:   about the child from it except that this recording does not say.
+SPAWN_OUTCOMES: tuple[str, ...] = ("ok", "error", "detached", "unknown")
 
 
 class SpawnWatcher:
@@ -224,6 +250,41 @@ class SpawnWatcher:
 
     Stateful only in the "have I seen this id before" sense, so one instance
     lives exactly as long as one run.
+
+    ## And every one of them is closed — `memory-and-replay` 54
+
+    `inspect` opens; `settled` closes what a frame reveals to have ended; and
+    `abandoned` closes, once, whatever the stream reached its end still owing.
+    A bar needs two ends, and the fallback — end it where the next frame
+    arrives — is the arrival-clock guess `46` exists to stop.
+
+    **`spawnId` is the join, and it is a new field rather than a reused one.**
+    `taskId` is a *domain* id (`48`'s trap: LangGraph's own task id is a
+    runtime UUID that never enters state) and it joins three of the four kinds
+    honestly — a `fanout` child's is the orchestrator's own subtask id, a
+    `subagent`'s and an `async`'s is the tool call id. It joins the fourth not
+    at all: a `subgraph` spawn has `taskId: null`. A field that is the join for
+    three kinds and absent for the fourth is not a join, so the watcher mints
+    one that is always present on both halves, and a reader matches on it
+    without first having to know which kind it is looking at.
+
+    **Three kinds close by observation; one cannot.** Measured, not assumed —
+    live on `.scratch/stress-2026-08-29` against `ollama:gpt-oss:120b-cloud`:
+
+    | kind | what ends it | seen |
+    | --- | --- | --- |
+    | `fanout` | its id appears in `worker_results` | `stress-review`, three children all labelled `impact-analyst`, closed on `task-1` / `task-1-1` / `task-2-1` |
+    | `subagent` | the `task` `ToolMessage` bearing its call id | `stress-deep`, `task/76783c85…` out at 3.2 s and back at 5.1 s |
+    | `subgraph` | its own node reporting at the top level | `stress-review`, the `audit` mount, 73 frames later |
+    | `async` | **nothing on this stream** | by design — the parent never waits |
+
+    The `async` row is the finding, not an omission. `start_async_task` hands
+    back an id and the child runs on a desk outside the run; its terminal
+    status is visible here only if the agent happens to loop again and the desk
+    is polled, so a close driven by observation would fire on some runs and not
+    others — the very defect (*a lane that hangs open and nothing says why*)
+    one level down. It is closed by `abandoned` as `detached` instead, which is
+    a fact about this run rather than a guess about the child.
     """
 
     def __init__(self, node_ids_by_name: dict[str, str] | None = None) -> None:
@@ -241,6 +302,21 @@ class SpawnWatcher:
         self._tasks: set[str] = set()
         self._tool_calls: set[str] = set()
         self._last_top_node: str = ""
+        #: `spawnId -> the frame that announced it`, for the children still
+        #: unaccounted for. A close echoes the open frame's own `kind`,
+        #: `parent`, `label`, `taskId` and `namespace` out of here, so a
+        #: reader that does not want to join can still render one row, and
+        #: the two halves cannot disagree about which lane they are on.
+        self._open: dict[str, dict[str, Any]] = {}
+        #: The three joins, one per closable kind. Separate maps rather than
+        #: one, because the *same string* is legitimately a subtask id in one
+        #: run and a tool call id in another, and a single map would let a
+        #: worker's result close a delegation.
+        self._by_result: dict[str, str] = {}
+        self._by_call: dict[str, str] = {}
+        self._by_node: dict[str, str] = {}
+        self._minted = 0
+        self._swept = False
 
     def inspect(
         self,
@@ -266,14 +342,20 @@ class SpawnWatcher:
             self._namespaces.add(mounted)
             mounted = self._known.get(mounted, mounted)
             spawns.append(
-                {
-                    "kind": "subgraph",
-                    "parent": self._last_top_node or mounted,
-                    "label": mounted,
-                    "instruction": "",
-                    "taskId": None,
-                    "namespace": ns,
-                }
+                self._announce(
+                    {
+                        "kind": "subgraph",
+                        "parent": self._last_top_node or mounted,
+                        "label": mounted,
+                        "instruction": "",
+                        "taskId": None,
+                        "namespace": ns,
+                    },
+                    # The mounted node's own id, which is what it reports
+                    # under when it finishes at the top level.
+                    self._by_node,
+                    mounted,
+                )
             )
 
         for owner, plan in (update.get("subtasks") or {}).items():
@@ -285,14 +367,18 @@ class SpawnWatcher:
                     continue
                 self._tasks.add(task_id)
                 spawns.append(
-                    {
-                        "kind": "fanout",
-                        "parent": str(owner),
-                        "label": str(task.get("archetype") or "") or task_id,
-                        "instruction": _snippet(task.get("instruction")),
-                        "taskId": task_id,
-                        "namespace": ns,
-                    }
+                    self._announce(
+                        {
+                            "kind": "fanout",
+                            "parent": str(owner),
+                            "label": str(task.get("archetype") or "") or task_id,
+                            "instruction": _snippet(task.get("instruction")),
+                            "taskId": task_id,
+                            "namespace": ns,
+                        },
+                        self._by_result,
+                        task_id,
+                    )
                 )
 
         for message in update.get("messages") or []:
@@ -308,6 +394,7 @@ class SpawnWatcher:
                 args = call.get("args")
                 args = args if isinstance(args, dict) else {}
                 spawns.append(
+                    self._announce(
                     {
                         "kind": kind,
                         "parent": node_id,
@@ -324,12 +411,147 @@ class SpawnWatcher:
                         # launch to answer without correlating anything.
                         "taskId": call_id or None,
                         "namespace": ns,
-                    }
+                    },
+                    # `async` registers no join at all — nothing on this
+                    # stream ever ends it. See the class docstring's table.
+                    self._by_call if kind == "subagent" else None,
+                    call_id,
+                    )
                 )
 
         if not internal and not ns:
             self._last_top_node = node_id
         return spawns
+
+    def settled(
+        self,
+        node_id: str,
+        namespace: tuple[str, ...] | list[str],
+        update: dict[str, Any],
+        internal: bool,
+    ) -> list[dict[str, Any]]:
+        """Every child this frame reveals to have **ended**, in the order shown.
+
+        The mirror of `inspect`, called on the same frames and one line after
+        it — the open frame is emitted *before* the update that revealed it, so
+        a child's steps read as arriving after the row that announced it, and
+        the close is emitted *after*, so the child's last step reads as
+        arriving before the row that ended it.
+
+        **Strict in trusting.** A result, an answer or a node id that matches
+        nothing open closes nothing: a close frame with no open frame is not a
+        close, it is a lane appearing out of nowhere at the moment it
+        disappears.
+        """
+        closed: list[dict[str, Any]] = []
+
+        # A dispatched worker's own result, keyed by the id the plan minted.
+        for task_id in (update.get("worker_results") or {}):
+            row = self._close(self._by_result, str(task_id), "ok")
+            if row is not None:
+                closed.append(row)
+
+        # A delegation's answer, keyed by the call that asked for it —
+        # `launch-readiness/178`'s reading, reused rather than re-derived.
+        for message in update.get("messages") or []:
+            outcome = delegation_outcome(message)
+            if outcome is None:
+                continue
+            call_id = str(getattr(message, "tool_call_id", "") or "")
+            row = self._close(self._by_call, call_id, outcome)
+            if row is not None:
+                closed.append(row)
+
+        # A mounted workflow reporting as an ordinary step of the canvas that
+        # mounted it. Top level only: a frame still inside the child is the
+        # child working, not the child finishing.
+        if not internal and not list(namespace):
+            row = self._close(self._by_node, node_id, "ok")
+            if row is not None:
+                closed.append(row)
+
+        return closed
+
+    def abandoned(self) -> list[dict[str, Any]]:
+        """Every child still open, closed once, as the stream ends.
+
+        Spent on the first call, because a run reaches its terminal frame by
+        one path but the code has two — the fold's own ending and the wrapper's
+        error handler — and a sweep that could run twice would double every
+        lane.
+
+        **What a reader may conclude, and what they may not.** `detached` is a
+        fact: an `async` child was still running on its own desk, and this run
+        stopped waiting for it by design. `unknown` is the absence of one: the
+        recording ended with no account. Neither says the child failed.
+
+        And the case with no frame at all is still real and still the client's
+        to name: a stream that dies with the connection emits nothing after
+        `GeneratorExit` — `_stream_run`'s docstring is explicit — so **an open
+        bar at the end of a body with no terminal frame means the recording
+        ended, not the child.** That is the same distinction `47` drew with its
+        `capped` marker, and it costs nothing here because both clients already
+        treat a missing terminal frame as a dropped connection.
+        """
+        if self._swept:
+            return []
+        self._swept = True
+        rows = [
+            self._settled_frame(row, "detached" if row["kind"] == "async" else "unknown")
+            for row in self._open.values()
+        ]
+        self._open.clear()
+        return rows
+
+    # -- minting and matching ------------------------------------------------
+
+    def _announce(
+        self,
+        spawn: dict[str, Any],
+        join: dict[str, str] | None,
+        key: str,
+    ) -> dict[str, Any]:
+        """Give one spawn its id, remember it, and index it by what will end it.
+
+        `join=None` is an `async` child: announced, remembered, and closable by
+        nothing but the sweep.
+        """
+        spawn_id = f"spawn-{self._minted}"
+        self._minted += 1
+        spawn["spawnId"] = spawn_id
+        self._open[spawn_id] = spawn
+        if join is not None and key:
+            join[key] = spawn_id
+        return spawn
+
+    def _close(self, join: dict[str, str], key: str, outcome: str) -> dict[str, Any] | None:
+        """The close frame for `key`, or nothing if it names no open child."""
+        spawn_id = join.pop(key, "") if key else ""
+        spawn = self._open.pop(spawn_id, None) if spawn_id else None
+        return None if spawn is None else self._settled_frame(spawn, outcome)
+
+    @staticmethod
+    def _settled_frame(spawn: dict[str, Any], outcome: str) -> dict[str, Any]:
+        """One child's ending, echoing the frame that announced its beginning.
+
+        **No result, and that is the audience decision rather than an
+        omission.** AG-UI's `SUBAGENT_FINISHED` carries one. What a child
+        produced already reaches the reader on the frame that revealed the
+        completion — a worker's own `update.output`, redacted a value at a
+        time — so a copy here would be a second spelling of one fact and the
+        only one of the two a future edit could forget to redact. `outcome` is
+        what a close frame adds, and it is identical for both audiences: that a
+        child finished is not a disclosure, exactly as its cadence is not.
+        """
+        return {
+            "spawnId": spawn["spawnId"],
+            "kind": spawn["kind"],
+            "parent": spawn["parent"],
+            "label": spawn["label"],
+            "taskId": spawn["taskId"],
+            "namespace": spawn["namespace"],
+            "outcome": outcome,
+        }
 
 
 class ActiveNodeResolver:
@@ -821,7 +1043,11 @@ def _sse(event: str, data: dict[str, Any]) -> str:
 #: while a node is *still working* (ticket 22). `update` fires on completion,
 #: so between two of them a tool that spends forty seconds paging an API
 #: produced nothing at all and the run read as stopped.
-PROGRESS_EVENTS: tuple[str, ...] = ("update", "token", "progress", "spawn")
+#:
+#: `settled` sits beside `spawn` for the same reason `progress` sits beside
+#: `token`: it is the *other* end of a child, and a run whose last frame was a
+#: child finishing is a run still going.
+PROGRESS_EVENTS: tuple[str, ...] = ("update", "token", "progress", "spawn", "settled")
 
 #: The event names that *end* a stream. Exactly one of these is the last
 #: frame of every stream that lives long enough to send one — see
@@ -890,7 +1116,16 @@ _PAYLOAD_FIELDS: dict[str, tuple[str, ...]] = {
         # field exists to draw.
         "detail",
     ),
-    "spawn": ("kind", "parent", "label", "instruction", "taskId", "namespace"),
+    "spawn": (
+        "spawnId", "kind", "parent", "label", "instruction", "taskId", "namespace",
+    ),
+    # The other end of the bar (`memory-and-replay` 54). `spawnId` joins it to
+    # the `spawn` frame; `outcome` is one of `SPAWN_OUTCOMES`; the rest is
+    # echoed from the open frame so a reader that does not join can still
+    # render a row. No `result` — see `SpawnWatcher._settled_frame`.
+    "settled": (
+        "spawnId", "kind", "parent", "label", "taskId", "namespace", "outcome",
+    ),
     "interrupt": ("threadId", "node", "message", "candidate", "verdict", "reason", "check"),
     "done": (
         "threadId", "answer", "decisions", "routes", "outputs",
@@ -1149,6 +1384,12 @@ async def _stream_run(
     # The audience travels with the bursts because a developer run's cadence
     # carries developer content, and a reader has to be able to refuse it.
     recorder = BurstRecorder(audience=getattr(audience, "value", str(audience)))
+    # **The children this run announced** (`memory-and-replay` 54). Owned here
+    # rather than inside the fold, for the reason the recorder above is: this
+    # is the wrapper every terminal path goes through, and a lane left open
+    # when the stream ends has to be closed on all of them — the fold's own
+    # ending *and* the error handler below, which the fold never reaches.
+    spawns = SpawnWatcher(node_ids_by_name)
     frames = _run_frames(
         graph,
         graph_input,
@@ -1163,6 +1404,7 @@ async def _stream_run(
         run_context,
         turn=turn,
         recorder=recorder,
+        spawns=spawns,
     )
     ended = False
     # What a stop would do to the step in flight, kept as the frames go past
@@ -1184,6 +1426,22 @@ async def _stream_run(
                 frame = await stream.__anext__()
             except StopAsyncIteration:
                 break
+            if _is_terminal(frame):
+                # Before the ending, never after it: a client that stops
+                # reading at the terminal frame — which the protocol entitles
+                # it to do — would otherwise never see the lanes close.
+                #
+                # **Built before the first is yielded, not one per yield**
+                # (`launch-readiness` 108, found again here on a live run).
+                # This generator is resumed from a fresh context per frame, so
+                # a `_sse` call made *after* a yield runs with no clock bound
+                # and mints no stamp: on a four-child run the first sweep frame
+                # carried `seq: 79` and the second carried none at all. The
+                # bind above covers this resumption; the whole sweep has to be
+                # built inside it.
+                closes = [_sse("settled", close) for close in spawns.abandoned()]
+                for close in closes:
+                    yield close
             ended = ended or _is_terminal(frame)
             cancellable = _frame_interruptible(frame, cancellable)
             _record_chunk(recorder, frame)
@@ -1316,6 +1574,19 @@ async def _stream_run(
                 if raw_name:
                     node = node_ids_by_name.get(raw_name, raw_name)
                     detail = f'Node "{node}" failed and produced no result. {detail}'
+            # The lanes die with the run, and something has to say so: an
+            # `error` frame with three bars still open reads as three children
+            # that are still working (`memory-and-replay` 54). `unknown` is the
+            # honest word — the recording ended, and it does not say what the
+            # child did.
+            #
+            # Bound and built in one go for the reason the sweep above is:
+            # nothing rebinds the clock on the failure path, and a frame built
+            # after a yield is built in somebody else's context.
+            bind_frame_clock(clock)
+            closes = [_sse("settled", close) for close in spawns.abandoned()]
+            for close in closes:
+                yield close
             yield _sse("error", {"threadId": thread_id, "detail": detail})
         return
     finally:
@@ -1367,6 +1638,7 @@ async def _run_frames(
     run_context: Mapping[str, Any] | None = None,
     turn: "RunTurn | None" = None,
     recorder: "BurstRecorder | None" = None,
+    spawns: "SpawnWatcher | None" = None,
 ) -> Any:
     """Drives one `graph.astream()` call and yields SSE frames.
 
@@ -1420,7 +1692,11 @@ async def _run_frames(
     turn = turn if turn is not None else RunTurn(silent=True)
 
     answer = ""
-    spawns = SpawnWatcher(node_ids_by_name)
+    # Owned by `_stream_run` when there is one, for the same reason `recorder`
+    # is (`memory-and-replay` 54): the wrapper is the frame that sees every
+    # terminal path, and it is the one that has to close the lanes this fold
+    # left open. A caller driving the fold directly gets its own.
+    spawns = spawns if spawns is not None else SpawnWatcher(node_ids_by_name)
     active = ActiveNodeResolver(node_ids_by_name)
     # Which of this graph's nodes a stop actually cancels, in canvas ids,
     # resolved once per run rather than per frame (`async-first/07`). Asked of
@@ -1888,6 +2164,12 @@ async def _run_frames(
                             **skipped_check,
                         },
                     )
+                    # …and the mirror of the spawn moment above. Emitted
+                    # *after* the frame that revealed the ending, so a child's
+                    # last step reads as arriving before the row that closed
+                    # it — the same rule as the spawn, run the other way.
+                    for close in spawns.settled(node_id, namespace, update, is_internal):
+                        yield _sse("settled", close)
             elif mode == "custom":
                 # A step saying something about itself mid-execution (22).
                 #
