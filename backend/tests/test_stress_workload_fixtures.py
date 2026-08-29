@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from openstategraph.compile.workflow_compiler import WorkflowCompiler
 from openstategraph.validation import validate_document
 
 
@@ -129,6 +130,56 @@ class TestStressFixturesCompile:
             )
             assert has_ghost_mount, "stress-bad-ghost-mount should have a mount to non-existent package"
 
+        elif package_name == "stress-bad-two-producers":
+            # `launch-readiness/174`: two desks writing into ONE output port is
+            # the shape `capacityRule` refuses to *draw* and the compiler
+            # accepts — and it is the shape that WORKS, returning both halves,
+            # which is the inversion 174 found. So the assertion is not
+            # "it compiles" but that it is the fan-in, and that the two
+            # documents 174 reconciled still say the same thing.
+            assert is_valid, f"the forbidden fan-in still compiles: {warnings}"
+            into_out = [
+                e
+                for e in document.get("edges", [])
+                if (e.get("target") or {}).get("nodeId") == "out1"
+            ]
+            assert len(into_out) == 2, (
+                "stress-bad-two-producers must keep TWO producers on one output "
+                f"port — that is the whole fixture. Found {len(into_out)}."
+            )
+
+        elif package_name == "stress-bad-fallback":
+            # `launch-readiness/184`, filed the day this fixture was committed.
+            # Its router declares `fallback: "nonexistent-branch"`, and the
+            # document validates clean. This assertion pins the DEFECT, not the
+            # desired behaviour: when 184 lands, this test goes red and whoever
+            # fixes it updates the expectation here. A fixture built to show a
+            # defect must never be asserted as "compiles successfully" — that
+            # encodes the defect as correct and turns a future regression green.
+            branch_ids = {
+                b.get("id")
+                for n in document.get("nodes", [])
+                if n.get("type") == "route.classifier"
+                for b in n.get("data", {}).get("branches", [])
+            }
+            fallback = next(
+                (
+                    n.get("data", {}).get("fallback")
+                    for n in document.get("nodes", [])
+                    if n.get("type") == "route.classifier"
+                ),
+                None,
+            )
+            assert fallback not in branch_ids, (
+                "stress-bad-fallback must keep a fallback naming no branch — "
+                "that is the whole fixture."
+            )
+            assert is_valid and not warnings, (
+                "Known gap, launch-readiness/184: a fallback naming a branch "
+                "that does not exist still validates clean. If this assertion "
+                "just failed, 184 was fixed — assert the refusal instead."
+            )
+
         else:
             # All other fixtures should compile successfully
             assert is_valid, (
@@ -195,3 +246,34 @@ class TestStressFixturesCompile:
         # Validate successfully (the defect is in execution/reporting, not compilation)
         is_valid, warnings = validate_document(document)
         assert is_valid, f"stress-parallel-drop should compile. Warnings: {warnings}"
+
+
+class TestEveryFixtureReachesTheCompiler:
+    """Validation is not compilation, and this file claimed both.
+
+    `validate_document` reads the document; `WorkflowCompiler.plan` is where
+    `launch-readiness/177`'s `always_taken_cycles` actually lives and where a
+    document that reads well can still fail to build. A fixture set that only
+    validates would have missed the rule it was collected to protect.
+    """
+
+    @pytest.mark.parametrize(
+        "package_name,package_path", get_stress_packages(), ids=lambda v: str(v)
+    )
+    def test_the_plan_agrees_with_the_document(
+        self, package_name: str, package_path: Path
+    ) -> None:
+        raw_doc = json.loads((package_path / "workflow.json").read_text())
+        document = raw_doc.get("document", raw_doc)
+
+        plan = WorkflowCompiler().plan(document)
+        is_valid, _ = validate_document(document)
+
+        # The two doors must not disagree about one document: `validate_document`
+        # is `plan.warnings` seen from the CLI, so a fixture the compiler flags
+        # and the validator passes would mean one of them stopped reading the
+        # other (`launch-readiness/177` wired them to one channel deliberately).
+        assert bool(plan.warnings) == (not is_valid), (
+            f"{package_name}: plan.warnings={[str(w)[:80] for w in plan.warnings]} "
+            f"but validate_document said valid={is_valid}"
+        )
