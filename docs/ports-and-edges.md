@@ -201,6 +201,25 @@ The rejection message points at the supported route rather than just saying no:
 *"That would create a loop. Route it through a Grader's 'revise' output
 instead."*
 
+**That gate is the editor's, and the editor is one door of several.** A
+hand-written document, an `openstategraph new` scaffold, an exported package,
+an MCP `compile_workflow` call and the workflow-architect agent all reach the
+compiler without drawing anything, and until `launch-readiness` 177 an
+all-static cycle arriving that way compiled: `openstategraph validate` printed
+`VALID` beside `Routes: none` — its own summary saying the graph has no
+conditional edge — and the run then spent the whole step budget and raised.
+The compiler checks it now, in `always_taken_cycles`, so every door inherits
+it: a loop whose every edge is on `plan.edges` or `plan.fan_out` is a
+`PROBLEMS FOUND` line, a non-zero `validate` exit and a warning at load.
+
+The two are deliberately not one rule mirrored twice. `acyclicRule` is
+stricter — it refuses *every* non-feedback cycle at the moment of drawing,
+including one a router could leave, because a gesture can be repeated
+differently. The compiler refuses only what is provably non-terminating, so
+its flagged set is a subset of the editor's and neither restates the other's
+sentence. A `Send` is not an escape either way: an orchestrator chooses how
+many tasks to dispatch, never whether to stop.
+
 ---
 
 ## Reading the canvas

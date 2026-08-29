@@ -1493,6 +1493,82 @@ class CompiledPlan:
 STEP_BUDGET_WALK_CAP = 32
 
 
+def always_taken_cycles(plan: "CompiledPlan") -> list[tuple[str, ...]]:
+    """Every loop in `plan` that no decision can leave, as node paths.
+
+    `CLAUDE.md`'s rule — *"a cycle must contain at least one conditional edge
+    — an all-static cycle can never terminate"* — made checkable
+    (`launch-readiness` 177). It was stated as settled fact and enforced
+    nowhere in the backend: `validate` printed `VALID` beside `Routes: none`
+    for a document whose only possible outcome is to spend the whole step
+    budget and raise `GraphRecursionError`, which at the default budget of 50
+    is roughly fifty model calls before the user is told anything.
+
+    **What counts as an escape is read from the plan itself**, never from a
+    second list of node types that would drift out of step with the one
+    `plan()` builds: an edge that reaches `plan.conditional` came from a node
+    that *decides*, and every other edge is taken on every lap. So the walk
+    below is over `plan.edges` plus `plan.fan_out`, and a router, a grader's
+    `revise`, a guard's, an approval's branches and a guardrail's are all
+    excluded by construction, together with whatever family declares a branch
+    port next.
+
+    **A `Send` is not a decision.** `orchestrate.supervisor` chooses how many
+    tasks to dispatch, never whether to stop dispatching, so a loop closed
+    through a fan-out edge is as unable to end as any other. It is walked as
+    an ordinary edge for that reason.
+
+    **Conservative in the direction that costs nothing.** A cycle carrying a
+    router whose every branch leads back into it is equally doomed and is not
+    reported here: judging *where* a branch goes is judging a decision the
+    model has not made yet, and this function only reports what is true
+    before any model runs. A missed loop is a run that overruns, which is
+    where every one of them was before this existed; a wrongly-reported one
+    would fail a working document, which is worse than the defect.
+    """
+    successors: dict[str, set[str]] = {}
+    for source, destination in plan.edges:
+        successors.setdefault(source, set()).add(destination)
+    for source, workers in plan.fan_out.items():
+        for worker in workers:
+            successors.setdefault(source, set()).add(worker)
+
+    #: 0 unvisited, 1 on the current path, 2 finished. An explicit colour
+    #: rather than recursion depth, because a back edge is exactly "a
+    #: successor still on the path" and nothing else here needs to know it.
+    #:
+    #: The walk is iterative for the reason `STEP_BUDGET_WALK_CAP` is capped:
+    #: a document arriving through a door that is not the editor was not laid
+    #: out by hand, and a `RecursionError` raised out of `plan()` would be
+    #: reported as *"Compile failed"* — the compiler blaming itself for a
+    #: large drawing.
+    colour: dict[str, int] = {}
+    path: list[str] = []
+    found: list[tuple[str, ...]] = []
+
+    for start in sorted(successors):
+        if colour.get(start, 0) != 0:
+            continue
+        stack: list[tuple[str, list[str]]] = [(start, sorted(successors.get(start, ())))]
+        colour[start] = 1
+        path.append(start)
+        while stack:
+            node_id, pending = stack[-1]
+            if not pending:
+                stack.pop()
+                path.pop()
+                colour[node_id] = 2
+                continue
+            successor = pending.pop(0)
+            if colour.get(successor, 0) == 1:
+                found.append(tuple(path[path.index(successor) :]) + (successor,))
+            elif colour.get(successor, 0) == 0:
+                colour[successor] = 1
+                path.append(successor)
+                stack.append((successor, sorted(successors.get(successor, ()))))
+    return found
+
+
 def data_key_findings(
     nodes: Mapping[str, dict[str, Any]],
 ) -> tuple[list[str], list[str]]:
@@ -1901,6 +1977,27 @@ class WorkflowCompiler:
                     "to 'revise' and the run never terminates. Wire the "
                     "'pass' port to a destination."
                 )
+
+        # A loop no decision can leave. The sibling of the check above and
+        # the same argument: a `pass` verdict with nowhere to go can only
+        # loop, and so can a cycle with no verdict on it at all. Reported on
+        # `plan.warnings` — the hard channel, so `validate` exits non-zero and
+        # `load_workflow` carries it — rather than raised, because a refusal
+        # would break any document already carrying one and this map forbids
+        # that. The editor refuses to *draw* one (`acyclicRule`, and
+        # `capacityRule` incidentally), but a hand-written document, a
+        # scaffold, an exported package, an MCP `compile_workflow` call and
+        # the workflow-architect agent all arrive here without passing either
+        # (`launch-readiness` 177).
+        for cycle in always_taken_cycles(plan):
+            drawn = " -> ".join(repr(node_id) for node_id in cycle)
+            plan.warnings.append(
+                f"Nodes {drawn} form a loop with no conditional step on it: "
+                "every edge on that path is taken on every lap, so the run can "
+                "only go round until the step budget is spent and then fail. "
+                "Put a grader, a guard or a router on the loop so a verdict can "
+                "leave it, or remove the edge that closes it."
+            )
 
         # Two archetypes with one dispatch key cannot both be reachable — the
         # later one silently shadows the earlier in the dispatch map. Warn at
