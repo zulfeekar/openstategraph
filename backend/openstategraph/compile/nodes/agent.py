@@ -41,7 +41,8 @@ from openstategraph.compile.context import (
 )
 from openstategraph.compile.diagnostics import Finding
 from openstategraph.compile.fields import _replaces_rules, _summarizes
-from openstategraph.compile.reporting import _final_text, tool_report
+from openstategraph.compile.reporting import tool_report
+from openstategraph.compile.silent_turn import text_or_ask_again
 from openstategraph.compile.subagents import async_subagent_specs, subagent_specs
 from openstategraph.run_identity import run_identity
 
@@ -622,7 +623,14 @@ def _agent(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compil
         # already read it this way; this node did not, which is how a
         # correct Chinook answer reached a grader as "the answer is empty"
         # and spent the whole retry budget re-asking an answered question.
-        text = _final_text(result.get("messages") or [])
+        #
+        # `text_or_ask_again` is the same read plus the case the walk-back
+        # cannot reach (`launch-readiness/185`): a turn where the model ran
+        # its tools, generated tokens, and published none of them. There is
+        # nothing further back to walk to, so the recovery is one more ask
+        # rather than a wider parse. `model`, not `agent`: the second call
+        # binds no tools, so it can only end the loop it is asked in.
+        text = await text_or_ask_again(result.get("messages") or [], model)
         answer = text if isinstance(text, str) else str(text)
         # What this agent was given, used and was refused. The extraction
         # is `tool_report` because `_worker` needs the identical thing and,
@@ -698,7 +706,11 @@ def _async_task_middleware(
                 # is the opposite of the isolation this is built around.
                 {"configurable": dict(identity)} if identity else None,
             )
-            text = _final_text(result.get("messages") or [])
+            # A subagent that goes silent costs the parent a `ToolMessage`
+            # with nothing in it, and the parent has no way to tell that from
+            # a task that genuinely had no result — so it gets the same second
+            # ask its parent does (`launch-readiness/185`).
+            text = await text_or_ask_again(result.get("messages") or [], model)
             return text if isinstance(text, str) else str(text)
 
         return launch

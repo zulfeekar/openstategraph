@@ -1,0 +1,203 @@
+{
+  "_comment": [
+    "One question per gallery package, and the argument for why this file exists.",
+    "",
+    "`launch-readiness/188`. Twenty-two of the twenty-four examples ship a",
+    "`tests/` directory, and every one of those tests asserts the *document* and",
+    "the wiring — 'neither of them needing a model', in their own words. That is",
+    "the right thing to assert in CI, which cannot call a model. It leaves the",
+    "gallery uncovered at the layer where `launch-readiness/185` lives: twenty-",
+    "three of the twenty-four packages had never been asked a question.",
+    "",
+    "WHY A COMMITTED LIST RATHER THAN A GENERIC QUESTION.",
+    "A generic prompt ('what can you do?') reaches every package's first node",
+    "and tests almost nothing past it: the router in `classifier-router-qa` sorts",
+    "it, the loop in `evaluator-optimizer` grades it, and both answer without",
+    "ever exercising the mechanism the example exists to demonstrate. Worse, it",
+    "makes the sweep's own result unreadable — a package that refuses a question",
+    "it was never meant to be asked is indistinguishable from one that is broken.",
+    "",
+    "WHY NOT THE PACKAGE'S OWN INPUT DEFAULT.",
+    "That was the first candidate, because an `input.text` default is the",
+    "author's own worked question and is already committed beside the document.",
+    "It does not carry: every one of the twenty-four examples ships `in1` with an",
+    "EMPTY prompt (deliberately — the editor's Examples shelf wants a blank",
+    "field). Only `chinook-assistant`, `morning-brief`, `ops-desk`, `support-",
+    "triage` and `workflow-2026` under `workflows/` carry one at all. So the",
+    "questions have to live somewhere, and beside the driver is where they can",
+    "be reviewed as a set.",
+    "",
+    "WHY NOT THE EVAL DATASETS.",
+    "Exactly one package has `evals/` — `sql-qa` — and one dataset cannot cover",
+    "twenty-four packages. Where it exists it is the better source and this file",
+    "borrows from it: `sql-qa`'s question is `s04` from its own committed",
+    "dataset, so the sweep and the eval ask the same thing.",
+    "",
+    "HOW A QUESTION WAS CHOSEN. Each one is the smallest question that forces",
+    "the mechanism named in that package's own AGENTS.md to run — a fan-out",
+    "question is a numbered list because `lead1` splits on one, a mount question",
+    "must be answerable three levels down, a router question must be",
+    "unambiguously one branch. `expect` records what the sweep should see, so a",
+    "package that is SUPPOSED to refuse or pause is not reported as a defect:",
+    "`budget-exhaustion` exhausts its rubric by construction, and the two",
+    "human-approval packages pause and wait for a person.",
+    "",
+    "This is a hand-run driver, not a CI job — CI cannot call a model. See",
+    "`scripts/run_stress_workload.py` for the precedent and `docs/evaluation.md`",
+    "for why an eval is not a third axis."
+  ],
+  "packages": {
+    "agentic-rag-rewrite": {
+      "question": "tell me about the seed thing",
+      "expect": "answered",
+      "why": "Vague on purpose: the rewriter has to sharpen it before the retriever can look anything up, which is the one mechanism this example exists for."
+    },
+    "approval-in-the-loop": {
+      "question": "Write a short message telling a customer their March invoice was overcharged by 40 euros and we are refunding it.",
+      "expect": "paused",
+      "why": "The run must stop at `gate1` and wait for a person. A run that reaches an answer here has lost the gate."
+    },
+    "archetype-orchestrator-report": {
+      "question": "Prepare a briefing on remote-work policy: 1) what the main trade-offs are, 2) draft a three-line note announcing a hybrid policy.",
+      "expect": "answered",
+      "why": "Two subtasks that want two different archetypes — one analysis, one prose — so the planner's labelling and the Send dispatch both have to be right."
+    },
+    "budget-exhaustion": {
+      "question": "Why is the sky blue?",
+      "expect": "answered",
+      "why": "The rubric contradicts itself, so the exit is always the attempt counter and never the verdict — but the exit is still an ANSWER. `compile/nodes/grader.py` swaps in its refusal sentence only when the last candidate is empty, and this package's drafter always writes its seven words, so the forced pass has something to hand on and `out1` renders it. The first draft of this file expected `refused` and the sweep corrected it: what to watch here is `attempts`, which must reach the cap."
+    },
+    "chained-summarizer": {
+      "question": "Explain what a database index is.",
+      "expect": "answered",
+      "why": "The smallest thing that exercises a second agent reading the first agent's result over its prompt port."
+    },
+    "classifier-router-qa": {
+      "question": "How do I change a flat tyre?",
+      "expect": "answered",
+      "why": "Unambiguously the how-to branch, so a wrong route is visible in `decisions` rather than hidden in a plausible answer."
+    },
+    "delegate-by-mount": {
+      "question": "How many customers are in the database?",
+      "expect": "answered",
+      "why": "Routes to the mounted `sql-qa` package, so one question tests the router, the mount, and the child's whole graph."
+    },
+    "evaluator-optimizer": {
+      "question": "Write a one-paragraph release note for a change that makes workflow runs resumable after a crash.",
+      "expect": "answered",
+      "why": "The canonical revision loop, on the kind of text its grader was written to judge."
+    },
+    "fanout-in-a-loop": {
+      "question": "Report on launching a paid tier: 1) what to price it at, 2) what to include, 3) how to announce it.",
+      "expect": "answered",
+      "why": "A numbered brief is what `lead1` splits on, and three subtasks make one lap cost several supersteps — the thing this example is about."
+    },
+    "guarded-lookup": {
+      "question": "What plan is ada.lovelace@example.com on?",
+      "expect": "answered",
+      "why": "An address has to pass the inbound guard for the lookup to work and be redacted on the way out, so both guards are on the same run."
+    },
+    "knowledge-lookup-qa": {
+      "question": "What temperature is the Meridian Seed Vault kept at?",
+      "expect": "answered",
+      "why": "The Vault does not exist, so a correct figure can only have been fetched from `knowledge/` — there is no third possibility."
+    },
+    "morning-brief": {
+      "question": "Morning brief: 1) what is in the team handbook about on-call, 2) which workflows are installed on this platform.",
+      "expect": "answered",
+      "why": "Two of the three workers, each holding a different tool, and neither of them the web — so the sweep is not gated on a stranger's server."
+    },
+    "nested-mounts": {
+      "question": "Explain what a foreign key is.",
+      "expect": "answered",
+      "why": "Has to travel three documents down to `chained-summarizer` and come back as one sentence."
+    },
+    "nested-mounts-mid": {
+      "question": "Explain what a foreign key is.",
+      "expect": "answered",
+      "why": "The middle level, run on its own, so a failure at three levels can be told apart from a failure at two."
+    },
+    "parallel-workers-join": {
+      "question": "Cover three things about switching to a four-day week: 1) the payroll question, 2) the customer-cover question, 3) the hiring question.",
+      "expect": "answered",
+      "why": "One archetype run three times, then a join with no model in it."
+    },
+    "remembers-across-runs": {
+      "question": "My name is Ada and I work on the compiler.",
+      "expect": "answered",
+      "why": "The sweep runs every package twice, which is exactly what this example needs: run two must be able to see run one.",
+      "thread": "gallery-sweep-remembers"
+    },
+    "same-package-twice": {
+      "question": "Explain what a compiler does.",
+      "expect": "answered",
+      "why": "Both mounts run one definition with different overrides, so the two answers must differ in shape."
+    },
+    "skill-driven-rubric": {
+      "question": "The change: the SQL tool now refuses statements that are not a single SELECT.",
+      "expect": "answered",
+      "why": "The skill is the writer's rules and the grader's criteria at once, so a house-style question tests both readers of one layer."
+    },
+    "sql-qa": {
+      "question": "Which genre earns the most revenue?",
+      "expect": "answered",
+      "why": "Case `s04` from this package's own committed eval dataset — a two-join revenue question. The sweep and the eval ask the same thing on purpose.",
+      "source": "evals/sql-qa.eval.json#s04"
+    },
+    "support-triage": {
+      "question": "I was charged twice for my subscription this month and I want one of them refunded.",
+      "expect": "paused",
+      "why": "Unambiguously the billing desk, and the run must stop at the human gate rather than send anything."
+    },
+    "two-stage-double-loop": {
+      "question": "The change: runs now resume from the last checkpoint after a crash instead of starting over.",
+      "expect": "answered",
+      "why": "Two rubrics in series on one piece of text — the engineer's line, then the customer's."
+    },
+    "web-research-digest": {
+      "question": "What is the current stable version of Python?",
+      "expect": "answered",
+      "why": "Needs a page actually fetched, which is what the grader checks for. Depends on a stranger's server, and this package's own AGENTS.md says so.",
+      "network": true
+    },
+    "youtube-trend-digest": {
+      "question": "What is trending on YouTube right now?",
+      "expect": "answered",
+      "why": "The flagship, and the only one that spends money on a second provider. Two external services have to answer.",
+      "network": true,
+      "paid": true
+    },
+    "chinook-assistant": {
+      "question": "combine most sold tracks and top artists",
+      "expect": "answered",
+      "why": "The owner's own question from `launch-readiness/185`, verbatim. Compound: two aggregations to be joined.",
+      "source": "launch-readiness/185"
+    },
+    "chinook-assistant-simple": {
+      "package": "chinook-assistant",
+      "question": "Which genre earns the most revenue? Name the genre and the figure.",
+      "expect": "answered",
+      "why": "185 asks whether the question matters. This is the package's own committed `in1` default — one aggregation — run beside the compound one so the two can be compared."
+    },
+    "concierge": {
+      "question": "What can you help me with?",
+      "expect": "answered",
+      "why": "A front desk, and this is the question a front desk is for."
+    },
+    "ops-desk": {
+      "question": "What workflows are installed on this platform?",
+      "expect": "answered",
+      "why": "Its own input default says 'ask the ops desk anything'; this is the narrowest thing an ops desk can be asked that has a checkable answer."
+    },
+    "workflow-architect": {
+      "question": "I want a workflow that reads a support email, decides which desk it belongs to, and drafts a reply.",
+      "expect": "answered",
+      "why": "It answers with a whole workflow document, which is the shape `CLAUDE.md` warns every parser about."
+    },
+    "workflow-2026": {
+      "question": "show me the repo list",
+      "expect": "answered",
+      "why": "Its own committed `input.text` default, which is the only thing this document says about what it is for — it has no `settings.purpose` and no `tests/`."
+    }
+  }
+}
