@@ -191,6 +191,20 @@ rewrite last — and every step of it has re-recorded here on the way past:
 now 569, with every node family this build implements living in its own module
 under `compile/nodes/`.
 
+**570** (`the-cost-of-one-more` 02). One line: `self._mount_memo`, the dict that
+makes a mounted package compile once per instance rather than once per mount
+*site* — the difference between eight builds and 255 for eight packages on
+disk. It is on the runtime and not in `compile/nodes/mount.py` where the rest of
+the mount family lives, and that placement is the reason the key
+`(slug, overrides, persistence)` is sufficient: a runtime fixes everything else
+a child compile reads — the services it inherits, the ancestry that refuses a
+cycle, the settings a context gap is measured against — so two sibling mounts
+under one runtime share all of it and two mounts under different runtimes share
+none. A memo hung anywhere with a longer life would need the invalidation list
+`docs/decisions/per-request-compile-cost.md` declined a cache over. The ratchet
+is exact in both directions, so a single line has to be claimed out loud; this
+is the claim.
+
 What the number was for is the growth, and it is worth restating now that it is
 being used the other way. The split of 2026-08-22 moved 401 lines out; the week
 that followed put more than fifteen hundred back, with a second extraction
@@ -481,7 +495,7 @@ and would be a module of two functions and a paragraph.
 #: hand-picked pins were found to cover only the classes somebody had already
 #: worried about.
 RECORDED: dict[str, Recorded] = {
-    "compile/node_runtime.py": Recorded(569, NODE_RUNTIME),
+    "compile/node_runtime.py": Recorded(570, NODE_RUNTIME),
     "cli.py": Recorded(1102, CLI),
     "compile/workflow_compiler.py": Recorded(890, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1026, STREAMING),
