@@ -43,6 +43,7 @@ if TYPE_CHECKING:
 # moved their patch target to the family module rather than keep patching a
 # name the builder no longer reads.
 from openstategraph.abc.grader import Grader  # noqa: F401
+from openstategraph.compile.checked_nodes import nodes_a_grader_checks
 from openstategraph.abc.router import Router  # noqa: F401
 from openstategraph.abc.node_family import INodeFamily, NodeBuildContext, NodeCapabilities
 from openstategraph.compile.graph_names import GraphNames
@@ -434,6 +435,20 @@ class NodeRuntime:
         #: the stream fold could resolve, and node ids legally carry colons
         #: that LangGraph node names may not.
         self.machinery_nodes: set[str] = set()
+        #: Graph node names — both spellings, as above — whose streamed reply
+        #: a grader will judge before this run ends
+        #: (`every-workflow-green` 45; `compile/checked_nodes.py` computes it,
+        #: `api/audience.AnswerChannel` is the other half).
+        #:
+        #: The tenth public member, and the last the ceiling allows. It is here
+        #: rather than folded into `machinery_nodes` because it answers the
+        #: opposite question about the same frames: that set says *this text is
+        #: not the reply*, this one says *this text IS the reply and is not
+        #: settled yet*. Unioned upward in `_subgraph` for the reason
+        #: `machinery_nodes` is — the reply on the ticket's own recording
+        #: streams out of an agent inside a mounted document, judged by a
+        #: grader the parent has never heard of.
+        self.checked_nodes: set[str] = set()
         #: Graph-node name -> canvas node id, for **this document and every
         #: document mounted under it** (tickets 33/34).
         #:
@@ -691,6 +706,13 @@ class NodeRuntime:
             self.names.remember(safe_name(node_id), node_id)
 
         def build(node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
+            # Computed here rather than above, because `factory` is handed the
+            # document and reachability is a question about the *plan* — the
+            # one place a grader's `revise` and `pass` destinations are facts
+            # rather than raw edges. Idempotent and cheap: every node of one
+            # compile is built against the same plan.
+            if not self.checked_nodes:
+                self.checked_nodes.update(nodes_a_grader_checks(plan, self._types))
             return self.builder_for(str(node.get("type", "")))(node_id, node, plan)
 
         return build

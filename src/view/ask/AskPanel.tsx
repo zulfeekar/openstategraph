@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { DRAFT_NOTICE, showsDraft } from './draftNotice';
 import { showsThinking } from './settledThinking';
 import { SpawnedPills } from '@view/spawned/SpawnedPills';
 import { attemptsLine } from './attemptsLine';
@@ -219,6 +220,22 @@ interface ChatTurn {
    * Markdown. They now have their own record below.
    */
   readonly thinking: string;
+  /**
+   * The same stream, split off: model text a grader has still to judge
+   * (`every-workflow-green` 45).
+   *
+   * A second buffer rather than a flag on the first, because the two are
+   * genuinely different text and end up in different places. On the ticket's
+   * own recording the reply streams three times round a revision loop and then
+   * a settled output node speaks; one buffer concatenates the rejected
+   * attempts and the settled text into a single block, and any mark on that
+   * block is wrong about half of it.
+   *
+   * Empty for every workflow with no grader downstream of the node that
+   * answered — which is most of them, and is what makes an ordinary answer
+   * gain nothing at all rather than a label that blinks.
+   */
+  readonly draft: string;
   /** What each tool returned this turn, in the order the tools were called. */
   readonly toolResults: readonly ToolResult[];
   readonly result: RunResult | null;
@@ -1079,7 +1096,9 @@ export function AskPanel({
               turn.id === id
                 ? event.kind === 'tool'
                   ? { ...turn, toolResults: appendToolChunk(turn.toolResults, event) }
-                  : { ...turn, thinking: turn.thinking + event.content }
+                  : event.draft
+                    ? { ...turn, draft: turn.draft + event.content }
+                    : { ...turn, thinking: turn.thinking + event.content }
                 : turn,
             ),
           );
@@ -1436,6 +1455,7 @@ export function AskPanel({
           progress: null,
           spoke: false,
           thinking: '',
+          draft: '',
           toolResults: [],
           result: null,
           error: null,
@@ -2173,6 +2193,33 @@ function Turn({
           on its own instead of pushing the model's prose out of one shared
           region (ticket 02). */}
       <ToolResults results={turn.toolResults} />
+
+      {showsDraft({
+        draft: turn.draft,
+        running: turn.running,
+        answer: turn.result?.answer ?? '',
+        awaitingApproval: turn.pendingApproval !== null,
+      }) ? (
+        // A reply a grader has still to judge (`every-workflow-green` 45).
+        //
+        // Its own region, above the ordinary streamed block, because it is the
+        // one piece of text on this panel that the run may be about to throw
+        // away. `role="status"` on the notice and nowhere else: the notice is
+        // written once and never changes, so a screen reader announces the
+        // state once — putting the live region on the text would announce
+        // every token.
+        //
+        // `ask__draft` is `user-select: none`. Selecting the figure out of an
+        // unsettled answer and pasting it somewhere is precisely how three
+        // wrong numbers were reported as results in one day, and a mark that
+        // stays behind on screen while the number travels is not a mark.
+        <div className="ask__draft">
+          <p className="ask__draft-notice" role="status">
+            {DRAFT_NOTICE}
+          </p>
+          <pre className="ask__draft-text">{turn.draft}</pre>
+        </div>
+      ) : null}
 
       {showsThinking({
         thinking: turn.thinking,

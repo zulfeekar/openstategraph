@@ -259,6 +259,44 @@
   white-space: normal;
 }
 
+/* ---------- A reply the grader has still to judge ---------- */
+
+/* `every-workflow-green` 45. Deliberately built out of the same pieces as
+   `.ask__thinking` above — sunken, hairline-dashed, tertiary, monospaced — and
+   introducing no new colour. The point is not to shout: the block already
+   reads as machinery rather than as an answer, and what was missing was a
+   sentence saying which. */
+.ask__draft {
+  border: var(--border-width-hairline) dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  padding: var(--space-2) var(--space-3);
+  /* The whole region, notice included. A figure lifted out of an unsettled
+     answer and pasted elsewhere arrives with nothing attached saying it was
+     unsettled — which is how three wrong numbers were reported as results on
+     one day. Selection is the copy path, so selection is what closes. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ask__draft-notice {
+  margin: 0 0 var(--space-1);
+  color: var(--color-text-tertiary);
+  font: var(--type-label);
+}
+
+.ask__draft-text {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font: var(--type-mono-sm);
+  font-style: italic;
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* Same cap and the same reason as the block above it. */
+  max-height: 160px;
+  overflow-y: auto;
+}
+
 /* ---------- Tool results ---------- */
 
 /* One result, one bounded region — see `toolResults.tsx` for why every tool

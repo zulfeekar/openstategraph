@@ -358,6 +358,19 @@
 
   /* Capped, like the editor's: a peek at the reasoning, not a transcript that
      pushes the answer off the screen. */
+  /* A reply the grader has still to judge (`every-workflow-green` 45).
+     Built out of the pieces `.thinking` already uses — muted, dashed, small —
+     and adding no colour: the run that produced the ticket showed a figure
+     forty times larger than the database holds, and what was missing was a
+     sentence saying it had not been checked, not more contrast.
+
+     `user-select: none` on the whole region, notice included. A number
+     selected out of an unsettled answer and pasted elsewhere arrives with
+     nothing attached saying it was unsettled, which is exactly how three wrong
+     figures were reported as results in one day. */
+  .draft:not([hidden]) { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-lg); padding: var(--space-2) var(--space-3); margin-top: var(--space-2); user-select: none; -webkit-user-select: none; }
+  .draft-notice { margin: 0 0 var(--space-1); font-size: var(--font-size-12); color: var(--muted); }
+  .draft-text { font-size: var(--font-size-12); color: var(--muted); font-style: italic; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow-y: auto; }
   .thinking { font-size: var(--font-size-12); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow-y: auto; }
   .thinking:not(:empty) { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-lg); padding: var(--space-2) var(--space-3); margin-top: var(--space-2); }
   /* The model's deliberation, kept visibly apart from the reply it is
@@ -1352,7 +1365,10 @@ function turnEl(question) {
   el.innerHTML = `<div class="q"></div><div class="steps"></div>`
     + `<details class="tl" hidden><summary>Timeline · <span class="tl-count"></span> · <span class="tl-total"></span></summary>`
     + `<div class="tl-body"></div><p class="tl-note">Durations are gaps between stream frames, not measured spans.</p></details>`
-    + `<div class="reasoning"></div><div class="thinking"></div>`
+    + `<div class="reasoning"></div>`
+    + `<div class="draft" hidden><p class="draft-notice" role="status"></p>`
+    + `<div class="draft-text"></div></div>`
+    + `<div class="thinking"></div>`
     + `<div class="rejected-banner" hidden><span class="dot"></span>`
     + `<span>The answer below is one our reviewer rejected — we ran out of attempts to improve it.</span></div>`
     + `<div class="answer" hidden></div>`;
@@ -1366,6 +1382,13 @@ function turnEl(question) {
 
 async function stream(path, body, el, signal) {
   const steps = el.querySelector(".steps"), thinking = el.querySelector(".thinking"), answer = el.querySelector(".answer");
+  const draftBox = el.querySelector(".draft"), draftText = el.querySelector(".draft-text");
+  /* One sentence, on both surfaces, and neither owns it: the editor's copy is
+     `src/view/ask/draftNotice.ts` and `draftNotice.parity.test.ts` fails if the
+     two ever disagree. See that module for why these six words and no actor.
+     Written once, when the box first appears, so a screen reader announces the
+     state once rather than once per token. */
+  el.querySelector(".draft-notice").textContent = "Draft — not checked yet";
   const rejectedBanner = el.querySelector(".rejected-banner");
   const reasoning = el.querySelector(".reasoning");
   /* What a step says about itself while it is still working (`progress`).
@@ -1462,7 +1485,7 @@ async function stream(path, body, el, signal) {
     return "http-error";
   }
   const reader = resp.body.getReader(); const dec = new TextDecoder();
-  let buf = "", event = null, tokens = "", thoughts = "";
+  let buf = "", event = null, tokens = "", thoughts = "", drafted = "";
   // Client-side timestamps, gathered as frames arrive — the stream carries no
   // timing of its own. Ephemeral: this list lives with the turn and is never
   // stored anywhere.
@@ -1722,7 +1745,20 @@ async function stream(path, body, el, signal) {
             //
             // Missing `block` reads as `text`: that is what an older backend
             // emitted, and it is what every non-reasoning frame is.
+            //
+            // `draft` says WHETHER A GRADER HAS STILL TO JUDGE IT
+            // (`every-workflow-green` 45) — a third buffer, for the same
+            // reason `block` bought the second. The run that produced that
+            // ticket streamed three attempts and then a settled output node;
+            // concatenating them puts a figure the grader is about to reject
+            // and the one it settled on into a single block, and no mark on
+            // that block can be right about both.
+            //
+            // Absent means NO GRADER IS DOWNSTREAM, never "checked", so an
+            // ungraded workflow renders exactly as it did before this existed
+            // — no box, no label, nothing that appears and vanishes.
             if (d.block === "reasoning") { thoughts += d.content; reasoning.textContent = thoughts.slice(-400); }
+            else if (d.draft) { drafted += d.content; draftText.textContent = drafted.slice(-600); draftBox.hidden = false; }
             else { tokens += d.content; thinking.textContent = tokens.slice(-600); }
           } else if (event === "error") {
             clearWaiting();
@@ -1730,7 +1766,7 @@ async function stream(path, body, el, signal) {
             // running — the same omission the `interrupt` branch had.
             ended = "error";
             finishFlow();
-            thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
+            thinking.textContent = ""; reasoning.textContent = ""; drafted = ""; draftText.textContent = ""; draftBox.hidden = true; settleThinking();
             answer.hidden = false; answer.innerHTML = `<span class="error">${esc2(d.detail || JSON.stringify(d))}</span>`;
           } else if (event === "interrupt") {
             clearWaiting();
@@ -1739,13 +1775,13 @@ async function stream(path, body, el, signal) {
             // the diagram must stop saying "running" here — see `pauseFlow`.
             ended = "interrupt";
             pauseFlow(flowFrameName(d));
-            thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
+            thinking.textContent = ""; reasoning.textContent = ""; drafted = ""; draftText.textContent = ""; draftBox.hidden = true; settleThinking();
             renderInterrupt(el, d);
           } else if (event === "done") {
             clearWaiting();
             ended = "done";
             finishFlow();
-            thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
+            thinking.textContent = ""; reasoning.textContent = ""; drafted = ""; draftText.textContent = ""; draftBox.hidden = true; settleThinking();
             // `launch-readiness` 25 — visible on this customer surface even
             // though the frame carries no `developer` channel: the fact that
             // a rejected candidate was published must not require asking for
@@ -1776,7 +1812,7 @@ async function stream(path, body, el, signal) {
       await reader.cancel().catch(() => {});
       finishFlow();
       clearWaiting();
-      thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
+      thinking.textContent = ""; reasoning.textContent = ""; drafted = ""; draftText.textContent = ""; draftBox.hidden = true; settleThinking();
       noteStopped(el, cancellable);
       return "stopped";
     }
@@ -1788,7 +1824,7 @@ async function stream(path, body, el, signal) {
     // network failure.
     finishFlow();
     clearWaiting();
-    thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
+    thinking.textContent = ""; reasoning.textContent = ""; drafted = ""; draftText.textContent = ""; draftBox.hidden = true; settleThinking();
     noteDropped(el, String((err && err.message) || err));
     return "dropped";
   }
@@ -1800,7 +1836,7 @@ async function stream(path, body, el, signal) {
   if (signal && signal.aborted) {
     finishFlow();
     clearWaiting();
-    thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
+    thinking.textContent = ""; reasoning.textContent = ""; drafted = ""; draftText.textContent = ""; draftBox.hidden = true; settleThinking();
     noteStopped(el, cancellable);
     return "stopped";
   }
@@ -1813,7 +1849,7 @@ async function stream(path, body, el, signal) {
   if (!ended) {
     finishFlow();
     clearWaiting();
-    thinking.textContent = ""; reasoning.textContent = ""; settleThinking();
+    thinking.textContent = ""; reasoning.textContent = ""; drafted = ""; draftText.textContent = ""; draftBox.hidden = true; settleThinking();
     noteDropped(el);
     return "dropped";
   }

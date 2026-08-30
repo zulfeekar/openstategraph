@@ -428,6 +428,14 @@ def _subgraph(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Com
             # since it described a true thing about the first level and
             # nothing about the rest.
             self.machinery_nodes |= child_runtime.machinery_nodes
+            # And the same union for the other half of what a `token` frame's
+            # text is (`every-workflow-green` 45). The reply on that ticket's
+            # own recording streams from `model` inside `agent_sql` inside a
+            # mounted `chinook-assistant`, judged by that child's `grader-sql`
+            # — a node no surface above this one has heard of. Without the
+            # union the draft is unmarked in exactly the composition where a
+            # reader is least able to work it out.
+            self.checked_nodes |= child_runtime.checked_nodes
             # Same direction and the same reason as `machinery_nodes`,
             # different question: which card of the CHILD's canvas a frame
             # from inside this mount is about. `GraphNames.absorb` owns

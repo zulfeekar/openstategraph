@@ -78,6 +78,7 @@ developer-only by their own convention.
 | guardrail `redactions` — counts and entity types per node, never values | developer | a customer must not be told what was removed from their own answer, and the developer needs to know the machinery rewrote it |
 | `statements` — what the run executed, with the tool that ran it and what came back | developer | `one-chinook-honest/30`. The evidence behind an answer, quoting node ids, tool names and a customer's own literal values. No credential can reach it: only an argument recognised as a *statement* is ever recorded, never the argument map (`executed_statements`) |
 | `mermaid` | **both** | `/chat` renders it as its live flow diagram, and `GET /api/workflows/{slug}/graph` already serves it to that page. Moving it here while leaving that endpoint open would be theatre, and it is topology, not guidance. |
+| a `token` frame's **`draft`** flag | **both** | `every-workflow-green` 45. That the reply on screen has not been checked yet is not a diagnostic about the document — it is the difference between a figure a reader may act on and one the run is about to reject. A customer is the audience least able to work it out for themselves, having no trace and no canvas. |
 | `decisions` / `outputs` / `attempts` | **both** | facts about *this run*, which is the customer's own turn. `/chat`'s trace already shows them frame by frame. |
 | a `token` frame's **text** | depends — see `AnswerChannel` | the reply is the customer's; a tool payload, a branch name, a verdict and the echoed question are not. The *frame* still goes to both, emptied and marked `withheld`, because it is the only one that says where a run is mid-node. |
 
@@ -312,6 +313,28 @@ class AnswerChannel:
     #: `token` frame is reported under whichever of the two is known — whose
     #: streamed text is machinery.
     machinery: frozenset[str] = frozenset()
+    #: The same two spellings, for the nodes a grader judges downstream
+    #: (`every-workflow-green` 45, `compile/checked_nodes.py`). A reply from
+    #: one of them is a **draft**: on screen, complete, and not yet checked.
+    #:
+    #: A second set rather than a second class, because the two answer the two
+    #: halves of one question — *is this text the reply, and is the reply
+    #: settled* — about the same frame, from the same compile, resolved by the
+    #: same membership rule. Splitting them would put that rule in two places
+    #: and hand `streaming.py` two objects to keep in step.
+    #:
+    #: Empty degrades the way `machinery` does: nothing is marked, which is
+    #: exactly what a document with no grader in it deserves.
+    checked: frozenset[str] = frozenset()
+
+    def _names(self, node: str, namespace: Iterable[str]) -> tuple[str, ...]:
+        """Every name this frame is answerable for — its own and its ancestry.
+
+        A frame from inside a mounted document names `model`, and the node the
+        composition knows is a segment of its namespace. Both membership
+        questions need the same walk, so it is written once.
+        """
+        return (node, *(str(segment).split(":")[0] for segment in namespace))
 
     def carries(
         self, node: str, kind: str, namespace: Iterable[str] = ()
@@ -319,9 +342,21 @@ class AnswerChannel:
         """Whether this `token` frame is the reply, and so a customer's to see."""
         if kind == "tool":
             return False
-        if node in self.machinery:
+        return not any(name in self.machinery for name in self._names(node, namespace))
+
+    def is_draft(
+        self, node: str, kind: str, namespace: Iterable[str] = ()
+    ) -> bool:
+        """Whether this frame is the reply **and** a grader has still to judge it.
+
+        Both clauses, and the first one is not decoration: a grader's own
+        verdict streams from a node that a loop makes reachable from itself,
+        and a tool's payload streams from inside a checked agent. Neither is a
+        draft answer, because neither is an answer.
+        """
+        if not self.carries(node, kind, namespace):
             return False
-        return not any(str(segment).split(":")[0] in self.machinery for segment in namespace)
+        return any(name in self.checked for name in self._names(node, namespace))
 
 
 @dataclass(frozen=True)
