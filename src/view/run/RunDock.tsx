@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Activity, exportTrace } from '../ask/traceTree';
 import { RunTimeline, SelectedBar } from '../ask/RunTimeline';
-import { buildLanes } from '../ask/timeline';
+import { laneFold, type RunLanes, type TimelineRow } from '../ask/timeline';
+import { reusableFold } from '../ask/incrementalFold';
 import type { RunView } from './runView';
 import { DOCK_MIN_HEIGHT } from '../layout/dockFit';
 // The bars and the trace rows keep their styles where they were written. They
@@ -134,7 +135,18 @@ export function RunDock({
   const empty = view.rows.length === 0 && !view.running;
   // One fold, read twice: the chart draws it and the detail pane answers for
   // whichever bar of it the reader picked. Two folds would be two records.
-  const { lanes, totalMs } = useMemo(() => buildLanes(view.rows), [view.rows]);
+  //
+  // And **one fold across the whole run**, not one per frame
+  // (`the-cost-of-one-more/04`). `AskPanel` rebuilds `view.rows` for every
+  // arriving frame, so the memo above it is honest and useless while a run
+  // streams: the key changes every time. `reusableFold` keeps the fold's own
+  // state in this dock and consumes only what arrived, and falls back to a
+  // whole fold for anything that is not an extension of what it has seen — a
+  // stored run opened here, or a second run in the same tab.
+  // Held as lazy initial state rather than in a ref, so nothing reads a ref
+  // during render: this dock's own fold, for as long as this dock is mounted.
+  const [fold] = useState<(rows: readonly TimelineRow[]) => RunLanes>(() => reusableFold(laneFold));
+  const { lanes, totalMs } = useMemo(() => fold(view.rows), [fold, view.rows]);
   const [selected, setSelected] = useState<string | null>(null);
   // Tall enough to earn the axis, the profile strip and the legend. A number
   // rather than a container query because the dock's height is state this

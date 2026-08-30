@@ -1,4 +1,4 @@
-import type { PastRun, PastRunStep, PastRunToolCall } from './RuntimeClient';
+import type { PastRun, PastRunStep, PastRunToolCall, PastRunTruncation } from './RuntimeClient';
 
 /**
  * How a past run reads on screen.
@@ -273,4 +273,36 @@ function duration(ms: number): string {
 
 function count(value: number): string {
   return value.toLocaleString('en-US');
+}
+
+/**
+ * What a history that came back cut off says, in the words of a reader who can
+ * only look at it.
+ *
+ * `the-cost-of-one-more/13`. The backend has said this since `06`, and the
+ * editor read the response's first two keys and no third — so a 5,000-superstep
+ * run and the last 200 of one drew identically, which is exactly the state `06`
+ * was filed to end.
+ *
+ * **Not the server's own sentence, and that is a decision rather than a
+ * rewrite.** `_truncation` ends *"ask again with a higher limit (up to 2000) to
+ * see more"*, which is true of `openstategraph threads show` and of anything
+ * holding the URL, and false here: this lane fetches with no `limit` and offers
+ * no control that could raise one. Printing it would describe a button that
+ * does not exist. The two facts a reader here can act on are that the missing
+ * end is the *oldest* — so the run began before what they are looking at — and
+ * that a tool result whose request fell outside is listed with no arguments,
+ * which otherwise reads as a tool called with nothing.
+ *
+ * `end` is a string on the wire and not an enum, so an end this client has
+ * never seen still yields a true sentence rather than a wrong direction — the
+ * repository's tolerant-reading rule, one field wide.
+ */
+export function truncationLine(truncation: PastRunTruncation | null): string {
+  if (truncation === null) return '';
+  const opening =
+    truncation.end === 'oldest'
+      ? `Older supersteps are not shown \u2014 this reads the newest ${count(truncation.kept)}`
+      : `Some supersteps are not shown \u2014 this reads ${count(truncation.kept)} of them`;
+  return `${opening} of a longer run. A tool result whose request fell outside them is listed without its arguments.`;
 }

@@ -1,3 +1,5 @@
+import type { Fold } from './incrementalFold';
+
 /**
  * The run timeline: stream frames → bars.
  *
@@ -259,6 +261,14 @@ function add(a: number | null, b: number | null): number | null {
 }
 
 /**
+ * A bar under construction — every field of a `TimelineStep`, still writable.
+ *
+ * At module scope rather than inside the fold because `result()` copies one and
+ * the copy needs a name.
+ */
+type Draft = { -readonly [K in keyof TimelineStep]: TimelineStep[K] };
+
+/**
  * Folds a run's frames into bars.
  *
  * Five rules, and each earns its place:
@@ -307,7 +317,27 @@ function add(a: number | null, b: number | null): number | null {
  *    would cost.
  */
 export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
-  type Draft = { -readonly [K in keyof TimelineStep]: TimelineStep[K] };
+  const fold = timelineFold();
+  for (const row of rows) fold.push(row);
+  return fold.result();
+}
+
+/**
+ * The same five rules with the loop turned inside out — one row at a time.
+ *
+ * `the-cost-of-one-more/04`. `buildTimeline` above is now *defined* by this,
+ * which is the property that keeps the two from disagreeing about what a bar
+ * is: `timeline.test.ts`, `timelineAttribution.test.ts` and `runLanes.test.ts`
+ * all still address the pure function, and they are testing this code.
+ *
+ * `result()` is non-destructive, as `Fold` requires. Every finishing pass —
+ * rule 6's mount windows, the kind reading, the overlaps — writes into a
+ * **copy** of each draft, because the run is very likely still streaming and
+ * the next frame will add to the drafts these copies were made from. A
+ * `durationMs` overwritten in place by rule 6 and then added to by the next
+ * arriving frame is a bar that grows past the pair that measured it.
+ */
+export function timelineFold(): Fold<TimelineRow, Timeline> {
   const steps: Draft[] = [];
   const visits = new Map<string, number>();
   const spawnNames = new Map<string, string>();
@@ -403,7 +433,7 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
     draft.key = `${draft.label}#${draft.visit}${taskId ? `@${taskId}` : ''}`;
   };
 
-  for (const row of rows) {
+  const push = (row: TimelineRow): void => {
     // The span this frame closes: from the last frame the server dated to
     // this one. The first dated frame is measured from the stream's own
     // opening, which is what `elapsedMs` is relative to. `null` propagates
@@ -442,7 +472,7 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
       // was the bar in progress (rule 4).
       const last: Draft | undefined = pending ?? mutable();
       if (last) last.durationMs = add(last.durationMs, duration);
-      continue;
+      return;
     }
 
     if (row.internal) {
@@ -478,7 +508,7 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
           pendingOwner = bar.label;
         }
       }
-      continue;
+      return;
     }
 
     const spawned =
@@ -502,7 +532,7 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
       pending.durationMs = add(pending.durationMs, duration);
       pending = null;
       pendingOwner = null;
-      continue;
+      return;
     }
     pending = null;
     pendingOwner = null;
@@ -517,7 +547,7 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
       bound.durationMs = add(bound.durationMs, duration);
       pending = bound;
       pendingOwner = bound.label;
-      continue;
+      return;
     }
 
     const last = mutable();
@@ -525,38 +555,53 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
       last.count += 1;
       charge(last, row);
       last.durationMs = add(last.durationMs, duration);
-      continue;
+      return;
     }
 
     const draft = open(label, row.taskId, namespace, startedAt);
     charge(draft, row);
     draft.durationMs = duration;
-  }
+  };
 
-  // Rule 6, second half: a mount's bar is its own two dated frames, not the
-  // spans that happened to be charged to it. The two agree whenever nothing
-  // interleaved, and where something did the pair is the one that is right.
-  for (const mount of mounts.values()) {
-    if (mount.bar === null || mount.startMs === null) continue;
-    mount.bar.startMs = mount.startMs;
-    if (mount.endMs === null) continue;
-    mount.bar.durationMs = Math.max(0, mount.endMs - mount.startMs);
-    mount.bar.measured = true;
-  }
-  // The kind, last, because it is a reading of the whole bar rather than of
-  // any one frame: a mount is a mount whichever frame opened it, and a bar is
-  // `model` on the evidence of a model frame it folded at any point. A refusal
-  // is already set and wins outright — it is the only one of the four that is
-  // a verdict rather than a description.
-  for (const mount of mounts.values()) {
-    if (mount.bar !== null && mount.bar.kind !== 'refusal') mount.bar.kind = 'mount';
-  }
-  for (const draft of steps) {
-    if (draft.kind === 'tool' && draft.modelCalls > 0) draft.kind = 'model';
-  }
-  assignConcurrency(steps);
+  const result = (): Timeline => {
+    // Every finishing pass below writes here, never into `steps`: a draft is
+    // still open to the next frame, and `order` is its index plus one from the
+    // moment it is created, so a copy is found without a second map.
+    const finished: Draft[] = steps.map((draft) => ({ ...draft }));
+    const copyOf = (draft: Draft): Draft | undefined => finished[draft.order - 1];
 
-  return { steps, totalMs: clock };
+    // Rule 6, second half: a mount's bar is its own two dated frames, not the
+    // spans that happened to be charged to it. The two agree whenever nothing
+    // interleaved, and where something did the pair is the one that is right.
+    for (const mount of mounts.values()) {
+      const bar = mount.bar === null ? undefined : copyOf(mount.bar);
+      if (bar === undefined || mount.startMs === null) continue;
+      bar.startMs = mount.startMs;
+      if (mount.endMs === null) continue;
+      bar.durationMs = Math.max(0, mount.endMs - mount.startMs);
+      bar.measured = true;
+    }
+    // The kind, last, because it is a reading of the whole bar rather than of
+    // any one frame: a mount is a mount whichever frame opened it, and a bar is
+    // `model` on the evidence of a model frame it folded at any point. A refusal
+    // is already set and wins outright — it is the only one of the four that is
+    // a verdict rather than a description.
+    for (const mount of mounts.values()) {
+      const bar = mount.bar === null ? undefined : copyOf(mount.bar);
+      if (bar !== undefined && bar.kind !== 'refusal') bar.kind = 'mount';
+    }
+    for (const draft of finished) {
+      if (draft.kind === 'tool' && draft.modelCalls > 0) draft.kind = 'model';
+    }
+    const overlaps = overlappingBars(finished);
+    finished.forEach((draft, index) => {
+      draft.concurrent = overlaps[index] as readonly string[];
+    });
+
+    return { steps: finished, totalMs: clock };
+  };
+
+  return { push, result };
 }
 
 /** The mount this namespace names, if the run had not yet closed it at `at`. */
@@ -572,7 +617,14 @@ function openMountAt<T extends { endMs: number | null }>(
 }
 
 /**
- * Names, on each bar, the bars it overlapped in time.
+ * The bars each bar overlapped in time, by index — the run ran them together.
+ *
+ * `the-cost-of-one-more/04`'s second quadratic. This compared every bar with
+ * every other, which is O(n²) whatever the answer turns out to be, and the
+ * answer is almost always nothing: the span model lays bars end to end by
+ * construction. A sweep in `startMs` order pays O(n log n) plus one step per
+ * pair it actually finds, which is the part that is genuinely quadratic and
+ * only when a run genuinely was.
  *
  * Strictly overlapped: a bar that begins exactly where another ends is a
  * sequence, and the span model produces a great many of those. So the only
@@ -581,26 +633,49 @@ function openMountAt<T extends { endMs: number | null }>(
  * concurrency in a run and never a ceiling, and `TimelineStep.concurrent`
  * says so where a reader will meet it.
  */
-function assignConcurrency(
-  steps: readonly { -readonly [K in keyof TimelineStep]: TimelineStep[K] }[],
-): void {
-  const found = steps.map((): string[] => []);
-  const endOf = (step: TimelineStep): number => (step.startMs ?? 0) + (step.durationMs ?? 0);
-  for (let i = 0; i < steps.length; i += 1) {
-    const a = steps[i]!;
-    if (a.startMs === null) continue;
-    for (let j = i + 1; j < steps.length; j += 1) {
-      const b = steps[j]!;
-      if (b.startMs === null) continue;
-      if (a.startMs < endOf(b) && b.startMs < endOf(a)) {
-        found[i]!.push(b.key);
-        found[j]!.push(a.key);
-      }
-    }
+export function overlappingBars(
+  steps: readonly {
+    readonly key: string;
+    readonly startMs: number | null;
+    readonly durationMs: number | null;
+  }[],
+): readonly (readonly string[])[] {
+  const found: number[][] = steps.map((): number[] => []);
+  const dated: { index: number; startMs: number; endMs: number }[] = [];
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index]!;
+    if (step.startMs === null) continue;
+    dated.push({ index, startMs: step.startMs, endMs: step.startMs + (step.durationMs ?? 0) });
   }
-  steps.forEach((step, index) => {
-    step.concurrent = found[index]!;
-  });
+
+  // The sweep. Ordered by where a bar opens, so a bar still in `active` when
+  // the next one opens is a bar that had not closed — which is the whole of
+  // the overlap test, and is why the second half of the old comparison
+  // (`b.startMs < endOf(a)`) does not have to be made: it is true by the sort.
+  const order = [...dated].sort((a, b) => a.startMs - b.startMs);
+  let active: typeof order = [];
+  for (const bar of order) {
+    // Strictly overlapped: a bar that begins exactly where another ends is a
+    // sequence. `<=` here rather than `<` is that strictness.
+    active = active.filter((open) => open.endMs > bar.startMs);
+    for (const open of active) {
+      // The second half of the old comparison, which the sort makes true in
+      // every case but one: a bar of **no length** opening exactly where an
+      // earlier one did ends where it starts, so nothing is inside it. Dropping
+      // this check pairs a zero-width bar with the bar it sits on, and the span
+      // model produces zero-width bars all the time.
+      if (bar.endMs <= open.startMs) continue;
+      found[open.index]!.push(bar.index);
+      found[bar.index]!.push(open.index);
+    }
+    active.push(bar);
+  }
+
+  // Sorted by the partner's own position, which is the order the every-pair
+  // comparison produced by construction: it visited `i` ascending and pushed
+  // `j` ascending inside it. Restoring it here is what makes this a faster
+  // spelling of the same answer rather than a different one.
+  return found.map((partners) => partners.sort((a, b) => a - b).map((index) => steps[index]!.key));
 }
 
 /** A bar's width as a percentage of the run, floored so a fast step is still visible. */
@@ -778,69 +853,118 @@ const RUN_LANE = 'The workflow';
  * ceiling, and its own doc comment says so where a reader will meet it.
  */
 export function buildLanes(rows: readonly TimelineRow[]): RunLanes {
-  const { steps, totalMs } = buildTimeline(rows);
+  const fold = laneFold();
+  for (const row of rows) fold.push(row);
+  return fold.result();
+}
 
-  type Child = { -readonly [K in keyof RunLane]: RunLane[K] } & { steps: TimelineStep[] };
-  const children: Child[] = [];
+/**
+ * `buildLanes`, one row at a time — and, like `timelineFold`, the definition
+ * of it rather than a second copy of the rules.
+ *
+ * Two things had to move out of `result()` into `push()` for this to be worth
+ * anything. The lane list was built by a **second walk of every row** looking
+ * for spawn frames, which on the live panel is the same O(F) per frame the
+ * fold itself was paying; it is accumulated as the frames arrive now. And a
+ * child lane's per-lane visit number was `lane.steps.filter(...)` **inside a
+ * loop over the steps**, which is a third quadratic — in bars rather than
+ * frames, and small, but on a path that now runs on every frame. It is a
+ * count per label instead.
+ */
+export function laneFold(): Fold<TimelineRow, RunLanes> {
+  const timeline = timelineFold();
+  /** What each `spawn` frame said, in the order the run announced them. */
+  const announced: {
+    readonly key: string;
+    readonly name: string;
+    readonly kind: RunLane['kind'];
+    readonly parent: string;
+    readonly taskId: string | null;
+    readonly startMs: number | null;
+    readonly endMs: number | null;
+    readonly ending: RunLane['ending'];
+  }[] = [];
 
-  for (const row of rows) {
+  const push = (row: TimelineRow): void => {
+    timeline.push(row);
     const spawn = row.spawn;
     // A mount folds; the run's own steps are the run's own lane. Only a child
     // that can outlive the frame that announced it earns a row.
-    if (!spawn || spawn.kind === 'subgraph') continue;
+    if (!spawn || spawn.kind === 'subgraph') return;
     const startMs = Number.isFinite(row.elapsedMs as number) ? (row.elapsedMs as number) : null;
     const endMs = Number.isFinite(spawn.settledMs as number) ? (spawn.settledMs as number) : null;
-    children.push({
+    announced.push({
       // A backend older than 54 mints no `spawnId`; the lane still exists and
       // is still keyed uniquely, it simply can never be closed.
-      key: spawn.spawnId ?? `spawn@${children.length}`,
+      key: spawn.spawnId ?? `spawn@${announced.length}`,
       name: spawn.label,
       kind: spawn.kind === 'subagent' || spawn.kind === 'async' ? spawn.kind : 'fanout',
       parent: stepLabel(row.node),
       taskId: row.taskId,
       startMs,
       endMs,
-      durationMs: startMs === null || endMs === null ? null : Math.max(0, endMs - startMs),
-      openEnded: endMs === null,
       ending: spawn.outcome ?? null,
-      sibling: null,
-      steps: [],
     });
-  }
-
-  const runLane: Child = {
-    key: 'run',
-    name: RUN_LANE,
-    kind: 'run',
-    parent: null,
-    taskId: null,
-    startMs: steps.length > 0 ? (steps[0]?.startMs ?? null) : null,
-    endMs: totalMs,
-    durationMs: totalMs,
-    // The reference frame: the recording's end *is* its end, so it is never
-    // the open-ended shape even while the run is still streaming.
-    openEnded: false,
-    ending: null,
-    sibling: null,
-    steps: [],
   };
 
-  for (const step of steps) {
-    const lane = claim(children, step) ?? runLane;
-    // `visit` is renumbered **within the lane**, and that is not tidiness.
-    // `buildTimeline` counts visits across the whole run, so the recorded
-    // fan-out's four children came out `visit 1..4` — the panel's badge for
-    // *a fourth revise lap of one node*, said about four workers that ran two
-    // at a time. A lap is a lap of this lane or it is nothing.
-    lane.steps.push(
-      lane === runLane
-        ? step
-        : { ...step, visit: lane.steps.filter((seen) => seen.label === step.label).length + 1 },
-    );
-  }
-  assignSiblings(children, totalMs);
+  const result = (): RunLanes => {
+    const { steps, totalMs } = timeline.result();
 
-  return { lanes: [runLane, ...children], totalMs };
+    type Child = { -readonly [K in keyof RunLane]: RunLane[K] } & { steps: TimelineStep[] };
+    const children: Child[] = announced.map((lane) => ({
+      ...lane,
+      durationMs:
+        lane.startMs === null || lane.endMs === null
+          ? null
+          : Math.max(0, lane.endMs - lane.startMs),
+      openEnded: lane.endMs === null,
+      sibling: null,
+      steps: [],
+    }));
+
+    const runLane: Child = {
+      key: 'run',
+      name: RUN_LANE,
+      kind: 'run',
+      parent: null,
+      taskId: null,
+      startMs: steps.length > 0 ? (steps[0]?.startMs ?? null) : null,
+      endMs: totalMs,
+      durationMs: totalMs,
+      // The reference frame: the recording's end *is* its end, so it is never
+      // the open-ended shape even while the run is still streaming.
+      openEnded: false,
+      ending: null,
+      sibling: null,
+      steps: [],
+    };
+
+    // One counter per lane per label, rather than a scan of the lane's own steps
+    // for every step it takes: the answer is the same and the walk is not.
+    const seen = new Map<Child, Map<string, number>>();
+    for (const step of steps) {
+      const lane = claim(children, step) ?? runLane;
+      // `visit` is renumbered **within the lane**, and that is not tidiness.
+      // `buildTimeline` counts visits across the whole run, so the recorded
+      // fan-out's four children came out `visit 1..4` — the panel's badge for
+      // *a fourth revise lap of one node*, said about four workers that ran two
+      // at a time. A lap is a lap of this lane or it is nothing.
+      if (lane === runLane) {
+        lane.steps.push(step);
+        continue;
+      }
+      const laps = seen.get(lane) ?? new Map<string, number>();
+      const visit = (laps.get(step.label) ?? 0) + 1;
+      laps.set(step.label, visit);
+      seen.set(lane, laps);
+      lane.steps.push({ ...step, visit });
+    }
+    assignSiblings(children, totalMs);
+
+    return { lanes: [runLane, ...children], totalMs };
+  };
+
+  return { push, result };
 }
 
 /**

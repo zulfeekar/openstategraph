@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { reusableFold, type Fold } from './incrementalFold';
 import type { RunResult } from '@core/runtime/RuntimeClient';
 import { RichText } from '@view/common/RichText';
 import { traceStepKey } from './traceKeys';
@@ -215,6 +216,28 @@ const same = (id: string) => id.replace(/^node:/, '');
  * the moment the user came here to see.
  */
 export function buildTrace(rows: readonly ActivityRow[]): TraceNode[] {
+  const fold = traceFold();
+  for (const row of rows) fold.push(row);
+  return fold.result();
+}
+
+/**
+ * The same rules, one row at a time — and the definition of `buildTrace` above
+ * rather than a second copy of them (`the-cost-of-one-more/04`).
+ *
+ * The trace is the run view a reader lands on, so it is the one that was paying
+ * the live loop's whole bill: `AskPanel` rebuilds `turn.activity` per frame,
+ * `Activity`'s memo is keyed on that array's identity, and the streaming turn
+ * therefore refolded a history one frame longer on every frame. F folds of
+ * O(F).
+ *
+ * `result()` hands back a fresh array of the same nodes rather than a deep
+ * copy. Unlike `timelineFold` there is no finishing pass here — nothing reads
+ * the accumulated tree to rewrite it — so the only thing a later `push` can do
+ * to an already-returned node is add the child it would have added anyway, and
+ * every reader of this is a render that is about to run again.
+ */
+export function traceFold(): Fold<ActivityRow, TraceNode[]> {
   interface Mutable {
     node: string;
     taskId: string | null;
@@ -250,10 +273,10 @@ export function buildTrace(rows: readonly ActivityRow[]): TraceNode[] {
     return node;
   };
 
-  for (const row of rows) {
+  const consume = (row: ActivityRow): void => {
     if (row.spawn) {
       push(row);
-      continue;
+      return;
     }
     const owner = traceOwner(row);
     if (row.internal) {
@@ -271,13 +294,13 @@ export function buildTrace(rows: readonly ActivityRow[]): TraceNode[] {
         });
         open.set(key, target);
       }
-      if (!target) continue;
+      if (!target) return;
       target.children.push(row);
       // The steps are where a node's time actually went: the completion
       // frame's own gap is the millisecond after the last one. Summing them
       // is what stops a 36-step agent reading `3 ms`.
       target.durationMs += row.durationMs;
-      continue;
+      return;
     }
     const key = same(owner ?? row.node);
     const opened = open.get(key);
@@ -294,11 +317,12 @@ export function buildTrace(rows: readonly ActivityRow[]): TraceNode[] {
       opened.taskId = opened.taskId ?? row.taskId;
       open.delete(key);
       last = opened;
-      continue;
+      return;
     }
     last = push(row);
-  }
-  return tree;
+  };
+
+  return { push: consume, result: (): TraceNode[] => [...tree] };
 }
 
 /** The downloadable run record — ticket 63's "export as tree JSON". */
@@ -331,7 +355,19 @@ export function Activity({ rows }: { rows: readonly ActivityRow[] }) {
   // every frame of the live run — O(turns x frames x rows) for a record
   // that cannot have changed. `buildTrace` is a pure fold of `rows`, so
   // caching it is referentially transparent (see traceTree.test.ts).
-  const trace = useMemo(() => buildTrace(rows), [rows]);
+  //
+  // What the memo could never buy is the **streaming** turn, whose array is a
+  // new one on every frame by construction — the fold it skipped for every
+  // finished turn it paid in full, over a history one frame longer each time
+  // (`the-cost-of-one-more/04`). This turn's own fold is kept here, consumes
+  // only the frames that arrived, and starts again for anything that is not an
+  // extension of what it has already read.
+  // Lazy initial state rather than a ref, so nothing reads a ref during
+  // render: this turn's own fold, for as long as this turn is on screen.
+  const [fold] = useState<(rows: readonly ActivityRow[]) => TraceNode[]>(() =>
+    reusableFold(traceFold),
+  );
+  const trace = useMemo(() => fold(rows), [fold, rows]);
   return (
     <div className="ask__activity">
       {/* No empty state of its own any more (`launch-readiness/141`). The
