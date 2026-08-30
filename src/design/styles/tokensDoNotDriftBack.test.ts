@@ -657,15 +657,35 @@ describe('a fallback behind a name that always resolves is dead code', () => {
    * a tenth accent, or a token moved out of `:root` into `[data-accent]`,
    * re-classifies itself.
    *
-   * **Scoped to a nested `var(--a, var(--b))`**, which is the shape `09` and
-   * `10` both measured. The same reasoning applies to a *literal* fallback —
-   * `var(--radius-sm, 6px)` behind an unconditional name is equally
-   * unreachable — and `src/` carries a dozen of those. They are a separate
-   * decision (a literal fallback can be deliberate belt-and-braces in a way a
-   * token alias is not, and one of them sits in a directory another worktree
-   * held) and are filed as `the-look-has-an-author-now/11` rather than swept
-   * in here, because a ticket about two sites should not quietly become a
-   * ticket about fourteen.
+   * **`11` widened the scope from a nested `var(--a, var(--b))` to any
+   * fallback at all**, which is one character in the matcher and a decision
+   * that had to be taken first. `10` deferred it because a *literal* fallback
+   * can be deliberate in a way a token alias is not: `var(--radius-sm, 6px)`
+   * reads as "6px if the design system ever loses the name", which is an
+   * argument, where an alias only reads as an author unsure which name
+   * existed.
+   *
+   * Measured, the argument does not survive its own instance. The rule above
+   * is not about likelihood — a name declared at bare `:root` is in scope on
+   * every element in every theme, so the design system cannot *lose* it while
+   * the stylesheet that spends it is loaded. There is no state to be
+   * belt-and-braces against. And the twelve literals said so themselves: the
+   * token behind `var(--focus-ring-width, 2px)` is `3px`, the one behind
+   * `var(--letter-spacing-wide, 0.04em)` is `0.01em`, and `--radius-sm`
+   * resolves through `--osg-radius: 0px` rather than the `4px` written beside
+   * it three times. A fallback that disagrees with the token is a second
+   * opinion nobody can ever read — belt-and-braces would at least have had to
+   * agree with the belt.
+   *
+   * So: deleted, and the list stays a ratchet at empty rather than growing an
+   * exemption by shape. What widening did add is a third kind, and it is why
+   * the live assertion below no longer reads "every survivor is an accent".
+   * `--canvas-empty-inset-left`, `--canvas-empty-inset-right` and
+   * `--textarea-max-rows` are set **inline on one element** by `AppShell.tsx`
+   * and `Field.tsx`, never at `:root`, so their literal fallbacks carry every
+   * element the component has not measured yet. The selector rule classifies
+   * them correctly with no help — which is the whole reason it reads
+   * declarations instead of names.
    */
 
   /** Custom properties declared by a top-level rule that matches the root always. */
@@ -705,11 +725,11 @@ describe('a fallback behind a name that always resolves is dead code', () => {
     expect(always.has('--accent-on-tint')).toBe(false);
   });
 
-  const nested = (): Array<{ site: string; token: string }> => {
+  const fallbacks = (): Array<{ site: string; token: string }> => {
     const found: Array<{ site: string; token: string }> = [];
     for (const path of stylesheets()) {
       const css = code(read(path));
-      for (const m of css.matchAll(/var\(\s*(--[a-zA-Z0-9_-]+)\s*,\s*var\(/g)) {
+      for (const m of css.matchAll(/var\(\s*(--[a-zA-Z0-9_-]+)\s*,/g)) {
         const line = css.slice(0, m.index).split('\n').length;
         found.push({ site: `${under(path)}:${line}`, token: m[1] ?? '' });
       }
@@ -717,20 +737,45 @@ describe('a fallback behind a name that always resolves is dead code', () => {
     return found;
   };
 
+  /**
+   * Three sites `11` could not reach, each with the same argument `10` gave
+   * for deferring `view/ask/PastRuns.css`: a **concurrent worktree held the
+   * directory**, and a three-token deletion is not worth a merge conflict in
+   * somebody else's session. Every one is dead by the rule above and none is
+   * defended — this is a ratchet that should empty, not an exemption list.
+   * The next session in `view/topbar/` or `view/workflow/` deletes its own
+   * and takes the row with it.
+   */
+  const HELD: readonly string[] = [
+    'view/topbar/TopBar.css:125 --space-1',
+    'view/workflow/WorkflowManager.css:85 --radius-full',
+    'view/workflow/WorkflowManager.css:88 --color-bg-subtle',
+  ];
+
   it('keeps the fallbacks that can fall through', () => {
     const always = unconditional();
-    const live = nested()
+    const live = fallbacks()
       .filter((f) => !always.has(f.token))
       .map((f) => `${f.site} ${f.token}`);
-    expect(live.length).toBeGreaterThan(0);
-    expect(live.every((s) => s.includes('--accent-'))).toBe(true);
+
+    // The five `var(--accent-*, …)` fallbacks `10` was written to spare. Named
+    // by count rather than asserted as "every survivor", because widening to
+    // literals brought in a second legitimate kind — a property set inline on
+    // one element — and a rule saying only accents may fall through would now
+    // be condemning `Field.css` and `canvas.css` for working code.
+    expect(live.filter((s) => s.includes('--accent-')).length).toBe(5);
+
+    // The other kind, by name: a custom property a component publishes onto
+    // one element from TypeScript is out of scope everywhere else, so its
+    // literal fallback is the value every unmeasured element renders.
+    expect(live).toContain('design/primitives/Field.css:147 --textarea-max-rows');
   });
 
   it('leaves no fallback behind a name that is always in scope', () => {
     const always = unconditional();
-    const dead = nested()
+    const dead = fallbacks()
       .filter((f) => always.has(f.token))
       .map((f) => `${f.site} ${f.token}`);
-    expect(dead.sort()).toEqual([]);
+    expect(dead.sort()).toEqual([...HELD].sort());
   });
 });

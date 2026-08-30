@@ -175,8 +175,23 @@
   font: var(--type-mono-sm);
   color: var(--color-text-primary);
   background: var(--color-bg-surface-sunken);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   padding: var(--space-1) var(--space-2);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+/* What a parked run is asking, under the sentence that says it is parked
+   (`the-cost-of-one-more/17`). The same grid as a checkpoint's `__line`,
+   because it is the same kind of thing — a key nobody here chose against a
+   value nobody here bounded — and a reader who has opened a step already
+   knows how to read it.
+
+   The one thing it adds is a ceiling. `candidate` is upstream text, which in
+   this product can be a whole workflow document, and a gate that pushed the
+   lanes off the bottom of the panel would answer "what is it waiting for" by
+   hiding everything else. Ten lines, then it scrolls in place. */
+.past-runs__ask {
+  max-height: 10lh;
+  overflow-y: auto;
 }

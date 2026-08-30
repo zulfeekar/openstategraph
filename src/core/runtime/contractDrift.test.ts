@@ -443,21 +443,22 @@ describe('the client and the published contract', () => {
    * the *schema* still declares those five, which a client-side census cannot.
    */
   const UNREAD_BY_DESIGN: Readonly<Record<string, string>> = {
-    // **Three, and each names its own ticket now.** `14` asked whether its
-    // five were one session or five, and the answer measured out at two and
-    // three. `default_model` and `findings` needed a line and a badge on rows
-    // that already existed, so they were mirrored and shown together; the
-    // three below each need an **affordance the editor does not have** — a
-    // staleness warning with nowhere to live, a disclosure of what a parked
-    // run is asking, a control that rebuilds routing knowledge. Three
-    // features on three surfaces with three design questions is not one
-    // ticket, and mirroring them into this client to clear a row here would
-    // be the exact defect the census exists to name, inverted: a field read
+    // **Two left.** `14` asked whether its five were one session or five, and
+    // the answer measured out at two and three. `default_model` and `findings`
+    // needed a line and a badge on rows that already existed, so they were
+    // mirrored and shown together; the three below each needed an **affordance
+    // the editor does not have** — a staleness warning with nowhere to live, a
+    // disclosure of what a parked run is asking, a control that rebuilds
+    // routing knowledge. Mirroring any of them here to clear a row would have
+    // been the exact defect this census exists to name, inverted: a field read
     // by a client that no consumer of it can see.
+    //
+    // `pause` is gone, which is what an exemption pointing at a ticket is for.
+    // `the-cost-of-one-more/17` gave it a surface, and the assertion below
+    // names that surface rather than trusting this row's absence.
     //
     // An exemption pointing at a ticket is a debt; each one below says which.
     editor_stale: 'the-cost-of-one-more/16 — nothing warns that this editor bundle is stale',
-    pause: 'the-cost-of-one-more/17 — the History lane says a run is parked, not what it asks',
     note: 'the-cost-of-one-more/18 — publish drops the backend sentence about routing knowledge',
     // The one genuine by-design entry. `MountDocumentResponse` echoes the
     // address the client just asked with; `WorkflowFileClient` built that URL
@@ -605,6 +606,13 @@ describe('the client and the published contract', () => {
     ).toContain('src/view/overlays/CredentialsDialog.tsx');
     expect(read('findings'), 'the package-contract lines reach no surface').toContain(
       'src/view/workflow/WorkflowManager.tsx',
+    );
+    // `the-cost-of-one-more/17`. The comment above says a third field added
+    // later inherits nothing from this and should join it, so it does. The
+    // History lane is the only consumer: `pauseLines` lives in `core/` and
+    // would satisfy `clientReads` on its own while drawing nothing.
+    expect(read('pause'), 'what a parked run is asking reaches no surface').toContain(
+      'src/view/ask/PastRuns.tsx',
     );
   });
 

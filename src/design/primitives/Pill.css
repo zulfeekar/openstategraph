@@ -79,7 +79,7 @@
    `--live` state exists to show was drawn in no colour whatsoever. */
 .pill--live .pill__mark {
   background: var(--color-status-running);
-  animation: pill-pulse 1.6s var(--ease-in-out, ease-in-out) infinite;
+  animation: pill-pulse 1.6s var(--ease-in-out) infinite;
 }
 
 @keyframes pill-pulse {

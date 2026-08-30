@@ -58,7 +58,7 @@
 
 .btn--lg {
   --btn-height: var(--control-height-lg);
-  --btn-padding-x: var(--space-3-5, 14px);
+  --btn-padding-x: var(--space-3-5);
 }
 
 /* ---------- Variants ---------- */

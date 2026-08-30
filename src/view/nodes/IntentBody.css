@@ -40,7 +40,7 @@
 
 .node__ambient-label {
   text-transform: uppercase;
-  letter-spacing: var(--letter-spacing-wide, 0.04em);
+  letter-spacing: var(--letter-spacing-wide);
   opacity: 0.75;
 }
 

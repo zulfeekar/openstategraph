@@ -7,6 +7,7 @@ import {
   describeRun,
   laneTitle,
   lanes,
+  pauseLines,
   stepCost,
   stepLines,
   stepTitle,
@@ -226,10 +227,37 @@ function RunHistory({ run, names }: { run: PastRun; names?: ReadonlyMap<string, 
   return (
     <div className="past-runs__steps">
       {run.status === 'paused' ? (
-        <p className="past-runs__note">
-          This run is parked at an approval. Ask again in the chat above to continue it — history
-          only reads.
-        </p>
+        <>
+          <p className="past-runs__note">
+            This run is parked at an approval. Ask again in the chat above to continue it — history
+            only reads.
+          </p>
+          {/*
+            What it is parked *on* (`the-cost-of-one-more/17`). The sentence
+            above has always known the run is waiting; the payload the gate
+            passed to `interrupt()` was published on `GET /api/threads` and
+            read by nothing, so a reviewer had to go back to the terminal that
+            started the run, or resume blind.
+
+            **Under the sentence, not inside it.** `candidate` is upstream text
+            and upstream text in this product can be an entire workflow
+            document — `workflow-architect` answers with one — so the value is
+            unbounded and the row's meta line is already carrying five facts.
+            `52`'s rule: an open-ended lane is drawn as a different shape.
+
+            Rendered as key/value rows and never as prose, because the payload
+            is `dict[str, str]` and the keys are the pausing node's own. This
+            reads; it offers nothing. Answering the gate is the composer above,
+            which costs a model call — showing a question and offering to
+            answer it are two features and only one of them is here.
+          */}
+          {pauseLines(run.pause).map((line) => (
+            <div className="past-runs__line past-runs__ask" key={line.key}>
+              <span className="past-runs__line-key">{line.key}</span>
+              <span className="past-runs__line-value">{line.value}</span>
+            </div>
+          ))}
+        </>
       ) : null}
       {/*
         Where the missing supersteps would have been (`the-cost-of-one-more/13`).

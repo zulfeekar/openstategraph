@@ -163,7 +163,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       lines away from its JSX. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 717,
+    lines: 722,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -217,7 +217,16 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       and its coercion in \`providers\` — the model a run gets when it names
       none, published on every provider row since the endpoint existed and read
       by nothing. One declared member and one line in a mapper, which is this
-      entry's cheapest possible bill and the shape it exists to permit.`,
+      entry's cheapest possible bill and the shape it exists to permit.
+
+      **717 -> 722** (\`the-cost-of-one-more/17\`). \`PastRun.pause\` — what a
+      parked run is waiting to be told — plus \`asPausePayload\`, a four-line
+      reader beside \`asTokens\` and \`asTruncation\`. Same shape as the two
+      bills above and the same argument: one declared member, one line in a
+      mapper, and a guard that refuses an array because \`Object.entries\` would
+      otherwise render one as numeric keys at a person. No behaviour — the
+      judgement about what the payload *says* is \`pastRunView.pauseLines\`,
+      which is where the rules in this seam belong.`,
   },
 };
 

@@ -26,7 +26,33 @@
   a mount boundary, so a caller of `.ask()` has a name to catch
   (`launch-readiness/176`).
 
+### Added
+- **A parked run's History row now says what it is parked on**
+  (`the-cost-of-one-more/17`). `GET /api/threads` has published the interrupt
+  payload since `workflow-gallery 76` — precisely so a reviewer would not have
+  to go back to the terminal that started the run — and the editor dropped it.
+  The lane knew a run was waiting and could not say for what. Open the row and
+  the gate's own payload sits under the parked sentence, as key/value rows.
+  Deliberately **not** prose and deliberately not a `question` field: the
+  payload is whatever the node passed to `interrupt()`, so a key this
+  repository has never seen is shown rather than hidden, and one that is not a
+  string is dropped rather than printed as `[object Object]`. The lane still
+  only reads — answering the gate is the composer above, and that costs a model
+  call.
+
 ### Fixed
+- **Nine `var(--token, literal)` fallbacks that could never render, deleted**
+  (`the-look-has-an-author-now/11`). `10`'s rule — a custom property declared
+  by a top-level rule whose selector list contains a bare `:root` is in scope
+  always, so nothing behind it renders in any theme on any element — does not
+  care whether the fallback is a token or a literal. It was widened to both.
+  The literals turned out to *disagree* with the tokens they hid behind:
+  `var(--focus-ring-width, 2px)` against a `3px` token,
+  `var(--letter-spacing-wide, 0.04em)` against `0.01em`, and `var(--radius-sm,
+  4px)` three times against a token that resolves through `--osg-radius: 0px`.
+  Nothing on screen moved, because the outer name was always what rendered.
+  Three more sit in directories a concurrent worktree held and are recorded as
+  a named ratchet rather than an exemption.
 - **Every run count on `docs/releasing.md`'s status table was wrong, and they
   are gone rather than corrected.** The page said `openwiki-update.yml` had
   "zero runs, ever" in one row and, forty lines below, named "the model key its

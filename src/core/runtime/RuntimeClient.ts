@@ -951,6 +951,18 @@ export interface PastRun {
    * nothing (production-ready/78).
    */
   readonly failed: boolean;
+  /**
+   * What a parked run is waiting to be told, or `null` when it is not parked.
+   *
+   * **Deliberately not narrowed past `Record<string, string>`.** The payload is
+   * the value passed to `interrupt()`, so it is written by whatever node
+   * paused — `human.approval` sends `{message, candidate}` and a grader's
+   * `{verdict, reason}` on top of it, and a package's own graph node sends
+   * whatever its author chose. Declaring a `message` here would be this client
+   * promising a shape the contract does not, on behalf of code it did not
+   * write; `pauseLines` reads it tolerantly instead.
+   */
+  readonly pause: Readonly<Record<string, string>> | null;
 }
 
 /**
@@ -1879,7 +1891,23 @@ function asPastRun(row: Record<string, unknown>): PastRun {
     // a Resume button for a run that cannot be resumed is the worse mistake.
     status: row['status'] === 'paused' ? 'paused' : 'finished',
     failed: row['failed'] === true,
+    // Kept as it arrived, minus anything that is not a mapping. The values are
+    // not coerced here: `pauseLines` is the one place this payload is judged,
+    // and a mapper that quietly `String()`d a nested object would hand it a
+    // string it could no longer refuse.
+    pause: asPausePayload(row['pause']),
   };
+}
+
+/**
+ * `dict[str, str] | None` as this client is willing to hold it.
+ *
+ * An array is an object in JavaScript and `Object.entries` would turn one into
+ * numeric keys, so it is refused here rather than rendered as `0`, `1`, `2`.
+ */
+function asPausePayload(value: unknown): Readonly<Record<string, string>> | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, string>;
 }
 
 /**

@@ -1168,7 +1168,36 @@ describe('RuntimeClient — past runs', () => {
       answer: 'Rock earns the most.',
       status: 'paused',
       failed: false,
+      pause: null,
     });
+  });
+
+  it('carries what a parked run is asking, without narrowing it', async () => {
+    // `the-cost-of-one-more/17`. Whatever the pausing node passed to
+    // `interrupt()`, verbatim: the keys belong to its author, and a mapper
+    // that kept only the ones this repository writes would drop the whole
+    // question for every package it did not ship.
+    const stub = stubFetch(
+      jsonResponse({
+        threads: [{ ...ROW, pause: { message: 'Approve this result?', severity: 'high' } }],
+      }),
+    );
+    const result = await new RuntimeClient('', stub.fetch).pastRuns();
+    expect(result.ok && result.value[0]?.pause).toEqual({
+      message: 'Approve this result?',
+      severity: 'high',
+    });
+  });
+
+  it('refuses a pause payload that is not a mapping', async () => {
+    // An array is an object here, and `Object.entries` would render one as
+    // keys `0`, `1`, `2` at a person. `null` is the honest reading of a shape
+    // the contract does not describe.
+    for (const hostile of [['a', 'b'], 'text', 7]) {
+      const stub = stubFetch(jsonResponse({ threads: [{ ...ROW, pause: hostile }] }));
+      const result = await new RuntimeClient('', stub.fetch).pastRuns();
+      expect(result.ok && result.value[0]?.pause).toBeNull();
+    }
   });
 
   it('reads a failed node’s sentinel back as `failed`, separately from `status`', async () => {
