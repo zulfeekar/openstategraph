@@ -182,13 +182,22 @@ class TestTheRouterIsTheDiagram:
 class TestNoNodeIsUnexplainable:
     """ "Every node must earn its place" as an executable ceiling."""
 
-    def test_the_visible_example_is_thirteen_nodes(self) -> None:
+    def test_the_visible_example_is_fourteen_nodes(self) -> None:
+        """Thirteen until `every-workflow-green/44`.
+
+        The fourteenth is `guard-web`, and it earns its place the way this
+        class asks: without it the document tripped its own grounding finding
+        on `load_workflow` alone, because `agent-web`'s two open-world tools
+        reached `out1` with nothing between them. It is also the only shipped
+        demonstration of `guard.check` there is.
+        """
         doc = document(ASSISTANT)
         assert sorted(n["id"] for n in doc["nodes"]) == [
             "agent-chat",
             "agent-sql",
             "agent-web",
             "grader-sql",
+            "guard-web",
             "in1",
             "out1",
             "router1",
