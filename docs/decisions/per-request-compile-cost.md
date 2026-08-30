@@ -91,6 +91,21 @@ is what makes the invalidation genuinely hard rather than merely fiddly: the
 sanctioned `code → canvas` channel means a package's behaviour can change with
 `workflow.json` untouched. Keying on the document is **not** sufficient.
 
+## It was revisited from the other side, and this decision stands
+
+`scale-and-adopt/14` (2026-08-31) shipped `LiveWorkflows`, and it is **not** a
+reversal of the paragraph above. The measurement here is of *our* request path,
+which still compiles per request; nothing was added to it. What shipped is for
+a **host** that holds a `CompiledWorkflow` for the life of its process because
+`Workflows.load()` gave it one — an adopter is not paying 27 ms, it is paying a
+restart, so the trade refused above was never the one it faced.
+
+The list below was the specification, and `openstategraph/live.py` was built
+against it rather than against a shorter one: content digests over every file
+under a package and every package it mounts (1–7), a lock proof for the
+mechanism, and item 8 recorded as not covered with `invalidate()` as its
+answer.
+
 ## If it is ever revisited, this is the invalidation list
 
 Recorded so that a future attempt starts from the full list rather than

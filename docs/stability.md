@@ -27,7 +27,7 @@ that does not answer the question.)
 ```python
 from openstategraph import (
     load_workflow, CompiledWorkflow, RunResult,
-    Workflows, WorkflowInfo,
+    Workflows, WorkflowInfo, LiveWorkflows, package_stamp,
     DEFAULT_RECURSION_LIMIT, __version__,
     OpenStateGraphError, WorkflowPackageError, PackageNotFound,
     InvalidPackageName, DocumentError, SchemaVersionError,
