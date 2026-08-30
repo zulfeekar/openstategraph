@@ -321,3 +321,67 @@ class TestAPartialIsExemptFromBothChecks:
 
     def test_an_open_ticket_with_no_commits_is_not_drift(self, script: ModuleType) -> None:
         assert not script.is_trailer_drift(ticket(script, "open"), [])
+
+
+class TestADriftRowCarriesItsOwnEvidence:
+    """`docs-and-gaps/21` — the row that stood for five days.
+
+    From 2026-08-26 the ledger printed one drift row every run:
+
+        launch-readiness/94  ← 7c776f3
+
+    Six handoffs and a dozen session reports carried it forward with the words
+    "pre-existing, unchanged", and **nobody opened the commit**. When somebody
+    finally did, `7c776f3` turned out to be a two-line prose fix to
+    `CLAUDE.md`'s step-budget paragraph, and `launch-readiness/94` — *a skill
+    has two sources and neither is authoritative* — was a live compiler defect
+    that had been hiding behind a mistyped trailer.
+
+    The row was correct. What failed was the reading, and the reason is on the
+    row itself: an id and a seven-character hash are two opaque tokens, so
+    seeing the mismatch cost a deliberate `git show`. A row that prints the
+    commit's own subject line beside the ticket's filename costs nothing —
+    *step budget* against *a skill has two sources* is visible at a glance.
+
+    This is deliberately **not** a new heuristic. Nothing new is reported, no
+    row is suppressed, and the false-positive rate is unchanged at zero: the
+    ticket asked whether the ledger could catch this *class*, and the two
+    heuristics it floated — a trailer whose ticket file predates the commit, a
+    diff touching nothing the ticket names — were both rejected here for the
+    reason the ticket itself gives. A noisy gate is how the row got ignored in
+    the first place, so the fix is to make the existing row legible rather than
+    to print more of them.
+    """
+
+    def test_it_reads_a_commit_subject(self, script: ModuleType) -> None:
+        """Pinned against the commit the ticket is about. It is pushed to two
+        remotes, so its subject cannot be rewritten."""
+        assert script.commit_subject("7c776f3") == (
+            "Name our step budget beside LangGraph's, since ours is the one in force"
+        )
+
+    def test_a_sha_this_repository_does_not_have_is_not_fatal(
+        self, script: ModuleType
+    ) -> None:
+        """A report is not the place to raise. The third check already exists
+        for commits this repository does not have."""
+        assert script.commit_subject("0000000") == "(no such commit here)"
+
+    def test_the_row_pairs_the_ticket_file_with_the_commit_subject(
+        self, script: ModuleType
+    ) -> None:
+        drifted = ticket(script, "open")
+
+        row = script.drift_row(drifted, ["7c776f3"])
+
+        assert "07-a-ticket.md" in row
+        assert "7c776f3" in row
+        assert "Name our step budget beside LangGraph's" in row
+
+    def test_every_commit_on_a_row_gets_its_subject(self, script: ModuleType) -> None:
+        drifted = ticket(script, "open")
+
+        row = script.drift_row(drifted, ["7c776f3", "6fd010b"])
+
+        assert "Name our step budget" in row
+        assert "The file a skill names is the skill" in row

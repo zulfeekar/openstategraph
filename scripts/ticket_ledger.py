@@ -231,6 +231,51 @@ def missing_ticket_files(
     return missing
 
 
+def commit_subject(sha: str) -> str:
+    """The commit's own first line, or a placeholder if it is not here.
+
+    Never raises: this is report text, and the "cites a commit this repository
+    does not have" check is where a missing commit is *judged*.
+    """
+    result = subprocess.run(
+        ["git", "log", "-1", "--format=%s", sha],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return "(no such commit here)"
+    return result.stdout.strip() or "(no such commit here)"
+
+
+def drift_row(ticket: Ticket, commits: list[str]) -> str:
+    """One shipped-but-open row, carrying the evidence a reader needs — `21`.
+
+    For five days the ledger printed ``launch-readiness/94  ← 7c776f3`` on
+    every run. The row was true and nobody read it: an id and a seven-character
+    hash are two opaque tokens, so noticing that a commit about the *step
+    budget* had been filed against a ticket about *a skill with two sources*
+    cost a deliberate ``git show`` -- and six handoffs paid the cheaper price
+    instead and wrote "pre-existing, unchanged".
+
+    So the row prints the commit's own subject line. Nothing new is reported
+    and nothing is suppressed: the row already existed and was already correct,
+    and the false-positive rate stays zero. What changes is that reading it is
+    no longer a separate act, which is the only part of that failure this
+    script can own.
+
+    The two heuristics `21` floated -- a trailer whose ticket file was last
+    modified long before the commit, a diff touching nothing the ticket names
+    -- are deliberately not here. Both would print rows that are usually
+    nothing, and a row that is usually nothing is how this one came to be
+    skipped.
+    """
+    lines = [f"{ticket.id} {ticket.path.name}"]
+    lines.extend(f"    ← {sha}  {commit_subject(sha)}" for sha in commits)
+    return "\n  ".join(lines)
+
+
 def commit_exists(sha: str) -> bool:
     return (
         subprocess.run(
@@ -288,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report(
         "Says open, but a commit's trailer resolves it",
-        [f"{t.id} {t.path.name} ← {', '.join(c)}" for t, c in shipped_but_open],
+        [drift_row(t, c) for t, c in shipped_but_open],
     )
     report(
         "Says open, but the file carries a resolution section",
@@ -301,7 +346,10 @@ def main(argv: list[str] | None = None) -> int:
     orphan_trailers = missing_ticket_files(claimed, known_ids, args.map_name)
     report(
         "A commit's trailer names a ticket that has no file",
-        [f"{tid} ← {', '.join(commits)}" for tid, commits in orphan_trailers],
+        [
+            "\n  ".join([tid] + [f"    ← {sha}  {commit_subject(sha)}" for sha in commits])
+            for tid, commits in orphan_trailers
+        ],
     )
 
     disagreements = (
@@ -309,6 +357,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     if disagreements == 0:
         print("\nThe ledger and git agree.")
+    else:
+        # `docs-and-gaps/21`. Every row above now carries the commit's own
+        # subject, so a row is answerable where it is printed. The one thing
+        # that must not happen to it is what happened to the row that stood
+        # from 2026-08-26: carried into six handoffs as "pre-existing,
+        # unchanged", never opened, hiding a live defect the whole time.
+        print(
+            "\nA row is opened, not carried. Each one prints the commit that"
+            " claims the ticket;\nif the subject and the filename are about"
+            " different things, the trailer is wrong\nand the ticket is still"
+            " open."
+        )
     return 1 if (args.strict and disagreements) else 0
 
 
