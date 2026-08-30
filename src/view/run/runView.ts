@@ -1,3 +1,4 @@
+import type { RunUsage } from '@core/runtime/RuntimeClient';
 import type { ActivityRow } from '../ask/traceTree';
 
 /**
@@ -37,9 +38,56 @@ export interface RunView {
   readonly rows: readonly ActivityRow[];
   /** True only while frames are still arriving. A stored run is never running. */
   readonly running: boolean;
+  /**
+   * The thread this run happened in — `''` when the run has not named one.
+   *
+   * `memory-and-replay` 61. The dock is outside the conversation, so *which
+   * run is this* is a question it could not answer at all: the header could
+   * say what was asked, and two runs of one question are one header. `53`'s
+   * `started` frame carries this on the first frame of every stream and the
+   * terminal frames carry it again, so a run identifies itself long before it
+   * ends.
+   *
+   * `''` means *the run told us nothing about its thread*, never *there was no
+   * thread* — the same reading `RunResult.threadId` documents, and the reason
+   * the dock prints nothing rather than a placeholder.
+   *
+   * **There is no run id beside it, and none is invented.** This runtime
+   * identifies a *turn*; a second identifier minted client-side would be a
+   * second name for one thing, and a name the server has never heard is not
+   * an identity a reader can look anything up with.
+   */
+  readonly threadId: string;
+  /**
+   * What the run spent, one row per model — `null` when it reported none.
+   *
+   * Widened rather than reached past, which is `61`'s own question. The
+   * alternative was a second store for the identity and the cost, and the
+   * property this snapshot exists for is that the dock is written against
+   * **one** shape: a stored run fills these two fields from a record exactly
+   * as a live one fills them from the terminal frame, and the panel learns the
+   * `—`-not-`0` rule once. A second source would have made the dock's own
+   * reader ask which of two objects is talking about the run it is drawing.
+   *
+   * It stays one *writer* — `AskPanel` — which is what `61` warned a second
+   * source would cost. Two fields on one snapshot is a field; two snapshots is
+   * a design change.
+   *
+   * Read by `runCost`, which is the whole of `14`'s rule: a mirror that stops
+   * at the mapper is not a mirror. `RunUsage` had been parsed by
+   * `RuntimeClient` since `56` and displayed by nothing.
+   */
+  readonly usage: readonly RunUsage[] | null;
 }
 
-const NOTHING: RunView = { source: 'live', question: '', rows: [], running: false };
+const NOTHING: RunView = {
+  source: 'live',
+  question: '',
+  rows: [],
+  running: false,
+  threadId: '',
+  usage: null,
+};
 
 export class RunViewStore {
   #held: RunView = NOTHING;
@@ -64,7 +112,9 @@ export class RunViewStore {
       held.source === view.source &&
       held.question === view.question &&
       held.running === view.running &&
-      held.rows === view.rows
+      held.rows === view.rows &&
+      held.threadId === view.threadId &&
+      held.usage === view.usage
     ) {
       return;
     }

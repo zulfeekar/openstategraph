@@ -9,13 +9,14 @@ import type { RunLane, StepKind, TimelineStep } from '../ask/timeline';
  * which is the reason every decidable part of this surface is a `.ts` module
  * and only the JSX is a `.tsx`.
  *
- * **What this pane is not, yet.** The prototype showed the selected step's
- * *payload* — what it **asked** and what it **produced**, worded per node
- * family: a router's routes and decision, a supervisor's subtasks by id, a
- * grader's verdict and reason, a mount's nested outputs. `ActivityRow.output`
- * carries one opaque string and the fold does not keep it, so building that
- * here would mean inventing per-family readings from a field that has none.
- * Filed as `memory-and-replay` 59 and deliberately absent rather than faked.
+ * **What this pane is, and what sits under it.** This half answers *what this
+ * bar is* — node, lane, kind, when it opened and closed, whether both ends
+ * were dated. The prototype's other half — what the step **asked** and what it
+ * **produced** — is `stepPayload` and `PayloadPane`, directly below, since
+ * `memory-and-replay` 59. It is a separate module rather than more terms in
+ * `barFacts` because a fact is a value the fold computed and a payload is a
+ * quotation the run wrote, and a `<dl>` of the two would present them as one
+ * kind of claim.
  */
 export interface BarFact {
   readonly term: string;

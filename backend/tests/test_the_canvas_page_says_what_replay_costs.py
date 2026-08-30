@@ -13,9 +13,13 @@ then presses play here has every reason to think it will be billed.
 `src/view/run/replayIsNotRerun.test.ts` pins that distinction in `CLAUDE.md`
 and in the component. This pins the one place a user actually reads it.
 
-It also pins the **negative**: `memory-and-replay` 59, 60 and 61 are filed and
-not built, and a page describing them would be the exact defect this map exists
-to fix.
+It also pins the **negative**, and the negative has shrunk. It used to name
+`memory-and-replay` 59, 60 and 61 together. **59 and 61 shipped**, so their
+half of the pin turned over: describing them is now required rather than
+forbidden, and what is asserted about them is the honesty rule a reader would
+otherwise misread — that *asked* is mostly not recorded, and that a live run
+has no partial token total. **60 is still filed and not built**, and a page
+describing it would be the exact defect this map exists to fix.
 """
 
 from __future__ import annotations
@@ -114,20 +118,69 @@ class TestTheHonestyRulesAUserWillOtherwiseMisread:
 
 
 class TestNothingUnbuiltIsDescribed:
-    """59, 60 and 61 are filed and absent. The page must stay quiet about them."""
+    """60 is filed and absent. The page must stay quiet about it.
 
-    @pytest.mark.parametrize(
-        "phrase",
-        [
-            "payload pane",
-            "cadence",
-            "token total",
-            "re-types",
-            "retypes",
-        ],
-    )
+    The answer re-typed at the cadence it arrived needs `47`'s bursts, and `47`
+    is `partially`: the store keeps the cadence and the reader is Python-level.
+    A paragraph re-typed at a uniform tick is a fabricated measurement, which
+    is the one thing this whole surface exists to refuse.
+    """
+
+    @pytest.mark.parametrize("phrase", ["cadence", "re-types", "retypes"])
     def test_the_page_does_not_promise_it(self, page: str, phrase: str) -> None:
         assert phrase not in page.lower(), (
-            f"`{phrase}` is `memory-and-replay` 59/60/61 — filed, not built. "
+            f"`{phrase}` is `memory-and-replay` 60 — filed, not built. "
             "A page describing it is the defect this map exists to fix."
         )
+
+
+class TestWhatTheSelectedStepSays:
+    """`memory-and-replay` 59, and the half a reader would otherwise misread."""
+
+    def test_produced_is_this_lap_and_says_so(self, page: str) -> None:
+        assert "lap" in page.lower(), (
+            "`outputs` is keyed by node and merged, so a reader who assumes a "
+            "bar shows the node's *last* answer will misread every revise "
+            "loop. The page has to say the bar carries its own lap."
+        )
+
+    def test_asked_is_named_as_mostly_absent_rather_than_shown_empty(
+        self, page: str
+    ) -> None:
+        page_lower = page.lower()
+        assert "asked" in page_lower
+        # The rule, in the page's own words: absence is stated, not drawn as an
+        # empty box — and the one case the run *does* record is the child it
+        # spawned. A page that showed only the happy half would teach a reader
+        # that a blank means the editor lost something.
+        assert "spawn" in page_lower
+        assert "empty box" in page_lower
+
+    def test_a_refusal_says_no_model_was_called(self, page: str) -> None:
+        # Whitespace-normalised: the page is wrapped prose, and a sentence
+        # that happens to break across two lines is the same sentence.
+        assert "no model was called" in " ".join(page.lower().split())
+
+
+class TestWhichRunAndWhatItCost:
+    """`memory-and-replay` 61 — identity, and a cost with no partial."""
+
+    def test_the_thread_is_named_as_the_run_s_identifier(self, page: str) -> None:
+        assert "thread" in page.lower()
+
+    def test_a_live_run_is_told_it_has_no_partial_total(self, page: str) -> None:
+        page_lower = page.lower()
+        assert "token" in page_lower
+        assert "partial" in page_lower, (
+            "A reader watching a run wants to know why the number is a dash. "
+            "The answer is that tokens are reported at the end and there is "
+            "no partial to show — not that the editor is still adding up."
+        )
+
+    def test_the_dash_and_the_zero_are_two_facts_for_tokens_too(
+        self, page: str
+    ) -> None:
+        # `launch-readiness` 108's rule, one field over. The duration half is
+        # pinned above; this is the token half, and it regressed nowhere only
+        # because nothing had ever displayed a token count.
+        assert re.search(r"`—`.*`0`|`0`.*`—`", page, re.DOTALL)

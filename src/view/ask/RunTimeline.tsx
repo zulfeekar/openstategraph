@@ -512,7 +512,14 @@ function Legend() {
   );
 }
 
-function findStep(
+/**
+ * The bar a key names, and the lane it is on.
+ *
+ * Exported for the payload pane the dock puts under this one
+ * (`memory-and-replay` 59): two panes answering about *the same selected bar*
+ * must not each decide for themselves which bar that is.
+ */
+export function findStep(
   lanes: readonly RunLane[],
   key: string | null,
 ): { lane: RunLane; step: TimelineStep } | null {
