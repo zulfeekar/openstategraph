@@ -759,15 +759,17 @@ not survive the next run, which is why this correction lives outside them.
 The stamped claim that the scheduled workflow "refreshes the repository wiki"
 describes intent, not observed behaviour:
 
-> **This workflow has now run, once, and failed** (2026-08-17, scheduled, run
-> `32004530549`, 41s): *"OPENAI_API_KEY is required for non-interactive runs.
-> Run openwiki in an interactive terminal to save credentials."* No model key
-> is configured in the repository's secrets, so the scheduled job cannot
-> produce a page and will fail identically every night until one is. Until
-> 2026-08-17 this line said the workflow had never run at all, and that is the
-> correction: it is no longer "never executed", it is **executing and failing**,
-> which is a different fact with a different fix (add the secret, or retire the
-> schedule).
+> **This workflow fires on schedule and fails every time** — the first one
+> dated, with a run id, so the account is checkable: 2026-08-17, scheduled,
+> run `32004530549`, 41s, *"OPENAI_API_KEY is required for non-interactive
+> runs. Run openwiki in an interactive terminal to save credentials."*
+> `secrets.OPENWIKI_API_KEY` is not set on the repository, so the scheduled
+> job cannot produce a page and will fail identically every night until it is.
+> Until 2026-08-17 this line said the workflow had never run at all, and that
+> is the correction: it is no longer "never executed", it is **executing and
+> failing**, which is a different fact with a different fix (set the secret,
+> or retire the schedule). It said "once" until 2026-08-30, by which time it
+> had fired again — which is why the number is gone and the state is not.
 >
 > Either way the practical instruction is unchanged: "let OpenWiki regenerate"
 > means *a human runs it locally*, and a generated page you leave stale stays
@@ -777,17 +779,25 @@ describes intent, not observed behaviour:
 > point.** Until 2026-08-16 this block said the repository had "zero git
 > remotes, so nothing in `.github/` has ever executed — not this, not the type
 > gate, not the drift gates, not `clean-install`". A remote (`beta`) exists,
-> and **CI does run and does pass** — 25 green runs including `clean-install`
-> and the generated-artifact drift gates, alongside 24 Release runs. Corrected
+> and **CI does run** — including `clean-install` and the generated-artifact
+> drift gates, alongside Release runs, and with green among them. Corrected
 > rather than deleted, because a rule document asserting the gates are theatre
 > is more dangerous than one asserting they are real.
 >
-> One exception survives and is worth knowing by name: `pages.yml` has run
-> four times and **failed four times** — see
+> One exception survives and is worth knowing by name: `pages.yml` has
+> **failed on every run it has ever had** — see
 > `.scratch/production-ready/tickets/28-the-gallery-nobody-could-see.md`.
-> `openwiki-update.yml` is the paragraph above: it *has* run, once, and
-> failed — this line said "never" beside that dated account for as long as
-> both stood, and the dated one carries a run id (`docs-and-gaps/25`).
+> `openwiki-update.yml` is the paragraph above: it *has* run, and has never
+> succeeded — this line said "never ran" beside that dated account for as long
+> as both stood, and the dated one carries a run id (`docs-and-gaps/25`).
+>
+> **Neither sentence carries a count any more, and that is the fix rather
+> than an omission** (`docs-and-gaps/29`). This line said four and
+> `docs/releasing.md` said six; the true figure was neither, and had moved
+> again before anybody reconciled them. A run count is a `gh run list` away
+> and has no way to fail once written down, so the state is stated and the
+> number is not — pinned by
+> `backend/tests/test_no_document_repeats_a_retracted_claim.py`.
 >
 > **`docs-freshness` is no longer PR-only**, and this line said it was for
 > four hours short of a day after `df8ce54` removed the `if:`. It runs on a

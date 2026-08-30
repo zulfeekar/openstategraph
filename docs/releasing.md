@@ -490,15 +490,24 @@ prediction.
 run on a pull request. So the gates on this page describe observed behaviour,
 not intent.
 
-Four things still have not executed, and they are named rather than implied.
-**Measured 2026-08-21** against the `beta` remote, 99 runs:
+Four things have never once succeeded, and they are named rather than implied.
+**No run count is given, and that is deliberate.** Every number this table
+once carried had drifted by the time somebody checked it — `openwiki-update`
+said zero when it had run, `pages.yml` said six and `CLAUDE.md` said four when
+neither was right, and `release-pr.yml`'s two had become three. A count in
+prose has no way to fail (`docs-and-gaps/17`), and it is a `gh run list` away
+for anyone who needs today's:
+
+```bash
+gh run list --repo <owner>/<repo> --workflow pages.yml
+```
 
 | | State |
 | --- | --- |
 | The **`pypi` job** | never run. `0.3.0rc1` is on TestPyPI only, and the human gate has never been clicked |
-| **`release-pr.yml`** (*Release PR*) | two runs, **two failures**, both at `peter-evans/create-pull-request` — see below. It has never opened a pull request |
-| `openwiki-update.yml` | zero runs, ever |
-| `pages.yml` (*Deploy landing page*) | six runs, six failures — `HttpError: Not Found` from `actions/configure-pages`. See production-ready ticket 28 |
+| **`release-pr.yml`** (*Release PR*) | every run has failed, all at `peter-evans/create-pull-request` — see below. It has never opened a pull request |
+| `openwiki-update.yml` (*OpenWiki update*) | has fired on schedule and failed every time, for want of `secrets.OPENWIKI_API_KEY`, which is not set on the repository — see `CLAUDE.md`'s OpenWiki block for the dated account and a run id |
+| `pages.yml` (*Deploy landing page*) | every run has failed — `HttpError: Not Found` from `actions/configure-pages`. See production-ready ticket 28 |
 
 `docs-freshness` used to carry `if: github.event_name == 'pull_request'`,
 which in a repository that pushes straight to `main` meant it had fired once
@@ -529,7 +538,7 @@ That is how `0.3.0rc1` was actually prepared, and it is worth knowing that the
 automated path has never once worked.
 
 `openwiki-update.yml` uses the same action and therefore needs the same switch,
-*in addition to* the model key its one run died for want of.
+*in addition to* the model key every one of its runs has died for want of.
 
 `backend/tests/test_the_release_train_names_what_has_not_run.py` pins the
 documented half: while any workflow calls that action, this page has to name
