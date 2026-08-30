@@ -461,11 +461,156 @@ import does not refuse to run — it runs without them, lands the reason on
 that answers confidently with nothing behind it. Read `.warnings` in
 development; gate on `.failures`.
 
+## 8. Streaming, without picking your web framework
+
+Everything above blocks: your handler waits for `ask()` and answers once. A
+chat surface wants the answer as it arrives, and that is where an integration
+usually acquires a dependency it did not want — the streaming helper a library
+ships is nearly always *its* framework's helper.
+
+This one is not. `workflow.events(...)` returns a **`RunStream`**, and the only
+thing it knows how to do is yield events:
+
+```python
+stream = workflow.events(message, thread_id=thread_id)
+
+async for event in stream:   # any async framework
+    ...
+for event in stream:         # any framework with no event loop
+    ...
+```
+
+Both forms drive the same run. The framework-specific part is the bit you were
+always going to write — turning events into your framework's response — and it
+is small enough to read at a glance.
+
+**FastAPI**, or anything else on ASGI:
+
+```python
+@app.get("/chat")
+async def chat(request: Request, message: str, thread_id: str = "anonymous"):
+    stream = catalog.load("echo").events(message, thread_id=thread_id)
+
+    async def body():
+        async def gone():
+            while True:
+                if (await request.receive()).get("type") == "http.disconnect":
+                    return stream.stop()
+
+        watch = asyncio.ensure_future(gone())
+        try:
+            async for event in stream:
+                yield f"data: {json.dumps(event.as_dict())}\n\n"
+        finally:
+            watch.cancel()
+
+    return StreamingResponse(body(), media_type="text/event-stream")
+```
+
+**Flask**, or anything else on WSGI — no event loop anywhere in it:
+
+```python
+@app.get("/chat")
+def chat():
+    stream = catalog.load("echo").events(
+        request.args["message"], thread_id=request.args.get("thread_id", "anonymous")
+    )
+
+    def body():
+        for event in stream:
+            yield f"data: {json.dumps(event.as_dict())}\n\n"
+
+    return Response(body(), mimetype="text/event-stream")
+```
+
+Both were run. Byte for byte the same stream comes out of each:
+
+```
+data: {"type": "started", "threadId": "t1"}
+
+data: {"type": "update", "node": "in1", "namespace": [], "output": "hello"}
+
+data: {"type": "update", "node": "fmt1", "namespace": [], "output": "# Echo\n\n### in1\nhello"}
+
+data: {"type": "update", "node": "out1", "namespace": [], "output": "# Echo\n\n### in1\nhello"}
+
+data: {"type": "done", "threadId": "t1", "answer": "# Echo\n\n### in1\nhello", "decisions": {},
+       "routes": {}, "outputs": {…}, "attempts": 0, "usage": {}}
+```
+
+### What comes out
+
+`event.type` is one of `started`, `update`, `token`, `interrupt`, `done` and
+`error`; `event.data` carries that event's fields, and
+`event.as_dict()` is the two flattened together for a `json.dumps`.
+
+**These are the names our own HTTP API already publishes**, with the same
+spellings, so [the HTTP API](api.md) is the one page describing them and this
+one does not restate the table. An embedded stream carries a subset of the
+fields the server's does — the server knows an audience, a compile plan and a
+mount registry, so its frames also say which node is *active*, where the run is
+inside a composition, and whether a stop would cancel it. A library consumer
+has none of that context and is not handed a hollow version of it.
+
+Two consequences worth knowing before you build a client:
+
+- **A `token` event is a model's own text.** The record a workflow writes into
+  its conversation history is deliberately not one; a client that concatenated
+  tokens would otherwise hold the answer twice before `done` showed it a third
+  time.
+- **`done.answer` can legitimately be empty.** That is a run that produced
+  nothing, and it is *not* the `RunProducedNothing` that `ask()` raises — by
+  the time a stream ends, its consumer has already watched everything that
+  happened, and raising then would be a second, later account of a run they
+  saw. `workflow.failure_warnings` is the gate that needs no run at all.
+
+### Stopping, which is the part most integrations get wrong
+
+**Call `stream.stop()` when your consumer goes away.** It is idempotent,
+callable from any thread, and it is the only thing that makes a stop mean
+anything on a transport whose framework does not tell you: on the ASGI stack
+this project pins, a browser that abandoned its fetch left the run streaming to
+its natural end with every remaining step billed to nobody. Newer Starlette
+cancels the response task and the run stops without the listener — but that is
+a fact about a version, and the listener above is eight lines that do not
+depend on it.
+
+On WSGI there is nothing to listen for and nothing to write: the server drops
+the response body, Python finalises the generator, and the run stops. Measured
+on both, against a workflow of three ten-second steps with the client hanging
+up after twelve: the step in flight ran to its end and **the third step never
+started**.
+
+That is the boundary, and it is the same one our own server has. **Stop means
+nothing further is scheduled.** Work already dispatched finishes and is
+discarded, because a blocking model call has no cancellation seam. And a
+stopped stream ends with **no terminal event** — the consumer it would be
+addressed to is the one that left, so a body ending without `done`, `error` or
+`interrupt` is how a client tells a dropped connection from a finished run.
+
+### Backpressure, and where an error arrives
+
+**Nothing is buffered.** The run is suspended at each event until you ask for
+the next one, so a slow consumer slows the run rather than filling a queue.
+Nothing is dropped and nothing is coalesced. If you need to shed load — a
+browser is a much slower consumer than a graph, and two thousand frames have
+killed one here before — do it in your handler, over events that carry enough
+to shed safely.
+
+**An error is an event, not a raise.** By the time a run fails your framework
+has sent its headers and can render nothing but the body, so a failed run ends
+with `{"type": "error", "detail": …}` and the stream closes. The one thing that
+*does* raise is anything wrong with the **request**: a `context` key the
+workflow does not declare raises out of `events(...)` itself, before a single
+event, where your handler can still answer 422 — the same `OpenStateGraphError`
+[§4](#4-rewiring-your-endpoint) already catches.
+
 ## Where to go next
 
 | | |
 | --- | --- |
-| Stream tokens to a browser instead of blocking | [wiring-it-in.md §3](wiring-it-in.md#3-the-same-thing-streamed) — the `.astream_events()` loop, and the four things `ask()` does that it does not |
+| Stream from a handler that is not on this page's framework | [§8](#8-streaming-without-picking-your-web-framework), above |
+| Drive the raw LangGraph stream yourself | [wiring-it-in.md §3](wiring-it-in.md#3-the-same-thing-streamed) — the `.astream_events()` loop, and the four things `ask()` does that it does not |
 | Draw the next workflow instead of typing JSON | `openstategraph serve --open`, with the `[server]` extra — the canvas at `/`, over this same workflows root |
 | Understand what you are drawing | [On the canvas](on-the-canvas.md) |
 | Know what we may take away | [The stability contract](stability.md) |

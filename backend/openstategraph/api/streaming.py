@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from openstategraph.messages import content_text, reasoning_text, usage_of
+from openstategraph.messages import (
+    content_text,
+    is_transcript_record as _is_transcript_record,
+    is_tool_message as _is_a_tool_message,
+    reasoning_text,
+    usage_of,
+)
 
 import asyncio
 import json
@@ -45,6 +51,8 @@ from openstategraph.run_journal import (  # noqa: E402
     run_turn,
 )
 from openstategraph.run_identity import run_identity  # noqa: E402
+from openstategraph.stream_parts import stream_part, stream_parts  # noqa: E402
+from openstategraph.run_stream import abandon_pending  # noqa: E402
 
 # Named here and in three other modules only — `run_doors` (the blocking
 # driver), `compile/node_runtime` (the mount boundary) and `run_journal` (the
@@ -132,58 +140,14 @@ def _tool_calls_of(message: Any) -> list[dict[str, Any]]:
     return [c for c in (calls or []) if isinstance(c, dict)]
 
 
-def is_transcript_record(message: Any) -> bool:
-    """Whether this is a node **writing the conversation record**, not the model.
-
-    `_input` logs the user's turn and `_output` logs the answer where every path
-    converges, which is what gives a thread memory (ticket 73). Both are right
-    and stay. But `stream_mode=["updates", "messages", "custom"]` emits every
-    message on that channel — written or streamed — and nothing told them apart,
-    so the record re-entered the token stream and `AskPanel`, which concatenates
-    every token, held the answer twice before the answer block showed it a third
-    time (`every-workflow-green` 02).
-
-    **Measured on the wire**, not inferred, by tapping one real run of
-    `workflow-2026` in the editor:
-
-        AIMessageChunk  AIMessageChunk  model                     744 chars
-        AIMessage       ai              node_output_formatted_1   744 chars
-        HumanMessage    human           node_input_text_1          21 chars
-        ToolMessage     tool            tools                     478 chars
-
-    744 + 744 + 21 = 1509, against 1466 measured in the DOM. The model's own
-    text arrives **only** as chunks; the two settled non-tool messages are
-    exactly the two records.
-
-    So: a settled `ai` or `human` message is the record. A **tool** message is
-    not — a tool produces its output whole rather than token by token, and the
-    developer's per-call result cards are fed from it.
-
-    Duck-typed on `.type` like `_is_tool_message`, for the reason recorded
-    there: this channel yields chunk classes and settled messages, and one test
-    covers the family without importing one of each. Verified against
-    langchain-core 1.5.3, where `AIMessageChunk.type` is the class name and
-    `AIMessage.type` is `"ai"`.
-
-    **The cost, stated rather than discovered.** A provider that does not stream
-    returns its reply as one settled `AIMessage`, which this drops from the
-    *live* stream. Nothing is lost — the answer still arrives on the `updates`
-    fold and the terminal frame — and a provider that does not stream had no
-    live text to offer anyway.
-    """
-    kind = str(getattr(message, "type", ""))
-    return kind in {"ai", "human"}
-
-
-def _is_tool_message(message: Any) -> bool:
-    """Whether a streamed message is a tool's *result* rather than model text.
-
-    Duck-typed on LangChain's own `type` discriminator rather than
-    `isinstance(message, ToolMessage)`: the `messages` stream yields chunk
-    classes (`ToolMessageChunk`) as well as settled messages, and both answer
-    `"tool"` here, so one test covers the family without importing it.
-    """
-    return str(getattr(message, "type", "")) == "tool"
+#: Two message predicates, declared once in `openstategraph/messages.py`
+#: beside `content_text`, `reasoning_text` and `usage_of` — the module that
+#: already owns "what is in a streamed message". They moved there when the
+#: framework-free run surface needed the same two answers
+#: (`launch-readiness/196`); a second copy of *the record is not a token* is
+#: the defect `every-workflow-green/02` cost a day to.
+is_transcript_record = _is_transcript_record
+_is_tool_message = _is_a_tool_message
 
 
 #: Tool name -> the `spawn` kind calling it announces.
@@ -809,23 +773,11 @@ async def _client_left(receive: Any) -> None:
             return
 
 
-def _abandon(task: Any) -> None:
-    """Drops a task we are no longer waiting on, without a warning storm.
-
-    A cancelled `__anext__` whose worker thread is still inside a synchronous
-    node does not finish immediately (a blocking call cannot be interrupted),
-    so the task outlives us. Retrieving its outcome here is what stops asyncio
-    logging "exception was never retrieved" for work nobody wanted.
-
-    Unchanged by `async-first/02`, deliberately. The fold is an async
-    generator now, but the reason this cancels *without awaiting* is the same
-    one it always had, and it is measured (`async-first/09`): the pending step
-    may be a blocking model call, and awaiting it would turn today's instant
-    stop into a stop the client sits through. Only an `async def` node body is
-    genuinely cancelled here, and that is Phase D.
-    """
-    task.cancel()
-    task.add_done_callback(lambda done: done.cancelled() or done.exception())
+#: One declaration, two readers — the framework-free run surface met the same
+#: problem and the argument for cancelling *without awaiting* is written down
+#: there once. Aliased rather than renamed: this module's own docstrings and
+#: three call sites name it.
+_abandon = abandon_pending
 
 
 async def stop_when_client_leaves(frames: Any, receive: Any) -> Any:
@@ -1038,59 +990,12 @@ def _token_frame(common: dict[str, Any], block: str, text: str, usage: Any) -> s
     )
 
 
-def _stream_parts(stream: Any) -> Any:
-    """`(namespace, mode, payload)` for each chunk, whichever shape it arrives in.
-
-    We ask LangGraph for **`version="v2"`** (see `_run_frames`), whose every
-    chunk is a `StreamPart` — `{"type", "ns", "data"}` — regardless of how many
-    modes were requested or whether `subgraphs=True` is set. v1, the default,
-    yields a bare payload for one mode, a `(mode, payload)` pair for several,
-    and a `(ns, mode, payload)` triple once subgraphs are on. We unpacked the
-    triple, which was correct for exactly the combination we happened to pass
-    and would have become wrong on the day a third mode was added — stable by
-    accident rather than by contract.
-
-    The v1 tuple is still accepted here, and that is deliberate rather than
-    leftover. Nine test files script this fold with hand-written chunks, and a
-    decode change that can only be demonstrated by rewriting its own callers
-    has not been isolated; `test_stream_version_v2.py` pins the two shapes to
-    identical frames and pins the `version="v2"` we actually send.
-
-    A chunk this version cannot produce is **skipped, not raised on**. The fold
-    is the one place a run can die without a terminal frame reaching the
-    client, so an unreadable chunk costs one frame rather than the stream.
-
-    The decode itself is `_stream_part`, one chunk at a time, because since
-    `async-first/02` the fold drives `graph.astream()` and iterates the chunks
-    with `async for`. Two loops over one decode would be two spellings of the
-    chunk vocabulary, and the second one is the one that goes stale.
-    """
-    for chunk in stream:
-        decoded = _stream_part(chunk)
-        if decoded is not None:
-            yield decoded
-
-
-def _stream_part(chunk: Any) -> tuple[Any, str, Any] | None:
-    """One chunk as `(namespace, mode, payload)`, or `None` if it is unreadable.
-
-    The whole chunk vocabulary, in one place — see `_stream_parts` for which
-    shapes arrive and why the v1 tuple is still accepted. `None` rather than a
-    raise: the fold is the one place a run can die without a terminal frame
-    reaching the client, so an unreadable chunk costs one frame, never the
-    stream.
-    """
-    if isinstance(chunk, dict):
-        mode = chunk.get("type")
-        if isinstance(mode, str):
-            return tuple(chunk.get("ns") or ()), mode, chunk.get("data")
-        logger.warning("skipping an unreadable stream chunk: %r", sorted(chunk))
-        return None
-    if isinstance(chunk, tuple) and len(chunk) == 3:
-        namespace, mode, payload = chunk
-        return namespace, mode, payload
-    logger.warning("skipping an unreadable stream chunk of type %s", type(chunk).__name__)
-    return None
+#: The chunk vocabulary, decoded in exactly one place — `stream_parts.py`,
+#: which is core because nothing about a stream chunk is a web concern and the
+#: framework-free run surface reads the same chunks. Aliased rather than
+#: renamed at the call sites: nine test files script this fold and name these.
+_stream_part = stream_part
+_stream_parts = stream_parts
 
 
 def _frame_bytes(event: str, data: dict[str, Any]) -> str:
