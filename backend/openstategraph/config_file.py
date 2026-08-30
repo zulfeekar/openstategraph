@@ -689,9 +689,55 @@ GITIGNORE_LINES = (
 )
 
 
+#: The two rules `init` will not proceed without *saying something about*.
+#: A subset of `GITIGNORE_LINES` — pinned as a subset by
+#: `tests/test_init_project.py`, so the set checked cannot drift away from
+#: the set written. `__pycache__/` is not here: leaving it out costs a
+#: reader nothing, and leaving `.env` out costs them a key.
+GITIGNORE_REQUIRED = (".env", "**/.openstategraph/")
+
+
 def render_gitignore() -> str:
     """The `.gitignore` `openstategraph init` writes."""
     return "\n".join(GITIGNORE_LINES) + "\n"
+
+
+def _ignore_subject(line: str) -> str | None:
+    """What one `.gitignore` line names, or `None` if it names nothing.
+
+    Deliberately not a gitignore engine — matching git's semantics would be a
+    second implementation of somebody else's parser, and the caller's only
+    question is whether two literal patterns we would have written are already
+    there in some spelling. Anchoring (`/.env`), the recursive prefix
+    (`**/.env`) and the trailing directory slash are the spellings that mean
+    the same thing here; everything else is left to be reported as missing,
+    because over-reporting prints two lines somebody may already have and
+    under-reporting stages a key.
+    """
+    text = line.strip()
+    if not text or text.startswith("#"):
+        return None
+    if text.startswith("**/"):
+        text = text[3:]
+    text = text.lstrip("/").rstrip("/")
+    return text or None
+
+
+def gitignore_gaps(text: str) -> tuple[str, ...]:
+    """Which of `GITIGNORE_REQUIRED` an existing ignore file does not cover.
+
+    launch-readiness/191. `init` writes `.gitignore` only when there is not
+    one already — clobbering somebody's would be worse — and then used to say
+    ".gitignore already covers it" regardless, in the same breath as telling
+    the reader to put an API key in `.env`. This is the reading that makes the
+    sentence checkable. It never writes: the fix is the sentence, not the file.
+    """
+    subjects = {
+        subject for subject in (_ignore_subject(line) for line in text.splitlines()) if subject
+    }
+    return tuple(
+        pattern for pattern in GITIGNORE_REQUIRED if _ignore_subject(pattern) not in subjects
+    )
 
 
 _ENV_VAR_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -822,6 +868,8 @@ __all__ = [
     "load_config",
     "looks_like_a_secret",
     "render_config_file",
+    "GITIGNORE_REQUIRED",
+    "gitignore_gaps",
     "render_gitignore",
     "reset_active_config",
 ]

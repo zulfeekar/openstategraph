@@ -289,6 +289,15 @@ takes an `audience`, and `runs export` says `developer` because it is an
 operator reading their own machine's store from that machine's own terminal.
 Whose store this is has always been this command's to know; nothing else here
 could answer it.
+
+**1129 -> 1137** (`launch-readiness/191`). Eight lines, and no new logic: the
+reading is `config_file.gitignore_gaps` and the branch is
+`InitResult.gitignore_gaps`, both computed before `cmd_init` is reached. What
+grew here is the copy — the case where `init` declined to write an existing
+`.gitignore` used to print one line claiming the file "already covers it",
+which is exactly the branch where it may not, and printing the missing rules
+as lines to paste costs more lines than a claim does. That is the module's own
+job: this command says what it did.
 """
 
 WORKFLOW_COMPILER = """
@@ -642,7 +651,7 @@ and the reader read.
 #: worried about.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1129, CLI),
+    "cli.py": Recorded(1137, CLI),
     "compile/workflow_compiler.py": Recorded(964, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1034, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
