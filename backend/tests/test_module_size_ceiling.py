@@ -243,6 +243,15 @@ audience it reads a stored run with — through `resolve()`, so a capped
 deployment caps the terminal too. Three lines, and no new logic: the door it
 already wrapped grew a parameter, and a caller that declines to answer would
 have been the silence this ticket is about.
+
+**1102 -> 1123** (`the-cost-of-one-more/08`). Twenty-one lines, and the rule
+holds: no new logic. `runs export` now catches the one thing `read_runs` can
+refuse — a cadence read this build could not perform — and turns it into a
+non-zero exit and a sentence, instead of writing a file with `bursts: []` on
+every row and exiting 0. The rest is `_write_runs`, which emits the same array
+a record at a time rather than holding a second copy of an unbounded store in
+memory before a byte of it reaches the disk. Both are the export command
+saying what it did, which is the only thing this module is allowed to do.
 """
 
 WORKFLOW_COMPILER = """
@@ -473,6 +482,17 @@ comment being replaced (`_BURST_COLUMNS`, *"this module has no migration
 machinery"*) shows the concern was already here, stated as a constraint with
 nobody owning it. Nothing extractable was added — `_reconcile` has one caller
 and would be a module of two functions and a paragraph.
+
+**578 -> 600** (`the-cost-of-one-more/08`). Twenty-two lines, and they are the
+reading half again: two `CREATE INDEX IF NOT EXISTS` statements with the
+paragraph naming which listing each answers and why `--thread` deliberately
+gets none, `CADENCE_BATCH` and the loop that honours it, and
+`RunCadenceUnavailable` — the class that separates *this store has no cadence*
+from *this read could not get it*, which had been one `except` and one
+`logger.debug` and so lost every burst of a 33,000-run export in silence. An
+exception class is not a second concern here: it is how this module says what
+it could not answer, which is what `_could_not_write` already does for the
+writing half.
 """
 
 #: Eight modules, derived and then argued for one at a time. Nothing in this
@@ -482,13 +502,13 @@ and would be a module of two functions and a paragraph.
 #: worried about.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(569, NODE_RUNTIME),
-    "cli.py": Recorded(1102, CLI),
+    "cli.py": Recorded(1123, CLI),
     "compile/workflow_compiler.py": Recorded(890, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1026, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(698, MCP_SERVER),
     "api/routes/workflows.py": Recorded(551, ROUTES_WORKFLOWS),
-    "run_sinks.py": Recorded(578, RUN_SINKS),
+    "run_sinks.py": Recorded(600, RUN_SINKS),
 }
 
 

@@ -48,7 +48,7 @@ import sys
 import textwrap
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence, cast
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence, TextIO, cast
 
 # The one import this module makes eagerly, and it is stdlib-only: `--template`
 # uses argparse `choices`, so the catalogue has to exist while the parser is
@@ -1232,7 +1232,11 @@ def cmd_runs_export(args: argparse.Namespace) -> int:
     NOT IN (SELECT rowid FROM runs)` — or deleting the file — both of which a person does on purpose, to their own
     machine, having already got the rows out.
     """
-    from openstategraph.run_sinks import read_runs, run_store_path
+    from openstategraph.run_sinks import (
+        RunCadenceUnavailable,
+        read_runs,
+        run_store_path,
+    )
 
     path = run_store_path(getattr(args, "workflows_root", None))
     # **With the cadence** (`memory-and-replay` 47), because this is what a
@@ -1241,20 +1245,54 @@ def cmd_runs_export(args: argparse.Namespace) -> int:
     # file that had not saved it. `runs list` deliberately does not ask — a
     # table prints one line per run, and 6 to 30 burst objects a row would make
     # the cheap question expensive.
-    rows = read_runs(path, limit=args.limit, with_bursts=True)
-    payload = json.dumps([row.model_dump() for row in rows], indent=2)
+    #
+    # **And it refuses rather than under-delivers** (`the-cost-of-one-more/08`).
+    # Past 32,766 runs the cadence read was refused by sqlite, logged at
+    # `debug`, and this command wrote a file with `bursts: []` on every row and
+    # exited 0 — aimed squarely at the one operator who had been told to run it
+    # before truncating. A partial export is the failure this command exists to
+    # prevent, so it is not a file.
+    try:
+        rows = read_runs(path, limit=args.limit, with_bursts=True)
+    except RunCadenceUnavailable as exc:
+        return _error(
+            f"could not read the run cadence out of {path}: {exc}. Nothing was "
+            "written: an export missing how its answers arrived is not a copy "
+            "of the store and must not be truncated against."
+        )
 
     if not args.to:
-        print(payload)
+        _write_runs(sys.stdout, rows)
         return EXIT_OK
     destination = Path(args.to)
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(payload + "\n", encoding="utf-8")
+        with destination.open("w", encoding="utf-8") as handle:
+            _write_runs(handle, rows)
     except OSError as exc:
         return _error(f"could not write {destination}: {exc}")
     print(f"wrote {len(rows)} run(s) to {destination}")
     return EXIT_OK
+
+
+def _write_runs(handle: TextIO, rows: list[Any]) -> None:
+    """The same JSON array, one record at a time.
+
+    `json.dumps([row.model_dump() for row in rows], indent=2)` held the whole
+    export as a second copy in memory before a byte of it reached the disk, on
+    a store whose only guarantee is that it grows (`the-cost-of-one-more/08`).
+    The output is byte-for-byte what that produced — a two-space-indented
+    array — because an export is a file people diff.
+    """
+    if not rows:
+        handle.write("[]\n")
+        return
+    handle.write("[\n")
+    for index, row in enumerate(rows):
+        body = json.dumps(row.model_dump(), indent=2)
+        handle.write(textwrap.indent(body, "  "))
+        handle.write(",\n" if index < len(rows) - 1 else "\n")
+    handle.write("]\n")
 
 
 def cmd_runs_path(args: argparse.Namespace) -> int:
