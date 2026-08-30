@@ -22,12 +22,13 @@ import { describe, expect, it } from 'vitest';
  * every list row is a cage, and a 13px node title in a display face at
  * weight 700 is the mistake the ticket warned about by name.
  *
- * **The rule decision is superseded in part by
- * `the-look-has-an-author-now/16`**, which split the width from the ink:
- * the four seams keep `--border-width-rule`, and three of them lose
- * `--color-rule` because full ink is now reserved for a border a pointer
- * can drag. The argument is written at the seams table below rather than
- * here, beside the row it changes.
+ * **The rule decision is superseded in part, twice, and by the same
+ * owner sentence read twice.** `the-look-has-an-author-now/16` split the
+ * width from the ink and took `--color-rule` off three of the four seams;
+ * `17` took `--border-width-rule` off the same three. What survives of
+ * `07` here is the *pair* — a 2px full-ink line — and it survives where a
+ * pointer can drag. The argument is written at the seams table below
+ * rather than here, beside the rows it changes.
  */
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -125,8 +126,9 @@ describe('a border width is a token, never a literal', () => {
 
 describe('the rule separates regions; everything inside one is a hairline', () => {
   /**
-   * **`07`'s decision, superseded in part by `the-look-has-an-author-now/16`,
-   * and the split is the point.**
+   * **`07`'s decision, superseded in part twice — by
+   * `the-look-has-an-author-now/16` and then by `17` — and the two
+   * supersessions are one move finished.**
    *
    * `07` measured `borderWidthsInUse === ["1px"]` and decided four seams:
    * the toolbar against everything under it, each side panel against the
@@ -135,23 +137,27 @@ describe('the rule separates regions; everything inside one is a hairline', () =
    * (`--color-rule`, full). The reported defect was the width; the ink came
    * along with it.
    *
-   * `16` applied the owner's rule — *"normal borders are dark grey so that
-   * the draggable borders stand out"* — and full ink is now reserved for a
-   * border a pointer can drag. Three of these four seams are not draggable:
-   * the toolbar is fixed, and both panels take their width from
-   * `--layout-palette-width` / `--layout-inspector-width` with no handle
-   * anywhere. The fourth is: `.run-dock__grip` straddles the dock's lower
-   * edge with `cursor: ns-resize` and draws no line of its own, so that
-   * border **is** the grip.
+   * `16` read the owner's second sentence as prescribing a dark grey for
+   * normal borders, took full ink off three of these four seams, and left
+   * them at 2px. Their third sentence, pointing at the palette's right
+   * edge, says that was the wrong half: *"this is a normal border — I asked
+   * opacity less, or light grey shade. Only the draggable border is
+   * correct."* A 2px line at 70% ink beside a 2px line at 100% differs by
+   * alpha alone, which is a difference you measure rather than see.
    *
-   * So the four seams keep their width and three of them lose the ink:
-   * **width says region, ink says draggable.** That is not a retreat from
-   * `07` — its own argument was that "flat corners plus a hairline reads as
-   * generic minimal", and a 2px line at 6.09:1 is not a hairline. What
-   * `15` said against this move ("a 2px line in `--color-border` is only a
-   * thicker version of the normal weight") was true of a normal weight at
-   * 60% and 4.41:1; at 70% a thicker version of the normal weight is
-   * exactly what a region seam should be.
+   * So `17` takes the **width** off the same three. Three of these four
+   * seams are not draggable: the toolbar is fixed, and both panels take
+   * their width from `--layout-palette-width` / `--layout-inspector-width`
+   * with no handle anywhere. The fourth is: `.run-dock__grip` straddles the
+   * dock's lower edge with `cursor: ns-resize` and draws no line of its
+   * own, so that border **is** the grip.
+   *
+   * What is left is not "width says region, ink says draggable" — that was
+   * `16`'s formula and it asked a reader to see 30% of alpha. It is
+   * simpler: **2px full ink is the draggable weight, and it is one pair,
+   * spent nowhere else.** `07`'s Modernist argument was for that pair, and
+   * the pair still exists; what `07` got wrong is only *how many* lines in
+   * the product are allowed to wear it.
    *
    * The dock's seam is on its **lower** edge since `memory-and-replay` 63 —
    * it opens under the top bar and pushes the paper down, so the seam it
@@ -163,38 +169,66 @@ describe('the rule separates regions; everything inside one is a hairline', () =
    * panel's own edge is already the seam, and a second one 40px inside it
    * doubles the boundary rather than drawing a new one.
    */
-  const SEAMS: ReadonlyArray<readonly [file: string, selector: string, side: string, ink: string]> =
+  const SEAMS: ReadonlyArray<
+    readonly [file: string, selector: string, side: string, width: string, ink: string]
+  > = [
     [
-      ['view/topbar/TopBar.css', '.topbar', 'border-bottom', '--color-border'],
-      ['design/primitives/Panel.css', '.panel--left', 'border-right', '--color-border'],
-      ['design/primitives/Panel.css', '.panel--right', 'border-left', '--color-border'],
-      ['view/run/RunDock.css', '.run-dock', 'border-bottom', '--color-rule'],
-    ];
+      'view/topbar/TopBar.css',
+      '.topbar',
+      'border-bottom',
+      '--border-width-hairline',
+      '--color-border',
+    ],
+    [
+      'design/primitives/Panel.css',
+      '.panel--left',
+      'border-right',
+      '--border-width-hairline',
+      '--color-border',
+    ],
+    [
+      'design/primitives/Panel.css',
+      '.panel--right',
+      'border-left',
+      '--border-width-hairline',
+      '--color-border',
+    ],
+    ['view/run/RunDock.css', '.run-dock', 'border-bottom', '--border-width-rule', '--color-rule'],
+  ];
 
-  it.each(SEAMS)('%s %s draws the rule width', (file, selector, side, ink) => {
+  it.each(SEAMS)('%s %s draws its seam from tokens', (file, selector, side, width, ink) => {
     const css = read(join(SRC, file));
     const block = new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
-    expect(block).toContain(`${side}: var(--border-width-rule) solid var(${ink})`);
-  });
-
-  /** The cage test: nothing else in the product may draw a rule-width line. */
-  it('is drawn in exactly those four places', () => {
-    const drawn = stylesheets().flatMap((path) =>
-      [...read(path).matchAll(/--border-width-rule\)/g)].map(() => under(path)),
-    );
-    expect(drawn.sort()).toEqual(SEAMS.map(([file]) => file).sort());
+    expect(block).toContain(`${side}: var(${width}) solid var(${ink})`);
   });
 
   /**
-   * And the half of `07` that `16` did not touch, asserted separately so a
-   * future reader can see which claim survived: exactly one of the four is
-   * full ink, and it is the one with a grip on it. The app-wide statement
-   * lives in `aBorderIsDraggableOrItIsNot.test.ts`; this is the local one,
-   * because this is the file that used to say all four were.
+   * The cage test, and `17` narrows what it cages. Rule width is no longer
+   * a property of a *seam*; it is half of the draggable pair, so the files
+   * allowed to draw it are the files allowed to spend `--color-rule` —
+   * `aBorderIsDraggableOrItIsNot.test.ts` holds that list app-wide and
+   * checks the two halves land on the same declarations.
+   */
+  const RULE_WIDTH_FILES = ['view/nodes/NodeCard.css', 'view/run/RunDock.css'];
+
+  it('draws a rule-width line only where a pointer can drag', () => {
+    const drawn = stylesheets().flatMap((path) =>
+      [...read(path).matchAll(/--border-width-rule\)/g)].map(() => under(path)),
+    );
+    expect([...new Set(drawn)].sort()).toEqual(RULE_WIDTH_FILES.slice().sort());
+  });
+
+  /**
+   * And the half of `07` that survived both passes, asserted separately so
+   * a future reader can see which claim is still standing: exactly one of
+   * the four is the draggable pair, and it is the one with a grip on it.
+   * The app-wide statement lives in `aBorderIsDraggableOrItIsNot.test.ts`;
+   * this is the local one, because this is the file that used to say all
+   * four were.
    */
   it('gives full ink to the one seam a pointer can drag, and to no other seam', () => {
-    expect(SEAMS.filter(([, , , ink]) => ink === '--color-rule')).toEqual([
-      ['view/run/RunDock.css', '.run-dock', 'border-bottom', '--color-rule'],
+    expect(SEAMS.filter(([, , , , ink]) => ink === '--color-rule')).toEqual([
+      ['view/run/RunDock.css', '.run-dock', 'border-bottom', '--border-width-rule', '--color-rule'],
     ]);
   });
 });

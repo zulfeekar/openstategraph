@@ -33,7 +33,7 @@
      four in the product. */
   /* The rule width, and the normal ink — `16`. The toolbar is a fixed-height
      row of controls; this seam ends a region but nothing drags it. */
-  border-bottom: var(--border-width-rule) solid var(--color-border);
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
   z-index: var(--z-topbar);
 }
 
