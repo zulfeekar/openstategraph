@@ -98,7 +98,7 @@
 .ask__break::after {
   content: '';
   flex: 1;
-  border-top: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-top: var(--border-width-hairline) solid var(--color-border);
 }
 
 .ask__question {
@@ -126,7 +126,7 @@
   gap: var(--space-2);
   padding: var(--space-1-5);
   background: var(--color-bg-surface);
-  border: var(--border-width-hairline) solid var(--color-border-strong);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   transition:
@@ -180,7 +180,7 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-2-5);
   background: var(--color-bg-surface-sunken);
-  border: var(--border-width-hairline) solid var(--color-border-subtle);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-md);
 }
 
@@ -242,7 +242,7 @@
   margin: 0;
   padding: var(--space-2) var(--space-3);
   background: var(--color-bg-surface-sunken);
-  border: var(--border-width-hairline) dashed var(--color-border-default);
+  border: var(--border-width-hairline) dashed var(--color-border);
   border-radius: var(--radius-md);
   color: var(--color-text-tertiary);
   font: var(--type-mono-sm);
@@ -270,7 +270,7 @@
 }
 
 .ask__tool {
-  border: var(--border-width-hairline) solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-surface-sunken);
   overflow: hidden;
@@ -325,7 +325,7 @@
   margin: 0;
   padding: var(--space-3);
   background: var(--color-bg-surface-raised);
-  border: var(--border-width-hairline) solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-lg);
   color: var(--color-text-primary);
   font: var(--type-body-md);
@@ -558,7 +558,7 @@
 .ask__activity-row--child {
   margin-left: var(--space-4);
   opacity: 0.75;
-  border-left: var(--border-width-hairline) solid var(--color-border-default);
+  border-left: var(--border-width-hairline) solid var(--color-border);
   padding-left: var(--space-2);
 }
 
@@ -568,7 +568,7 @@
 .ask__activity-row--spawn {
   margin-left: var(--space-4);
   padding-left: var(--space-2);
-  border-left: var(--border-width-hairline) solid var(--color-border-default);
+  border-left: var(--border-width-hairline) solid var(--color-border);
   justify-content: flex-start;
 }
 
@@ -616,7 +616,7 @@
   margin: var(--space-1) 0 var(--space-2) var(--space-4);
   padding: var(--space-1-5) var(--space-2);
   font: var(--type-body-sm);
-  border-left: var(--border-width-marker) solid var(--color-border-default);
+  border-left: var(--border-width-marker) solid var(--color-border);
   max-height: 180px;
   overflow-y: auto;
 }
@@ -627,7 +627,7 @@
   font: var(--type-caption);
   color: var(--color-text-tertiary);
   background: none;
-  border: var(--border-width-hairline) solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: var(--transition-colors);
@@ -650,7 +650,7 @@
   margin: 0 0 var(--space-3);
   padding: var(--space-2) var(--space-3);
   background: var(--color-bg-surface-sunken);
-  border: var(--border-width-hairline) solid var(--color-border-subtle);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   font: var(--type-body-sm);
@@ -819,7 +819,7 @@
   width: 100%;
   margin: var(--space-3) 0;
   padding: var(--space-2);
-  border: var(--border-width-hairline) solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
@@ -831,7 +831,7 @@
    reader recognises it as an offer, and a different left edge because the two
    do different things: one wires a tool that exists, one opens an interview. */
 .ask__suggestion--build {
-  border-left: var(--border-width-marker) solid var(--color-border-strong);
+  border-left: var(--border-width-marker) solid var(--color-border);
 }
 
 /* What this run spawned (`canvas-feels-right/07`). A row of chips between the

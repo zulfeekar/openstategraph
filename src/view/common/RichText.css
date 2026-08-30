@@ -78,7 +78,7 @@
 
 .rich-text th,
 .rich-text td {
-  border: var(--border-width-hairline) solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border);
   padding: var(--space-1) var(--space-2);
   text-align: left;
   white-space: nowrap;
@@ -90,7 +90,7 @@
 }
 
 .rich-text blockquote {
-  border-left: var(--border-width-marker) solid var(--color-border-default);
+  border-left: var(--border-width-marker) solid var(--color-border);
   padding-left: var(--space-2-5);
   color: var(--color-text-secondary);
 }

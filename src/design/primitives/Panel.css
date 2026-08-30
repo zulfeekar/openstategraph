@@ -34,7 +34,7 @@
 }
 
 .panel__header--bordered {
-  border-bottom: var(--border-width-hairline) solid var(--color-border-default);
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
 }
 
 .panel__title {
@@ -57,7 +57,7 @@
 .panel__footer {
   flex: none;
   padding: var(--space-2-5) var(--space-3);
-  border-top: var(--border-width-hairline) solid var(--color-border-default);
+  border-top: var(--border-width-hairline) solid var(--color-border);
 }
 
 /* ---------- Grouped section inside a panel body ---------- */
@@ -69,7 +69,7 @@
 }
 
 .panel-section + .panel-section {
-  border-top: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-top: var(--border-width-hairline) solid var(--color-border);
 }
 
 .panel-section__heading {

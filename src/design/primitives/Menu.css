@@ -9,7 +9,7 @@
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface-raised);
   box-shadow:
-    inset 0 0 0 1px var(--color-border-default),
+    inset 0 0 0 1px var(--color-border),
     var(--shadow-xl);
   animation: menu-in var(--duration-fast) var(--ease-out);
 }
@@ -88,7 +88,7 @@
 .menu__separator {
   height: 1px;
   margin: var(--space-1) calc(-1 * var(--space-1));
-  background: var(--color-border-subtle);
+  background: var(--color-border);
 }
 
 .menu__label {

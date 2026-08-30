@@ -71,17 +71,53 @@
   --color-text-success: var(--green-600);
 
   /* ---------- Borders ---------- */
+  /* `the-look-has-an-author-now/15`. The owner's rule of thumb, verbatim:
+     "darker border only for the draggable. Other normal borders should be
+     the same border colour but a lighter variant or opacity of the dark
+     colour — about 60%, a greyish." So there are two weights, decided by
+     what a border *means* rather than where it sits — a resize grip earns
+     the dark one, a card outline or a table rule does not — and this is
+     the second of them: the same ink as `--color-rule` below, read through
+     `color-mix()` at the owner's own number rather than a hand-picked hex,
+     so a reader can see the arithmetic instead of trusting a swatch. It
+     flips with the theme for the same reason `--color-rule` does — through
+     `--osg-divider`, not by being redeclared per theme below.
+     Measured against both grounds this sits on: 4.40:1 on `--color-bg-
+     surface` (white), 4.24:1 on `--color-bg-canvas`; 6.16:1 and 6.35:1 on
+     the dark theme's equivalents. Old `--color-border-default` measured
+     1.25:1 and 1.11:1 on the same two grounds — a hairline nobody could
+     actually see, which is the defect the owner's number corrects. */
+  --color-border: color-mix(in srgb, var(--osg-divider) 60%, transparent);
+  /* Interaction *state*, not a third structural weight — the one thing a
+     flat two-weight system cannot say on its own. A resting `:hover` on an
+     input, a button, a palette row used to step `default` → `strong`
+     border-only, with no other cue; collapsing that pair into the single
+     `--color-border` above would have made hovering an input silent. Kept
+     as a recorded exception rather than folded in, and narrowed to
+     `:hover`/`:focus`/`:active`/pressed rules only — never a resting
+     border — so the two-weight pin still measures the truth everywhere
+     else. 80%, one step short of the draggable ceiling. */
+  --color-border-emphasis: color-mix(in srgb, var(--osg-divider) 80%, transparent);
+  /* Retired from every stylesheet this ticket reaches — kept declared,
+     at their unchanged pre-existing values, only because `view/run/`
+     still spends all three and this ticket does not touch that directory
+     (a concurrent session owns it, applying the same rule there). Delete
+     these three once nothing names them. */
   --color-border-subtle: var(--neutral-100);
   --color-border-default: #e7e6e6;
   --color-border-strong: var(--neutral-200);
-  --color-border-emphasis: var(--neutral-300);
   /* The rule. Four borders in the product carry it — the toolbar's bottom
      edge and the three panel edges that meet the canvas — and they are the
-     seams between regions of the shell rather than lines inside one.
-     `--osg-divider` is the authored token, commented in the authored file
-     as *"2px rules, full ink"*, and it is full ink on purpose: a 2px line
-     in `--color-border-default` is only a thicker hairline. It needs no
-     dark override here because `--osg-divider` is itself theme-aware —
+     seams between regions of the shell rather than lines inside one. That
+     is a third, separately-argued use of full ink alongside the draggable
+     one above — `07`/`08` decided it before this ticket existed, it is
+     pinned by `ruleAndDisplayFace.test.ts`, and this ticket leaves it
+     standing rather than re-litigating it; see `15`'s own notes for the
+     tension and why it was not resolved here. `--osg-divider` is the
+     authored token, commented in the authored file as *"2px rules, full
+     ink"*, and it is full ink on purpose: a 2px line in `--color-border`
+     is only a thicker version of the normal weight. It needs no dark
+     override here because `--osg-divider` is itself theme-aware —
      `#201e1d` on the light ground, `#f3f2f2` on the dark one. */
   --color-rule: var(--osg-divider);
   /* `--osg-focus: 2px solid var(--osg-accent)` — the design system says the
@@ -188,7 +224,7 @@
   --shadow-md: var(--osg-shadow-md);
   --shadow-lg: var(--osg-shadow-lg);
   --shadow-xl: 0 10px 0 rgba(32, 30, 29, 0.26);
-  --shadow-node: 0 0 0 1px var(--color-border-default), var(--osg-shadow-sm);
+  --shadow-node: 0 0 0 1px var(--color-border), var(--osg-shadow-sm);
   --shadow-node-hover: 0 0 0 1px var(--color-border-emphasis), var(--osg-shadow-md);
   --shadow-node-selected: 0 0 0 var(--osg-rule) var(--osg-accent), var(--osg-shadow-md);
 }
@@ -239,11 +275,14 @@
      `--osg-*` primitives, which flip underneath us. */
   --color-text-success: var(--color-status-success);
 
+  /* `--color-border` and `--color-border-emphasis` are not redeclared here:
+     both are `color-mix()` over `--osg-divider`, which is itself theme-aware
+     (`15`), so the single light-block declaration already carries the dark
+     value — the same reasoning `--color-rule` below has carried since `07`. */
   --color-border-subtle: #272524;
   --color-border-default: #312f2e;
   /* The authored dark `--osg-border`. */
   --color-border-strong: #3a3736;
-  --color-border-emphasis: #4f4c4b;
   /* The authored dark accent, `--osg-accent-400`. */
   --color-border-focus: #f4715c;
   --color-focus-ring: #f4715c;
@@ -307,7 +346,7 @@
   --shadow-md: 0 2px 0 rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 6px 0 rgba(0, 0, 0, 0.6);
   --shadow-xl: 0 10px 0 rgba(0, 0, 0, 0.65);
-  --shadow-node: 0 0 0 1px var(--color-border-default), 0 1px 0 rgba(0, 0, 0, 0.5);
+  --shadow-node: 0 0 0 1px var(--color-border), 0 1px 0 rgba(0, 0, 0, 0.5);
   --shadow-node-hover: 0 0 0 1px var(--color-border-emphasis), 0 2px 0 rgba(0, 0, 0, 0.55);
   --shadow-node-selected: 0 0 0 var(--osg-rule) #f4715c, 0 2px 0 rgba(0, 0, 0, 0.55);
 }

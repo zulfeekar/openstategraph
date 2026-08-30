@@ -436,12 +436,18 @@ describe('a colour role exists in both themes', () => {
   };
 
   /**
-   * One, and it is correct by derivation rather than missing:
+   * Three, and each is correct by derivation rather than missing:
    * `--color-rule: var(--osg-divider)`, and `--osg-divider` is itself
    * redefined in `tokens.css`'s dark block — full ink on either ground. A
    * role that flips through an authored token does not restate itself.
+   *
+   * `--color-border` and `--color-border-emphasis` (`the-look-has-an-
+   * author-now/15`) are the same shape one derivation further in:
+   * `color-mix(in srgb, var(--osg-divider) N%, transparent)`, so the single
+   * light-block declaration already carries the dark value and a second
+   * one under `[data-theme='dark']` would only restate the formula.
    */
-  const DERIVED_IN_BOTH = ['--color-rule'];
+  const DERIVED_IN_BOTH = ['--color-rule', '--color-border', '--color-border-emphasis'];
 
   it('redefines every light role in the dark block, or derives it from one that flips', () => {
     const light = roles("\\[data-theme='light'\\]");

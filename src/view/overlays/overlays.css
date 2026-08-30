@@ -14,7 +14,7 @@
   border-radius: var(--radius-xl);
   background: var(--color-bg-surface);
   box-shadow:
-    inset 0 0 0 1px var(--color-border-default),
+    inset 0 0 0 1px var(--color-border),
     var(--shadow-lg);
   overflow: hidden;
 }
@@ -40,7 +40,7 @@
   max-height: 46vh;
   overflow-y: auto;
   padding: var(--space-1) var(--space-3) var(--space-3);
-  border-top: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-top: var(--border-width-hairline) solid var(--color-border);
 }
 
 .shortcuts__group + .shortcuts__group {
@@ -129,7 +129,7 @@
   border-radius: var(--radius-2xl);
   background: var(--color-bg-surface);
   box-shadow:
-    inset 0 0 0 1px var(--color-border-default),
+    inset 0 0 0 1px var(--color-border),
     var(--shadow-xl);
   animation: dialog-in var(--duration-normal) var(--ease-out);
 }
@@ -183,7 +183,7 @@
   justify-content: flex-end;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
-  border-top: var(--border-width-hairline) solid var(--color-border-default);
+  border-top: var(--border-width-hairline) solid var(--color-border);
 }
 
 /* ---------- Provider rows ---------- */
@@ -195,7 +195,7 @@
   padding: var(--space-3);
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface-sunken);
-  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-border);
 }
 
 .provider__head {
@@ -256,7 +256,7 @@
   padding: var(--space-2-5);
   border-radius: var(--radius-md);
   background: var(--color-bg-surface-sunken);
-  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-border);
   font: var(--type-caption);
   line-height: var(--line-height-relaxed);
   color: var(--color-text-secondary);
@@ -329,7 +329,7 @@
   gap: var(--space-2);
   width: 260px;
   padding: var(--space-3);
-  border: var(--border-width-hairline) solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface);
   box-shadow: var(--shadow-xl);
@@ -355,8 +355,8 @@
   width: 8px;
   height: 8px;
   transform: rotate(45deg);
-  border-top: var(--border-width-hairline) solid var(--color-border-default);
-  border-left: var(--border-width-hairline) solid var(--color-border-default);
+  border-top: var(--border-width-hairline) solid var(--color-border);
+  border-left: var(--border-width-hairline) solid var(--color-border);
   background: var(--color-bg-surface);
 }
 
