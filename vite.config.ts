@@ -7,6 +7,14 @@ import { DEV_SERVER_WATCH_IGNORED } from './src/app/devServerWatch';
 
 export default defineConfig({
   plugins: [react()],
+  // Relative, so every emitted asset URL is resolved against the document's
+  // `<base href>` rather than against the origin root. A host application
+  // that mounts this product at `/osg` serves `index.html` with
+  // `<base href="/osg/">`; a root-absolute `/assets/index-*.js` would leave
+  // that mount and reach the host's own 404, which loads the page and breaks
+  // everything in it. Vite serves at `/` in dev regardless, so the dev stack
+  // is untouched. The API half of the same problem is `runtimeBaseUrl.ts`.
+  base: './',
   // Native tsconfig path resolution — replaces the vite-tsconfig-paths
   // plugin, so `tsconfig.app.json` stays the single place aliases are
   // declared and tests import exactly what the app imports.

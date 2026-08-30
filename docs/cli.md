@@ -52,7 +52,7 @@ the directory you are standing in.
 ### `init`
 
 ```
-openstategraph init [directory] [--workflows-dir NAME] [--empty] [--force]
+openstategraph init [directory] [--workflows-dir NAME] [--empty] [--force] [--adopt]
 ```
 
 Makes a directory an OpenStateGraph project: an `openstategraph.yaml`, a
@@ -88,6 +88,24 @@ alone)` beside each line.
 | `--workflows-dir NAME` | name the packages folder something other than `workflows`, and record it in the config |
 | `--empty` | config and `.gitignore` only, no starter package |
 | `--force` | waive the *"directory is not empty"* refusal and **nothing else** — it still overwrites no file it did not write, and still refuses to share a workflows root that was already there |
+| `--adopt` | take over a `workflows/` that already exists and is not ours, as this project's root |
+
+**A `workflows/` that is already there is reviewed, not assumed.** Without
+`--adopt`, `init` stops and prints what is in that directory — every package
+by slug, its name and its node count, and any that will not parse and why —
+followed by the three ways out: adopt it, name a different root, or move
+theirs aside. Seeing the list is the point: sharing a root nobody told you
+about is the defect this refusal was written for, and a review answers it
+without making the wrong choice for you.
+
+`--adopt` is the second consent, and it is a different one from `--force`:
+`--force` says the *project directory* may have things in it, `--adopt` says
+the *workflows root* is already full of packages and they are yours to read.
+It writes the config pointing at that root, prints the same review as a report
+of what the project now reads, and writes **no starter** into it — a starter is
+a teaching aid for an empty root, and in somebody else's it is litter under a
+slug they may already be using. This is the shape a service in adoption is in:
+it already ships workflows, and it wants the canvas over them.
 
 The generated `openstategraph.yaml` is commented, and one of its keys is worth
 knowing about before you need it: `prepend_sys_path:`, which is what makes a
