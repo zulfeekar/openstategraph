@@ -217,16 +217,46 @@
   /* ---------- Composite type roles ----------
    * Shorthand bundles so a component writes one declaration instead of
    * four, and can never drift out of the scale.                       */
-  /* The one role that reads `--font-display`. Archivo is a display face —
-     the design system's own `theme.json` ships it at 400/600/800 — and a
-     product that loads one and never sets it anywhere is paying for a
-     typeface to sit in a variable. Display is 20px here rather than the
-     38–60px the authored scale reaches, because this is a canvas and not a
-     landing page; it is still the largest type in the product. */
+  /* ---- The three roles that read `--font-display`, and why it is three.
+   *
+   * Archivo is a display face — the design system's own `theme.json` ships
+   * it at 400/600/800 — and until `the-look-has-an-author-now/07` this was
+   * the *only* role that named it, while nothing in the product set that
+   * role. A face downloaded on every page load and read by no rule is a
+   * typeface sitting in a variable.
+   *
+   * The pairing is the design, so the boundary matters as much as the
+   * application. Display goes to the **masthead and the two largest
+   * headings** and stops there. It does not go to `--type-heading-sm`,
+   * which is what every *panel* header uses and those are labels rather
+   * than headings; it does not go to `--type-title-node`, a 13px line
+   * inside a 252px card; and it does not go to `--type-label`, which is
+   * 10px uppercase. A display face at 10px is not a display face, it is
+   * noise — the same defect as never setting it, from the other side.
+   *
+   * **The product's largest type is 20px, and that is a statement rather
+   * than an omission.** The authored scale runs to `--osg-text-60` because
+   * it was authored for document and marketing surfaces. This is a canvas
+   * tool whose densest surface is a node card; there is no masthead here
+   * that wants 38px, and importing the top of that ramp would be importing
+   * a page this app does not have. `styles/ruleAndDisplayFace.test.ts`
+   * holds the list both ways round. */
+
+  /* The wordmark, and only the wordmark — the one piece of type in the app
+     that is the product naming itself rather than the product labelling
+     something. It keeps the 14px it has always been, because the toolbar is
+     a fixed-height row of controls and a bigger wordmark is a layout change
+     rather than a type change; what it gains is the face, the authored
+     display tracking, and a weight heavy enough for Archivo to read as
+     drawn instead of as a substitution. */
+  --type-wordmark: var(--font-weight-bold) var(--font-size-14) / var(--line-height-tight)
+    var(--font-display);
   --type-display: var(--font-weight-semibold) var(--font-size-20) / var(--line-height-tight)
     var(--font-display);
+  /* Dialog and overlay titles — the app's only true headings, as opposed to
+     the panel headers below, which are labels with a border under them. */
   --type-heading-lg: var(--font-weight-semibold) var(--font-size-16) / var(--line-height-snug)
-    var(--font-sans);
+    var(--font-display);
   --type-heading-sm: var(--font-weight-semibold) var(--font-size-14) / var(--line-height-snug)
     var(--font-sans);
   --type-body-md: var(--font-weight-regular) var(--font-size-13) / var(--line-height-normal)
@@ -295,6 +325,24 @@
   --radius-xl: var(--osg-radius);
   --radius-2xl: var(--osg-radius);
   --radius-full: 999px;
+
+  /* ---------- Line weight ----------
+   * The authored file ships **two** widths — `--osg-rule: 2px` and
+   * `--osg-hairline: 1px` — and the design system's own `theme.json` calls
+   * its dividers *strong*. This product was using one of them. Measured on
+   * the running app before this block existed, `borderWidthsInUse` over
+   * every `div`, `section` and `header` returned exactly `["1px"]`.
+   *
+   * Two names rather than one, because the distinction is the point: flat
+   * corners plus a hairline grey reads as generic minimal, and flat corners
+   * plus a 2px full-ink line reads as Modernist. The rule draws the seams
+   * **between regions of the shell**; the hairline draws everything inside
+   * one. `--color-rule` in `theme.css` carries the matching ink, and
+   * `styles/ruleAndDisplayFace.test.ts` names all four places a rule is
+   * drawn — because 2px on every list row is the same defect as 1px
+   * everywhere, in the other direction. */
+  --border-width-hairline: var(--osg-hairline);
+  --border-width-rule: var(--osg-rule);
 
   /* ---------- Neutral ramp (the authored warm ink) ----------
    * Was a cool slate; is now the authored ink family — `#f7f6f6` through

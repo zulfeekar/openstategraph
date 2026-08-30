@@ -82,7 +82,7 @@
   letter-spacing: var(--letter-spacing-tight);
   color: var(--color-text-secondary);
   background: var(--color-bg-subtle);
-  border: 1px solid var(--color-border-strong);
+  border: var(--border-width-hairline) solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   padding: var(--space-0-5) var(--space-1-5);
   cursor: pointer;
@@ -144,7 +144,7 @@
    * `NodeCard` measures and reports the card's height, so growing is
    * supported; the width is what is fixed, and `peekMermaid` lays the diagram
    * out top-down to suit it. */
-  border: 1px solid var(--color-border);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-md);
   /* The real token is `--color-bg-surface-sunken`; the earlier spelling had no
      such custom property, so the fallback (transparent) always won. */

@@ -15,7 +15,9 @@
   flex-direction: column;
   min-height: 0;
   background: var(--color-bg-surface);
-  border-top: 1px solid var(--color-border-default);
+  /* The fourth rule. The dock is a region of the shell rather than a thing
+     floating over the canvas, and the line is what says so. */
+  border-top: var(--border-width-rule) solid var(--color-rule);
   z-index: var(--z-panel);
 }
 
@@ -55,7 +57,7 @@
   flex: none;
   min-height: 36px;
   padding: var(--space-1) var(--space-3);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: var(--border-width-hairline) solid var(--color-border-subtle);
 }
 
 .run-dock__title {
@@ -139,7 +141,7 @@
 
 .run-dock__detail {
   flex: 2 1 0;
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: var(--border-width-hairline) solid var(--color-border-subtle);
   padding-left: var(--space-3);
 }
 
@@ -159,7 +161,7 @@
 
   .run-dock__detail {
     border-left: none;
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: var(--border-width-hairline) solid var(--color-border-subtle);
     padding-left: 0;
     padding-top: var(--space-2);
   }
@@ -214,7 +216,7 @@
 .rtl__transport button {
   font: var(--type-label);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border-default);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
   padding: 2px var(--space-2);
@@ -260,12 +262,12 @@
   grid-template-columns: repeat(6, minmax(0, 1fr));
   margin: 0;
   flex: none;
-  border-block: 1px solid var(--color-border-subtle);
+  border-block: var(--border-width-hairline) solid var(--color-border-subtle);
 }
 
 .rtl__kpi {
   padding: var(--space-1) var(--space-2) var(--space-1) 0;
-  border-inline-end: 1px solid var(--color-border-subtle);
+  border-inline-end: var(--border-width-hairline) solid var(--color-border-subtle);
 }
 
 .rtl__kpi:last-child {
@@ -316,7 +318,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  border-inline-start: 1px solid var(--color-border-subtle);
+  border-inline-start: var(--border-width-hairline) solid var(--color-border-subtle);
   padding-inline-start: 3px;
   font: var(--type-label);
   font-family: var(--font-mono);
@@ -332,7 +334,7 @@
 }
 
 .rtl__lane {
-  border-block-end: 1px solid var(--color-border-subtle);
+  border-block-end: var(--border-width-hairline) solid var(--color-border-subtle);
   min-height: 22px;
 }
 
@@ -363,7 +365,7 @@
   height: 14px;
   padding: 0;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-text-primary);
+  border: var(--border-width-hairline) solid var(--color-text-primary);
   background: transparent;
   cursor: pointer;
   display: flex;
@@ -441,7 +443,7 @@
   top: 6px;
   height: 10px;
   inset-inline-end: 0;
-  border-block-start: 1px dashed var(--color-text-quaternary);
+  border-block-start: var(--border-width-hairline) dashed var(--color-text-quaternary);
   background: repeating-linear-gradient(
     90deg,
     var(--color-text-quaternary) 0 3px,
@@ -532,7 +534,7 @@
   width: 18px;
   height: 8px;
   margin-inline-end: var(--space-1);
-  border: 1px solid var(--color-text-primary);
+  border: var(--border-width-hairline) solid var(--color-text-primary);
   vertical-align: -1px;
 }
 

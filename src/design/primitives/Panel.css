@@ -11,12 +11,17 @@
   z-index: var(--z-panel);
 }
 
+/* A panel's outer edge is where a region ends, so it draws the rule
+   (`the-look-has-an-author-now/07`). Its header, footer and section
+   dividers below stay hairlines: the panel's own edge has already drawn
+   the boundary, and a second one 40px inside it doubles the line rather
+   than saying anything new. */
 .panel--left {
-  border-right: 1px solid var(--color-border-default);
+  border-right: var(--border-width-rule) solid var(--color-rule);
 }
 
 .panel--right {
-  border-left: 1px solid var(--color-border-default);
+  border-left: var(--border-width-rule) solid var(--color-rule);
 }
 
 .panel__header {
@@ -29,7 +34,7 @@
 }
 
 .panel__header--bordered {
-  border-bottom: 1px solid var(--color-border-default);
+  border-bottom: var(--border-width-hairline) solid var(--color-border-default);
 }
 
 .panel__title {
@@ -52,7 +57,7 @@
 .panel__footer {
   flex: none;
   padding: var(--space-2-5) var(--space-3);
-  border-top: 1px solid var(--color-border-default);
+  border-top: var(--border-width-hairline) solid var(--color-border-default);
 }
 
 /* ---------- Grouped section inside a panel body ---------- */
@@ -64,7 +69,7 @@
 }
 
 .panel-section + .panel-section {
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: var(--border-width-hairline) solid var(--color-border-subtle);
 }
 
 .panel-section__heading {

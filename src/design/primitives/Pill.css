@@ -17,7 +17,7 @@
      glance and at any zoom. */
   border-radius: 999px;
   padding: 2px var(--space-2) 2px var(--space-1-5);
-  border: 1px dashed var(--color-border-subtle);
+  border: var(--border-width-hairline) dashed var(--color-border-subtle);
   background: var(--color-bg-surface-sunken);
   color: var(--color-text-tertiary);
   font: var(--type-caption);

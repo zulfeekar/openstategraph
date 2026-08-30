@@ -29,7 +29,10 @@ describe('a pill is visibly not a node', () => {
   });
 
   it('wears a dashed outline, which nothing savable does', () => {
-    expect(css).toMatch(/border:\s*1px dashed/);
+    // `dashed` is the load-bearing word; the width reads through the authored
+    // hairline token since `the-look-has-an-author-now/07`, so this asserts the
+    // stroke style and lets the weight live where every other border's does.
+    expect(css).toMatch(/border:\s*var\(--border-width-hairline\) dashed/);
   });
 
   it('borrows no node styling at all', () => {
