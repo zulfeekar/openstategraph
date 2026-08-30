@@ -797,3 +797,21 @@ describes intent, not observed behaviour:
 > is why the claim is now derived from `ci.yml` by
 > `backend/tests/test_no_document_repeats_a_retracted_claim.py` instead of
 > being repeated in prose (`docs-and-gaps/28`).
+
+**A generated page now says which commit it came from** (`docs-and-gaps/27`).
+Staleness under the paragraph above is structural rather than careless, and
+the defect was never the staleness — it was that no `openwiki/**` page carried
+a date, so a contributor had nothing distinguishing a current page from a
+nine-day-old one. `scripts/stamp_wiki_freshness.py` copies the commit and date
+out of `openwiki/.last-update.json` onto the pages themselves, above the first
+heading.
+
+The stamp **does not survive a refresh**, for the reason this section is
+already about: the generator writes each page whole, and we do not own the
+generator. That is why it is a script and a test rather than a hand-edit — a
+refresh deletes every stamp at exactly the moment every stamp has gone wrong
+anyway, and `backend/tests/test_a_generated_wiki_page_says_when_it_was_generated.py`
+turns the deletion into a red test naming each unstamped page instead of a
+silence. Run the script after `openwiki code --update`. Nothing in the stamp
+counts days or commits behind: it names the commit and hands the reader
+`git log <sha>..HEAD`, because a number in prose has no way to fail.

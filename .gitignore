@@ -30,9 +30,22 @@ venv/
 .ruff_cache/
 .mypy_cache/
 
-# Test output
+# Test output. `.coverage` is the sqlite database a coverage run writes: a
+# build artifact with no reader, carrying the absolute paths of whichever
+# machine produced it. It was tracked until `publishable/04`, which is what an
+# artifact with no ignore rule does — an untracked file comes back on the next
+# careless `git add`.
 coverage/
+.coverage
+.coverage.*
 .gstack/
+
+# No PDF belongs at the repository root. A third party's article was committed
+# there and went unnoticed for weeks (`publishable/04`); republishing somebody
+# else's copyrighted work is the reason that mattered, and a careless `git add`
+# at the root is how it arrived. Anchored, so a PDF that a document genuinely
+# needs can still live beside that document. `git add -f` is the hatch.
+/*.pdf
 
 # Code Workshop workflow — runtime jail and PR dry-run output, never sources
 harness-loop-graph.pdf

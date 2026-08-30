@@ -183,6 +183,13 @@ it up. Correcting a page that names a file or a directory which no longer
 exists is the one exception, because a dead link is the failure the page is
 there to prevent.
 
+Every generated page carries a `FRESHNESS` block naming the commit and date it
+was generated from, so a reader can tell a current page from one written weeks
+ago. The generator does not write that block and a refresh deletes it: run
+`python3 scripts/stamp_wiki_freshness.py` after `openwiki code --update`, and
+`backend/tests/test_a_generated_wiki_page_says_when_it_was_generated.py` will
+name any page you missed.
+
 ## Adding things
 
 Everything is a registry; extending never edits `core/`. See README's
