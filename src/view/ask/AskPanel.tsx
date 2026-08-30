@@ -776,10 +776,90 @@ export function AskPanel({
        * backend that predates the field earns.
        */
       let cancellable = false;
+
+      /**
+       * Arriving rows, held until the browser could actually paint one —
+       * `the-cost-of-one-more/20`.
+       *
+       * A `setTurns` per frame is a **commit** per frame, and a commit renders
+       * the whole run: the trace draws a row per step, so F commits over F
+       * rows is quadratic and it was measured as such. Two thousand unpaced
+       * frames took 128 s of blocked main thread, one thousand took 32 s,
+       * five hundred took 8.5 s — ×3.8 per doubling, with no cliff anywhere
+       * and nothing special happening at three thousand.
+       *
+       * The pace this buffer keeps is the screen's. `requestAnimationFrame`
+       * does not run while the reader's microtask chain is saturated, which is
+       * exactly the condition this ticket is about — so an unpaced burst
+       * coalesces into **one** commit and a paced run still commits once per
+       * painted frame. That is not a compromise between the two: a tab that
+       * cannot paint gains nothing from rendering, and dropping renders the
+       * screen never showed loses nothing a reader could have seen.
+       *
+       * `setTimeout` runs alongside it as a backstop, because a hidden tab
+       * gets no animation frames at all and a run finishing in one must still
+       * have its rows before the answer lands. Whichever fires first cancels
+       * the other, and every event that is not an append flushes first, so
+       * ordering against `settled`, `token` and the terminal update is exact
+       * rather than probable.
+       *
+       * What is deliberately **not** coalesced: the canvas glow and the
+       * spawned-chip projection. Both are already read from `spawnRows`
+       * synchronously and on purpose — a projection driven off committed turn
+       * state is one frame behind, which on a two-frame fan-out means a worker
+       * never gets a chip.
+       */
+      const pendingRows: { readonly row: ActivityRow; readonly stepNode?: string }[] = [];
+      let pendingFrame: number | null = null;
+      let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+      const flushRows = () => {
+        if (pendingFrame !== null) {
+          cancelAnimationFrame(pendingFrame);
+          pendingFrame = null;
+        }
+        if (pendingTimer !== null) {
+          clearTimeout(pendingTimer);
+          pendingTimer = null;
+        }
+        if (pendingRows.length === 0) return;
+        const batch = pendingRows.splice(0, pendingRows.length);
+        setTurns((all) =>
+          all.map((turn) => {
+            if (turn.id !== id) return turn;
+            // The live line is a fold over the steps that completed, so it is
+            // replayed in arrival order rather than taken from the last row:
+            // `liveLineAfterStep` clears a step's own announcement and keeps
+            // somebody else's, and reading only the newest frame would lose
+            // the middle of a batch.
+            let progress = turn.progress;
+            for (const entry of batch) {
+              if (entry.stepNode !== undefined) {
+                progress = liveLineAfterStep(progress, entry.stepNode);
+              }
+            }
+            return {
+              ...turn,
+              progress,
+              activity: [...turn.activity, ...batch.map((entry) => entry.row)],
+            };
+          }),
+        );
+        scrollToEnd();
+      };
+      const queueRow = (row: ActivityRow, stepNode?: string) => {
+        pendingRows.push(stepNode === undefined ? { row } : { row, stepNode });
+        if (pendingFrame === null) pendingFrame = requestAnimationFrame(flushRows);
+        if (pendingTimer === null) pendingTimer = setTimeout(flushRows, 250);
+      };
+
       const onEvent = (event: RunStreamEvent) => {
         if (event.type === 'update' || event.type === 'token' || event.type === 'progress') {
           cancellable = event.interruptible;
         }
+        // Everything that is not an append reads or rewrites the rows, so the
+        // buffer is drained first and the order on screen is the order the
+        // wire produced.
+        if (event.type !== 'update' && event.type !== 'spawn') flushRows();
         if (event.type === 'update') {
           const now = performance.now();
           const durationMs = Math.round(now - lastFrameAt);
@@ -826,59 +906,40 @@ export function AskPanel({
             });
             projectSpawnedNow();
           }
-          setTurns((all) =>
-            all.map((turn) =>
-              turn.id === id
-                ? {
-                    ...turn,
-                    // A step completed, so whatever it was last saying about
-                    // itself is usually no longer true — an agent's inner
-                    // `tools` step finishing is exactly the end of the tool
-                    // call whose "Calling search_docs on langchain-docs" is on
-                    // screen. The one exception, and the reason this is not
-                    // `null` here any more, is the step clearing *its own*
-                    // announcement: narration is written from a `before_*`
-                    // hook about work that has not started, and the hook's own
-                    // `update` lands microseconds later
-                    // (`launch-readiness/110`). The rule, and the captured
-                    // frame order that forced it, live in `liveLineAfterStep`.
-                    progress: liveLineAfterStep(turn.progress, event.node),
-                    activity: [
-                      ...turn.activity,
-                      {
-                        node: event.node,
-                        taskId: event.taskId,
-                        internal: event.internal,
-                        namespace: event.namespace,
-                        // Carried onto the row so this frame can be projected
-                        // again later, onto a document that was not open when
-                        // it arrived — see `ActivityRow.path` and `replayOnto`.
-                        path: event.path,
-                        // Without the slugs the replay cannot use the exact
-                        // rule and falls back to the ambiguous id walk — two
-                        // rules for one wire format, which is the drift
-                        // `frameTarget` exists to prevent.
-                        pathSlugs: event.pathSlugs,
-                        activeNode: event.activeNode,
-                        durationMs,
-                        // The other clock, and the one the timeline draws
-                        // (`launch-readiness` 108). `durationMs` above is when
-                        // this tab saw the frame; this is when the server
-                        // built it.
-                        elapsedMs: event.elapsedMs,
-                        output: event.output,
-                        // A grader that reached its verdict without invoking a
-                        // model says so here (`production-ready` 92); empty on
-                        // every other frame.
-                        check: event.check,
-                        reason: event.reason,
-                      },
-                    ],
-                  }
-                : turn,
-            ),
+          // The live line moves with the batch rather than with this frame:
+          // see `flushRows`, which replays `liveLineAfterStep` over the rows
+          // in arrival order.
+          queueRow(
+            {
+              node: event.node,
+              taskId: event.taskId,
+              internal: event.internal,
+              namespace: event.namespace,
+              // Carried onto the row so this frame can be projected
+              // again later, onto a document that was not open when
+              // it arrived — see `ActivityRow.path` and `replayOnto`.
+              path: event.path,
+              // Without the slugs the replay cannot use the exact
+              // rule and falls back to the ambiguous id walk — two
+              // rules for one wire format, which is the drift
+              // `frameTarget` exists to prevent.
+              pathSlugs: event.pathSlugs,
+              activeNode: event.activeNode,
+              durationMs,
+              // The other clock, and the one the timeline draws
+              // (`launch-readiness` 108). `durationMs` above is when
+              // this tab saw the frame; this is when the server
+              // built it.
+              elapsedMs: event.elapsedMs,
+              output: event.output,
+              // A grader that reached its verdict without invoking a
+              // model says so here (`production-ready` 92); empty on
+              // every other frame.
+              check: event.check,
+              reason: event.reason,
+            },
+            event.node,
           );
-          scrollToEnd();
         } else if (event.type === 'spawn') {
           // A spawn takes no time of its own — it is an announcement, not a
           // step — so it does not move `lastFrameAt` and carries a zero
@@ -901,34 +962,21 @@ export function AskPanel({
             },
           });
           projectSpawnedNow();
-          setTurns((all) =>
-            all.map((turn) =>
-              turn.id === id
-                ? {
-                    ...turn,
-                    activity: [
-                      ...turn.activity,
-                      {
-                        node: event.parent,
-                        taskId: event.taskId,
-                        internal: false,
-                        namespace: event.namespace,
-                        durationMs: 0,
-                        elapsedMs: event.elapsedMs,
-                        output: null,
-                        spawn: {
-                          kind: event.kind,
-                          label: event.label,
-                          instruction: event.instruction,
-                          spawnId: event.spawnId,
-                        },
-                      },
-                    ],
-                  }
-                : turn,
-            ),
-          );
-          scrollToEnd();
+          queueRow({
+            node: event.parent,
+            taskId: event.taskId,
+            internal: false,
+            namespace: event.namespace,
+            durationMs: 0,
+            elapsedMs: event.elapsedMs,
+            output: null,
+            spawn: {
+              kind: event.kind,
+              label: event.label,
+              instruction: event.instruction,
+              spawnId: event.spawnId,
+            },
+          });
         } else if (event.type === 'settled') {
           // The other end of the bar (`memory-and-replay` 54). It closes the
           // row the spawn opened rather than adding one: a child that started
@@ -1099,6 +1147,10 @@ export function AskPanel({
       try {
         outcome = await call(onEvent, signal);
       } finally {
+        // Whatever ended the stream — an answer, a stop, a dropped socket —
+        // the rows it produced belong on screen. This is the one flush that
+        // does not depend on a frame or a timer firing.
+        flushRows();
         streams.settle(id);
         clearRunInFlight();
       }

@@ -27,14 +27,19 @@ import { acyclicGraphRule } from './WorkflowValidator';
  * model change — so a 400-node document with a revision loop near its entry
  * paid ~12 ms inside every React render caused by a node drag.
  *
- * Two assertions, because wall-clock alone is either flaky or toothless:
+ * Two assertions, and **neither is a clock** — `the-cost-of-one-more/19`:
  *
  *  - a **counting** one, which is exact and cannot be flaky: one SCC pass
  *    visits each candidate's out-edges once, so `successors` is called once
  *    per candidate. V calls, not V².
- *  - a **ratio** one at the rule's own level, with a margin wide enough that
- *    a loaded machine cannot fail it and narrow enough that quadratic
- *    growth cannot pass it.
+ *  - a **ratio** one at the rule's own level, over two real documents — which
+ *    is the right shape and used to be the wrong instrument. It read
+ *    `expect(largeMs / smallMs).toBeLessThan(24)` on `performance.now()`,
+ *    best-of-5, and it is the sibling of the assertion that failed twice in
+ *    one night under load in `concurrentProducers.scaling.test.ts`. The ratio
+ *    survives; it is now a ratio of counted document reads. Unlike that
+ *    sibling, the count agrees with the claim the block always made: this rule
+ *    really is linear.
  */
 
 /**
@@ -59,15 +64,32 @@ function graphWithCycleAtTheHead(size: number): Workbench {
   return workbench;
 }
 
-/** Best of N, because a single sample measures the scheduler, not the code. */
-function bestOf(runs: number, work: () => void): number {
-  let best = Infinity;
-  for (let i = 0; i < runs; i += 1) {
-    const started = performance.now();
-    work();
-    best = Math.min(best, performance.now() - started);
-  }
-  return best;
+/**
+ * Every question the rule asks the document, whoever asks it.
+ *
+ * The exact form of "one SCC pass, not one DFS per leftover member": the pass
+ * reads each candidate's out-edges once, so `edgesOf` is called once per node.
+ * The old filter walked the whole blocked subgraph from every one of its
+ * members and would read V² of them.
+ */
+function countingModel(model: Workbench['model']): {
+  model: Workbench['model'];
+  tally: () => Record<string, number>;
+} {
+  const tally: Record<string, number> = {};
+  const proxy = new Proxy(model, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver) as unknown;
+      if (typeof value !== 'function') return value;
+      const method = value as (...args: unknown[]) => unknown;
+      const name = String(property);
+      return (...args: unknown[]): unknown => {
+        tally[name] = (tally[name] ?? 0) + 1;
+        return method.apply(target, args);
+      };
+    },
+  });
+  return { model: proxy, tally: () => tally };
 }
 
 describe('cycle membership is computed once, not once per candidate', () => {
@@ -131,25 +153,24 @@ describe('the findings are unchanged by the faster membership test', () => {
 });
 
 describe('acyclicGraphRule scales linearly with a cycle present', () => {
-  it('grows no worse than the doubling itself, four times over', () => {
-    const small = graphWithCycleAtTheHead(200);
-    const large = graphWithCycleAtTheHead(1600);
-    const run = (workbench: Workbench) => () => {
-      acyclicGraphRule.check({ model: workbench.model, registry: workbench.registry });
+  it('reads the document once per node at both sizes, counted rather than timed', () => {
+    const counted = (size: number): Record<string, number> => {
+      const workbench = graphWithCycleAtTheHead(size);
+      const watched = countingModel(workbench.model);
+      acyclicGraphRule.check({ model: watched.model, registry: workbench.registry });
+      return watched.tally();
     };
 
-    // Warm both paths so neither measurement pays for a cold JIT.
-    run(small)();
-    run(large)();
+    // Exact. `topologicalOrder` is Kahn's one pass; `edgesOf` is the SCC
+    // pass reading each candidate's out-edges, once each, plus the three the
+    // notice needs to name and anchor itself.
+    expect(counted(200)).toEqual({ topologicalOrder: 1, edgesOf: 203, node: 3 });
+    expect(counted(1600)).toEqual({ topologicalOrder: 1, edgesOf: 1603, node: 3 });
 
-    const smallMs = bestOf(5, run(small));
-    const largeMs = bestOf(5, run(large));
-    const growth = largeMs / smallMs;
-
-    // 8× the work. Linear predicts ~8; the old V·(V+E) filter predicts ~64,
-    // and measured ×3.6–4.4 per *doubling* — i.e. ~50× across this gap. The
-    // bound is deliberately loose: it exists to catch a return to quadratic,
-    // not to police a constant factor on someone's laptop.
-    expect(growth, `${smallMs.toFixed(3)}ms → ${largeMs.toFixed(3)}ms`).toBeLessThan(24);
+    // 8× the document. Linear predicts ~8 and measures 7.9; the old
+    // V·(V+E) filter predicts ~64 reads per node rather than one, i.e. tens of
+    // thousands of `edgesOf` calls at 200 alone.
+    const growth = counted(1600).edgesOf! / counted(200).edgesOf!;
+    expect(growth).toBeLessThan(8.1);
   });
 });
