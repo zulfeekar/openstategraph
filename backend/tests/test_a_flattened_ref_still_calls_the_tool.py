@@ -4,8 +4,8 @@
 
 `156` was filed on the belief that `mcp_resolve_lens` and `mcp_prepare` were
 *uncallable* because their schema nests its arguments under `inp`. **They are
-not.** Verified live against `localhost:8080/mcp/`: the nested form answers
-`ok: true, lens: cargoflow, confidence 0.81`, the flat form is refused, the
+not.** Verified live against a running MCP server: the nested form answers
+`ok: true, lens: catalog, confidence 0.81`, the flat form is refused, the
 schema reaches the model intact through `langchain-mcp-adapters`, and GitHub
 Copilot calls both tools without trouble. **`gpt-4o-mini` flattened the
 `$ref`.** Nothing is wrong with that service and nothing there is changed.
@@ -116,7 +116,7 @@ class FakeSession:
         self.calls: list[dict[str, Any]] = []
 
     async def call_tool(self, name: str, arguments: Any, **kwargs: Any) -> CallToolResult:
-        """The CPL server's own contract: nested is accepted, flat is refused."""
+        """That server's own contract: nested is accepted, flat is refused."""
         args = dict(arguments or {})
         self.calls.append(args)
         if set(args) == {"inp"} and isinstance(args["inp"], dict):
@@ -245,7 +245,7 @@ def run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     def _run(
         schema: dict[str, Any] = WRAPPER_SCHEMA,
         args: dict[str, Any] | None = None,
-        answer: str = '{"ok": true, "lens": "cargoflow"}',
+        answer: str = '{"ok": true, "lens": "catalog"}',
     ) -> tuple[FakeSession, FlatteningModel]:
         session = FakeSession(answer)
         monkeypatch.setattr(
@@ -281,7 +281,7 @@ class TestTheForcedWrappingIsPerformed:
         session, model = run()
 
         assert session.calls == [{"inp": {"question": "vessels?"}}]
-        assert "cargoflow" in model.tool_text()
+        assert "catalog" in model.tool_text()
 
     def test_an_inline_object_is_the_same_case(self, run) -> None:
         """A `$ref` is a spelling. The forcing condition is the shape."""

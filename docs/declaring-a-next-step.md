@@ -11,14 +11,13 @@ exists because of one measured behaviour:
 
 ## The failure this closes, measured
 
-A question asked for cargo flows **and** dark vessels. Cargo flows are the
-`cargoflow` lens; dark vessels are `dark_fleet`; the SQL tool locks to one
-lens. The run received, alternately:
+A question asked about the catalogue **and** the playlists. Each is its own
+lens and the SQL tool locks to one of them. The run received, alternately:
 
 ```
 lock guard refused: SQL references tables outside the resolver lock set:
-  ['dark_fleet'] not in ['sm.area_counts_dark_v1r0', 'sm.cargoflow_latest', ...]
-Unknown lens 'sm.dim_vessel_latest'. Valid lenses: ['area_activity', ...]
+  ['playlists'] not in ['main.Invoice', 'main.InvoiceLine', ...]
+Unknown lens 'main.Album'. Valid lenses: ['sales', 'catalog', ...]
 ```
 
 The model then alternated between passing a *table* name as `lens` and passing
@@ -83,8 +82,8 @@ specific:
 
 | Instead of | Write |
 | --- | --- |
-| "Try a different lens." | "`dark_fleet` is not in this lock set. Call `mcp_resolve_lens` for it and run a second statement." |
-| "Invalid lens." | "`sm.dim_vessel_latest` is a table, not a lens. Lens ids are `area_activity`, `cargoflow`, … — pass one of those." |
+| "Try a different lens." | "`playlists` is not in this lock set. Call `mcp_resolve_lens` for it and run a second statement." |
+| "Invalid lens." | "`main.Album` is a table, not a lens. Lens ids are `sales`, `catalog`, … — pass one of those." |
 | "Read the docs." | "Read `_cross_cutting/JOINS.md` with `mcp_skill_read`." |
 
 Name the tool the model should call next, and the argument. A model that can
@@ -93,28 +92,3 @@ approach" re-rolls the dice.
 
 **One note, not a list of options.** The point is to end an alternation, and
 three destinations restart it.
-
----
-
-## Where it goes, for the CPL server specifically
-
-Two producers, and one shared blocker.
-
-- `backend/skills_service/app/mcp/tools/exec_sql.py:145` — the lock
-  violation.
-- `backend/skills_service/app/mcp/tools/_common.py:134`
-  (`resolve_lens_or_error`) — the unknown lens, whose sentence is raised at
-  `core/lens_resolver.py:75`.
-
-Both return `MCPToolError`, in
-`backend/skills_service/core/mcp/envelope.py:80`, which declares
-`model_config = ConfigDict(extra="forbid", frozen=True)` and has no `notes`
-field — so this is not a one-line call-site edit. Add an optional
-`notes: list[dict] = Field(default_factory=list)` to that model (or attach the
-list through `structured_content`), then fill it at the two sites above.
-
-One near-miss worth knowing: `ExecuteSqlOutput.next_step`
-(`core/mcp/schemas/outputs.py:130`) already exists, but it is a **success**
-path hint nested inside `data`, and OpenStateGraph deliberately reads only the
-top-level `notes` list. A field nested in a payload is domain data; only a
-declaration at the envelope level is a declaration.

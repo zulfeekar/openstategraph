@@ -66,7 +66,7 @@ class FakeRemoteTool:
 
     async def coroutine(self, **kwargs: Any) -> Any:
         self.calls += 1
-        return json.dumps({"lenses": ["cargoflow", "vesselmovements"]})
+        return json.dumps({"lenses": ["catalog", "playlists"]})
 
 
 def discovery(tool: FakeRemoteTool):

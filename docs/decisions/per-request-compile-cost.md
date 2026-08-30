@@ -33,7 +33,7 @@ the timeline panel is not yet trustworthy and every duration the editor shows is
 
 ## The numbers
 
-`cpl-nl2sql` (`~/osg-demo/workflows/cpl-nl2sql`) — 28 nodes, four `tools/*.py`
+A private package — 28 nodes, four `tools/*.py`
 importing Databricks and sqlglot, five `skills/*.md` totalling 10,889 bytes.
 The heaviest real package this project has; deliberately not a toy.
 
@@ -58,7 +58,7 @@ Read the warm rows.
 ## What fraction of a turn that is
 
 `launch-readiness/109`'s head-to-head stopwatch measured whole turns of
-27.63 s, 39.71 s and 56.63 s on the CPL demo, of which **97–99 % was model
+27.63 s, 39.71 s and 56.63 s on that package, of which **97–99 % was model
 inference**.
 
 > **27 ms of a 27.6 s turn is 0.10 %. Of the 39.7 s median, 0.07 %.**
@@ -69,7 +69,7 @@ the *same question*, which varied by 29 s purely on how many ReAct laps the
 model chose to take.
 
 The earlier estimate on `109` — "≤ 60 ms, ~0.15 % of the turn" — was taken from
-response-header timing on `cpl-mcp`, a package that ships **no** `tools/*.py`.
+response-header timing on an MCP package that ships **no** `tools/*.py`.
 This measurement is the one that includes the tool-import half the ticket was
 actually worried about, on the package that has the most of it, and it lands
 lower rather than higher.

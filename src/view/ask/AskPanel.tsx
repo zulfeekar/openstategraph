@@ -2015,7 +2015,7 @@ function Turn({
           ) : (
             // And when nothing is saying anything, what it is waiting for.
             //
-            // `launch-readiness/141`: measured on `cpl-nl2sql`, the first
+            // `launch-readiness/141`: measured on a 28-node package, the first
             // narration frame does not leave the server until 4.99 s — three
             // nodes run before anything with a voice does. The frames that do
             // arrive are prompt (received 15.9 ms, in the DOM 62.9 ms), so

@@ -24,8 +24,8 @@ from openstategraph.progress import progress_report
 
 class TestTheTableCoversThisProjectsToolSurface:
     def test_covers_the_thirteen_mcp_tools_the_server_advertises(self) -> None:
-        # `docs/decisions/an-agent-that-reaches-cpl-through-mcp.md`, and the
-        # same 13 the read-through cache's allowlist is sourced from.
+        # Read off a running lens-serving MCP server, and the same 13 the
+        # read-through cache's allowlist is sourced from.
         advertised = {
             "mcp_resolve_lens",
             "mcp_list_lenses",
@@ -73,7 +73,7 @@ class TestTheTableCoversThisProjectsToolSurface:
     def test_covers_the_deep_agent_harness_stack(self) -> None:
         # `create_deep_agent` pre-assembles these, so every `DeepAgentNode`
         # has them whether or not its author added a tool. Measured on a live
-        # `cpl-mcp` run: three of the fourteen lines in one card's stack were
+        # MCP run: three of the fourteen lines in one card's stack were
         # `"Calling a tool."`, and all three were these.
         harness = {"ls", "read_file", "write_file", "edit_file", "glob", "grep", "task", "write_todos"}
         assert harness <= set(TOOL_NAMES)

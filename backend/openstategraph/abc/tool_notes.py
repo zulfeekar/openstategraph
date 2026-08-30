@@ -217,7 +217,7 @@ class ToolFailure(BaseModel):
 
     **Why the run records this at all**, when the model is already handed the
     error as content: because the model's account of its own silence is exactly
-    what may not be relied on. Live, `cpl-mcp` answered *"an authentication
+    what may not be relied on. Live, an MCP-backed agent answered *"an authentication
     issue with the data source"* for a call the server had rejected on an
     argument name, and sent the owner to check a credential that was never
     wrong. `127` made that argument about a substitution; this is the same

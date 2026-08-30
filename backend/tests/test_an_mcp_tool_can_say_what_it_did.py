@@ -381,7 +381,8 @@ class TestTheAwaitablePathIsUnchanged:
 class TestACallTheServerCalledUnretryable:
     """`launch-readiness/164`, at the seam `157` built.
 
-    Every CPL MCP failure carries `"retryable": false` and nothing read it,
+    Every failure from the MCP server measured here carries
+    `"retryable": false` and nothing read it,
     while `117`'s whole argument is that a tool result should say what to do
     next **and something should read it**. The corrective was already being
     sent, in a structured field, and was dropped on the floor.

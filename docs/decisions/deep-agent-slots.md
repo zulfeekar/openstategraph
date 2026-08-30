@@ -449,11 +449,11 @@ single-server MCP node the prefix filter is the whole surface, so the
 substitution was effectively unconditional — and a result replaced on arrival
 is a result the model never sees once.
 
-Measured live on `cpl-mcp`, 2026-08-28:
+Measured live on an MCP package, 2026-08-28:
 
 ```
-mcp_describe_lens_tables("cargoflow")   14,101 chars   -> pointer
-mcp_skill_read("cargoflow/SKILL.md")    18,856 chars   -> pointer
+mcp_describe_lens_tables("catalog")     14,101 chars   -> pointer
+mcp_skill_read("catalog/SKILL.md")      18,856 chars   -> pointer
 mcp_resolve_lens(question=...)           3,037 chars   -> in band
 ```
 
@@ -476,7 +476,8 @@ says which a result is**. The three candidates on the ticket all classify the
    argued against for this exact middleware, and which leaves every package
    whose author has not yet watched an agent invent a column name broken.
 2. **A declared note** — right in principle, and `157` built the rails for it.
-   But nothing declares it today and CPL's server does not, so it fixes zero
+   But nothing declares it today and the server measured here does not, so it
+   fixes zero
    live packages and leaves every undeclared server — which is all of them —
    on the unsafe side.
 3. **Content-shaped** — refused. `157` refused to read `entities[].value` out

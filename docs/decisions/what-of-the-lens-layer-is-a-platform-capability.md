@@ -1,6 +1,6 @@
 # What of the lens layer is a platform capability
 
-Source: `~/osg-demo/workflows/cpl-nl2sql/` (a package, not modified by this
+Source: a private NL2SQL package (not modified by this
 review). It produced four things during its build. One (`dbf5f87`, the
 `skill` port connection cap) is already in OpenStateGraph. This document
 covers the other three: the lens files (`skills/lenses/*.md`), the SQL
@@ -90,7 +90,7 @@ returns `"outputs": {node_id: candidate}` — the upstream candidate text —
 never the failure `reason`, even when the attempt budget is exhausted and
 the branch is forced to `pass`. The reason is confined to `feedback` (fed
 back into the revision loop) and `verdicts[node_id]["reason"]` (a structured
-field, not prose glued into the answer). The leak in `cpl-nl2sql`
+field, not prose glued into the answer). The leak in that package
 (`launch-readiness/74`) happened because `gate1` was a `route.grader`
 relaying the validator's *raw text* as its own candidate, so an exhausted
 budget forced that raw text — check ids and all — downstream as the

@@ -12,15 +12,26 @@ be the artifact tested. Doing the pass once, in beta, makes the two trees
 identical and leaves this gate with nothing to do but say yes or no. So there
 is no autofix here, no `--fix`, and no sed pass. It refuses.
 
-## Why it is red today, and when it goes green
+## Why it was red, and what it means now that it is green
 
-`publishable/03` is the pass over the files this gate names. The gate is
+`publishable/03` was the pass over the files this gate named. The gate was
 written *first*, on purpose: a pass with nothing to prove itself against is a
 pass that reports its own success, and this repository has found a dozen
-instances of that shape. `test_no_tracked_file_names_an_engagement` fails on
-today's tree — **that failure is the worklist**, and it is the definition of
-done for `03`. Every other test in this module passes today and is what proves
-the failing one means something.
+instances of that shape. `test_no_tracked_file_names_an_engagement` failed on
+the tree of 2026-08-30 naming **76 files** — that failure was the worklist and
+the definition of done — and `03` cleared it: seventeen documents whose subject
+*was* the engagement were deleted, and the rest moved to their chinook
+analogues.
+
+**Two tests in this module changed shape when that happened, and the change is
+recorded rather than quiet.** `test_it_reads_file_contents` and
+`test_it_reads_the_changelog_whose_job_is_to_recount_history` both asserted
+`"CHANGELOG.md" in unpublishable_files()`. That was the strongest
+demonstration available while the tree was dirty, and it expires by
+construction the moment the pass succeeds — so each now pins the property it
+was standing for (a body is read as well as a path; the changelog is in the
+corpus) against something that does not depend on the tree being dirty.
+Nothing about what the gate refuses moved.
 
 ## `publishable/01` — which words identify an engagement, and which are English
 
@@ -111,7 +122,9 @@ Four exclusions, and each one costs something visible:
    implausible rather than merely unlikely.
 4. **Paths are scanned as well as contents**, with the same list, because a
    content grep never sees a filename. `docs/decisions/an-agent-that-reaches-
-   cpl-through-mcp.md` is refused for its path as well as its body.
+   cpl-through-mcp.md` was refused for its path as well as its body; `03`
+   deleted that document, and its path survives here as a string because the
+   matcher's behaviour on it is what the test is about.
 
 `backend/tests/test_a_row_count_is_not_a_vessel_count.py` was recorded on the
 map as the *other* offending filename. Under `01`'s decision it is not one:
@@ -469,16 +482,27 @@ class TestThePermittedWordsArePermitted:
 class TestTheGateCoversWhatTheInventoryFound:
     """Four kinds of hiding place, because the inventory found all four."""
 
-    def test_it_reads_file_contents(self) -> None:
-        assert "CHANGELOG.md" in unpublishable_files()
+    def test_it_reads_file_contents(self, tmp_path: Path) -> None:
+        # Until `publishable/03` this asserted `"CHANGELOG.md" in
+        # unpublishable_files()`, which was the strongest demonstration
+        # available while the tree was dirty and expires the moment the pass
+        # succeeds. The claim it was making — *a body is read, not only a
+        # path* — is made here against a file written for the purpose, so it
+        # survives the tree being clean and would survive the tree going
+        # dirty again.
+        planted = tmp_path / "innocent-name.md"
+        planted.write_text("a paragraph that names cargoflow in passing\n")
+        assert refused_terms_in(_read(planted)) == ["cargoflow"]
 
     def test_it_reads_paths_a_content_grep_never_sees(self) -> None:
         path = "docs/decisions/an-agent-that-reaches-cpl-through-mcp.md"
         assert "cpl" in refused_terms_in(path)
 
     def test_it_reads_the_changelog_whose_job_is_to_recount_history(self) -> None:
-        # The likeliest place for a client name to survive a prose pass.
-        assert "CHANGELOG.md" in unpublishable_files()
+        # The likeliest place for a client name to survive a prose pass, so
+        # the property worth pinning is that it is **in the corpus** — which
+        # stays true and stays checkable now that its contents are clean.
+        assert "CHANGELOG.md" in tracked_files()
 
     def test_it_reads_bytes_so_fixture_data_cannot_hide(self) -> None:
         # "No fixture data carries client rows" was measured, and "none today"

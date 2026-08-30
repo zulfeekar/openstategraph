@@ -743,7 +743,8 @@ _UNRETRYABLE_TEXT = (
 def _unretryable_note(envelopes: list[Any]) -> tuple[ToolNote, ...]:
     """A corrective for a failure the server itself called unrepeatable.
 
-    `launch-readiness/164`. Every CPL MCP failure carries `"retryable": false`
+    `launch-readiness/164`. Every failure from the MCP server measured here
+    carries `"retryable": false`
     and nothing read it, while `117`'s whole argument is that a tool result
     should say what to do next **and something should read it**. Here the
     server was already sending the corrective in a structured field and it was

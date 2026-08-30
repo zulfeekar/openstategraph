@@ -1,7 +1,8 @@
 """`resolve.vocabulary` — the prefetch step, lifted into a node type.
 
 `launch-readiness/135`. The capability existed as one package's private
-function (`cpl-nl2sql`'s `functions/prefetch_context.py`) and could not be
+function (a private NL2SQL package's `functions/prefetch_context.py`) and
+could not be
 placed, configured or seen. What is lifted here is deliberately **vocabulary
 only** — *"what is this word called here?"* — because the measurement that
 scoped the ticket found the index's table coverage was 3 of 38 while its

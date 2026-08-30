@@ -338,7 +338,7 @@ Each row is one statement a tool was actually handed and answered:
 {
   "node": "agent1",
   "tool": "mcp_execute_sql",
-  "statement": "SELECT port, SUM(barrels) FROM cargoflow_latest GROUP BY port",
+  "statement": "SELECT BillingCity, SUM(Total) FROM Invoice GROUP BY BillingCity",
   "result": "{\"row_count\": 68, \"rows\": [...]}",
   "truncated": true
 }

@@ -8,7 +8,7 @@ instrument that produced it, committed so the next person re-measures instead
 of re-arguing.
 
     python3 scripts/measure_setup_path.py backend/openstategraph/examples/guarded-lookup
-    python3 scripts/measure_setup_path.py ~/osg-demo/workflows/cpl-nl2sql
+    python3 scripts/measure_setup_path.py workflows/chinook-assistant
 
 Read the **warm** passes, not the first one. A live server has already paid
 for the lazy imports that make pass 1 two to three times the rest, and the

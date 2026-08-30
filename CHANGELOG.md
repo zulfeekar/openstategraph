@@ -91,10 +91,10 @@
   the half that needed one. Two fields, stated by the data source beside its
   schema — `row_key` (the columns that identify one row) and `coverage`
   (`column`/`min`/`max`) — read off the run's own record by a new built-in
-  guard check, `zero_outside_coverage`. Measured live on 2026-08-29:
-  `sm.area_counts_dark_v1r0` runs `2026-01-01 → 2026-05-12` while its sibling
-  runs to two days ago, so *"0 dark vessels last month"* over it is right by
-  accident and reads exactly like a run that looked. Four states and no toggle
+  guard check, `zero_outside_coverage`. The worked case, re-runnable against
+  `workflows/chinook-assistant`: `main.Invoice` runs `2009-01-01 →
+  2013-12-22`, so *"0 invoices last month"* over it is right by accident and
+  reads exactly like a run that looked. Four states and no toggle
   between them: a window entirely outside a **declared** coverage is sent back
   to say which of the two it means; a window running past a declared end, and
   a table that declares nothing at all, each get their own sentence on the
@@ -160,7 +160,7 @@
   coverage report cannot be switched off, and its two hardest states are kept
   apart by construction: a catalogue declaring exactly one source says *there
   is nothing to choose*, and one declaring none says *silence here is not
-  evidence*. No package uses it yet; wiring `cpl-mcp` is the next step.
+  evidence*. No package uses it yet; wiring one is the next step.
 - **A tool can say what to do next, and what it substituted for your word —
   and the run records the second one rather than asking the model to remember
   it.** `ToolResult` gains `notes`, an empty-by-default tuple carrying two new
@@ -358,7 +358,8 @@
   wrong call is worse than the failure it replaced. One-directional on purpose
   — a nested call against a flat schema is left alone.
 - **An MCP tool error no longer kills the run, and the run says so itself**
-  (`launch-readiness/156`). Live, `cpl-mcp` answered a real question with
+  (`launch-readiness/156`). Live, an MCP-backed workflow answered a real
+  question with
   *"unable to retrieve … due to an authentication issue with the data
   source"*. There was no authentication issue: two tools nest their arguments
   under a field named `inp`, the model sent them flat, the server refused, and

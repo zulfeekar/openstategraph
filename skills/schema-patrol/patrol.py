@@ -391,7 +391,7 @@ def _as_list(value) -> list[str]:
 
 # --- table families and which member is current ---------------------------
 #
-# This warehouse spells a version `v{major}r{minor}` — `cargoflow_v2r0`,
+# Some warehouses spell a version `v{major}r{minor}` — `movements_v2r0`,
 # `geofences_v3r1`, `idle_events_v1r2` — alongside a `_latest` alias. Both
 # forms coexist for the same stem, so "the table" is a family and a
 # declaration picks one member of it.

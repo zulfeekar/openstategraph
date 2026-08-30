@@ -93,7 +93,7 @@ def _grader(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
     # another grader's `pass` are conditional edges, so a grader reading
     # only `plan.edges` sees no candidate at all and rejects with "The
     # answer is empty" — without a model call, so nothing in the trace
-    # says why. Found by wiring 165's gate into `cpl-mcp` and running it:
+    # says why. Found by wiring 165's gate into an MCP package and running it:
     # four live runs, four empty answers, the full draft sitting in
     # `outputs[guard1]` the whole time.
     #

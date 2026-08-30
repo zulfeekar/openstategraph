@@ -40,25 +40,25 @@ class TestValidateWorkflowTool:
         doc = json.dumps(
             {
                 "nodes": [
-                    {"id": "t1", "type": "cpl-nl2sql/tools.DatabricksSqlQueryTool", "data": {}},
-                    {"id": "f1", "type": "cpl-nl2sql/functions.normalize", "data": {}},
+                    {"id": "t1", "type": "chinook-assistant/tools.QueryTool", "data": {}},
+                    {"id": "f1", "type": "chinook-assistant/functions.normalize", "data": {}},
                 ],
                 "edges": [],
             }
         )
         result = ValidateWorkflowTool().run(document=doc)
-        assert result.error is None or "cpl-nl2sql/tools.DatabricksSqlQueryTool" not in result.error
-        assert result.error is None or "cpl-nl2sql/functions.normalize" not in result.error
+        assert result.error is None or "chinook-assistant/tools.QueryTool" not in result.error
+        assert result.error is None or "chinook-assistant/functions.normalize" not in result.error
 
     def test_a_slash_type_that_is_not_tools_or_functions_still_reports_unknown(self) -> None:
         """The gate is a shape (`<one segment>/tools.` or `/functions.`), not
         a blanket "anything with a slash" pass — otherwise a genuine typo in
         that shape would stop being reported at all."""
         doc = json.dumps(
-            {"nodes": [{"id": "x1", "type": "cpl-nl2sql/widgets.Foo", "data": {}}], "edges": []}
+            {"nodes": [{"id": "x1", "type": "chinook-assistant/widgets.Foo", "data": {}}], "edges": []}
         )
         result = ValidateWorkflowTool().run(document=doc)
-        assert result.error is not None and "cpl-nl2sql/widgets.Foo" in result.error
+        assert result.error is not None and "chinook-assistant/widgets.Foo" in result.error
 
     def test_known_types_stay_in_lockstep_with_the_runtime(self) -> None:
         from openstategraph.compile.node_runtime import NodeRuntime

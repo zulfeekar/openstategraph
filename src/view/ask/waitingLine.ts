@@ -5,7 +5,8 @@
  * see anything for a few seconds"* against a measurement (`109`) that put the
  * first frame at 0.09 s. Both were true, and neither was the whole picture:
  *
- * - The wire, timestamped at the server on `cpl-nl2sql`: `in1` at **0.06 s**,
+ * - The wire, timestamped at the server on a 28-node package: `in1` at
+ *   **0.06 s**,
  *   `router1` at **2.16 s**, `prefetch1` and the first narration frame at
  *   **4.99 s**, the first model token at **13.13 s**.
  * - The browser, timestamped at receipt and at the DOM mutation carrying it:

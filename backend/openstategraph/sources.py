@@ -34,7 +34,7 @@ stated source is indistinguishable from a number from the wrong one.
 A source must not be a choice the model makes differently on every run; that
 is the argument `resolve.vocabulary` already made and measured. And it is not
 a sentence in a preamble: six prompt-level rules have been declined on this
-project, and `cpl-mcp`'s prompt already carries a rule of exactly this shape
+project, and an MCP package's prompt already carries a rule of this shape
 which six runs ignored.
 
 ## Tolerant in reading, strict in trusting

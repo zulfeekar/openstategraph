@@ -11,7 +11,7 @@ This is the instrument that answers it, committed for the same reason
 `scripts/measure_setup_path.py` was (`launch-readiness/113`): so the next
 person re-measures instead of re-arguing.
 
-    python3 scripts/measure_turn.py ~/osg-demo/workflows/cpl-nl2sql \
+    python3 scripts/measure_turn.py workflows/chinook-assistant \
         --question "..." --passes 2
 
 **Three clocks, and the point is that they are compared rather than mixed.**

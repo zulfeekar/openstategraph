@@ -4,7 +4,7 @@ milliseconds, and it never touches the network.
 `launch-readiness/113` suspected this path of being the cost behind `109`
 ("a turn takes far longer than a comparable assistant"). The ticket's own
 instruction was **measure before building**, and the measurement said no:
-against `cpl-nl2sql` — 28 nodes, four `tools/*.py`, five `skills/*.md`, the
+against a private package — 28 nodes, four `tools/*.py`, five `skills/*.md`, the
 heaviest package this project has — the whole setup path is **~27 ms warm**
 and ~85 ms on a process's first pass, against turns of 27–57 s. The argument
 and the numbers are `docs/decisions/per-request-compile-cost.md`; the

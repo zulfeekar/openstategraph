@@ -1,12 +1,13 @@
 """launch-readiness 167 — a guard that runs out of attempts publishes what it refused.
 
-Measured live on 2026-08-28 (`cpl-mcp`, the owner's question, `maxAttempts: 2`):
+Measured live on 2026-08-28 (an MCP package, the owner's question,
+`maxAttempts: 2`):
 
 ```
 lap 1  guard1  pass
-lap 2  guard1  "The answer reports 1,454,449 vessels. That figure came from a
-                bare COUNT(*) over sm.area_counts_dark_v1r0..."   -> EXHAUSTED
-       out1    "...there are 1,454,449 dark vessels."
+lap 2  guard1  "The answer reports 8,715 tracks. That figure came from a
+                bare COUNT(*) over main.PlaylistTrack..."     -> EXHAUSTED
+       out1    "...there are 8,715 tracks."
 ```
 
 The verdict was recorded and the branch was `pass`, so the answer shipped **with

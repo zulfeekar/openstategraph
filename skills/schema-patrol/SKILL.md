@@ -160,7 +160,8 @@ no credentials. `--refresh` recaptures the fixture — and it does so by invokin
 **the package's own fixture generator**, which the patrol discovers. The patrol
 deliberately does not capture warehouse facts itself: the credentials, the
 catalog name and the index name are the package's business, and a second
-capture path is a second source of truth. In `cpl-nl2sql` the generator is
+capture path is a second source of truth. In the package this was built
+against the generator is
 `scripts/refresh_warehouse_facts.py` and the fixture is
 `data/warehouse_facts.json`. A package that has neither should add them there,
 not here.
@@ -218,7 +219,7 @@ A **noisy** run is the failure mode to watch for, and it has three usual causes:
 The case the patrol was built from, end to end.
 
 **What the index said.** Index rows for the vessel-class glossary named
-`ms_cpl_app_prod.shipping.dim_vessel_latest` — in `glossary_maps_to`, in
+a fully qualified dimension table — in `glossary_maps_to`, in
 `description`, and in a `usage_hint`, which the agent reads as an instruction.
 
 **What the declaration lacked.** No lens declared that table, as a canonical
@@ -244,7 +245,8 @@ run, before a user meets it.
 
 ## A clean run, verbatim
 
-Against `cpl-nl2sql` on 2026-08-25, after the dimension was declared. Checks 1
+Against a private data package on 2026-08-25, after the dimension was
+declared. Checks 1
 and 3 are clean — **the finding the patrol was built for is gone**, which is
 the demonstration that it reads the package correctly rather than that it has
 nothing to say.
@@ -257,8 +259,8 @@ nothing to say.
           proposed: no action required — an unplaced table is usually correct.
 
 [FAIL] check 2  SKILL vs FACT     a declaration the warehouse denies
-        - (documented-type-mismatch) cargoflow_latest.vessel_imo = dim_vessel_latest.imo
-          'cargoflow' joins INT to LONG — already recorded as a trap in the declaration
+        - (documented-type-mismatch) movements_latest.vessel_imo = dim_vessel_latest.imo
+          that lens joins INT to LONG — already recorded as a trap in the declaration
           proposed: no action
         - (contradictory-type) idle_events_v1r2.IMO = dim_vessel_latest.imo
           'vessel_idle_periods' joins INT to LONG — the equality is legal, but a value

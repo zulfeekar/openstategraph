@@ -1,6 +1,6 @@
 """`launch-readiness/162` — a result is offloaded *after* the model reads it.
 
-The defect, measured live on `cpl-mcp`: at `tier: deep` the compiler wires
+The defect, measured live on an MCP package: at `tier: deep` the compiler wires
 `OffloadMiddleware` over the whole wired surface, so
 `mcp_describe_lens_tables` (14,101 chars) and `mcp_skill_read` (18,856) were
 replaced with pointers **on arrival** while `mcp_resolve_lens` (3,037) was not.
@@ -47,7 +47,7 @@ THREAD = "162-thread"
 #: thing: the column the model needs is buried a long way down, exactly as
 #: `load_date` was at line 211 of the offload file.
 SCHEMA = (
-    "cargoflow.voyages\n"
+    "catalog.tracks\n"
     + "".join(f"  filler_column_{i:03d}  text  a description of a column\n" for i in range(200))
     + "  load_date  date  the day the cargo was loaded\n"
     + "".join(f"  tail_column_{i:03d}  text  another description\n" for i in range(60))
@@ -101,7 +101,7 @@ class Analyst(GenericFakeChatModel):
         self.calls.append(list(messages))
         turn = len(self.calls)
         if turn == 1:
-            return _call("mcp_describe_lens_tables", {"q": "cargoflow"}, "call-1")
+            return _call("mcp_describe_lens_tables", {"q": "catalog"}, "call-1")
         if turn == 2:
             seen = "\n".join(str(m.content) for m in messages if isinstance(m, ToolMessage))
             object.__setattr__(

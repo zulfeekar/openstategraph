@@ -3,7 +3,8 @@
 
 The owner watched a real run and reported *"I don't see anything for a few
 seconds"* against a measurement (`launch-readiness/109`) that put the first
-frame at 0.09 s. Both were true. Timestamped at the server on `cpl-nl2sql`:
+frame at 0.09 s. Both were true. Timestamped at the server on a 28-node
+package:
 
     0.06 s  update   in1        (carries the reader's own question back)
     2.16 s  update   router1

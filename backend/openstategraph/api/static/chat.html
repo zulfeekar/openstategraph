@@ -302,7 +302,7 @@
     .steps div.thinking.live > p:last-child::before { animation: none; }
   }
   /* What the panel says while the wire is honestly quiet
-     (`launch-readiness/141`). Measured on `cpl-nl2sql`: the first narration
+     (`launch-readiness/141`). Measured on a 28-node package: the first narration
      frame does not leave the server until 4.99 s, because three nodes run
      before anything with a voice does. The frames that do arrive are prompt,
      so this is a silence to account for rather than a paint to fix — and the
@@ -1530,7 +1530,7 @@ async function stream(path, body, el, signal) {
               : "";
             // No "⋯ " prefix any more (`launch-readiness/140`): the stack
             // draws its own mark per line, and the two together rendered as
-            // a double marker — caught on a live `cpl-mcp` run.
+            // a double marker — caught on a live MCP run.
             liveLine((d.message || displayName(d.node)) + count);
             el.scrollIntoView({ block: "end" });
           } else if (event === "invoked") {
