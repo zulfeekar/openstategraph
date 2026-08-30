@@ -361,8 +361,8 @@
   width: 14px;
   height: 14px;
   cursor: nwse-resize;
-  border-right: 2px solid var(--color-rule);
-  border-bottom: 2px solid var(--color-rule);
+  border-right: var(--border-width-rule) solid var(--color-rule);
+  border-bottom: var(--border-width-rule) solid var(--color-rule);
   border-bottom-right-radius: 4px;
   opacity: 0;
   transition: opacity var(--duration-fast) var(--ease-out);

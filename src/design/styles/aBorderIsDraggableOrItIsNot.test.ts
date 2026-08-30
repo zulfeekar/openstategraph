@@ -4,37 +4,50 @@ import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * The instrument for `the-look-has-an-author-now/15`, corrected by `16`.
+ * The instrument for `the-look-has-an-author-now/15`, corrected by `16`
+ * and again by `17`.
  *
- * The owner's rule of thumb, as `15` recorded it:
+ * The owner has now said this three times, and all three are recorded here
+ * because two passes have already overshot in opposite directions.
  *
- * > "The rule of thumb is: darker border only for the draggable. Other
- * > normal borders should be the same border colour but a lighter variant
- * > or opacity of the dark colour — about 60%, a greyish."
+ * 1. On `15`: *"The rule of thumb is: darker border only for the
+ *    draggable. Other normal borders should be the same border colour but
+ *    a lighter variant or opacity of the dark colour — about 60%, a
+ *    greyish."*
+ * 2. On what `15` shipped: *"Still inconsistent — normal borders are dark
+ *    grey so that the draggable borders stand out."*
+ * 3. On what `16` shipped, pointing at the palette panel's right edge:
+ *    *"This is a normal border — I asked opacity less, or light grey
+ *    shade. Only the draggable border is correct."*
  *
- * And their verdict on what `15` shipped from it:
+ * **The second sentence is a report, not a specification, and `16` read it
+ * as one.** It raised the normal weight 60% → 70% on the strength of it.
+ * The first and third agree with each other and disagree with that
+ * reading: the normal weight is the *light* one. So the value goes back to
+ * the owner's own number.
  *
- * > "Still inconsistent, and as I requested: the draggable border should
- * > only be dark. Rule of thumb is **normal borders are dark grey so that
- * > the draggable borders stand out**."
+ * There is a floor as well as a ceiling. `15`'s first attempt failed the
+ * other way — `--color-border-default` sat at 1.25:1 and read as absent —
+ * so the job is the band between "competes with the draggable weight" and
+ * "is not there". 60% of the ink over white is `#797877` at 4.41:1: a grey
+ * line anybody can see, and nobody would call dark.
  *
- * The emphasis moved, and with it the value. 60% of the ink over white is
- * `#797877` — a mid grey, which is what a reader called *"reads as
- * absent"*. The rule is not "one weight is faint and one is dark"; it is
- * that **both weights are legible and the contrast that matters is between
- * them**. So the normal weight is dark grey — 70% of the ink, `#636261` on
- * white at 6.09:1 — and the draggable weight is full ink at 16.60:1, which
- * is 2.73:1 against the normal weight beside it.
+ * **What `16` could not fix by moving alpha, and `17` fixes by moving
+ * width.** Measured on the running app at `5f0b895`, the palette's right
+ * edge was `2px` at 70% and the run dock's draggable edge was `2px` at
+ * 100%. Two lines of the same width whose only difference is 30% of alpha
+ * is a difference a reader measures rather than sees, which is why a third
+ * complaint arrived about a token that was already the right one. So the
+ * two weights now differ in **both** width and ink:
  *
- * Three weights are declared and each is a different kind of thing:
- *
- * - `--color-rule` — full ink, and **only a border a pointer can drag**.
- *   Two of them in the whole product, asserted by site below.
- * - `--color-border` — dark grey, 70%. Every other structural line: a
- *   panel edge, a card outline, a divider, an input, a table rule, a chart
- *   hairline.
- * - `--color-border-emphasis` — 85%, interaction *state* only, never a
- *   resting border. Equal 15-point steps put it between the two, which is
+ * - `--color-rule` at `--border-width-rule` — 2px, full ink, and **only a
+ *   border a pointer can drag**. One pair, spent at three declarations
+ *   across two files, asserted by site below.
+ * - `--color-border` at `--border-width-hairline` — 1px, 60%. Every other
+ *   structural line: a panel edge, a card outline, a divider, an input, a
+ *   table rule, a chart hairline.
+ * - `--color-border-emphasis` — 80%, interaction *state* only, never a
+ *   resting border. Equal 20-point steps put it between the two, which is
  *   a rule a reader can check rather than three hand-picked numbers.
  *
  * **What this file does not try to settle.** A colour used to signal
@@ -218,19 +231,26 @@ describe('a border is drawn by what it means, and there are two weights', () => 
    *
    * | | light surface | light canvas | dark surface | dark canvas |
    * | --- | --- | --- | --- | --- |
-   * | `--color-border` 70% | 6.09:1 | 5.98:1 | 8.21:1 | 8.71:1 |
-   * | `--color-border-emphasis` 85% | 10.35:1 | 9.88:1 | 11.52:1 | 12.52:1 |
+   * | `--color-border` 60% | 4.41:1 | 4.32:1 | 6.33:1 | 6.62:1 |
+   * | `--color-border-emphasis` 80% | 8.67:1 | 8.34:1 | 10.40:1 | 11.08:1 |
    * | `--color-rule` 100% | 16.60:1 | 15.66:1 | 15.71:1 | 17.25:1 |
    *
    * And the number the owner's rule is actually about — the step **between
-   * the weights**, normal against draggable: 2.73:1 light, 1.91:1 dark.
+   * the weights**, normal against draggable side by side: **3.77:1 light,
+   * 2.48:1 dark**. Under `16`'s 70% it was 2.73:1 / 1.91:1, and the third
+   * complaint arrived anyway, because that step was being asked to carry
+   * the whole distinction on its own. It is not any more: the draggable
+   * weight is also twice as wide.
    *
-   * `15` shipped 60% / 80%. That gave a normal weight of 4.41:1 on white,
-   * a mid grey rather than a dark one; raising it to 70% costs the hover
-   * step, which went 1.97:1 → 1.70:1 in light and 1.64:1 → 1.40:1 in dark.
-   * That is the trade and it is recorded rather than hidden: the owner
-   * narrowed the range on purpose, and a hover has a pointer and a
-   * transition behind it where a resting border has neither.
+   * The floor is real and it is `15`'s own failure — a weight at 1.25:1
+   * reads as absent. 4.41:1 is not near it. Nor is the low end of the
+   * band: 50% would put the normal weight at 3.26:1 on white, and the
+   * arithmetic ladder would stop being one.
+   *
+   * The hover step comes back with the value: 60% → 80% is 1.97:1 light /
+   * 1.64:1 dark, against the 1.70:1 / 1.40:1 that `16`'s narrower range
+   * cost. That was recorded as `16`'s price, and it is refunded here
+   * rather than quietly forgotten.
    */
   it('declares the three weights as one ink at three strengths', () => {
     const theme = read(join(SRC, 'design/styles/theme.css'));
@@ -238,10 +258,10 @@ describe('a border is drawn by what it means, and there are two weights', () => 
       (new RegExp(`${token}\\s*:\\s*([^;]+);`).exec(theme)?.[1] ?? '').replace(/\s+/g, ' ').trim();
 
     expect(declared('--color-border')).toBe(
-      'color-mix(in srgb, var(--osg-divider) 70%, transparent)',
+      'color-mix(in srgb, var(--osg-divider) 60%, transparent)',
     );
     expect(declared('--color-border-emphasis')).toBe(
-      'color-mix(in srgb, var(--osg-divider) 85%, transparent)',
+      'color-mix(in srgb, var(--osg-divider) 80%, transparent)',
     );
     expect(declared('--color-rule')).toBe('var(--osg-divider)');
   });
@@ -295,6 +315,38 @@ describe('a border is drawn by what it means, and there are two weights', () => 
       .map((s) => `${s.file} ${s.property}`)
       .sort();
     expect(found).toEqual(DRAGGABLE.map(([file, property]) => `${file} ${property}`).sort());
+  });
+
+  /**
+   * **The width half, which is `17`'s addition and the reason a third
+   * complaint was needed to find it.**
+   *
+   * `16` asserted the ink and said nothing about the width, so the palette
+   * edge could be — and was — a 2px line at 70% sitting beside a 2px line
+   * at 100%. A census that measures only one of two values cannot see a
+   * pair that has come apart. So the two are asserted together: every
+   * declaration that spends full ink also spends rule width, and no
+   * declaration anywhere else spends rule width.
+   *
+   * That is the whole two-weight system stated as one sentence a reader
+   * can check — **2px full ink is draggable, 1px at 60% is everything
+   * else** — and it is why `NodeCard.css`'s grip stopped writing `2px` as
+   * a literal: a literal cannot be counted by the half of this pin that
+   * counts the token.
+   */
+  it('gives the draggable weight one width as well as one ink', () => {
+    const carrying = borderSites().filter((s) => s.token === '--color-rule');
+    for (const site of carrying) {
+      expect(site.value, `${site.file} ${site.property}`).toContain('var(--border-width-rule)');
+    }
+    const spending = [
+      ...new Set(
+        stylesheets().flatMap((path) =>
+          [...read(path).matchAll(/--border-width-rule\)/g)].map(() => under(path)),
+        ),
+      ),
+    ].sort();
+    expect(spending).toEqual([...new Set(DRAGGABLE.map(([file]) => file))].sort());
   });
 
   it('leaves the grip and the dock edge actually draggable, not merely dark', () => {

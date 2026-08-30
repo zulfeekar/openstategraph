@@ -664,14 +664,31 @@ describe('a bar beside a block is a marker, and a marker has a name', () => {
    *   slot** — space held open so the row does not move when a tab is
    *   chosen. Its width belongs to the underline it reserves, which is a
    *   state indicator rather than an indent.
+   *
+   * **`08` ruled that neither is a marker. It did not rule that either is a
+   * literal**, and this test asserted the stronger thing — a bare `2px` —
+   * for as long as no other token wanted the line. `the-look-has-an-author-now/17`
+   * is the case where one does: `.node__resize` is one of the two places in
+   * the product a pointer can drag a border, so it draws the draggable
+   * weight, `--border-width-rule` at `--color-rule`, and `17`'s census
+   * counts that token to prove the pair has not come apart. A literal
+   * cannot be counted.
+   *
+   * `08`'s argument is untouched by that — a drag affordance still has
+   * nothing to do with the weight of a quotation, and the marker is still
+   * the wrong name for it. So the row survives with what `08` actually
+   * decided under it: **not the marker**, and for the corner, the rule.
+   * `.tabs__tab` keeps its literal, because the underline it reserves space
+   * for is a state indicator that answers to no width token yet.
    */
   it.each([
     ['view/nodes/NodeCard.css', '.node__resize', 'a glyph, not a bar'],
     ['design/primitives/Tabs.css', '.tabs__tab', 'a selection slot, not an indent'],
-  ])('%s %s keeps its literal — %s', (file, selector) => {
+  ])('%s %s is not a marker — %s', (file, selector) => {
     const css = read(join(SRC, file));
     const block = new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
-    expect(block).toMatch(/border-(right|bottom): 2px solid/);
+    expect(block).toMatch(/border-(right|bottom): (2px|var\(--border-width-rule\)) solid/);
+    expect(block).not.toContain('--border-width-marker');
   });
 
   /**

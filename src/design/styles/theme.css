@@ -71,18 +71,24 @@
   --color-text-success: var(--green-600);
 
   /* ---------- Borders ---------- */
-  /* `the-look-has-an-author-now/15`, corrected by `16`. The owner, on what
-     `15` shipped: *"Still inconsistent, and as I requested: the draggable
-     border should only be dark. Rule of thumb is normal borders are dark
-     grey so that the draggable borders stand out."*
+  /* `the-look-has-an-author-now/15`, corrected by `16` and again by `17`.
+     The owner, pointing at the palette panel's right edge after `16`:
+     *"This is a normal border — I asked opacity less, or light grey shade.
+     Only the draggable border is correct."*
 
-     The emphasis is on the *pair*, not on one of them being faint. `15`
-     read "a lighter variant, about 60%" as the instruction and produced
-     `#797877` on white — a mid grey, which a reader called absent. 60% was
-     the owner's first estimate; "dark grey" is the correction, and this is
-     the value that satisfies it.
+     That is their first sentence again (*"a lighter variant or opacity of
+     the dark colour — 60%, a greyish"*). `16` read their middle sentence
+     — *"normal borders are dark grey so that the draggable borders stand
+     out"* — as a specification and raised this 60% → 70%; it was a report
+     of what they were looking at. Two of the three agree, so the value is
+     the owner's own number and this is the third pass to write it.
 
-     Three strengths of one ink, at equal 15-point steps, so the ladder is
+     There is a floor as well as a ceiling: `15`'s first attempt put a
+     weight at 1.25:1 and it read as absent. 60% of the ink is `#797877` on
+     white at 4.41:1 — a grey line anybody can see, and nobody would call
+     dark.
+
+     Three strengths of one ink, at equal 20-point steps, so the ladder is
      arithmetic a reader can check rather than three picked swatches. It
      flips with the theme through `--osg-divider` — the same reason
      `--color-rule` below needs no per-theme redeclaration.
@@ -90,13 +96,22 @@
      Composited over the two grounds these actually sit on:
 
        weight               light surface / canvas   dark surface / canvas
-       --color-border 70%    6.09:1 / 5.98:1          8.21:1 / 8.71:1
-       ...-emphasis   85%   10.35:1 / 9.88:1         11.52:1 / 12.52:1
-       --color-rule  100%   16.60:1 / 15.66:1        15.71:1 / 17.25:1
+       --color-border  60%   4.41:1 / 4.32:1          6.33:1 / 6.62:1
+       ...-emphasis    80%   8.67:1 / 8.34:1         10.40:1 / 11.08:1
+       --color-rule   100%  16.60:1 / 15.66:1        15.71:1 / 17.25:1
 
      And the number the rule is about — normal against draggable, side by
-     side: 2.73:1 light, 1.91:1 dark. */
-  --color-border: color-mix(in srgb, var(--osg-divider) 70%, transparent);
+     side: 3.77:1 light, 2.48:1 dark, against 2.73:1 / 1.91:1 under `16`.
+
+     **Alpha is no longer carrying this alone, and that is `17`'s real
+     change.** A width goes with each weight: this one is always
+     `--border-width-hairline` (1px) and `--color-rule` is always
+     `--border-width-rule` (2px). `16` left the panel edges 2px and moved
+     only their ink, so the two weights differed by 30% of alpha at the
+     same width — which is a difference you measure rather than see, and is
+     why a third complaint arrived about a token that was already the
+     right one. */
+  --color-border: color-mix(in srgb, var(--osg-divider) 60%, transparent);
   /* Interaction *state*, not a third structural weight — the one thing a
      flat two-weight system cannot say on its own. A `:hover` on an input,
      a button, a palette row steps up one rung with no other cue; collapsing
@@ -104,19 +119,28 @@
      to `:hover`/`:focus`/`:active`/pressed rules only — never a resting
      border — and held to an exact site list by the pin.
 
-     Raising the resting weight to dark grey costs this step, and the cost
-     is recorded rather than hidden: 60%→80% was 1.97:1 light / 1.64:1 dark;
-     70%→85% is 1.70:1 / 1.40:1. The owner narrowed the range on purpose,
-     and a hover arrives with a pointer and a transition behind it where a
-     resting border has neither. */
-  --color-border-emphasis: color-mix(in srgb, var(--osg-divider) 85%, transparent);
-  /* Full ink, and **only a border a pointer can drag** — `16`. Two of them
-     in the product: the node card's resize grip and the run dock's lower
-     edge, which `.run-dock__grip` straddles and which draws no line of its
-     own. The toolbar's bottom edge and the two panel edges wore this until
-     `16`; they keep `--border-width-rule` (2px) and take the normal ink,
-     because width is what says "a region ends here" and ink is what says
-     "take hold of this". `--osg-divider` is the authored token, commented
+     `16` raised the resting weight to 70% and recorded the cost to this
+     step: 1.97:1 light / 1.64:1 dark became 1.70:1 / 1.40:1. `17` returns
+     the resting weight to 60%, so the step comes back with it. A cost that
+     was recorded rather than hidden is a cost that can be refunded in the
+     open. */
+  --color-border-emphasis: color-mix(in srgb, var(--osg-divider) 80%, transparent);
+  /* Full ink, and **only a border a pointer can drag** — `16`, completed by
+     `17`. Two of them in the product: the node card's resize grip and the
+     run dock's lower edge, which `.run-dock__grip` straddles and which
+     draws no line of its own. Both draw it at `--border-width-rule`, and
+     nothing else in the product draws that width — the pair is the
+     draggable weight, and `aBorderIsDraggableOrItIsNot.test.ts` asserts
+     the two halves land on the same declarations.
+
+     The toolbar's bottom edge and the two panel edges wore this ink until
+     `16` and its width until `17`. `16` kept them at 2px on the argument
+     that width says "a region ends here" while ink says "take hold of
+     this"; the owner then reported the palette edge as a dark border
+     anyway, which is what a 2px seam is regardless of its alpha. A region
+     is already told by its ground — a panel is `--color-bg-surface`
+     against the canvas's `--color-bg-canvas` — so the seam does not have
+     to shout it. `--osg-divider` is the authored token, commented
      in the authored file as *"2px rules, full ink"*, and it is theme-aware
      itself — `#201e1d` on the light ground, `#f3f2f2` on the dark one.
 

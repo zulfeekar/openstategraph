@@ -23,11 +23,11 @@
    ink is what says draggable. 2px of dark grey still ends a region; that
    is the half of `07` this keeps. */
 .panel--left {
-  border-right: var(--border-width-rule) solid var(--color-border);
+  border-right: var(--border-width-hairline) solid var(--color-border);
 }
 
 .panel--right {
-  border-left: var(--border-width-rule) solid var(--color-border);
+  border-left: var(--border-width-hairline) solid var(--color-border);
 }
 
 .panel__header {
