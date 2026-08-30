@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Maximize2, Minus, Plus } from 'lucide-react';
 import { Icon, IconButton, Tooltip } from '@design/primitives';
-import { unionRects, type Rect } from '@core/kernel/geometry';
-import { coversAnyNode } from './coverage';
+import { unionRects, type Point, type Rect } from '@core/kernel/geometry';
+import { coversAnyNode, type ScreenProjection } from './coverage';
+import { observeResize } from '../layout/observeResize';
 import { usePaperController, useWorkbench, useWorkflowVersion } from '@app/WorkbenchContext';
 import './Minimap.css';
 
@@ -38,24 +39,92 @@ export function Minimap() {
     return paper.viewport.onChange(sync);
   }, [paper]);
 
-  const nodes = workbench.model.nodes();
-  const rects = nodes.map((node) => ({
-    id: node.id,
-    kind: node.kind,
-    accent: node.definition.accent,
-    x: node.position.x,
-    y: node.position.y,
-    width: node.size.width,
-    height: node.size.height,
-  }));
+  // Rebuilt when the model says so, not on every render of the shell — which
+  // is what gives the coverage effect below something honest to depend on. The
+  // node geometry is derived from the whole document, so `version` is the
+  // signal that invalidates it; the same idiom, and the same suppression, as
+  // `Inspector.tsx`'s diagnostics memo.
+  const rects = useMemo(
+    () =>
+      workbench.model.nodes().map((node) => ({
+        id: node.id,
+        kind: node.kind,
+        accent: node.definition.accent,
+        x: node.position.x,
+        y: node.position.y,
+        width: node.size.width,
+        height: node.size.height,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [workbench, version],
+  );
 
   // The map frames the graph *and* the viewport, so panning away from the
   // nodes still shows where you are rather than an empty box.
   const world = unionRects([...rects, ...(viewRect ? [viewRect] : [])]);
 
-  // Whether the map is currently sitting on a card (ticket 55.8). After paint,
-  // because it needs the map's own laid-out rectangle, and after *every* one:
-  // a camera move or a document change can slide a node underneath.
+  /**
+   * The map's own laid-out rectangle, re-measured only when it can have moved.
+   *
+   * `the-cost-of-one-more/22`. This read used to sit inside the coverage
+   * effect below, which had **no dependency array** — so a `getBoundingClientRect`
+   * forced a synchronous layout of the whole document after every render of
+   * the shell, for every reason the shell renders. `20`'s CPU profile put it
+   * at 19.7% of a 700-frame burst, second only to Markdown parsing, growing
+   * ×3.65 per doubling of the frame count: not because the minimap does more
+   * work, but because a forced layout costs what the document costs and the
+   * run trace was adding rows to that document on every frame.
+   *
+   * An empty dependency array would have been the wrong fix and a second bug
+   * in the same place — the map moves, and a box measured once at mount is
+   * wrong for the rest of the session. Two observers, because two different
+   * things move it and neither raises an event the other would catch:
+   *
+   *  - **its own box**, which changes when the map is collapsed or expanded;
+   *  - **the stage it floats in**, which changes on a window resize and when
+   *    the run dock takes three hundred pixels of height out of it. The map is
+   *    anchored to the stage's bottom-right, so that moves the map without
+   *    changing its size — a `ResizeObserver` on the map alone would never
+   *    hear it. `observeResize`'s own docstring is about exactly this dock.
+   *
+   * A pan or a zoom is neither: it moves the *nodes* under a stationary map,
+   * and the projection below carries that.
+   */
+  const [mapBox, setMapBox] = useState<Rect | null>(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const measure = () => {
+      const box = root.getBoundingClientRect();
+      setMapBox({ x: box.x, y: box.y, width: box.width, height: box.height });
+    };
+    measure();
+    const stopWatchingSelf = observeResize(root, measure);
+    const stopWatchingStage = observeResize(root.parentElement, measure);
+    return () => {
+      stopWatchingSelf();
+      stopWatchingStage();
+    };
+  }, []);
+
+  /**
+   * Model coordinates → screen ones, for the camera we were last told about.
+   *
+   * The viewport is read live because that is the only place `localToClient`
+   * lives, but the *identity* of this object is keyed on the camera state the
+   * subscription above publishes — which is what gives the coverage effect
+   * something honest to depend on. A pan changes `viewRect`, a zoom changes
+   * `zoom`, and either rebuilds the projection.
+   */
+  const view = useMemo<ScreenProjection | null>(
+    () =>
+      paper === null || viewRect === null
+        ? null
+        : { zoom, localToClient: (at: Point) => paper.viewport.localToClient(at) },
+    [paper, zoom, viewRect],
+  );
+
+  // Whether the map is currently sitting on a card (ticket 55.8).
   //
   // Written straight onto the element rather than held as state. It is a fact
   // about where the DOM ended up that drives nothing but an opacity — routing
@@ -64,11 +133,8 @@ export function Minimap() {
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    root.toggleAttribute(
-      'data-covering',
-      paper !== null && coversAnyNode(root.getBoundingClientRect(), rects, paper.viewport),
-    );
-  });
+    root.toggleAttribute('data-covering', view !== null && coversAnyNode(mapBox, rects, view));
+  }, [mapBox, rects, view]);
 
   const project = useCallback(
     (rect: Rect) => {

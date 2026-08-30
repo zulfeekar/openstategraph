@@ -1,6 +1,7 @@
 import type { WorkflowModel } from '@core/model/WorkflowModel';
 import type { IEdgeModel } from '@core/model/contracts/workflow';
 import type { INodeModel, NodeId } from '@core/model/contracts/node';
+import { dominatorTree, dominatorsOf, type DominatorTree } from './dominators';
 
 /**
  * The document's control-flow skeleton, resolved **once** and then asked
@@ -52,6 +53,18 @@ export interface IControlFlowGraph {
   reachable(from: readonly NodeId[], options?: { readonly without?: NodeId }): Set<NodeId>;
   /** Every node that can reach `node` over control-flow edges, `node` included. */
   ancestorsOf(node: NodeId): Set<NodeId>;
+  /**
+   * Every node that lies on **all** control-flow paths from a root to `node`,
+   * `node` itself excluded — which is the same set as *"the nodes whose
+   * deletion would leave `node` unreachable"*, asked from the other end.
+   *
+   * `null` means **this index cannot answer**, not "nothing dominates it":
+   * either the document's control flow has a cycle, or `node` sits in a
+   * component the roots never reach. Both are cases where the equivalence the
+   * index rests on stops holding, so a caller that gets `null` must fall back
+   * to `reachable` rather than treat it as an empty answer.
+   */
+  dominatorsOf(node: NodeId): ReadonlySet<NodeId> | null;
 }
 
 /**
@@ -132,6 +145,9 @@ export class ControlFlowGraph implements IControlFlowGraph {
   private readonly successors = new Map<string, NodeId[]>();
   private readonly predecessors = new Map<string, NodeId[]>();
   private readonly branchTargets = new Map<string, NodeId[]>();
+  /** Built at most once, on the first question that needs it. */
+  private tree: DominatorTree | null | undefined;
+  private readonly chains = new Map<NodeId, ReadonlySet<NodeId> | null>();
 
   constructor(model: WorkflowModel) {
     const fed = new Set<NodeId>();
@@ -159,5 +175,24 @@ export class ControlFlowGraph implements IControlFlowGraph {
 
   ancestorsOf(node: NodeId): Set<NodeId> {
     return walk(this.predecessors, [node], undefined);
+  }
+
+  /**
+   * One pass over the successor index, shared by every question afterwards.
+   *
+   * The pass is the same order of cost as the constructor's own — it reads the
+   * adjacency this object already holds and touches each node once — so it is
+   * a second constant on a call that already pays one, rather than a factor on
+   * the number of branching nodes, which is the whole of
+   * `the-cost-of-one-more/21`. Memoised per node as well as per graph, so the
+   * chain is walked once however many gates ask about the same producer.
+   */
+  dominatorsOf(node: NodeId): ReadonlySet<NodeId> | null {
+    const known = this.chains.get(node);
+    if (known !== undefined) return known;
+    if (this.tree === undefined) this.tree = dominatorTree(this.roots, this.successors);
+    const chain = this.tree === null ? null : dominatorsOf(this.tree, node);
+    this.chains.set(node, chain);
+    return chain;
   }
 }
