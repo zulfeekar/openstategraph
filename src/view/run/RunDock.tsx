@@ -4,6 +4,8 @@ import { RunTimeline, SelectedBar } from '../ask/RunTimeline';
 import { laneFold, type RunLanes, type TimelineRow } from '../ask/timeline';
 import { reusableFold } from '../ask/incrementalFold';
 import type { RunView } from './runView';
+import { runCost } from './runCost';
+import { PayloadPane } from './PayloadPane';
 import { DOCK_MIN_HEIGHT } from '../layout/dockFit';
 // The bars and the trace rows keep their styles where they were written. They
 // are the same two renderings this panel is promoting out of the chat, and
@@ -69,13 +71,29 @@ import './RunDock.css';
  *   `docs/openapi.json`. A paragraph re-typed at a uniform tick is exactly the
  *   fabricated measurement `52` exists to forbid, so it is absent rather than
  *   faked. `memory-and-replay` 60.
- * - **The payload pane** — what the selected step *asked* and *produced*.
- *   `ActivityRow.output` is one opaque string and the fold does not keep it, so
- *   the per-family readings the prototype showed would be invented here.
- *   `memory-and-replay` 59.
- * - **The identity masthead and the token total.** Thread, sitting and
- *   timestamp are `44`'s run record and tokens ride `56`'s terminal frames;
- *   `RunView` carries rows and nothing else. `memory-and-replay` 61.
+ * The two the port went back for are now here, and one is still short:
+ *
+ * - **The payload pane** — what the selected step *asked* and *produced*
+ *   (`memory-and-replay` 59). The fold keeps the payload now, so nothing is
+ *   parsed in a renderer; `stepPayload` decides what to *call* it per bar kind
+ *   and what to say when there is nothing.
+ * - **The identity and the cost** (`memory-and-replay` 61) — the thread the run
+ *   reported, and `usage`, which had ridden the terminal frames since `56` and
+ *   reached no surface at all. **Not the prototype's whole masthead**: it also
+ *   showed a sitting and a timestamp, and neither is something *this run*
+ *   reported. The sitting is this tab's own `browserSessionId`, which
+ *   identifies the browser rather than the run; a wall-clock start is on no
+ *   frame at all, and `52` fixed that the axis *"refuses to claim absolute
+ *   time"*. Printing either would be the masthead answering a question the
+ *   recording did not.
+ *
+ * # Where the identity goes at 260 px
+ *
+ * In the header, not in the profile strip. The strip is `tall`-gated and is
+ * six numbers **derived from the fold**; the thread and the token total are
+ * two facts **the run reported**, and mixing the two sources in one row would
+ * make a reader ask which of them the fold could be wrong about. The header is
+ * one line at every height, which is where a thing you check once belongs.
  */
 export function RunDock({
   view,
@@ -133,6 +151,10 @@ export function RunDock({
   );
 
   const empty = view.rows.length === 0 && !view.running;
+  // Not memoised: it is a sum over at most a handful of rows, and a memo whose
+  // key is the same array identity the store already compares by would be
+  // book-keeping for nothing.
+  const cost = runCost(view);
   // One fold, read twice: the chart draws it and the detail pane answers for
   // whichever bar of it the reader picked. Two folds would be two records.
   //
@@ -180,6 +202,20 @@ export function RunDock({
         </span>
         <span className="run-dock__state" data-running={view.running || undefined}>
           {view.running ? 'Running' : view.source === 'stored' ? 'Stored run' : 'Finished'}
+        </span>
+        {/* Which run this is, and what it cost — `memory-and-replay` 61.
+            Rendered only when the run named a thread: `''` is the record
+            saying it disclosed none, and a placeholder in an identity slot is
+            an identity a reader would try to look up. */}
+        {view.threadId === '' ? null : (
+          <span className="run-dock__thread" title={`Thread ${view.threadId}`}>
+            <span className="run-dock__thread-label">Thread</span>
+            <code>{view.threadId}</code>
+          </span>
+        )}
+        <span className="run-dock__cost" title={cost.caption}>
+          <span className="run-dock__cost-label">Tokens</span>
+          <code>{cost.total}</code>
         </span>
         <span className="run-dock__actions">
           {!view.running && view.rows.length > 0 ? (
@@ -231,6 +267,7 @@ export function RunDock({
               just clicked a bar has said which grain they want first. */}
           <div className="run-dock__detail">
             <SelectedBar lanes={lanes} selected={selected} />
+            <PayloadPane lanes={lanes} selected={selected} />
             <Activity rows={view.rows} />
           </div>
         </div>

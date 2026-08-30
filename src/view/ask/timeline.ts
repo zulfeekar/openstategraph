@@ -112,6 +112,28 @@ export interface TimelineRow {
    * on the strength of a guess.
    */
   readonly check?: string;
+  /**
+   * The grader's sentence for `check` — carried with it, never alone.
+   *
+   * Read here for the same reason `check` is, one step further on: a refusal
+   * is the one bar whose *verdict* is the interesting thing about it, and the
+   * verdict without its sentence is a word (`memory-and-replay` 59).
+   */
+  readonly reason?: string;
+  /**
+   * This node's own settled output, as the run reported it on this frame.
+   *
+   * The server's `outputs[node]` or `worker_results[taskId]`, already redacted
+   * for the audience that asked (`api/streaming.py`'s `_redact_for`) — so what
+   * arrives here is what this reader is entitled to, and nothing on this side
+   * has to decide that a second time.
+   *
+   * Kept per **frame**, which is the whole reason the fold reads it rather
+   * than the terminal record: `RunResult.outputs` is keyed by node and merged,
+   * so a revise loop's two laps collapse to one row there and a pane fed from
+   * it would show the second draft against the first bar.
+   */
+  readonly output?: string | null;
   /** Set on a spawn row: a run announced a child. Never a bar of its own —
    * a spawn takes no time — but it is what a lane gets its *name* from. */
   readonly spawn?: {
@@ -216,6 +238,45 @@ export interface TimelineStep {
    * never "everything else definitely did not".
    */
   readonly concurrent: readonly string[];
+  /**
+   * What the run itself recorded about this bar's work — `memory-and-replay`
+   * 59, and the reason 58 could not build the payload pane.
+   *
+   * Three references, never copies: the strings are the ones the rows already
+   * hold, so a bar costs three pointers rather than the run's prose a second
+   * time. 59 weighed keeping the payload on the step against a lookup from bar
+   * key back to rows and worried about *"a bigger object on a hot path"*; the
+   * lookup is what makes it bigger, because re-deriving which frames belong to
+   * which bar is this fold's own attribution written a second time — and a
+   * second attribution is what rule 4 and `launch-readiness` 108 already cost
+   * once. The fold knows; it now says.
+   */
+  readonly payload: StepPayload;
+}
+
+/**
+ * What one bar's frames said about what the step produced.
+ *
+ * Deliberately not an *asked* half. Nothing on the wire carries a top-level
+ * node's prompt — it is assembled inside the runtime and never leaves it — and
+ * the one instruction the run does record belongs to a spawned child, which is
+ * a property of the **lane** (`RunLane.instruction`) rather than of a bar.
+ * Inventing an `asked` field here would give every bar a slot that is empty
+ * for almost all of them, which reads as data lost rather than data absent.
+ */
+export interface StepPayload {
+  /**
+   * The node's own settled output, as the last frame charged to this bar
+   * reported it. `null` when the run reported none — never `''`, because an
+   * empty string and no answer are two facts and a renderer must tell them
+   * apart. The last non-`null` wins, which is the rule `traceTree` already
+   * applies to the same field.
+   */
+  readonly output: string | null;
+  /** The deterministic check that refused this candidate, or `null`. */
+  readonly check: string | null;
+  /** The sentence that check wrote, or `null`. Only ever set beside `check`. */
+  readonly reason: string | null;
 }
 
 export interface Timeline {
@@ -266,7 +327,11 @@ function add(a: number | null, b: number | null): number | null {
  * At module scope rather than inside the fold because `result()` copies one and
  * the copy needs a name.
  */
-type Draft = { -readonly [K in keyof TimelineStep]: TimelineStep[K] };
+// The payload is unwrapped a second time because the mapped type above strips
+// only the top level, and this fold writes into it frame by frame.
+type Draft = Omit<{ -readonly [K in keyof TimelineStep]: TimelineStep[K] }, 'payload'> & {
+  payload: { -readonly [K in keyof StepPayload]: StepPayload[K] };
+};
 
 /**
  * Folds a run's frames into bars.
@@ -371,7 +436,20 @@ export function timelineFold(): Fold<TimelineRow, Timeline> {
    * that forgets draws a model call as a plain step for ever.
    */
   const charge = (bar: Draft, row: TimelineRow): void => {
-    if ((row.check ?? '').trim() !== '') bar.kind = 'refusal';
+    // What the step produced, kept as it arrives (`memory-and-replay` 59).
+    // Above the `internal` gate on purpose: a mounted document's own nodes
+    // report as internal frames of the mount's bar, and their answer is the
+    // only answer that bar ever has.
+    if (typeof row.output === 'string' && row.output !== '') bar.payload.output = row.output;
+    const check = (row.check ?? '').trim();
+    if (check !== '') {
+      bar.kind = 'refusal';
+      bar.payload.check = check;
+      // Never alone: a reason without the check it explains is a sentence
+      // with no subject, which is the shape `graderVerdictLine` already
+      // refuses on the card beside the answer.
+      bar.payload.reason = (row.reason ?? '').trim() || null;
+    }
     if (!row.internal) return;
     if (isModelStep(row.node)) {
       // A middleware hook is *evidence* that a model step exists in this
@@ -410,6 +488,7 @@ export function timelineFold(): Fold<TimelineRow, Timeline> {
       visit,
       measured: false,
       concurrent: [],
+      payload: { output: null, check: null, reason: null },
     };
     steps.push(draft);
     return draft;
@@ -567,7 +646,10 @@ export function timelineFold(): Fold<TimelineRow, Timeline> {
     // Every finishing pass below writes here, never into `steps`: a draft is
     // still open to the next frame, and `order` is its index plus one from the
     // moment it is created, so a copy is found without a second map.
-    const finished: Draft[] = steps.map((draft) => ({ ...draft }));
+    // `payload` is copied too, not shared: `result()` is called on every
+    // frame while a run streams, and a shallow copy would hand every earlier
+    // snapshot the same object the still-open draft is about to write into.
+    const finished: Draft[] = steps.map((draft) => ({ ...draft, payload: { ...draft.payload } }));
     const copyOf = (draft: Draft): Draft | undefined => finished[draft.order - 1];
 
     // Rule 6, second half: a mount's bar is its own two dated frames, not the
@@ -738,6 +820,21 @@ export interface RunLane {
    * which they render alike is the drawing this ticket exists to stop.
    */
   readonly sibling: { readonly index: number; readonly of: number } | null;
+  /**
+   * The task the run handed this child, as it recorded it on the `spawn`
+   * frame — `null` on the run's own lane, which nobody handed anything.
+   *
+   * **The only *asked* the wire carries** (`memory-and-replay` 59). A
+   * top-level node's prompt is composed inside the runtime by
+   * `resolvePrompt()` and never leaves it; a dispatched child's instruction is
+   * a value the orchestrator wrote down, so it is the one half of the payload
+   * pane that is a quotation rather than an inference.
+   *
+   * One line, and bounded server-side to `SPAWN_SNIPPET_CHARS` with an
+   * ellipsis — it was minted for a step row. Enough to recognise the task,
+   * which is what a reader who has just clicked a bar is asking.
+   */
+  readonly instruction: string | null;
   /** The bars that belong to this lane, in the order they fired. */
   readonly steps: readonly TimelineStep[];
 }
@@ -883,6 +980,7 @@ export function laneFold(): Fold<TimelineRow, RunLanes> {
     readonly startMs: number | null;
     readonly endMs: number | null;
     readonly ending: RunLane['ending'];
+    readonly instruction: string | null;
   }[] = [];
 
   const push = (row: TimelineRow): void => {
@@ -904,6 +1002,10 @@ export function laneFold(): Fold<TimelineRow, RunLanes> {
       startMs,
       endMs,
       ending: spawn.outcome ?? null,
+      // `''` is what a backend sends for a child it dispatched without words;
+      // `null` is this fold saying so, so the pane never renders a heading
+      // over an empty quotation.
+      instruction: spawn.instruction.trim() || null,
     });
   };
 
@@ -936,6 +1038,7 @@ export function laneFold(): Fold<TimelineRow, RunLanes> {
       openEnded: false,
       ending: null,
       sibling: null,
+      instruction: null,
       steps: [],
     };
 

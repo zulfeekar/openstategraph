@@ -1,7 +1,7 @@
 import type { RunLanes } from '../ask/timeline';
 
 /**
- * The strip above the chart: what the whole run cost, in five numbers.
+ * The strip above the chart: what the whole run *did*, in five numbers.
  *
  * `memory-and-replay` 58, ported from the design prototype's KPI row. Every
  * one of these is derived from the fold `50` and `57` already produce — **no
@@ -16,10 +16,13 @@ import type { RunLanes } from '../ask/timeline';
  *   completions. Printing one word over the other number would be a claim
  *   about the runtime made from data that cannot support it — and it is the
  *   same word `CLAUDE.md` already forbids on the step budget.
- * - **No token total.** The prototype showed one. Tokens ride the terminal
- *   frames since `56`, but `RunView` carries rows and nothing else, so this
- *   panel does not have them. Filed as `memory-and-replay` 61 rather than
- *   estimated: a token count is the number a reader is most likely to quote.
+ * - **No token total, still — and now for a better reason.** The prototype's
+ *   sixth KPI shipped with `memory-and-replay` 61, and it is in the dock's
+ *   *header*, not here. Every number in this strip is derived from the fold;
+ *   a token count is a number the **run reported**, and putting the two in one
+ *   row would leave a reader unable to tell which of them the fold could be
+ *   wrong about. It is also `tall`-gated where it sits, and an identity you
+ *   check once has to be readable at every height. See `runCost`.
  */
 export interface RunProfile {
   /** The run's own wall clock. `null` when it reported none — never `0`. */

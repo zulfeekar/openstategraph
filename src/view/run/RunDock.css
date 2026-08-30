@@ -607,3 +607,77 @@
     transition: none;
   }
 }
+
+/* ---- which run this is, and what it cost (`memory-and-replay` 61) ----
+   Two facts the run reported, in the header rather than in the profile strip:
+   the strip is derived from the fold and is gated on the dock being dragged
+   tall, and an identity you check once must be readable at every height. */
+
+.run-dock__thread,
+.run-dock__cost {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.run-dock__thread-label,
+.run-dock__cost-label {
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.run-dock__thread code,
+.run-dock__cost code {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--type-caption);
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+}
+
+/* ---- what the selected step asked and produced (`memory-and-replay` 59) ---- */
+
+.rtl__payload {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+}
+
+.rtl__payload h4 {
+  margin: 0;
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.rtl__payload-caption {
+  margin: var(--space-1) 0 0;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+/* A quotation, not prose: whitespace is preserved and nothing is rendered as
+   Markdown, for the reason `toolResults` gives — a payload that reflows its
+   own asterisks has stopped being evidence. Bounded and scrollable rather
+   than clipped, so a long answer costs a scroll instead of the pane. */
+.rtl__payload-text {
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2);
+  max-height: 12em;
+  overflow: auto;
+  border-left: var(--border-width-marker) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  font: var(--type-caption);
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

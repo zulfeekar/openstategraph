@@ -86,7 +86,7 @@ interface Recorded {
 
 const RECORDED: Readonly<Record<string, Recorded>> = {
   'view/ask/AskPanel.tsx': {
-    lines: 905,
+    lines: 907,
     reason: `The largest module under \`src/\` and the one the ticket named: the counterpart
       of \`node_runtime.py\` with no split ticket behind it at all. Eight hundred and
       eighty-nine code lines out of 2,237 physical — the rest is JSX structure, imports and
@@ -136,7 +136,14 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       has listed "the run's live state" among the things this module composes
       since it was written, and drawing a run is no longer one of them. The
       transcript seam it keeps asking somebody to take is still the next one,
-      and it is now the only structural one left.`,
+      and it is now the only structural one left.
+
+      **905 -> 907** (\`memory-and-replay/61\`). Two fields on the \`runView\`
+      publish that 51 left behind: the thread the run reported, and what it
+      spent. Both were already on this turn's \`result\` and neither had a reader
+      anywhere in \`src/\` — the publish is the same effect handing on two more
+      of a record it already holds, and the reason to change stays the one 51
+      removed: this module is still not the thing that draws a run.`,
   },
   'core/runtime/RuntimeClient.ts': {
     lines: 717,

@@ -502,6 +502,31 @@ Two things are drawn side by side: **bars** on the left, one row per thing that
 was running, and the **trace** on the right, which is the detail for whichever
 bar you click.
 
+Its header says **which run this is** — the question it was asked, whether it is
+running, the **thread** the run reported, and what it spent in **tokens**. The
+thread is the run's own identifier and the one you can look a run up by; it
+appears only once the run has told the editor what it is. Two runs of the same
+question have the same header without it.
+
+### What a step asked, and what it produced
+
+Click a bar and the column beside it answers in three grains: what the bar
+**is** (node, lane, when it opened and closed), what it **asked and produced**,
+and then the whole trace.
+
+**Produced** is what that node wrote, on that lap. A revision loop's second
+attempt is a bar of its own and carries its own answer, so the first bar keeps
+the first draft rather than showing you the last one. A bar that refused —
+where a rule rejected the candidate before any model was asked — shows the
+check that refused it and the sentence it wrote, and says that no model was
+called.
+
+**Asked** is the half the run mostly does not record, and the panel says so
+rather than showing you an empty box. The one case it does record is a child
+the run **spawned**: a fanned-out worker, a subagent, a background task all
+carry the task they were handed, and that is quoted. A top-level node's prompt
+is assembled inside the runtime and never reaches the editor.
+
 ### Lanes — one row per concurrent child
 
 The run itself is one lane. Every child the run announced gets its own —
@@ -537,7 +562,7 @@ for play/pause and stepping are in the shortcuts drawer with everything else —
 that drawer is the published list of shortcuts, and it is printed from the same
 table the editor dispatches from, so it cannot fall behind.
 
-### Three things the timeline refuses to tell you, on purpose
+### Four things the timeline refuses to tell you, on purpose
 
 - **A live run gets no scrubber.** While frames are still arriving there is no
   right-hand edge to drag to, and a slider that cannot reach its end is lying
@@ -550,6 +575,11 @@ table the editor dispatches from, so it cannot fall behind.
   open: a background task still running outside this run, a recording that
   ended owing an account, or a child that simply had not finished. None of them
   is given a number, because the run measured none.
+- **A run in flight shows no token count.** Tokens are reported when a run
+  finishes, so there is no partial figure to show and none is invented — the
+  number a reader is most likely to quote is the worst one to estimate. A run
+  that finished and reported nothing reads `—`; a run that called no model at
+  all reads `0`, because those are two different facts.
 
 ---
 

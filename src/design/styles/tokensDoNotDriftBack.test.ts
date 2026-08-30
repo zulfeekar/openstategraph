@@ -550,6 +550,10 @@ describe('a bar beside a block is a marker, and a marker has a name', () => {
     ['view/ask/AskPanel.css', '.ask__trace-output'],
     ['view/ask/AskPanel.css', '.ask__suggestion--build'],
     ['view/ask/PastRuns.css', '.past-runs__lane'],
+    // `memory-and-replay` 59. The selected step's payload, quoted verbatim in
+    // the run dock — the same thing `.ask__trace-output` is, one surface over,
+    // which is why it takes the same width rather than a second guess at it.
+    ['view/run/RunDock.css', '.rtl__payload-text'],
   ];
 
   it.each(MARKERS)('%s %s draws the marker', (file, selector) => {

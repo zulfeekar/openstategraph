@@ -434,6 +434,13 @@ export function AskPanel({
       question: newest.question,
       rows: newest.activity,
       running: newest.running,
+      // Which run, and what it cost (`memory-and-replay` 61). Both were
+      // already on this turn — `result` is the terminal frame, which has
+      // carried `threadId` since `53` and `usage` since `56` — and neither had
+      // a reader. `''` and `null` are the record's own words for *it did not
+      // say*, so they are passed on rather than replaced with a placeholder.
+      threadId: newest.result?.threadId ?? '',
+      usage: newest.result?.usage ?? null,
     });
   }, [turns]);
   /**

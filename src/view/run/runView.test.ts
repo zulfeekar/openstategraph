@@ -9,6 +9,8 @@ const live = (over: Partial<RunView> = {}): RunView => ({
   question: 'who bought the most',
   rows,
   running: true,
+  threadId: 'th-1',
+  usage: null,
   ...over,
 });
 
@@ -94,5 +96,58 @@ describe('the run on show', () => {
     store.subscribe(heard)();
     store.publish(live());
     expect(heard).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * `memory-and-replay` 61 — the dock is outside the conversation, so the run
+ * has to say which one it is and what it cost from the snapshot itself.
+ */
+describe('which run this is, and what it cost', () => {
+  it('starts with nothing to identify and nothing to bill', () => {
+    const store = new RunViewStore();
+    expect(store.read().threadId).toBe('');
+    expect(store.read().usage).toBeNull();
+  });
+
+  it('notices a run that has learned its thread', () => {
+    const store = new RunViewStore();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.publish(live({ threadId: '' }));
+    store.publish(live({ threadId: 'th-9' }));
+    expect(store.read().threadId).toBe('th-9');
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * The whole reason these two fields are on the snapshot and not on a second
+   * store: usage arrives on the *terminal* frame, so the publish that carries
+   * it is the same publish that flips `running` — one object, one identity
+   * change, one render.
+   */
+  it('notices a run that has reported what it spent', () => {
+    const store = new RunViewStore();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.publish(live({ running: true }));
+    store.publish(
+      live({
+        running: false,
+        usage: [{ model: 'gpt-oss:120b-cloud', inputTokens: 10, outputTokens: 5, totalTokens: 15 }],
+      }),
+    );
+    expect(store.read().usage).toHaveLength(1);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('stays silent when neither changed', () => {
+    const store = new RunViewStore();
+    const view = live();
+    store.publish(view);
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.publish({ ...view });
+    expect(listener).not.toHaveBeenCalled();
   });
 });
