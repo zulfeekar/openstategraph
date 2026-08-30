@@ -867,6 +867,128 @@ def _reconcile(
         )
 
 
+def _tables() -> tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]:
+    """Every table this store holds, each with the one declaration of its columns.
+
+    Enumerated rather than written out twice inside `_open`, because the order
+    the three phases of `_prepare` run in is load-bearing and a list is the
+    only place a third table can be added.
+
+    A function rather than a module constant so that it reads the two column
+    tuples *when it is asked*: a constant would capture them at import, and the
+    schema-drift tests simulate an older build by shortening `_COLUMNS` — a
+    fixture that a tuple would silently stop reaching, which is a second
+    spelling of the schema arriving by the back door.
+
+    The cadence table (`memory-and-replay/47`) is created on the same open as
+    `runs` so the two cannot exist apart: a burst insert shares the run row's
+    transaction, so a mismatch on either would lose both.
+    """
+    return (
+        ("runs", _COLUMNS, _COLUMN_TYPES),
+        ("run_bursts", _BURST_COLUMNS, _BURST_TYPES),
+    )
+
+#: The four `at`-keyed indexes `the-cost-of-one-more/11` replaced, dropped on
+#: sight so a store carries one set rather than two.
+#:
+#: **That is not the store sweeping.** The standing rule is that no *run* is
+#: ever removed; an index holds nothing that is not in the rows and is rebuilt
+#: from them, so replacing one loses nothing a reader could ask for. Keeping
+#: them beside the four below would have doubled index maintenance on every
+#: write, forever, on the one structure this product guarantees only grows —
+#: and would have kept the wrong ordering indexed. An older build reopening the
+#: file recreates its own; both sets are correct for the build that made them.
+_SUPERSEDED_INDEXES: tuple[str, ...] = (
+    "runs_thread",
+    "runs_workflow_at",
+    "runs_at",
+    "runs_session_at",
+)
+
+#: Every index, as `(name, table, keys)`.
+#:
+#: The four questions this store is asked — *out of everything*, *this
+#: workflow*, *this session*, *this conversation* — each of them **newest
+#: first**. Without an index the unfiltered one read and sorted every row ever
+#: written to print a page of 25 (`the-cost-of-one-more/08`), and a store that
+#: never sweeps makes that a cost that only ever rises. Sqlite carries `rowid`
+#: as the last column of every index, so each of these satisfies the trailing
+#: `rowid DESC` outright as well. `--thread` gets one where `08` left it with a
+#: temp sort on the argument that one conversation is bounded by a person's
+#: patience: that was right, and it is now free rather than bought — the index
+#: it already needed for the equality search is the same index, one column
+#: longer. `run_bursts` is asked one question: *this run, in order*.
+#:
+#: **Keyed on `CHRONOLOGICAL`, not on `at`.** The column is local wall clock
+#: with an offset and sorting it as text is not sorting it by time
+#: (`the-cost-of-one-more/11`); an index on `at` made the wrong order fast.
+#: Sqlite indexes expressions, so the derived key costs a store no column, no
+#: backfill and no state a migration can be halfway through.
+#:
+#: A name here is also what `_prepare` reads to know which columns must exist
+#: before it runs, which is why the keys are data and not four `execute` calls.
+_INDEXES: tuple[tuple[str, str, str], ...] = (
+    ("runs_at_utc", "runs", CHRONOLOGICAL),
+    ("runs_workflow_utc", "runs", f"workflow_slug, {CHRONOLOGICAL}"),
+    ("runs_session_utc", "runs", f"session_id, {CHRONOLOGICAL}"),
+    ("runs_thread_utc", "runs", f"thread_id, {CHRONOLOGICAL}"),
+    ("run_bursts_run", "run_bursts", "run_rowid, ord"),
+)
+
+
+def _holds_the_runs_table(connection: sqlite3.Connection) -> bool:
+    """Can this file answer for the table a run is about to be written to?
+
+    The one question that separates *the schema could not be finished* from
+    *this is not a database I can use* (`the-cost-of-one-more/12`), asked of
+    the file rather than inferred from the exception text — sqlite says `file
+    is not a database` for one of those and `no such column` for the other, and
+    matching on either would be reading a message rather than a state.
+    """
+    try:
+        return bool(_table_columns(connection, "runs"))
+    except sqlite3.Error:
+        return False
+
+
+def _prepare(connection: sqlite3.Connection) -> None:
+    """Bring the file up to this build's schema: tables, then columns, then indexes.
+
+    **Three passes, and the order is the ticket** (`the-cost-of-one-more/12`).
+    These statements used to be written out one after another with
+    `_reconcile` last, and `CREATE TABLE IF NOT EXISTS` is a no-op against a
+    table that already exists in an older shape — so a file written before
+    `session_id` existed reached `CREATE INDEX … ON runs (session_id, …)` with
+    no such column, the whole open failed, `_broken` latched, and every run
+    that process recorded afterwards was dropped.
+
+    Moving the two `_reconcile` calls up would have fixed that instance and
+    left the class: the next statement somebody wrote above them would reopen
+    it, and nothing but a comment would have said not to. So the phases are
+    three loops over declarations instead, and an index is added by naming it
+    in `_INDEXES`, where it cannot be placed before the columns it names
+    exist. `test_a_store_one_column_behind_keeps_its_runs.py` reads `_INDEXES`
+    and builds one old-shaped store per column any of them mentions, so a
+    fifth index on a sixteenth column is covered on the day it is declared
+    rather than on the day somebody remembers this paragraph.
+
+    Nothing in `_reconcile` depends on an index, checked rather than assumed:
+    it reads `PRAGMA table_info` and issues `ALTER TABLE … ADD COLUMN`.
+    """
+    for table, columns, types in _tables():
+        declared = ",".join(
+            f"{name} {types.get(name, 'TEXT')}" for name in columns
+        )
+        connection.execute(f"CREATE TABLE IF NOT EXISTS {table} ({declared})")
+    for table, columns, types in _tables():
+        _reconcile(connection, table, columns, types)
+    for superseded in _SUPERSEDED_INDEXES:
+        connection.execute(f"DROP INDEX IF EXISTS {superseded}")
+    for name, table, keys in _INDEXES:
+        connection.execute(f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({keys})")
+
+
 class SqliteRunSink:
     """The default sink: a table on the machine that ran the workflow.
 
@@ -994,14 +1116,37 @@ class SqliteRunSink:
             self._connection = None
 
     def _open(self) -> sqlite3.Connection | None:
-        """Connect and create the table, once, on the first row actually written.
+        """Connect and prepare the schema, once, on the first row actually written.
 
         Lazy so that merely *constructing* the default registry — which every
         process does — never touches the disk, and so a workflow that is loaded
-        and never run costs nothing. `_broken` latches, because a state
-        directory that could not be created will not become creatable between
-        two runs of one process, and one warning is a report while one per run
-        is a log flood.
+        and never run costs nothing.
+
+        **Two failures, two costs** (`the-cost-of-one-more/12`). They were one
+        `except` and one `warning`, which is how a file that needed one
+        `ALTER TABLE` came to drop every run the process recorded:
+
+        - *This is not a database I can use* — the state directory could not be
+          created, or sqlite would not open the file at all. `_broken` latches,
+          because a directory that could not be created will not become
+          creatable between two runs of one process, and one report is a report
+          while one per run is a log flood.
+        - *The schema could not be finished* — the file opened, and one
+          statement bringing it up to date did not run. That is not a reason to
+          refuse every write: the connection is kept and used, so the schema
+          work is attempted once and never again, and a row that then names
+          something the file does not hold is reported one row at a time by
+          `_could_not_write`, the loud-once handler that already says what was
+          lost. There is no retry loop here, deliberately: re-running `_prepare`
+          on every record would make an unusable file cost a full schema pass
+          per run.
+
+        **Which of the two it is, is measured rather than guessed.** Sqlite
+        opens lazily, so `connect` succeeds on a file that is not a database at
+        all and the truth arrives inside `_prepare` — which would put the worst
+        case in the forgiving branch. So a failed `_prepare` asks the file for
+        the table it is about to write to, and a file that cannot answer that
+        is the first kind after all.
         """
         if self._connection is not None or self._broken:
             return self._connection
@@ -1011,99 +1156,58 @@ class SqliteRunSink:
             else:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 connection = sqlite3.connect(self.path, check_same_thread=False)
-            with connection:
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS runs ("
-                    + ",".join(
-                        f"{name} {_COLUMN_TYPES.get(name, 'TEXT')}" for name in _COLUMNS
-                    )
-                    + ")"
-                )
-                # The four questions this store is asked — *out of
-                # everything*, *this workflow*, *this session*, *this
-                # conversation* — each of them **newest first**. Without an
-                # index the unfiltered one read and sorted every row ever
-                # written to print a page of 25 (`the-cost-of-one-more/08`),
-                # and a store that never sweeps makes that a cost that only
-                # ever rises. Sqlite carries `rowid` as the last column of
-                # every index, so each of these satisfies the trailing
-                # `rowid DESC` outright as well.
-                #
-                # **Keyed on `CHRONOLOGICAL`, not on `at`.** The column is
-                # local wall clock with an offset and sorting it as text is not
-                # sorting it by time (`the-cost-of-one-more/11`); an index on
-                # `at` made the wrong order fast. Sqlite indexes expressions,
-                # so the derived key costs a store no column, no backfill and
-                # no state a migration can be halfway through — see
-                # `CHRONOLOGICAL` for why the other two candidates were not
-                # taken.
-                #
-                # **The four `at`-keyed indexes are dropped, and that is not
-                # the store sweeping.** The standing rule is that no *run* is
-                # ever removed; an index holds nothing that is not in the rows
-                # and is rebuilt from them, so replacing one loses nothing a
-                # reader could ask for. Keeping them beside these would have
-                # doubled the index maintenance on every write, forever, on the
-                # one structure this product guarantees only grows — and would
-                # have kept the wrong ordering indexed. An older build reopening
-                # the file recreates its own; both sets are correct for the
-                # build that made them.
-                for superseded in (
-                    "runs_thread",
-                    "runs_workflow_at",
-                    "runs_at",
-                    "runs_session_at",
-                ):
-                    connection.execute(f"DROP INDEX IF EXISTS {superseded}")
-                connection.execute(
-                    f"CREATE INDEX IF NOT EXISTS runs_at_utc ON runs ({CHRONOLOGICAL})"
-                )
-                connection.execute(
-                    "CREATE INDEX IF NOT EXISTS runs_workflow_utc "
-                    f"ON runs (workflow_slug, {CHRONOLOGICAL})"
-                )
-                connection.execute(
-                    "CREATE INDEX IF NOT EXISTS runs_session_utc "
-                    f"ON runs (session_id, {CHRONOLOGICAL})"
-                )
-                # `--thread` gets one too, where `08` left it with a temp sort
-                # on the argument that one conversation is bounded by a
-                # person's patience. That was right and it is now free: the
-                # index it already needed for the equality search is the same
-                # index, one column longer.
-                connection.execute(
-                    "CREATE INDEX IF NOT EXISTS runs_thread_utc "
-                    f"ON runs (thread_id, {CHRONOLOGICAL})"
-                )
-                # The cadence table (`memory-and-replay` 47). Created here, on
-                # the same first row, so the two tables cannot exist apart.
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS run_bursts ("
-                    + ",".join(
-                        f"{name} {_BURST_TYPES.get(name, 'TEXT')}"
-                        for name in _BURST_COLUMNS
-                    )
-                    + ")"
-                )
-                # The one question this table is asked: *this run, in order*.
-                connection.execute(
-                    "CREATE INDEX IF NOT EXISTS run_bursts_run "
-                    "ON run_bursts (run_rowid, ord)"
-                )
-                # `CREATE TABLE IF NOT EXISTS` is a no-op against a table that
-                # already exists with the old shape, so the four statements
-                # above are the whole schema only on a file this build created.
-                # Both tables, on the same open, in the same transaction: a
-                # burst insert shares the run row's transaction, so a mismatch
-                # on either would lose both.
-                _reconcile(connection, "runs", _COLUMNS, _COLUMN_TYPES)
-                _reconcile(connection, "run_bursts", _BURST_COLUMNS, _BURST_TYPES)
         except (OSError, sqlite3.Error) as exc:
-            logger.warning("Could not open the run store at %s: %s", self.path, exc)
-            self._broken = True
+            self._cannot_open_the_store(exc)
             return None
+        try:
+            with connection:
+                _prepare(connection)
+        except sqlite3.Error as exc:
+            if not _holds_the_runs_table(connection):
+                self._cannot_open_the_store(exc)
+                try:
+                    connection.close()
+                except sqlite3.Error:  # pragma: no cover - defensive
+                    pass
+                return None
+            self._could_not_finish_the_schema(exc)
         self._connection = connection
         return connection
+
+    def _cannot_open_the_store(self, exc: OSError | sqlite3.Error) -> None:
+        """Say that runs are being lost, not only that a file would not open.
+
+        `the-boundary-nobody-checked/07` set this shape for one lost row and
+        this is the loss of every row, so it cannot be a level quieter: the
+        message names the file, says what will be missing, and says it will go
+        on being missing. Once, because `_broken` latches.
+        """
+        self._broken = True
+        logger.error(
+            "Could not open the run store at %s: %s. No run will be recorded for "
+            "the rest of this process — the answers themselves are unaffected, "
+            "but `openstategraph runs list` will not show this run or any after "
+            "it. Check the path is a sqlite database this user can write, on a "
+            "disk that is not full.",
+            self.path,
+            exc,
+        )
+
+    def _could_not_finish_the_schema(self, exc: sqlite3.Error) -> None:
+        """The file is a database; this build could not finish bringing it up.
+
+        Said once — `_open` runs once per sink — and it deliberately does not
+        latch: a store this build cannot fully prepare may still take most of
+        what it is given, and a missing index costs speed rather than rows.
+        """
+        logger.error(
+            "Could not bring the run store at %s up to date: %s. It is still "
+            "being written to, and any run it refuses will be reported on its "
+            "own; `openstategraph runs export --to runs.json` takes a copy of "
+            "what it already holds before you move it aside.",
+            self.path,
+            exc,
+        )
 
 
 class JsonlRunSink:
