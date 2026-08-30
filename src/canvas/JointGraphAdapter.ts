@@ -520,7 +520,7 @@ function buildLabel(text: string, position: dia.Link.LabelPosition): dia.Link.La
       labelBody: {
         ref: 'labelText',
         fill: 'var(--color-bg-canvas)',
-        stroke: 'var(--color-border-subtle)',
+        stroke: 'var(--color-border)',
         strokeWidth: 1,
         rx: 4,
         ry: 4,

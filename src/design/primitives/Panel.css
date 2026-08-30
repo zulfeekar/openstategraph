@@ -12,16 +12,22 @@
 }
 
 /* A panel's outer edge is where a region ends, so it draws the rule
-   (`the-look-has-an-author-now/07`). Its header, footer and section
+   *width* (`the-look-has-an-author-now/07`). Its header, footer and section
    dividers below stay hairlines: the panel's own edge has already drawn
    the boundary, and a second one 40px inside it doubles the line rather
-   than saying anything new. */
+   than saying anything new.
+
+   The *ink* is the normal weight, not full ink — `16`. A panel's width
+   comes from `--layout-palette-width` / `--layout-inspector-width` and
+   there is no handle on this edge, so nothing here is draggable, and full
+   ink is what says draggable. 2px of dark grey still ends a region; that
+   is the half of `07` this keeps. */
 .panel--left {
-  border-right: var(--border-width-rule) solid var(--color-rule);
+  border-right: var(--border-width-rule) solid var(--color-border);
 }
 
 .panel--right {
-  border-left: var(--border-width-rule) solid var(--color-rule);
+  border-left: var(--border-width-rule) solid var(--color-border);
 }
 
 .panel__header {
