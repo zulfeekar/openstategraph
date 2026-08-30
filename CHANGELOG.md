@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.3.0rc8 — 2026-08-30
+
+Everything under *Unreleased* above this line at the time of the cut. The
+pre-release the tree was published from once the engagement terms left the
+tracked tree and the distribution learned to teach the agent that installs it.
+
 ### Added
 - **Stored runs — every recording the local run store kept, on the run
   timeline** (`memory-and-replay` 72, 73). A control in the top bar opens a
