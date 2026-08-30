@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,19 @@ from openstategraph.mcp_server import (
     build_mcp_server,
 )
 from openstategraph.api.audience import Audience
+
+
+_GRAMMAR_START = "and the rest. The grammar:"
+_GRAMMAR_END = "The list is read from the same registry"
+
+
+def _enumerated_types() -> set[str]:
+    """Every `family.name` the guide's node-type enumeration comment names."""
+    guide = (Path(__file__).resolve().parents[2] / "docs" / "mcp.md").read_text()
+    if _GRAMMAR_START not in guide or _GRAMMAR_END not in guide:
+        return set()
+    block = guide.split(_GRAMMAR_START, 1)[1].split(_GRAMMAR_END, 1)[0]
+    return set(re.findall(r"\b([a-z]+\.[a-z0-9-]+[a-z0-9])\b", block))
 
 
 def _linear_document() -> dict[str, Any]:
@@ -187,6 +201,64 @@ class TestNodeVocabulary:
             "docs/mcp.md tells a composing client that a type absent from the "
             f"vocabulary payload cannot be used, and never names these: {missing}"
         )
+
+    def test_the_guide_names_no_type_the_payload_does_not_carry(self) -> None:
+        """The other direction, which the sentence above the list claims and
+        this file did not check (docs-and-gaps/24).
+
+        `docs/mcp.md` said the test "fails if this enumeration and that
+        registry disagree in either direction" while exactly one set was
+        computed, so a type deleted from the registry stayed in the guide
+        forever and a composing client kept being told it could place one.
+        A false claim about an instrument is worse than a false claim,
+        because it is the reason a sweep skips the list.
+
+        Scoped to the enumeration comment rather than the whole page on
+        purpose: §2 teaches by *inventing* `output.text` and watching the
+        compiler refuse it, and a gate that fails on a deliberate
+        counter-example is a gate somebody deletes.
+        """
+        enumerated = _enumerated_types()
+        listed = {n["type"] for n in NodeVocabulary().describe()["node_types"]}
+
+        invented = sorted(enumerated - listed)
+        assert invented == [], (
+            "docs/mcp.md enumerates node types the vocabulary payload does "
+            f"not carry, so a client cannot place them: {invented}"
+        )
+
+    def test_the_guide_quotes_the_prompt_contract_the_server_sends(self) -> None:
+        """docs-and-gaps/24, and the worst finding in that sweep.
+
+        `docs/mcp.md`'s sample carried the sentence *"An EMPTY
+        preamble/contract means this node type locks nothing: its prompt is
+        entirely yours"* — the exact sentence the server retracted, because
+        `agent.llm` locks neither and the base prepends 289 characters of
+        rules anyway. `test_it_no_longer_says_an_empty_contract_means_nothing_is_locked`
+        pinned the server's copy and nothing pinned the guide's, so the
+        retracted claim went on being published *to the audience that acts on
+        it*: a model composing a document reads this page.
+
+        Quoted verbatim rather than paraphrased, so the two cannot part
+        again.
+        """
+        guide = (
+            Path(__file__).resolve().parents[2] / "docs" / "mcp.md"
+        ).read_text()
+        by_type = {n["type"]: n for n in NodeVocabulary().describe()["node_types"]}
+        contract = by_type["agent.llm"]["prompt_contract"]
+
+        assert contract["editable"] in guide, (
+            "docs/mcp.md prints a `prompt_contract.editable` the server does "
+            "not send; a composing model is being taught the wrong contract"
+        )
+        assert "default_rules" in guide
+
+    def test_the_enumeration_comment_was_actually_found(self) -> None:
+        """Both directions compare against this block. If the comment is
+        reworded away, the parse returns nothing and the two assertions above
+        start passing on emptiness."""
+        assert len(_enumerated_types()) > 30
 
 
 class TestStatelessCompile:

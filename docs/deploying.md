@@ -38,6 +38,15 @@ What that does *not* cover, said plainly:
   deleting and credential entry are editor actions available to any
   authenticated caller.
 
+What it *does* cover, since it was probed and closed: a workflow's SQL tools
+open their database `mode=ro`, and `mode=ro` describes **one file**. `ATTACH`
+and `VACUUM INTO` carry their own mode, so one model-authored statement used to
+copy a whole database to any absolute path the process could write. Every
+read-only connection now installs a `set_authorizer` denying
+`SQLITE_ATTACH`/`SQLITE_DETACH` (`backend/openstategraph/readonly_sqlite.py`,
+`test_a_read_only_database_opens_no_second_file.py`) — denied by action, not by
+path, so nothing here parses SQL.
+
 ---
 
 ## 1b. Identity, and what per-person memory needs before it works
@@ -229,8 +238,11 @@ openstategraph serve --host 0.0.0.0
   and `/chat` keep working unchanged. A security control that breaks the
   product is a security control that gets switched off.
 - **`GET /api/health` stays open.** A liveness probe runs before anything has
-  credentials, and a probe that 401s is an outage. It reads environment
-  variables and nothing else — no socket, no database, no disk. This said "a
+  credentials, and a probe that 401s is an outage. It opens no socket and no
+  database: it reads environment variables, and — for the `editor_stale` field
+  — takes two `stat` walks over a directory the process already sits in,
+  returning `None` the moment there is no source tree to compare against, which
+  is every installed wheel. This said "a
   fixed literal": `model_configured` *was* the constant `True`, on the
   reasoning that Ollama was always available, which was itself the defect. It
   is now computed — true when any registered provider has the environment it
@@ -331,6 +343,14 @@ long-term memories are durable, exactly as approvals are, and one startup line
 says where they landed. Two files rather than one database, because the two
 have different lifetimes — wiping threads while keeping what was learned is a
 thing a deployment legitimately does.
+
+**There is a third file**, on the same reasoning and with no variable of its
+own: `runs.sqlite` beside the other two, the run journal every door writes a
+finished run into (`openstategraph runs path` prints it, `runs list` and
+`runs export` read it). It holds questions, health and usage rather than state
+a run resumes from, so losing it loses history and no work in flight — but it
+is a third file under `state_dir()`, and back-up advice naming two of three is
+the kind that is discovered at restore time.
 Unlike every other backend here, an unreachable Postgres **fails startup**
 rather than degrading: nobody sets that variable by accident, and quietly
 writing their approvals to a local file instead is a surprise discovered at
@@ -378,7 +398,11 @@ Stated so nobody infers otherwise from the presence of a login form:
   may touch — and closes it by refusing rather than guessing. It is not a
   general authorization layer, and nothing else in the product is per-user yet:
   thread listing filters by `user_email`, and `api/threads.py` says in as many
-  words that this is "a filter, not an authorization check".
+  words that this is "a filter, not an authorization check". Reading one
+  thread is the exception: `GET` on a thread takes an `audience`, capped by the
+  same `resolve()` the run doors use and defaulting to `customer`, so a
+  deployment pinned to `OPENSTATEGRAPH_AUDIENCE=customer` cannot be talked into
+  a run's machinery through its history either.
 - **Rate limiting, quotas and an audit log** (gap register SEC-02). A token
   holder can spend the model budget as fast as the providers answer. The proxy
   is the place to put a limit today.

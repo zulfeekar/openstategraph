@@ -106,10 +106,20 @@ The gist of what comes back:
         { "id": "skill",    "type": "skill",    "direction": "in" },
         { "id": "tools",    "type": "tool",     "direction": "in" }
       ],
+      // Every entry also carries `fields` — the config schema, derived from the
+      // same declaration the editor's card renders from — plus `executes`,
+      // `scope` and `generated_ports`. `fields` is the list the fifth rule
+      // below tells you to read before setting anything in `data`:
+      "fields": [
+        { "key": "model", "kind": "select", "label": "Model", "required": false, "default": "" },
+        { "key": "systemPrompt", "kind": "textarea", "label": "System prompt", "required": false, "default": "" }
+        // …and the rest.
+      ],
       "prompt_contract": {
         "preamble": "",
         "contract": "",
-        "editable": "Only your own rules are editable. The preamble and the output contract are supplied by the runtime and must NOT be restated in the node's config — the contract is appended last and later instructions win. An EMPTY preamble/contract means this node type locks nothing: its prompt is entirely yours."
+        "default_rules": "- Answer the question that was asked, and stop there.\n- Where you hold a tool that can establish a fact, use it. …",
+        "editable": "Only your own rules are editable. The preamble and the output contract are supplied by the runtime and must NOT be restated in the node's config — the contract is appended last and later instructions win. An empty preamble/contract does NOT mean the prompt is entirely yours: default_rules is prepended by the base and your rules extend it unless you replace them."
       }
     }
     // …and the rest. The grammar: annotate.group, annotate.note,
@@ -152,7 +162,8 @@ The gist of what comes back:
     "Exactly one node should have no incoming control edge — that is the entry point.",
     "Some node must flow toward the end, or the graph has no exit.",
     "Call compile_workflow after every revision. A document you have not compiled is a guess.",
-    "Do not put Infinity or NaN anywhere: this document is JSON."
+    "Do not put Infinity or NaN anywhere: this document is JSON.",
+    "A node's `data` keys are exactly its `fields` list above — check that list before setting any key. compile_workflow does not currently reject an unrecognised or missing required key by itself; guessing produces a document that may still validate while the node silently lacks what it needs to run."
   ]
 }
 ```
@@ -420,16 +431,18 @@ your-repo/
     └── tests/
 ```
 
-`save_workflow_draft(slug, name, document)` exists for deployments that also
+`save_workflow_draft(slug, document, name=None)` exists for deployments that also
 *host* workflows, and it is optional — the primary flow keeps the artifact in
-your repo. When you do use it, the guardrails are server-side, not on the
+your repo. Note the order: `document` is the second argument and `name` the
+third and optional one, because `document` accepts `compile_workflow`'s own
+envelope and the server reads the name out of it. When you do use it, the guardrails are server-side, not on the
 client's honour: the document is validated first and an invalid one is refused
 with findings rather than written (there is no `force`), the write is always a
 draft, and a published workflow is never overwritten.
 
 **Pass `slug=None` for a new workflow.** The server mints a free slug from
 `name` and the response says which one it got — the first "My Workflow" gets
-`my-workflow`, a second gets `my-workflow-<six characters>`. A slug you derive
+`my-workflow`, a second gets `my-workflow-2`. A slug you derive
 from a name yourself is a guess, and a guess that lands on an existing draft
 replaces it; name a slug only to update a package you saved earlier.
 
@@ -511,8 +524,13 @@ The nine exposed tools: `get_node_vocabulary`, `compile_workflow`,
   did not identify. Run an inline `document` instead of a `slug` and the
   workflow scope is unbound too: a document with no package has no slug to be
   honest about.
-- **No rate limiting, quotas or audit log.** `run_workflow` in particular
-  spends the deployer's model budget.
+- **No rate limiting or quotas.** `run_workflow` in particular spends the
+  deployer's model budget. There *is* a record: every MCP run opens a turn in
+  the run journal (`mcp_server.py`'s `run_turn`) and lands a row in
+  `state_dir()/runs.sqlite`, readable with `openstategraph runs list` — but
+  `user_email` and `session_id` are empty on this door (§7), so it is a log
+  with no attribution to a person, which is a different thing from an audit
+  log.
 - **Discovered `tool.*`/`function.*` node types are not enumerable.** They are
   minted per workflow package at runtime, so the vocabulary names the prefixes
   and their meaning rather than listing them. Everything the editor itself

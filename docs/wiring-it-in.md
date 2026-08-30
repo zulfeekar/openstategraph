@@ -253,9 +253,13 @@ section is the consumer's half only.
 
 ## 6. Things that are true today and will not stay true silently
 
-- **`RunResult.usage` and `.total_tokens` are library-and-CLI only.** The HTTP
-  and MCP doors do not carry them yet. `.total_tokens` is `None` when nothing
-  reported — never `0`, because a run nobody metered did not cost nothing.
+- **`RunResult.usage` and `.total_tokens` reach every door but MCP.** The
+  library and the CLI carry them; so does HTTP, where `usage` rides all three
+  terminal SSE frames — `done`, `error` **and** `interrupt`, because a paused
+  run has been paid for like the other two — and is documented on the wire in
+  [`api.md`](api.md). The MCP door is the one that does not carry them yet.
+  `.total_tokens` is `None` when nothing reported — never `0`, because a run
+  nobody metered did not cost nothing.
 - **There is no zero-dependency pure-LangGraph export.** The wiring on this
   page is what replaces that promise rather than a placeholder for it; see
   [export and portability](export-and-portability.md). `openstategraph export

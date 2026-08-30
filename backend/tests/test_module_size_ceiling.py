@@ -60,12 +60,12 @@ both, in one table:
   for. It is not a target and no file is asked to shrink to it.
 - The **recorded number is exact**, which makes it a **ratchet**. A file that
   grows fails; a file that shrinks fails too and gets re-recorded lower. That is
-  `WorkflowModel`'s pinned 43 doing its job — the number is a tripwire, not a
+  `WorkflowModel`'s pin in `src/publicSurfaceCeiling.test.ts` doing its job — the number is a tripwire, not a
   goal.
 
 A bare ceiling would be red on day one for ten files, which is how a pin
 acquires a `# noqa` and dies. A bare ratchet with no ceiling would put a number
-on all 434 modules in this repository, which is a config file nobody reads. The
+on every module in this repository, which is a config file nobody reads. The
 ceiling picks a set small enough that every member can carry a real argument;
 the exact number is what fires on the growth this ticket found.
 

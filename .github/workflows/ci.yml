@@ -328,8 +328,10 @@ jobs:
   # `if: always()` is load-bearing — without it this job is *skipped* when a
   # dependency fails, and a skipped required check is treated as neutral, which
   # would turn the gate into decoration. So it always runs and inspects the
-  # results itself. `skipped` is accepted because `docs-freshness` legitimately
-  # skips on push-to-main; `cancelled` is not.
+  # results itself. `skipped` is accepted because a job can legitimately be
+  # skipped by a future `if:` -- `docs-freshness` was that job until `df8ce54`
+  # and now runs on both events, exiting 0 rather than skipping when a push has
+  # no range to compare; `cancelled` is not accepted.
   ci-success:
     if: always()
     needs: [frontend, generated-port-specs, generated-openapi, backend, clean-install, docs-freshness, e2e, gallery-diagrams-check]

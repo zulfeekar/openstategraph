@@ -29,17 +29,31 @@ Verdicts are three, and only three:
 | **should precede public launch** | Shippable, but the first outside user meets it and it costs trust. |
 | **fine to carry** | Recorded, understood, cheap to leave. Revisit on demand, not on schedule. |
 
-**The totals are no longer printed here, and that is deliberate.**
-*(2026-08-16.)* This line said 38 once, was recounted to 45 on 2026-08-13, and
-had drifted again three days later — and every recount disagreed with the
-section headers as well. A cardinal in a register that gains and closes
-entries is a claim that goes stale between edits and is believed anyway.
-Count it when you need it:
+**Every total in this file is derived, and here is what derives it.**
+*(2026-08-30.)* This line said 38 once, was recounted to 45 on 2026-08-13, and
+had drifted again three days later. It then said totals were "no longer
+printed here" while printing a table of them twenty lines below — and shipped
+two commands that could not count: one required a two-letter id, so it missed
+every `SEC-`, missed the struck-through closed entries, and returned 40 against
+a table summing to 45; the other anchored `**Verdict:` to the start of a line,
+found the one entry written that way out of three, and counted itself
+(`docs-and-gaps/28`). A register whose own audit command under-reports its
+blockers by two thirds is worse than one printing no number at all, because a
+release decision runs the command instead of reading the file.
 
 ```bash
-grep -cE '^\*\*[A-Z]{2}-[0-9]{2} ' docs/decisions/gap-register.md   # entries
-grep -c '^\*\*Verdict: blocks 1.0' docs/decisions/gap-register.md   # by verdict
+# entries, including the struck-through closed ones the theme totals count
+grep -cE '^~*\*\*[A-Z]{2,3}-[0-9]{2}' docs/decisions/gap-register.md
+# the same census per theme — this reproduces the table below
+awk '/^## [A-F]\./{t=$2} /^~*\*\*[A-Z]{2,3}-[0-9]{2}/{n[t]++} END{for (k in n) print k, n[k]}' \
+  docs/decisions/gap-register.md | sort
+# entries carrying the hardest verdict; the bracket keeps the line off its own count
+grep -c 'Verdict: blocks 1[.]0' docs/decisions/gap-register.md
 ```
+
+`backend/tests/test_the_gap_register_can_count_itself.py` runs the first two
+and fails when the table below disagrees with them, which is the part that
+was missing every time this number drifted.
 
 The verdicts are what this file is for; the arithmetic never was.
 (RC-01 closed 2026-08-10 by ticket 04, RC-02 by ticket 05, both of
@@ -57,6 +71,11 @@ dead-surface sweep.)
 | D. Docs | 4 | 0 | 2 | 2 |
 | E. Security & ops | 4 | 0 | 1 | 3 |
 | F. Performance | 5 | 0 | 0 | 5 |
+
+The verdict columns are the `###` sections an entry sits under, **closed
+entries included** — which is why `grep -c 'Verdict: blocks 1[.]0'` answers 3
+against a column of 4: PK-02 closed on 2026-08-15 and still sits under B's
+*Blocks 1.0* heading with its strike-through.
 
 Six items on the intake list for this register were checked and found
 **already done** — they are listed at the bottom under "Verified closed", not
@@ -555,12 +574,21 @@ it does not currently appear, which is out of scope for this pass. The
 `data-error` hook is now present on the label element, so it is a one-line
 change whenever the owner wants it."* **Size S.** **Verdict: fine to carry.**
 
-**UX-10 — A drill-in breadcrumb affordance for mounted workflows.** Evidence:
-`src/nodes/compose/TeamNode.ts:38-39` — *"A dedicated breadcrumb affordance is
-recorded on ticket 56 as follow-up UX, not blocking the mechanism"*; also
-`src/view/nodes/CompositionBody.tsx:39-40` and
-`src/view/workflow/loadWorkflowIntoEditor.ts:23`. **Size M.** **Verdict: fine
-to carry.**
+**UX-10 — A drill-in trail deeper than one level up.** **Re-verdicted
+2026-08-30 against source** (`docs-and-gaps/28`): this entry cited
+`src/nodes/compose/TeamNode.ts:38-39` for a sentence about a "breadcrumb
+affordance … not blocking the mechanism", and that file has not existed since
+schema v3 collapsed `team.workflow` into `SubgraphNode.ts`. The quoted
+sentence is nowhere in `src/`, and by this register's own opening rule an
+entry with no live evidence is a worry rather than a gap.
+
+What actually shipped is most of it. `src/view/workflow/DrillBanner.tsx` is a
+permanent strip naming the mount you are inside with a way back, and the trail
+is **derived from the open address** rather than remembered, so a chain through
+two mounts of one package no longer collapses. What is still missing is the
+narrower thing: `parentAddress` (`src/core/model/MountAddress.ts`) walks one
+level, so the strip offers the parent and not every ancestor as separate
+targets. **Size S.** **Verdict: fine to carry.**
 
 ---
 
