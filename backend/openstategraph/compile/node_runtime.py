@@ -355,6 +355,20 @@ class NodeRuntime:
         #: that (transitively) includes itself is refused at build time
         #: instead of recursing forever at run time.
         self._ancestry = _ancestry
+        #: One mounted package, compiled once — keyed by what actually
+        #: determines the built child, `(slug, overrides, persistence)`.
+        #:
+        #: `the-cost-of-one-more` 02: the mount graph is a DAG, and resolving
+        #: it per mount *site* cost `2^(d+1) - 1` compiles for `d` levels each
+        #: mounting the next twice. It hangs off the runtime rather than off
+        #: the module because that is what makes those three fields a
+        #: sufficient key — a runtime fixes the services the child inherits,
+        #: the ancestry that refuses a cycle, and the settings a context gap is
+        #: measured against. And it is a memo rather than a cache because it
+        #: dies here: `docs/decisions/per-request-compile-cost.md` declined a
+        #: cache over an invalidation surface, and a thing with no lifetime has
+        #: none. Written and read only by `compile/nodes/mount.py`.
+        self._mount_memo: dict[tuple[str, str, str], Any] = {}
         #: Per-node model overrides, keyed by the resolved LangChain model
         #: string — cached so ten agents on the same non-default model share
         #: one client instance rather than each cold-starting its own.

@@ -22,6 +22,8 @@ binding mechanism.
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from openstategraph.compile.state import RunState
@@ -54,6 +56,206 @@ if TYPE_CHECKING:
     from openstategraph.compile.node_runtime import NodeRuntime
 
 
+@dataclass
+class _ResolvedChild:
+    """One mounted package, as far as compiling it is the same at every site.
+
+    Everything here is a function of `(slug, overrides, persistence)` **and of
+    the runtime doing the resolving** — which is what makes those three enough
+    for a key. A parent runtime fixes the rest of what `_subgraph` reads: the
+    services the child inherits, the ancestry that refuses a cycle, and the
+    `settings` a context gap is measured against. Two sibling mounts of one
+    package share all of it; two mounts under different parents share none of
+    it, which is why the memo hangs off the runtime rather than off the module.
+
+    What is deliberately **not** here is everything keyed by the mount's own
+    node id — the override confirmations, the unenforced-outcome sentence, the
+    `MountedGraph` record and the name fold. Those are replayed per site, so a
+    memo that collapses two compiles never collapses two cards.
+    """
+
+    #: The child document with this mount's overrides already applied.
+    document: dict[str, Any]
+    #: What `apply_mount_overrides` could not do, and what it did.
+    override_warnings: tuple[str, ...]
+    applied_overrides: tuple[tuple[str, str], ...]
+    #: Keys the child asks its callers for that this document cannot supply.
+    unsuppliable: tuple[Any, ...]
+    #: The child's own capabilities, and whether it brought them itself.
+    assets: Any
+    owns_its_assets: bool
+    #: The child's runtime, and the graph it compiled.
+    runtime: Any
+    graph: Any
+    #: Whether any grader in the child routes `revise`. `None` until somebody
+    #: asks, because asking costs a `plan()` of the child and only a mount that
+    #: writes an `outcome` has a reason to — the short-circuit this used to get
+    #: from `and` in the caller. Once asked it is answered for every sibling
+    #: mount too, which is the second `plan()` per document the ticket names.
+    _closes_a_loop: bool | None = None
+
+    def closes_a_loop(self, runtime: Any) -> bool:
+        """Whether this child can enforce an outcome a mount's card promises."""
+        if self._closes_a_loop is None:
+            self._closes_a_loop = runtime._closes_a_loop_impl(self.document)
+        return self._closes_a_loop
+
+
+def _child_key(slug: str, overrides: Any, persistence: str) -> tuple[str, str, str]:
+    """What actually determines the built child, canonically.
+
+    Not the slug alone. `CLAUDE.md` fixes an *instance* as one mount carrying
+    its own `data.overrides`, so a slug-keyed memo would hand one instance
+    another's prompts — the shape of `launch-readiness/182` and of
+    `the-boundary-nobody-checked/05`, both found in one week. `persistence` is
+    in the key because it is what the child is compiled *with*
+    (`mount_checkpointer`), and the overrides are serialised with sorted keys
+    so two spellings of one configuration are one key. A mount whose overrides
+    will not serialise falls to its own key and is compiled on its own, which
+    is what this function did for every mount before it existed.
+    """
+    try:
+        canonical = json.dumps(overrides, sort_keys=True, default=str)
+    except Exception:
+        canonical = repr(overrides)
+    return (slug, canonical, persistence)
+
+
+def _resolve_child(
+    self: "NodeRuntime", slug: str, overrides: Any, persistence: str
+) -> "_ResolvedChild | None":
+    """Compile the mounted package — once per `(slug, overrides, persistence)`.
+
+    **A memo, not a cache, and the difference is its lifetime.**
+    `docs/decisions/per-request-compile-cost.md` declined a compiled-graph
+    cache after measuring the setup path at 27 ms warm, and its recorded
+    objection was never the architecture: it was an invalidation surface of
+    nine items — the document, `tools/*.py`, `functions/`, `middlewares/`,
+    `skills/*.md`, `knowledge/`, a capability refresh, every mounted child
+    transitively, and provider state — against a repository whose named
+    recurring defect is *two situations rendering identically*.
+
+    This memo answers that list by not having one. It lives on the runtime
+    that is doing the compiling and dies with it, so nothing it holds can go
+    stale: a capability refresh, a saved document and an edited tool all
+    produce a new runtime, and a new runtime has an empty memo. There is no
+    lock either, for the same reason — a runtime is not shared between
+    requests, so there is nothing to serialise (`docs/decisions/async-seam.md`
+    asks for a concurrency proof, and the proof is that nothing is concurrent).
+
+    What it buys is the whole of `the-cost-of-one-more` 02: the mount graph is
+    a DAG, so resolving it per *site* cost `2^(d+1) - 1` compiles for `d`
+    levels each mounting the next twice — 255 for eight packages on disk.
+    Resolving it per distinct instance costs one compile per package.
+    """
+    # The one family that builds a *runtime*, not just a step: a mount
+    # compiles its child with a `NodeRuntime` of the child's own assets. So
+    # this is the single import in `compile/nodes/` that points back at
+    # `node_runtime`, and it is local for the reason 30f17dc moved the leaves
+    # out first — at module scope it would be a real cycle, because
+    # `NodeRuntime`'s class body imports this module to bind `_subgraph`.
+    from openstategraph.compile.node_runtime import NodeRuntime
+    from openstategraph.compile.mount_persistence import mount_checkpointer
+    from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+    key = _child_key(slug, overrides, persistence)
+    if key in self._mount_memo:
+        return self._mount_memo[key]  # type: ignore[no-any-return]
+
+    resolved: "_ResolvedChild | None" = None
+    try:
+        child_document = self.services.document_loader(slug)  # type: ignore[misc]
+    except Exception:
+        child_document = None
+    if child_document is not None:
+        # Per-mount overrides (docs/decisions/mount-overrides.md):
+        # this mount's own configuration, merged onto a copy of the
+        # shared package before the child compiles.
+        applied_overrides: list[tuple[str, str]] = []
+        child_document, mount_warnings = apply_mount_overrides(
+            child_document, overrides, applied=applied_overrides
+        )
+        child_assets = PackageAssets(
+            tools=self.services.tools,
+            functions=self.services.functions,
+            skills_context=self.services.skills_context,
+            workflow_middleware=self.services.workflow_middleware,
+            knowledge_dir=self.services.knowledge_package_dir,
+        )
+        child_owns_its_assets = False
+        if self.services.package_loader is not None:
+            try:
+                child_assets = self.services.package_loader(slug)
+                child_owns_its_assets = True
+            except Exception:
+                pass  # the parent assets remain the honest fallback
+        child_runtime = NodeRuntime(
+            services=RuntimeServices(
+                model=self.services.model,
+                tools={**self.services.tools, **child_assets.tools},
+                functions={**self.services.functions, **child_assets.functions},
+                document_loader=self.services.document_loader,
+                package_loader=self.services.package_loader,
+                memory_store=self.services.memory_store,
+                skills_context=child_assets.skills_context,
+                workflow_middleware=child_assets.workflow_middleware or {},
+                # The child's OWN knowledge, never the parent's —
+                # the same isolation as skills (ticket 67's lesson).
+                knowledge_package_dir=child_assets.knowledge_dir,
+                # ...and the child's OWN skills to disclose. Inheriting
+                # the parent's directory here would hand a routed child
+                # a skill list naming files it does not carry.
+                skills_package_dir=child_assets.skills_dir,
+                max_attempts=self.services.max_attempts,
+                # Deliberately NOT inherited. A child subgraph's node
+                # ids do not exist in the document open on the canvas,
+                # so any `attachTo` it produced would name a node the
+                # editor cannot find — an unappliable suggestion is
+                # worse than none, since it reads as an offer.
+                advisor_catalog="",
+            ),
+            _ancestry=(*self._ancestry, slug),
+        )
+        child_factory = child_runtime.factory(child_document)
+        child_graph = WorkflowCompiler().build(
+            child_document,
+            RunState,
+            child_factory,
+            # The tri-state, and the first time this boundary has said
+            # anything at all about it. `None` is the argument it
+            # always passed by omission, so a mount that did not opt in
+            # compiles exactly as it did before
+            # (`compile/mount_persistence.py` carries the rest).
+            checkpointer=mount_checkpointer(persistence),
+            store=self.services.memory_store,
+            # A child of a mount is **sealed**: a graph compiled with no
+            # `context_schema` inherits its caller's run context whole
+            # and no argument to `invoke` can take that away, so a child
+            # that declares nothing gets an empty schema rather than
+            # none (`organisms-first-class` 76).
+            mounted=True,
+        )
+        resolved = _ResolvedChild(
+            document=child_document,
+            override_warnings=tuple(mount_warnings),
+            applied_overrides=tuple(applied_overrides),
+            # Taken against the effective (post-override) child, for the
+            # reason the sizing and context documents are: an override that
+            # rewrote a declaration would otherwise be narrowed against a
+            # document the child never compiled from.
+            unsuppliable=tuple(
+                unsuppliable_context_keys(child_document, {"settings": self._settings})
+            ),
+            assets=child_assets,
+            owns_its_assets=child_owns_its_assets,
+            runtime=child_runtime,
+            graph=child_graph,
+        )
+
+    self._mount_memo[key] = resolved
+    return resolved
+
+
 def _subgraph(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
     """Another workflow, compiled and invoked as one node of this graph.
 
@@ -69,21 +271,12 @@ def _subgraph(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Com
     """
     from openstategraph.compile.composition import MountedGraph
 
-    # The one family that builds a *runtime*, not just a step: a mount
-    # compiles its child with a `NodeRuntime` of the child's own assets. So
-    # this is the single import in `compile/nodes/` that points back at
-    # `node_runtime`, and it is local for the reason 30f17dc moved the leaves
-    # out first — at module scope it would be a real cycle, because
-    # `NodeRuntime`'s class body imports this module to bind `_subgraph`.
-    from openstategraph.compile.node_runtime import NodeRuntime
-
     from openstategraph.compile.mount_persistence import (
         STATELESS,
         carries_the_parents_dialogue,
-        mount_checkpointer,
         mount_persistence,
     )
-    from openstategraph.compile.workflow_compiler import WorkflowCompiler, safe_name
+    from openstategraph.compile.workflow_compiler import safe_name
 
     data = node.get("data") or {}
     slug = _text(data, "workflow").strip()
@@ -126,19 +319,18 @@ def _subgraph(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Com
     #: (`organisms-first-class` 76). `None` when there is no child at all.
     child_context_document: dict[str, Any] | None = None
     if slug and self.services.document_loader is not None:
-        try:
-            child_document = self.services.document_loader(slug)
-        except Exception:
-            child_document = None
-        if child_document is not None:
-            # Per-mount overrides (docs/decisions/mount-overrides.md):
-            # this mount's own configuration, merged onto a copy of the
-            # shared package before the child compiles.
-            applied_overrides: list[tuple[str, str]] = []
-            child_document, mount_warnings = apply_mount_overrides(
-                child_document, data.get("overrides"), applied=applied_overrides
-            )
-            for warning in mount_warnings:
+        # **One compile per instance, not per site** (`the-cost-of-one-more`
+        # 02). Everything a mount of this package with these overrides and
+        # this persistence resolves to is the same at every site under this
+        # runtime, so it is resolved once and replayed below. What is replayed
+        # rather than shared is everything the mount's own node id names: two
+        # sibling mounts are two cards, two `MountedGraph` records and two
+        # sentences in the report, and a memo that quietly made them one would
+        # be a worse defect than the exponent it removes.
+        resolved = _resolve_child(self, slug, data.get("overrides"), persistence)
+        if resolved is not None:
+            child_document = resolved.document
+            for warning in resolved.override_warnings:
                 self.diagnostics.record(
                     Finding.OVERRIDE_PROBLEM, f"{slug or node_id}: {warning}"
                 )
@@ -157,7 +349,12 @@ def _subgraph(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Com
             # level rather than erasing one — a grandparent's report reads
             # `Inside mounted workflow "<mid-slug>": ... "mount-inner" ->
             # "<leaf-slug>#shorten1.systemPrompt"`, the whole chain.
-            for child_node_id, field in applied_overrides:
+            #
+            # Replayed from the memo rather than recorded inside it, and this
+            # is the line that says why the memo is not keyed by slug: the
+            # *pairs* are a property of the instance, the *sentence* is a
+            # property of the site.
+            for child_node_id, field in resolved.applied_overrides:
                 self.diagnostics.record(
                     Finding.OVERRIDE_APPLIED,
                     f'"{node_id}" -> "{slug}#{child_node_id}.{field}"',
@@ -181,13 +378,10 @@ def _subgraph(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Com
             # both documents are in hand; until now it was said only as the
             # run died at this node, a whole run late.
             #
-            # Recorded against the effective (post-override) child, for the
-            # reason the two lines above are, and keyed by slug rather than
-            # by `node_id`: this document's declaration is document-wide,
-            # so three mounts of one package share one gap.
-            for unsuppliable in unsuppliable_context_keys(
-                child_document, {"settings": self._settings}
-            ):
+            # Keyed by slug rather than by `node_id`: this document's
+            # declaration is document-wide, so three mounts of one package
+            # share one gap.
+            for unsuppliable in resolved.unsuppliable:
                 self.diagnostics.record(
                     Finding.UNSUPPLIABLE_CONTEXT, slug, unsuppliable
                 )
@@ -196,7 +390,9 @@ def _subgraph(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Com
             # the node's type — since v3 there is one mount type, and what
             # makes a card a promise is the prose on it, not which card it
             # is (tickets 03 and 16). A mount with no outcome claims
-            # nothing and is not warned about.
+            # nothing and is not warned about — which is why
+            # `closes_a_loop` is asked lazily: the answer costs a `plan()`
+            # of the child, and the `and` below is what used to save it.
             #
             # (That sentence began "# type: since v3…", which mypy read as
             # a PEP 484 type comment and rejected as invalid syntax. Do not
@@ -206,70 +402,13 @@ def _subgraph(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Com
             # edges here: `conditional` is where a grader's `revise`
             # destination becomes a fact, so this cannot drift from what
             # the graph actually does.
-            if _text(data, "outcome").strip() and not self._closes_a_loop_impl(child_document):
+            if _text(data, "outcome").strip() and not resolved.closes_a_loop(self):
                 self.diagnostics.record(Finding.UNENFORCED_OUTCOME, node_id, slug)
-            child_assets = PackageAssets(
-                tools=self.services.tools,
-                functions=self.services.functions,
-                skills_context=self.services.skills_context,
-                workflow_middleware=self.services.workflow_middleware,
-                knowledge_dir=self.services.knowledge_package_dir,
-            )
-            child_owns_its_assets = False
-            if self.services.package_loader is not None:
-                try:
-                    child_assets = self.services.package_loader(slug)
-                    child_owns_its_assets = True
-                except Exception:
-                    pass  # the parent assets remain the honest fallback
-            if child_owns_its_assets:
-                self._report_inherited_functions(slug, child_document, child_assets)
-            child_runtime = NodeRuntime(
-                services=RuntimeServices(
-                    model=self.services.model,
-                    tools={**self.services.tools, **child_assets.tools},
-                    functions={**self.services.functions, **child_assets.functions},
-                    document_loader=self.services.document_loader,
-                    package_loader=self.services.package_loader,
-                    memory_store=self.services.memory_store,
-                    skills_context=child_assets.skills_context,
-                    workflow_middleware=child_assets.workflow_middleware or {},
-                    # The child's OWN knowledge, never the parent's —
-                    # the same isolation as skills (ticket 67's lesson).
-                    knowledge_package_dir=child_assets.knowledge_dir,
-                    # ...and the child's OWN skills to disclose. Inheriting
-                    # the parent's directory here would hand a routed child
-                    # a skill list naming files it does not carry.
-                    skills_package_dir=child_assets.skills_dir,
-                    max_attempts=self.services.max_attempts,
-                    # Deliberately NOT inherited. A child subgraph's node
-                    # ids do not exist in the document open on the canvas,
-                    # so any `attachTo` it produced would name a node the
-                    # editor cannot find — an unappliable suggestion is
-                    # worse than none, since it reads as an offer.
-                    advisor_catalog="",
-                ),
-                _ancestry=(*self._ancestry, slug),
-            )
-            child_factory = child_runtime.factory(child_document)
-            child_graph = WorkflowCompiler().build(
-                child_document,
-                RunState,
-                child_factory,
-                # The tri-state, and the first time this boundary has said
-                # anything at all about it. `None` is the argument it
-                # always passed by omission, so a mount that did not opt in
-                # compiles exactly as it did before
-                # (`compile/mount_persistence.py` carries the rest).
-                checkpointer=mount_checkpointer(persistence),
-                store=self.services.memory_store,
-                # A child of a mount is **sealed**: a graph compiled with no
-                # `context_schema` inherits its caller's run context whole
-                # and no argument to `invoke` can take that away, so a child
-                # that declares nothing gets an empty schema rather than
-                # none (`organisms-first-class` 76).
-                mounted=True,
-            )
+            if resolved.owns_its_assets:
+                self._report_inherited_functions(slug, child_document, resolved.assets)
+            child_runtime = resolved.runtime
+            child_graph = resolved.graph
+
             # Inherited *upwards*, unlike everything else about a child
             # runtime, and deliberately: the child's frames ride the
             # PARENT's one SSE stream, so the parent's stream fold is the
