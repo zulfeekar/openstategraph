@@ -28,17 +28,34 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
-  // The gate for CLAUDE.md's "the one rule that makes it work": `core/` is
-  // framework-free TypeScript that could run in Node or a worker, so it
+  // Half the gate for CLAUDE.md's "the one rule that makes it work": `core/`
+  // is framework-free TypeScript that could run in Node or a worker, so it
   // imports neither React nor JointJS, and never reaches sideways into the
-  // view or canvas layers. This was review-only until now — `import
-  // { useState } from 'react'` inside `src/core/` passed every CI job.
+  // view or canvas layers. This was review-only until this block existed —
+  // `import { useState } from 'react'` inside `src/core/` passed every CI job.
   //
   // It is an ERROR, not a warning: the whole value of the rule is that the
   // dependency never lands, and a warning is a dependency that landed. If it
   // fires on something you are writing, the import is the thing to change,
   // not this block. Depend on an abstraction (`core/` owns the interfaces
   // both other layers implement) or move the code out of `core/`.
+  //
+  // The *other* half — the sideways rule — lived here too until 2026-08-30, as
+  // a third group matching `['**/canvas/**', '**/view/**', '**/app/**',
+  // '**/controller/**']`. It matched a path, and this codebase writes aliases:
+  // `../view/AppShell` errored, `@view/AppShell` on the next line was silent,
+  // and one module (`core/testing/fixtures.ts`) was already through. Restating
+  // the four aliases here would have closed today's hole and kept the shape
+  // that made it — this block and `tsconfig.app.json`'s `paths` would still be
+  // two descriptions of one directory set, so the next alias would be outside
+  // the gate again. It moved to `src/layerBoundaries.test.ts`, which reads the
+  // alias table and asks about the file an import lands on rather than about
+  // how it was spelled.
+  //
+  // The split is the point, not a leftover: a package restriction is by NAME,
+  // and a name has one spelling, so it belongs in a rule that fires on the
+  // keystroke. A path restriction has at least two spellings and needs a
+  // resolver. Do not add a path group back here.
   {
     files: ['src/core/**/*.{ts,tsx}'],
     rules: {
@@ -55,14 +72,6 @@ export default tseslint.config(
               group: ['@joint/*', 'jointjs'],
               message:
                 'core/ imports neither React nor JointJS (CLAUDE.md § Layering). Keep JointJS in canvas/.',
-            },
-            {
-              // Relative escapes out of core/ into a view layer. `core/` may
-              // depend on itself and on `design/` tokens; it must not depend
-              // on the projection of its own model.
-              group: ['**/canvas/**', '**/view/**', '**/app/**', '**/controller/**'],
-              message:
-                'core/ is the model, and canvas/ + view/ are one-way projections of it (CLAUDE.md § Layering). The dependency runs the other way.',
             },
           ],
         },
