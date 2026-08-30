@@ -124,6 +124,12 @@ describe('the rule separates regions; everything inside one is a hairline', () =
    * canvas, and the run dock against the stage. Those are the boundaries a
    * reader is meant to see.
    *
+   * The dock's is on its **lower** edge since `memory-and-replay` 63 — it
+   * opens under the top bar and pushes the paper down, so the seam it draws
+   * is the one it shares with the paper. The side a seam is drawn on is a
+   * fact about where the region is, and this table is where that is
+   * recorded; the cage below counts them either way.
+   *
    * A panel *header* is not one of them, and neither is a list row — the
    * panel's own edge is already the rule, and a second one 40px inside it
    * doubles the boundary rather than drawing a new one.
@@ -132,7 +138,7 @@ describe('the rule separates regions; everything inside one is a hairline', () =
     ['view/topbar/TopBar.css', '.topbar', 'border-bottom'],
     ['design/primitives/Panel.css', '.panel--left', 'border-right'],
     ['design/primitives/Panel.css', '.panel--right', 'border-left'],
-    ['view/run/RunDock.css', '.run-dock', 'border-top'],
+    ['view/run/RunDock.css', '.run-dock', 'border-bottom'],
   ];
 
   it.each(SEAMS)('%s %s draws the rule', (file, selector, side) => {

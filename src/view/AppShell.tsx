@@ -162,20 +162,19 @@ export function AppShell() {
   const [mcpServersOpen, setMcpServersOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
 
-  /* ---------------- the two things a bottom dock adds ----------------
+  /* ---------------- the two things the run dock adds ----------------
    *
-   * `memory-and-replay` 51 wraps everything above it — top bar, palette,
-   * canvas, inspector — in one **stage**, and hangs the run dock underneath as
-   * its sibling. So the dock pushes rather than overlays: the canvas is never
-   * covered, only shorter.
+   * `memory-and-replay` 51 gave the run dock a **stage** to push instead of a
+   * canvas to cover, and `63` moved it to the edge the owner asked for: the
+   * shell holds the top bar, then the dock, then the stage — palette, canvas,
+   * inspector. So the dock pushes rather than overlays: the canvas is never
+   * covered, only shorter, and shorter from the top.
    *
    * Two refs come out of that, and both are load-bearing rather than
    * bookkeeping. `shellRef` is what the drag clamps against, because the
    * ceiling is a fact about how tall the whole app is and the dock cannot see
    * past itself. `stageRef` is the box the Workflows popover has to stay
-   * inside (`launch-readiness` 189): the window does **not** resize when the
-   * dock takes three hundred pixels, so a popover measured against the window
-   * would hang over the timeline.
+   * inside (`launch-readiness` 189).
    */
   const shellRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -528,66 +527,93 @@ export function AppShell() {
 
   return (
     <div className="app-shell" ref={shellRef}>
-      {/* The stage: everything that was the app before there was a dock.
-          The dock is its **sibling** below, so the canvas is pushed rather
-          than covered — the owner's own framing of `memory-and-replay` 51,
-          and better than an overlay because a time axis is something you read
-          *while* watching the thing it measures. */}
-      <div className="app-shell__stage" ref={stageRef}>
-        <TopBar
-          theme={theme}
-          onThemeChange={setTheme}
-          showGrid={showGrid}
-          onGridChange={setShowGrid}
-          paletteOpen={paletteOpen}
-          onPaletteToggle={() => setPaletteOpen((value) => !value)}
-          inspectorOpen={inspectorOpen}
-          onInspectorToggle={() => setInspectorOpen((value) => !value)}
-          onOpenCredentials={() => setCredentialsOpen(true)}
-          onOpenMcpServers={() => setMcpServersOpen(true)}
-          onNotify={onNotify}
-          onNewWorkflow={() => void startNewWorkflow()}
-          onSave={() => void saveOpenWorkflow()}
-          saving={saving}
-          onWorkflowsToggle={() => setWorkflowManagerOpen((value) => !value)}
-          workflowsOpen={workflowManagerOpen}
-          // One prop, and it carries a rectangle rather than a behaviour: the
-          // Workflows list is now a popover centred on this button
-          // (`launch-readiness` 189), and only the button knows where it is.
-          // `TopBarProps` is a long interface and 51 warned against absorbing
-          // anything else into it; an anchor is the one thing that genuinely
-          // cannot live anywhere but on the control.
-          workflowsAnchorRef={workflowsAnchorRef}
-          timelineOpen={timelineOpen}
-          onTimelineToggle={toggleDock}
-          askOpen={askOpen}
-          onAskToggle={() =>
-            setAskOpen((value) => {
-              if (value) {
-                setAskNotice(null);
-                // Closing the panel ends the runs it was showing. The panel is
-                // where a run is watched, answered and continued, and its
-                // transcript goes with it — so a stream left open would write
-                // to nothing a user can ever read while still billing tokens.
-                // Said here rather than in the panel's cleanup for the reason
-                // `askStreams` records.
-                askStreams.abortAll();
-              }
-              return !value;
-            })
-          }
-          onRun={runWorkflow}
-          // The run lives in the Ask panel, so Stop is a request forwarded to
-          // it — never a second place that knows how to abort. Except when the
-          // panel is not there to receive it: the shell holds the handle, so a
-          // Stop offered while the panel is closed is one that can be delivered
-          // rather than a button that silently does nothing (ticket 07).
-          onStop={() =>
-            askOpen ? setAskStopRequest({ nonce: Date.now() }) : askStreams.abortAll()
-          }
-          runInFlight={backendRunning}
-        />
+      {/* Top bar, then the run surface, then the room that is left.
+          `memory-and-replay` 63: the control that opens the surface is an icon
+          up here, so the surface opens directly under it and the paper moves
+          **down**. Push, not overlay — the owner's own framing of `51`, and
+          better than an overlay because a time axis is something you read
+          *while* watching the thing it measures — but under the chrome rather
+          than at the far edge of the window, because a button at the top that
+          changes something at the bottom changes it where nobody is looking.
 
+          The top bar is the shell's own child again, which it was until `51`
+          put it inside the stage. Something has to be outside the pushed
+          region — the dock sits under the top bar, so the top bar cannot be
+          inside the thing the dock pushes — and `.app-shell__stage` keeps its
+          one job under the new name it earns: *what the dock pushes down*.
+
+          `launch-readiness` 189's popover is unaffected, and that is checked
+          rather than assumed: `stageBounds` reports how far the stage
+          **reaches**, and the stage still reaches the window's right and
+          bottom edges. So the clamp is the same clamp. The popover passes
+          over the dock the way it passes over the canvas — it is transient
+          and dismisses on the first click anywhere else. */}
+      <TopBar
+        theme={theme}
+        onThemeChange={setTheme}
+        showGrid={showGrid}
+        onGridChange={setShowGrid}
+        paletteOpen={paletteOpen}
+        onPaletteToggle={() => setPaletteOpen((value) => !value)}
+        inspectorOpen={inspectorOpen}
+        onInspectorToggle={() => setInspectorOpen((value) => !value)}
+        onOpenCredentials={() => setCredentialsOpen(true)}
+        onOpenMcpServers={() => setMcpServersOpen(true)}
+        onNotify={onNotify}
+        onNewWorkflow={() => void startNewWorkflow()}
+        onSave={() => void saveOpenWorkflow()}
+        saving={saving}
+        onWorkflowsToggle={() => setWorkflowManagerOpen((value) => !value)}
+        workflowsOpen={workflowManagerOpen}
+        // One prop, and it carries a rectangle rather than a behaviour: the
+        // Workflows list is now a popover centred on this button
+        // (`launch-readiness` 189), and only the button knows where it is.
+        // `TopBarProps` is a long interface and 51 warned against absorbing
+        // anything else into it; an anchor is the one thing that genuinely
+        // cannot live anywhere but on the control.
+        workflowsAnchorRef={workflowsAnchorRef}
+        timelineOpen={timelineOpen}
+        onTimelineToggle={toggleDock}
+        askOpen={askOpen}
+        onAskToggle={() =>
+          setAskOpen((value) => {
+            if (value) {
+              setAskNotice(null);
+              // Closing the panel ends the runs it was showing. The panel is
+              // where a run is watched, answered and continued, and its
+              // transcript goes with it — so a stream left open would write
+              // to nothing a user can ever read while still billing tokens.
+              // Said here rather than in the panel's cleanup for the reason
+              // `askStreams` records.
+              askStreams.abortAll();
+            }
+            return !value;
+          })
+        }
+        onRun={runWorkflow}
+        // The run lives in the Ask panel, so Stop is a request forwarded to
+        // it — never a second place that knows how to abort. Except when the
+        // panel is not there to receive it: the shell holds the handle, so a
+        // Stop offered while the panel is closed is one that can be delivered
+        // rather than a button that silently does nothing (ticket 07).
+        onStop={() => (askOpen ? setAskStopRequest({ nonce: Date.now() }) : askStreams.abortAll())}
+        runInFlight={backendRunning}
+      />
+
+      {timelineOpen ? (
+        <RunDock
+          view={shownRun}
+          height={dockHeight}
+          onHeightChange={resizeDock}
+          onClose={closeDock}
+        />
+      ) : null}
+
+      {/* The stage: the room the dock leaves. Its height is what a drag on
+          the dock's lower edge changes — no window `resize` event fires for
+          that, which is why `stageResized` observes this element rather than
+          the window. */}
+      <div className="app-shell__stage" ref={stageRef}>
         <div
           className="app-shell__body"
           // Whether the panels share the row with the canvas or float over it,
@@ -698,15 +724,6 @@ export function AppShell() {
           />
         </Popover>
       </div>
-
-      {timelineOpen ? (
-        <RunDock
-          view={shownRun}
-          height={dockHeight}
-          onHeightChange={resizeDock}
-          onClose={closeDock}
-        />
-      ) : null}
 
       {credentialsOpen ? <CredentialsDialog onClose={() => setCredentialsOpen(false)} /> : null}
       {mcpServersOpen ? <McpServersDialog onClose={() => setMcpServersOpen(false)} /> : null}

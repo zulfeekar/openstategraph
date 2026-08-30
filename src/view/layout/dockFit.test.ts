@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { LAYOUT } from '@design/tokens';
 import {
   clampDockHeight,
+  DOCK_KEYBOARD_STEP,
+  dockHeightFromArrow,
+  dockHeightFromDrag,
   dockMaxHeight,
   DOCK_DEFAULT_HEIGHT,
   DOCK_MIN_HEIGHT,
@@ -62,5 +65,53 @@ describe('the run dock’s height', () => {
 
   it('rounds, because a fractional height is a hairline seam on every repaint', () => {
     expect(clampDockHeight(260.4, TALL)).toBe(260);
+  });
+});
+
+/**
+ * Which way the edge moves, which is a fact about which edge it *is*.
+ *
+ * `memory-and-replay` 63. `51` docked the surface under the stage, so its
+ * draggable edge was its **top** and growing it meant dragging up; the owner
+ * asked for it under the top bar, pushing the paper down, so the edge is its
+ * **bottom** and growing it means dragging down. That inversion is one
+ * subtraction written the other way round, which is exactly the kind of change
+ * that ships backwards and is noticed by a hand rather than by a test — so it
+ * is a named function here beside the clamp rather than a line in a pointer
+ * handler.
+ *
+ * Unclamped on purpose, both of them: the shell owns the clamp, because the
+ * ceiling is a fact about how tall the shell is and the dock cannot see past
+ * itself. These answer only *what the gesture asked for*.
+ */
+describe('the run dock’s draggable edge', () => {
+  it('grows when the pointer goes down, because the edge is the bottom one', () => {
+    expect(dockHeightFromDrag(260, 400, 460)).toBe(320);
+  });
+
+  it('shrinks when the pointer comes back up', () => {
+    expect(dockHeightFromDrag(260, 400, 340)).toBe(200);
+  });
+
+  it('is exactly the height it started at when the pointer has not moved', () => {
+    // The pointerdown itself must not nudge the edge — a grip that jumps on
+    // contact is a grip nobody can put back where it was.
+    expect(dockHeightFromDrag(260, 400, 400)).toBe(260);
+  });
+
+  it('gives the keyboard the same directions the pointer has', () => {
+    // A separator a pointer can move and a keyboard cannot is a control half
+    // the users of this editor do not have — and one whose arrows disagree
+    // with the drag is worse than one with no arrows at all.
+    expect(dockHeightFromArrow(260, 'ArrowDown')).toBe(260 + DOCK_KEYBOARD_STEP);
+    expect(dockHeightFromArrow(260, 'ArrowUp')).toBe(260 - DOCK_KEYBOARD_STEP);
+  });
+
+  it('declines every other key rather than swallowing it', () => {
+    // `null` is how the handler knows not to call `preventDefault`. Tab, Enter
+    // and the rest belong to the page.
+    expect(dockHeightFromArrow(260, 'Tab')).toBeNull();
+    expect(dockHeightFromArrow(260, 'ArrowLeft')).toBeNull();
+    expect(dockHeightFromArrow(260, 'Enter')).toBeNull();
   });
 });

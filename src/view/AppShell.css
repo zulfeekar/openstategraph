@@ -6,8 +6,8 @@
   background: var(--color-bg-canvas);
 }
 
-/* The stage — everything that was the app before there was a dock: the top
- * bar, the palette, the canvas, the inspector.
+/* The stage — the room the run dock leaves: the palette, the canvas, the
+ * inspector, and the Workflows popover that is bounded by all three.
  *
  * It exists so the run dock (`memory-and-replay` 51) can be its **sibling**
  * rather than another thing floating over the canvas. Push, not overlay: a
@@ -15,6 +15,11 @@
  * canvas with it would be covering the answer with the question. Every other
  * panel in this app overlays when the room runs out; this one shortens the
  * stage instead, which is why it is here and not in `app-shell__body`.
+ *
+ * `63` moved the dock from under the stage to above it and took the top bar
+ * out with it — the dock sits under the top bar, so the top bar cannot be
+ * inside the thing the dock pushes. The stage keeps its one job under the
+ * name it earns: what the dock pushes down.
  *
  * `min-height: 0` is load-bearing, not tidiness: without it a flex item
  * refuses to shrink below its content and the dock would push the canvas off

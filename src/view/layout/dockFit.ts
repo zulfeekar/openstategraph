@@ -72,3 +72,46 @@ export function clampDockHeight(requested: number, shellHeight: number): number 
   if (!Number.isFinite(requested)) return DOCK_DEFAULT_HEIGHT;
   return Math.min(Math.max(Math.round(requested), DOCK_MIN_HEIGHT), dockMaxHeight(shellHeight));
 }
+
+/**
+ * How far one arrow press moves the edge.
+ *
+ * Here rather than in `RunDock`, because the two functions below are the only
+ * places the number means anything and a step whose direction lives in one
+ * module and whose size lives in another is two descriptions of one gesture.
+ */
+export const DOCK_KEYBOARD_STEP = 24;
+
+/**
+ * The height a drag is asking for, given where it started.
+ *
+ * **The edge is the dock's bottom one** (`memory-and-replay` 63): the surface
+ * sits under the top bar and pushes the paper down, so its free edge is the
+ * lower one and the height grows as `clientY` grows. Under `51` it was the
+ * other edge and the other sign, and this is the whole of that difference —
+ * one subtraction, written in the direction the panel is actually docked.
+ *
+ * Unclamped. The shell owns the clamp: the ceiling is a fact about how tall
+ * the shell is, and the dock cannot see past itself.
+ */
+export function dockHeightFromDrag(
+  startHeight: number,
+  startPointerY: number,
+  pointerY: number,
+): number {
+  return startHeight + (pointerY - startPointerY);
+}
+
+/**
+ * The height an arrow press is asking for, or `null` for a key this separator
+ * has no opinion about.
+ *
+ * `null` rather than the unchanged height, so the handler knows whether to
+ * call `preventDefault`: a separator that swallows Tab is a separator a
+ * keyboard user cannot leave.
+ */
+export function dockHeightFromArrow(height: number, key: string): number | null {
+  if (key === 'ArrowDown') return height + DOCK_KEYBOARD_STEP;
+  if (key === 'ArrowUp') return height - DOCK_KEYBOARD_STEP;
+  return null;
+}

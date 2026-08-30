@@ -1,11 +1,13 @@
 /* ------------------------------------------------------------------ *
- * The run dock — a bottom panel that pushes the shell rather than
- * covering it. `memory-and-replay` 51.
+ * The run dock — a panel under the top bar that pushes the paper down
+ * rather than covering it. `memory-and-replay` 51, moved to this edge
+ * by `63`.
  *
  * A sibling of `.app-shell__stage`, not a child of it: the stage is the
- * whole of the current view and this stands under it, so the canvas is
- * never overlaid — only shorter. Its height is inline, because a drag
- * writes it, and clamped by `dockFit` before it ever reaches the style.
+ * room left below the chrome and this stands above it, so the canvas is
+ * never overlaid — only shorter, and shorter from the edge the control
+ * that opened it sits on. Its height is inline, because a drag writes
+ * it, and clamped by `dockFit` before it ever reaches the style.
  * ------------------------------------------------------------------ */
 
 .run-dock {
@@ -16,17 +18,19 @@
   min-height: 0;
   background: var(--color-bg-surface);
   /* The fourth rule. The dock is a region of the shell rather than a thing
-     floating over the canvas, and the line is what says so. */
-  border-top: var(--border-width-rule) solid var(--color-rule);
+     floating over the canvas, and the line is what says so. On its lower
+     edge, which is the edge it shares with the paper. */
+  border-bottom: var(--border-width-rule) solid var(--color-rule);
   z-index: var(--z-panel);
 }
 
-/* The draggable edge. Wider than it looks: a 1px border is a target
- * nobody hits, so the grip is a transparent band straddling the top edge
- * with the visible line drawn by the panel's own border above it. */
+/* The draggable edge — the **lower** one, the edge this panel shares with
+ * the paper it is pushing down. Wider than it looks: a 1px border is a
+ * target nobody hits, so the grip is a transparent band straddling that
+ * edge with the visible line drawn by the panel's own border. */
 .run-dock__grip {
   position: absolute;
-  top: -3px;
+  bottom: -3px;
   left: 0;
   right: 0;
   height: 7px;
@@ -39,7 +43,7 @@
 .run-dock__grip:focus-visible::after {
   content: '';
   position: absolute;
-  top: 3px;
+  bottom: 3px;
   left: 0;
   right: 0;
   height: 2px;
@@ -483,13 +487,6 @@
   background: var(--color-status-error);
   pointer-events: none;
   z-index: 2;
-}
-
-/* Pinned to the head while frames are still arriving — there is nothing
-   ahead of it to scrub to. */
-.rtl__playhead[data-live] {
-  inset-inline-start: auto !important;
-  inset-inline-end: 0;
 }
 
 .rtl__scrubrow {

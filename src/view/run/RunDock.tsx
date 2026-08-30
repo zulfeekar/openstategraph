@@ -6,7 +6,7 @@ import { reusableFold } from '../ask/incrementalFold';
 import type { RunView } from './runView';
 import { runCost } from './runCost';
 import { PayloadPane } from './PayloadPane';
-import { DOCK_MIN_HEIGHT } from '../layout/dockFit';
+import { DOCK_MIN_HEIGHT, dockHeightFromArrow, dockHeightFromDrag } from '../layout/dockFit';
 // The bars and the trace rows keep their styles where they were written. They
 // are the same two renderings this panel is promoting out of the chat, and
 // moving eight hundred lines of stylesheet in the same commit that moves the
@@ -18,16 +18,24 @@ import '../ask/AskPanel.css';
 import './RunDock.css';
 
 /**
- * The run timeline, as a bottom dock with a draggable top edge.
+ * The run timeline, docked under the top bar with a draggable lower edge.
  *
- * `memory-and-replay` 51. The owner asked for the timeline as *"a section on
- * the top panel"*, and what that turned out to mean is settled: **the control
- * lives in the top bar, the surface lives at the bottom**, and the surface
- * *pushes* rather than overlays — the shell wraps the whole current view
- * (top bar, palette, canvas, inspector) in one stage and this panel is its
- * **sibling**. So the canvas is never covered; it is shorter. Every other
- * panel in this app overlays when the room runs out, and none of them is a
- * time axis you read while watching the thing it is measuring.
+ * `memory-and-replay` 51 and 63. The owner asked for the timeline as *"a
+ * section on the top panel"*, and the part of that which was always settled is
+ * that the *surface* is not a 48 px header strip: a scrubbable multi-lane
+ * chart does not fit in one. **The control is an icon in the top bar and the
+ * surface opens directly beneath it**, and it *pushes* rather than overlays —
+ * the shell holds the top bar, then this panel, then a stage carrying
+ * everything else, so the canvas is never covered; it is shorter, and shorter
+ * from the top. Every other panel in this app overlays when the room runs out,
+ * and none of them is a time axis you read while watching the thing it is
+ * measuring.
+ *
+ * `51` docked it at the far edge of the window instead, and `63` is the
+ * correction the owner asked for in their own words — *"clicking on it will
+ * push down the paper"*. It is not a preference between two placements: a
+ * control at the top of the window whose effect happens at the bottom of the
+ * window has its effect where the user is not looking.
  *
  * **`view/`, and never a JointJS paper feature.** The canvas is a one-way
  * projection of the *model*; a timeline draws a *run*. One surface must not
@@ -126,10 +134,12 @@ export function RunDock({
     (event: React.PointerEvent<HTMLDivElement>) => {
       const from = dragFrom.current;
       if (!from) return;
-      // Dragged **upward** to grow, the way a desktop app's bottom drawer
-      // behaves: the edge follows the pointer, so the number goes up as
-      // `clientY` goes down.
-      onHeightChange(from.height + (from.pointerY - event.clientY));
+      // Dragged **downward** to grow: the free edge is the lower one, so the
+      // edge follows the pointer and the number goes up with `clientY`. The
+      // direction is `dockFit`'s, not this handler's — it is one subtraction
+      // that reads correctly either way round and is only ever wrong in a
+      // hand, so it has a name and a test (`memory-and-replay` 63).
+      onHeightChange(dockHeightFromDrag(from.height, from.pointerY, event.clientY));
     },
     [onHeightChange],
   );
@@ -141,10 +151,12 @@ export function RunDock({
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       // A separator a pointer can move and a keyboard cannot is a control half
-      // the users of this editor do not have.
-      if (event.key === 'ArrowUp') onHeightChange(height + KEYBOARD_STEP);
-      else if (event.key === 'ArrowDown') onHeightChange(height - KEYBOARD_STEP);
-      else return;
+      // the users of this editor do not have — and one whose arrows disagree
+      // with the drag is worse than one with no arrows at all, so both
+      // directions come from the same module.
+      const asked = dockHeightFromArrow(height, event.key);
+      if (asked === null) return;
+      onHeightChange(asked);
       event.preventDefault();
     },
     [height, onHeightChange],
@@ -275,9 +287,6 @@ export function RunDock({
     </section>
   );
 }
-
-/** How much one arrow press moves the edge. */
-const KEYBOARD_STEP = 24;
 
 /**
  * The height at which the chart gains its axis, profile strip and legend.
