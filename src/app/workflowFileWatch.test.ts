@@ -15,6 +15,7 @@ const summary = (slug: string, savedAt: string, hidden = false): WorkflowSummary
   nodeCount: 0,
   edgeCount: 0,
   hidden,
+  findings: [],
 });
 
 /**

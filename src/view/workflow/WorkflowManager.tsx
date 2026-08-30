@@ -49,6 +49,7 @@ import {
   browserStorageLine,
   deletedMessage,
   draftKeptForAnotherTabMessage,
+  packageFindingsMark,
   publishedMessage,
   rowActionHint,
   rowStatusHint,
@@ -527,6 +528,24 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
                       >
                         {wf.published ? 'Published' : 'Draft'}
                       </span>
+                      {/* What the backend found wrong with the package
+                          *folder* (`the-cost-of-one-more/14`). Beside the
+                          lifecycle badge rather than in place of it: a broken
+                          package can still be published, and the two answer
+                          different questions — one is who can see it, the
+                          other is whether it can run. Absent on a clean row,
+                          which is what makes it worth looking at. */}
+                      {(() => {
+                        const mark = packageFindingsMark(wf.findings);
+                        return mark === null ? null : (
+                          <span
+                            className="workflow-manager__badge workflow-manager__badge--flagged"
+                            title={mark.hint}
+                          >
+                            {mark.label}
+                          </span>
+                        );
+                      })()}
                       <span className="workflow-manager__date">
                         {wf.savedAt ? new Date(wf.savedAt).toLocaleDateString() : ''}
                       </span>

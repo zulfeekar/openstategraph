@@ -139,7 +139,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       and it is now the only structural one left.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 715,
+    lines: 717,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -187,7 +187,13 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       and this time the entry's argument is load-bearing in the other direction
       too: the field existed on the wire, was documented, was published, and
       was mirrored by nobody for a day — so these fifteen lines are the
-      practice working rather than the file drifting.`,
+      practice working rather than the file drifting.
+
+      **715 -> 717** (\`the-cost-of-one-more/14\`). \`ProviderStatus.defaultModel\`
+      and its coercion in \`providers\` — the model a run gets when it names
+      none, published on every provider row since the endpoint existed and read
+      by nothing. One declared member and one line in a mapper, which is this
+      entry's cheapest possible bill and the shape it exists to permit.`,
   },
 };
 

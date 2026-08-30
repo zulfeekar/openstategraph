@@ -101,6 +101,19 @@
   border-color: currentColor;
 }
 
+/* A package the backend has findings about (`the-cost-of-one-more/14`). It
+   deliberately takes **no colour of its own**: the two severities are carried
+   by the word and the tooltip, and a red or amber here would be a fill token
+   spent as ink on `--color-bg-subtle`, which is the reuse
+   `primaryContrast.test.ts` exists to catch. What it does take is weight and
+   a solid edge, so a flagged row is findable in a long list without asking
+   the palette a question that is still open (`the-look-has-an-author-now/06`). */
+.workflow-manager__badge--flagged {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
+  font-weight: var(--font-weight-semibold);
+}
+
 /* The Examples shelf's own door (ticket 23). Full width and left-aligned so it
    reads as a row you open rather than as a stray button, and it is the first
    thing in the section — a signpost below the fold is not a signpost. The

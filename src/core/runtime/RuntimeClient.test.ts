@@ -1460,3 +1460,61 @@ describe('RuntimeClient and the MCP registry', () => {
     expect(result.value.status).toBe('not_mcp');
   });
 });
+
+/**
+ * `GET /api/providers`, and the one field of it nothing read
+ * (`the-cost-of-one-more/14`).
+ *
+ * The contract has published `default_model` per provider since the endpoint
+ * existed and `providers()` mapped every neighbouring key and not that one, so
+ * the editor could list ten models it knows about and could not say which one
+ * a run that names none would actually get.
+ */
+describe('RuntimeClient.providers', () => {
+  const jsonOf = (body: unknown): Response =>
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  it('carries the model a run gets when it names none', async () => {
+    const client = new RuntimeClient(
+      'http://rt',
+      () =>
+        Promise.resolve(
+          jsonOf({
+            providers: [
+              { name: 'openai', label: 'OpenAI', configured: true, default_model: 'gpt-4o-mini' },
+            ],
+            environment: 'server',
+            run_readiness: 'ready',
+          }),
+        ) as Promise<Response>,
+    );
+
+    const result = await client.providers();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]!.defaultModel).toBe('gpt-4o-mini');
+  });
+
+  it('says nothing rather than something when the row omits it', async () => {
+    // The contract declares it required, so an absent one is an answer that
+    // did not arrive — never evidence that this provider has no default.
+    // `''` is what a surface tests for, and it prints nothing for it.
+    const client = new RuntimeClient(
+      'http://rt',
+      () =>
+        Promise.resolve(
+          jsonOf({ providers: [{ name: 'ollama', label: 'Ollama' }], environment: 'server' }),
+        ) as Promise<Response>,
+    );
+
+    const result = await client.providers();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]!.defaultModel).toBe('');
+  });
+});

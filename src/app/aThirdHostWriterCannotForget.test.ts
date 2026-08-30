@@ -174,6 +174,7 @@ describe('what the seam does with a draft', () => {
             edgeCount: 0,
             published: true,
             hidden: false,
+            findings: [],
           }),
         save: async () => {
           throw new Error('a refused host write must not reach the backend at all');

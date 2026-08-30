@@ -27,6 +27,7 @@ function status(
     installHint,
     extra,
     keyHint: null,
+    defaultModel: '',
   };
 }
 

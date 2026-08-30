@@ -159,13 +159,30 @@ describe('a colour is a role the design layer names, never a literal', () => {
    * `02` names these two literals as the defect it exists to catch: `#a78bfa`
    * is the resolved value of `--accent-on-tint` under
    * `[data-theme='dark'] [data-accent='violet']`, hand-typed into a component
-   * instead of referenced. They are still here because `src/view/ask/` was
-   * held by a concurrent worktree for the whole of this session and editing
-   * it would have written a merge conflict into somebody else's work.
+   * instead of referenced.
+   *
+   * **The reason they survive has changed, and that is the honest record.**
+   * Until `09`'s remainder was swept (`the-look-has-an-author-now/09`, second
+   * half) the sentence here said `src/view/ask/` was held by a concurrent
+   * worktree, so editing it would have written a merge conflict into somebody
+   * else's work. That was true and is no longer: the directory was reachable,
+   * and every dead *name* in it was repaired in the same commit that repaired
+   * this paragraph. These two are still literals because they are a **colour
+   * decision, not an access problem** — and it is not this pin's to make.
+   *
+   * `.ask__decision-branch` and `.timeline__lane[data-repeat='true']` are
+   * violet on purpose in *both* themes: `--violet-50` / `--violet-600` in
+   * light, and these two hand-typed values in dark. Referencing
+   * `--accent-on-tint` would resolve, and would make a decision branch follow
+   * whichever of the nine accents the workflow carries — a different product,
+   * not a de-duplication. Minting a fixed violet role instead is the move
+   * `09` refused for `--color-accent-subtle`: a second spelling of a colour in
+   * a system whose identity has one accent voice. Which way that goes is
+   * `the-look-has-an-author-now/06`, and it belongs to the owner.
    *
    * The row asserts the count **exactly**, so it cannot quietly grow, and it
-   * goes red the day the two are fixed — which is the only kind of exemption
-   * that removes itself. `the-look-has-an-author-now/09` carries the sweep.
+   * goes red the day the two are decided — which is the only kind of exemption
+   * that removes itself.
    */
   const QUARANTINED: ReadonlyArray<readonly [file: string, count: number]> = [
     ['view/ask/AskPanel.css', 2],
@@ -327,36 +344,56 @@ describe('a token a stylesheet spends is a token something declares', () => {
    * the mistake, and `--color-accent-subtle` would have been a second
    * spelling of `--color-danger-subtle` in a system with one accent voice.
    *
-   * Five remain, and every one of them is in `src/view/ask/`, which a
-   * concurrent worktree held for the whole of `09`'s session — the same
-   * directory, and the same reason, as the two quarantines above and the
-   * three literal bars below. They are named individually rather than
-   * counted, so the row that survives says which fix is owed:
+   * **The list is empty, and that is the whole of `09`.** Five survived its
+   * first session, all in `src/view/ask/`, which a concurrent worktree held;
+   * the second half of `09` reached that directory and repaired every one
+   * against a live build rather than against this file:
    *
    * - `AskPanel.css --color-border`, `--color-surface`, `--color-text` — the
-   *   build door's frame, ground and ink. Misspellings of `--color-border-
-   *   default`, `--color-bg-surface` and `--color-text-primary`; the door
-   *   currently has no border and inherits its ink.
+   *   rejection note's frame, ground and ink, all three on one declaration
+   *   block. It measured `border: 0px none`, `background: rgba(0, 0, 0, 0)`
+   *   and an inherited `color` in **both** themes: a textarea a person is
+   *   asked to type a rejection into, drawn with no edge and no ground at all.
+   *   Misspellings of `--color-border-default`, `--color-bg-surface` and
+   *   `--color-text-primary`.
    * - `PastRuns.css --color-surface-sunken` — the same misspelling of
-   *   `--color-bg-surface-sunken`, behind a `transparent` fallback, so a past
-   *   run's lane has no ground.
-   * - `PastRuns.css --type-code` — the one that is not a colour. It falls back
-   *   to `--type-caption`, which renders; the role it wants is `--type-mono-sm`,
-   *   which is declared and is what a monospaced caption in this scale is
-   *   called.
+   *   `--color-bg-surface-sunken`, behind a `transparent` fallback, so one
+   *   tool call's line had no ground to separate it from the lane.
+   * - `PastRuns.css --type-code` — the one that is not a colour, and the one
+   *   that shows what a fallback costs. It resolved to `--type-caption` and a
+   *   `font-family` line beside it re-imposed the mono family, so the text
+   *   *looked* right and the role it wanted, `--type-mono-sm`, already says
+   *   both things in one token. Naming it made the second declaration
+   *   redundant, which is the tell that the pair was one fact written twice.
    *
    * The set stays recorded **exactly**, which makes it a ratchet in both
-   * directions: a sixth reference is red, and repairing one is red too until
+   * directions: a first reference is red, and repairing one is red too until
    * its row is deleted. A list that can only be edited deliberately is the
    * difference between a debt and a suppression.
+   *
+   * ---
+   *
+   * **The shape this census catches by luck, and the one it cannot catch at
+   * all.** The build door read
+   * `border-left: 3px solid var(--color-border-strong, var(--color-border))`.
+   * `--color-border-strong` is declared in both theme blocks, so the fallback
+   * was **unreachable** — it could never render, in any theme, on any
+   * element. Nothing about the screen would ever have reported it, and it was
+   * reported here only because the name behind it happened to be dead: the
+   * matcher below is global, so `var(--a, var(--b))` yields both names.
+   *
+   * Change the inner name to one that resolves and the whole thing goes
+   * silent — dead code in CSS with no signature, which is `CLAUDE.md`'s
+   * `TopBar.tsx` gap in another language. Two live instances remain
+   * (`design/primitives/Pill.css`), and they are not the same as the five
+   * `var(--accent-*, …)` fallbacks beside them: `--accent-solid` and
+   * `--accent-on-tint` are declared under `[data-accent]` only, so an element
+   * outside an accented subtree genuinely falls through. Filed as
+   * `the-look-has-an-author-now/10` rather than swept in here, because
+   * telling those two cases apart needs a rule about *conditional* declaration
+   * and that is a pin to design, not a line to edit.
    */
-  const DEAD: readonly string[] = [
-    'view/ask/AskPanel.css --color-border',
-    'view/ask/AskPanel.css --color-surface',
-    'view/ask/AskPanel.css --color-text',
-    'view/ask/PastRuns.css --color-surface-sunken',
-    'view/ask/PastRuns.css --type-code',
-  ];
+  const DEAD: readonly string[] = [];
 
   it('names the ones that resolve to nothing, and the list only shrinks by decision', () => {
     /* A custom property is declared in CSS, and also in TSX as
@@ -496,12 +533,23 @@ describe('a bar beside a block is a marker, and a marker has a name', () => {
    * five files, which is why the answer is one token and not a token per
    * weight. A token minted over an unresolved disagreement would have frozen
    * the disagreement.
+   *
+   * The last three landed with `09`'s remainder, and the build door is the one
+   * that proves the paragraph above: it was the 3px half of the ask panel's
+   * own disagreement, and it went to 2px because the disagreement was never a
+   * decision. What distinguishes it from the trace output beside it survives
+   * where it belongs — in the colour, `--color-border-strong` against
+   * `--color-border-default`, which is what "a different left edge" was
+   * reaching for.
    */
   const MARKERS: ReadonlyArray<readonly [file: string, selector: string]> = [
     ['design/styles/typography.css', '.prose blockquote'],
     ['view/common/RichText.css', '.rich-text blockquote'],
     ['view/inspector/Inspector.css', '.inspector__locked-row'],
     ['view/palette/Palette.css', '.palette-item--scoped'],
+    ['view/ask/AskPanel.css', '.ask__trace-output'],
+    ['view/ask/AskPanel.css', '.ask__suggestion--build'],
+    ['view/ask/PastRuns.css', '.past-runs__lane'],
   ];
 
   it.each(MARKERS)('%s %s draws the marker', (file, selector) => {
@@ -521,11 +569,13 @@ describe('a bar beside a block is a marker, and a marker has a name', () => {
    * file may spend both names on one line and the seams stay four. Any new
    * left bar joins `MARKERS` or explains itself.
    */
-  it('is drawn in exactly those four places', () => {
+  it('is drawn in exactly the files that record a marker, and no others', () => {
     const drawn = stylesheets()
       .filter((path) => /--border-width-marker\)/.test(code(read(path))))
       .map(under);
-    expect(drawn.sort()).toEqual(MARKERS.map(([file]) => file).sort());
+    // By file, deduplicated: `AskPanel.css` records two markers and is one
+    // stylesheet. The per-selector half of the cage is the `it.each` above.
+    expect(drawn.sort()).toEqual([...new Set(MARKERS.map(([file]) => file))].sort());
   });
 
   /**
@@ -551,20 +601,20 @@ describe('a bar beside a block is a marker, and a marker has a name', () => {
   });
 
   /**
-   * The same quarantine as the hex literals, for the same reason and with
-   * the same ratchet. Three left bars under `src/view/ask/` — a quoted trace
-   * output, a past-run lane, the build door at 3px — were unreachable this
-   * session because a concurrent worktree held that directory. Exact counts,
-   * so it goes red when they are converted. `09` carries them.
+   * **Zero, and the count is kept because it is the cage.**
+   *
+   * This was a quarantine of three — a quoted trace output, a past-run lane,
+   * the build door at 3px — held open while a concurrent worktree owned
+   * `src/view/ask/`. `09`'s remainder converted all three, and the assertion
+   * is kept rather than deleted: a left bar written as a literal is how the
+   * marker got guessed twice in the first place, and an emptied list is a
+   * stronger rule than a list of three. The next `2px solid` down the left of
+   * a block joins `MARKERS` or argues here.
    */
-  it('leaves exactly three literal bars, all in the directory this session could not touch', () => {
+  it('leaves no literal left bar anywhere — every marker names the token', () => {
     const literal = declarations()
       .filter((d) => d.property.startsWith('border-left') && /^\s*[23]px\s/.test(d.value))
       .map((d) => `${d.file}: ${d.value}`);
-    expect(literal.sort()).toEqual([
-      'view/ask/AskPanel.css: 2px solid var(--color-border-default)',
-      'view/ask/AskPanel.css: 3px solid var(--color-border-strong, var(--color-border))',
-      'view/ask/PastRuns.css: 2px solid var(--color-border-subtle)',
-    ]);
+    expect(literal.sort()).toEqual([]);
   });
 });

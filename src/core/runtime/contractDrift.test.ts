@@ -443,31 +443,41 @@ describe('the client and the published contract', () => {
    * the *schema* still declares those five, which a client-side census cannot.
    */
   const UNREAD_BY_DESIGN: Readonly<Record<string, string>> = {
-    // Four fields published and read by nothing — the same shape as the
-    // finding this census is named for, one severity down, because none of
-    // them contradicts what the editor draws the way `truncation` did. Filed
-    // as `the-cost-of-one-more/14` rather than folded in here, and named
-    // rather than left to silence. An exemption pointing at a ticket is a
-    // debt; the four below say which.
-    editor_stale: 'the-cost-of-one-more/14 — nothing warns that this editor bundle is stale',
-    default_model: 'the-cost-of-one-more/14 — the picker never says which model is the default',
-    pause: 'the-cost-of-one-more/14 — the History lane says a run is parked, not what it asks',
-    note: 'the-cost-of-one-more/14 — publish drops the backend sentence about routing knowledge',
+    // **Three, and each names its own ticket now.** `14` asked whether its
+    // five were one session or five, and the answer measured out at two and
+    // three. `default_model` and `findings` needed a line and a badge on rows
+    // that already existed, so they were mirrored and shown together; the
+    // three below each need an **affordance the editor does not have** — a
+    // staleness warning with nowhere to live, a disclosure of what a parked
+    // run is asking, a control that rebuilds routing knowledge. Three
+    // features on three surfaces with three design questions is not one
+    // ticket, and mirroring them into this client to clear a row here would
+    // be the exact defect the census exists to name, inverted: a field read
+    // by a client that no consumer of it can see.
+    //
+    // An exemption pointing at a ticket is a debt; each one below says which.
+    editor_stale: 'the-cost-of-one-more/16 — nothing warns that this editor bundle is stale',
+    pause: 'the-cost-of-one-more/17 — the History lane says a run is parked, not what it asks',
+    note: 'the-cost-of-one-more/18 — publish drops the backend sentence about routing knowledge',
     // The one genuine by-design entry. `MountDocumentResponse` echoes the
     // address the client just asked with; `WorkflowFileClient` built that URL
     // out of an address it already holds, so reading the echo back would be
     // the client learning its own argument.
     mount_path: 'the address the client sent — reading the echo teaches it nothing',
-    // One name for two things, and only one half is by design.
-    // `ValidateResponse.findings` is the document's own validation, which the
-    // editor derives continuously from the same rules in `core/model` and
-    // renders itself — a client with a narrower job, the distinction the
-    // frame-field pin above draws. `WorkflowSummaryResponse.findings` is the
-    // catalogue row's *package-contract* lines, which only the backend can
-    // know because only it can read the folder, and no surface shows them.
-    // Named as the second half rather than covered by the first.
-    findings:
-      'the editor renders its own document validation; the catalogue half is the-cost-of-one-more/14',
+    // `findings` used to sit here carrying two arguments, and only one of them
+    // was about a field this census could see. It read as one name over two
+    // schemas — `ValidateResponse`'s document validation, which the editor
+    // derives itself from the same rules in `core/model`, and
+    // `WorkflowSummaryResponse`'s package-contract lines, which only the
+    // backend can know. The row is gone because the second half is read now
+    // (`the-cost-of-one-more/14`), and the first half turns out never to have
+    // been in scope at all: **no client file calls `POST
+    // /api/workflows/validate`**, so `ValidateResponse` is not among the
+    // schemas walked below and an exemption for it was an argument about
+    // nothing. Recorded rather than deleted, because a plausible sentence
+    // defending a field the instrument could not reach is the way an
+    // exemption list starts describing something other than itself — and this
+    // one had already been read twice as though it were load-bearing.
   };
 
   /** Every property name reachable from a schema, `$ref`s resolved. */
@@ -552,6 +562,50 @@ describe('the client and the published contract', () => {
       Object.keys(UNREAD_BY_DESIGN).filter((field) => clientReads(field)),
       'recorded as unread but the client reads it — delete the entry',
     ).toEqual([]);
+  });
+
+  /**
+   * **A mirror is not a reader, and the census above cannot tell them apart.**
+   *
+   * `clientReads` is satisfied by a property appearing in one of three client
+   * files, which is exactly the property `truncation` needed and exactly the
+   * property `progress` had before production-ready 56 found that the editor
+   * parsed it and drew nothing. So the cheapest way to make the census green
+   * is to add a line to a mapper and stop — a field read by a client that no
+   * consumer of that client can see, which is this file's own finding turned
+   * inside out.
+   *
+   * Discovered rather than listed, like the renderers above: a surface reads
+   * a mirrored field by its camelCase name, and there is no fourth spelling
+   * once the wire name has been mapped. The two fields `14` mirrored are
+   * asserted by name because they are what this assertion was built for; a
+   * third one added later inherits nothing from this and should join it.
+   */
+  it('lets no mirrored field stop at the mapper', () => {
+    const surfaces = ['src/view', 'src/app', 'src/nodes'].flatMap(sourceFilesUnder);
+    const read = (field: string): string[] =>
+      surfaces.filter((path) =>
+        new RegExp(`\\.${field}(?![\\w$])`).test(
+          readFileSync(fileURLToPath(new URL(path, REPO)), 'utf8'),
+        ),
+      );
+
+    // Anti-vacuity: a walker that found no surfaces would make both claims
+    // below true of nothing.
+    expect(surfaces.length).toBeGreaterThan(100);
+
+    // Named surfaces, not merely a non-empty list. `AccessibilityCheck.tsx`
+    // computes a `Finding[]` of its own, so "something in `src/view` writes
+    // `.findings`" would have been true before this ticket and would have
+    // stayed true if the badge were deleted tomorrow. What the mirror owes is
+    // *this* reader.
+    expect(
+      read('defaultModel'),
+      'the model a run gets when it names none reaches no surface',
+    ).toContain('src/view/overlays/CredentialsDialog.tsx');
+    expect(read('findings'), 'the package-contract lines reach no surface').toContain(
+      'src/view/workflow/WorkflowManager.tsx',
+    );
   });
 
   it('sends run fields the contract declares', () => {

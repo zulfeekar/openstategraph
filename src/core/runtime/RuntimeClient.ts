@@ -56,6 +56,20 @@ export interface ProviderStatus {
    * without revealing how long it is.
    */
   readonly keyHint: string | null;
+  /**
+   * The model this server reaches for when a run names none.
+   *
+   * A **server** fact, and that is why it sits beside `configuredBy` rather
+   * than in the registry's own model list: the picker offers the models the
+   * editor knows about, and a run that leaves the field empty gets this one
+   * instead — which nothing could name, so the editor could not state which
+   * model a default run would use (`the-cost-of-one-more/14`).
+   *
+   * `''` when the server did not say. The contract declares it a required
+   * string, so an empty one means the answer did not arrive rather than that
+   * no default exists, and a surface prints nothing for it.
+   */
+  readonly defaultModel: string;
 }
 
 /**
@@ -1710,6 +1724,7 @@ export class RuntimeClient implements IRuntimeClient {
           installHint: typeof row['install_hint'] === 'string' ? row['install_hint'] : '',
           extra: typeof row['extra'] === 'string' ? row['extra'] : '',
           keyHint: typeof row['key_hint'] === 'string' ? row['key_hint'] : null,
+          defaultModel: typeof row['default_model'] === 'string' ? row['default_model'] : '',
         })),
         environment: typeof body['environment'] === 'string' ? body['environment'] : '',
         runReadiness: typeof body['run_readiness'] === 'string' ? body['run_readiness'] : '',
