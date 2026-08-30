@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Fixed
+- **A package `tools/` module that imports the project it lives in now says so
+  when it cannot** (`launch-readiness/195`). `from myapp.inventory import
+  stock_level` — the whole point of `tools/` in a codebase you already have —
+  resolved in-process and failed under the installed command, because
+  `python script.py` puts the invocation directory on `sys.path` and a console
+  script does not. The remedy printed was *"Copy the package's `tools/` folder
+  next to workflow.json"*, and the folder was already there; that is how
+  discovery found the module it then failed to import. The import failure now
+  names the module the interpreter could not find and gives the two real
+  remedies, and the binding finding asks the disk which remedy applies — a
+  `tools/` folder that is absent is a folder to copy, one that is present has
+  a different problem.
+
+### Added
+- **`prepend_sys_path:` in `openstategraph.yaml`** — directories put on
+  `sys.path` by the console script, resolved relative to the config file, and
+  applied by `console_main` only, never by `main`. `init` writes it with `"."`
+  and a comment saying what it does. Nothing is injected implicitly; the
+  argument, its prior art and what was rejected are in
+  `docs/decisions/importing-the-projects-own-code.md`
+  (`launch-readiness/195`).
+
 ### Added
 - **Three additions to the run stream's published vocabulary**
   (`memory-and-replay` 53, 55, 56), taken together because the seam is priced

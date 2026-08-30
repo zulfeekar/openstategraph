@@ -290,6 +290,10 @@ class OpenStateGraphConfig(BaseModel):
     #: built-in defaults by name, never instead of them: a project that adds
     #: one server has not asked to lose the LangChain documentation.
     mcp_servers: list[McpServerConfig] = []
+    #: Directories to put on `sys.path` before the console script does
+    #: anything — **relative to this file**, exactly like `workflows_dir`.
+    #: Empty by default; see `apply_prepend_sys_path`.
+    prepend_sys_path: list[str] = []
 
 
 def _pyproject_table(source: Path) -> Any | None:
@@ -519,6 +523,74 @@ def configured_workflows_dir() -> Path | None:
     return (base / Path(config.workflows_dir or "").expanduser()).expanduser().resolve()
 
 
+def apply_prepend_sys_path(start: Path | str | None = None) -> list[Path]:
+    """Puts this project's declared directories on `sys.path`. Returns what it added.
+
+    `launch-readiness/195`, and the decision behind it is written down in
+    `docs/decisions/importing-the-projects-own-code.md` rather than here.
+    The two-line version:
+
+    A workflow package's `tools/*.py` that imports the host project's own
+    module — `from myapp.inventory import stock_level`, which is the entire
+    point of `tools/` in an adopted codebase — resolved in-process and failed
+    under the console script, because `python script.py` puts the invocation
+    directory on `sys.path` and an installed console script does not.
+
+    **Nothing is injected implicitly**, and that is the load-bearing half.
+    pytest states the rule this follows in as many words — *"rootdir is NOT
+    used to modify `sys.path`/`PYTHONPATH` or influence how modules are
+    imported"* — and the cost of the alternative is not hypothetical: a
+    project root silently prepended is a directory that can shadow the stdlib
+    for every module this process loads afterwards, decided by nobody and
+    recorded nowhere.
+
+    So the opt-in is a key in the committed config file, which is Alembic's
+    `prepend_sys_path` down to the spelling, adopted for the defect its own
+    commit message describes in our exact words: *"running the alembic command
+    line would not place the local '.' path in sys.path, meaning an
+    application locally present in '.' and importable through normal channels,
+    e.g. python interpreter, pytest, etc. would not be located"*. Same problem,
+    same shape of answer, and reusing the name means an adopter who has met one
+    already knows this one.
+
+    Three properties, each a test in
+    `tests/test_a_package_tool_reaches_the_project.py`:
+
+    | | |
+    | --- | --- |
+    | **relative to the file, never to the cwd** | the same rule `workflows_dir` follows: the file is committed and shared, so its meaning must not depend on which subdirectory a colleague was standing in |
+    | **a directory that is not there is not added** | a `sys.path` entry pointing at nothing is a typo nobody will ever see; skipping it silently would be, too, so it is skipped *and* returned as absent by omission |
+    | **process-level only** | `console_main` calls this; `main` does not. A function this project's own tests call in-process must not rewrite the interpreter under everything that runs after it — the boundary `.env` loading already observes, for the same reason |
+
+    It is deliberately not the preferred answer, only the available one. The
+    ecosystem's own recommendation is to make the project a distribution —
+    `pip install -e .`, the Packaging Authority's *Development Mode* — which
+    buys importability in every tool rather than in this one, and that is what
+    the import-failure message names first.
+    """
+    import sys
+
+    source = find_config_file(start)
+    if source is None:
+        return []
+    try:
+        declared = load_config(source).prepend_sys_path
+    except ConfigError:
+        # A config file that will not load is reported by whichever surface
+        # actually needs it. Refusing to start a command over it here would
+        # make every command depend on a file most of them never read.
+        return []
+    added: list[Path] = []
+    for entry in declared:
+        directory = (source.parent / entry).resolve()
+        if not directory.is_dir():
+            continue
+        if str(directory) not in sys.path:
+            sys.path.insert(0, str(directory))
+        added.append(directory)
+    return added
+
+
 def render_config_file(
     *, workflows_dir: str = "workflows", default_model: str | None = None
 ) -> str:
@@ -577,6 +649,21 @@ version: 1
 # Where <slug>/workflow.json packages live. Relative to THIS file, never to
 # the directory you happen to be standing in.
 workflows_dir: {workflows_dir}
+
+# Directories put on sys.path before anything runs, relative to THIS file.
+#
+# "." is this project's root, and it is here because a workflow package's
+# tools/*.py routinely imports the project it lives in — `from myapp.models
+# import ...`. That import works from `python script.py` and from pytest,
+# because both put the invocation directory on sys.path; an installed console
+# script does not, so without this line the same package validates in your
+# tests and fails `openstategraph validate`.
+#
+# Delete the line to turn it off. The alternative, and the better answer if
+# this project is or can become a distribution, is `pip install -e .` from
+# here — that makes your code importable from every tool rather than this one.
+prepend_sys_path:
+  - "."
 
 # providers:
 #   - name: anthropic

@@ -119,8 +119,14 @@ class TestRealFaultsAreStillRealFaults:
         _package(tmp_path, "import nosuchmodule_at_all\n", name="broken.py")
         discover_tool_instances(tmp_path, "my-flow", warnings=warnings)
 
+        # The words moved in `launch-readiness/195` and the claim did not: a
+        # `ModuleNotFoundError` for some *other* module now names that module
+        # rather than saying only "could not be imported", because the remedy
+        # differs. What this test is about is that the module is still named
+        # and the consequence still stated.
         assert any(
-            "broken.py" in w and "could not be imported" in w for w in warnings
+            "broken.py" in w and "nosuchmodule_at_all" in w and "is missing from this run" in w
+            for w in warnings
         ), warnings
 
     def test_a_deliberate_base_with_no_args_is_still_silent(self, tmp_path: Path) -> None:

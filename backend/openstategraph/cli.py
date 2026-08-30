@@ -2240,8 +2240,27 @@ def console_main() -> int:
     `load_workflow` observes for a library consumer, one layer in.
 
     Already-exported variables always win — see `openstategraph/dotenv.py`.
+
+    **`prepend_sys_path` is the second thing on that same side of the line**
+    (`launch-readiness/195`), and it is there for the identical reason. A
+    package's `tools/*.py` that imports the host project's own module resolved
+    from `python script.py` and failed from the installed command, because the
+    invocation directory is on `sys.path` in the first case and not in the
+    second — so the pre-flight check and the run disagreed about one package.
+    Rewriting `sys.path` from a file on disk is exactly as unrepeatable inside
+    a test process as rewriting `os.environ` is; the argument for reading it
+    here and only here is already written above, and the argument for it being
+    an explicit, committed opt-in rather than an implicit injection is in
+    `docs/decisions/importing-the-projects-own-code.md`.
+
+    No new logic (rule 1 of this module): `apply_prepend_sys_path` is
+    `config_file`'s, beside the `workflows_dir` resolution that follows the
+    same relative-to-the-file rule.
     """
+    from openstategraph.config_file import apply_prepend_sys_path
+
     load_env_file()
+    apply_prepend_sys_path()
     return main()
 
 

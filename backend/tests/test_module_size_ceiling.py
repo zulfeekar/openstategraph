@@ -266,6 +266,15 @@ every row and exiting 0. The rest is `_write_runs`, which emits the same array
 a record at a time rather than holding a second copy of an unbounded store in
 memory before a byte of it reaches the disk. Both are the export command
 saying what it did, which is the only thing this module is allowed to do.
+
+**1125 -> 1127** (`launch-readiness/195`). Two lines in `console_main`: an
+import and a call. The rule holds for the same reason `.env` loading did — the
+logic is `config_file.apply_prepend_sys_path`, beside the `workflows_dir`
+resolution that follows the same relative-to-the-file rule, and what lives
+here is only the statement that a **process** the user launched may
+reconfigure their interpreter from a committed file while a **function** this
+suite calls in-process may not. That boundary is this module's, and there is
+nowhere else to draw it.
 """
 
 WORKFLOW_COMPILER = """
@@ -583,7 +592,7 @@ line between them.
 #: worried about.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(570, NODE_RUNTIME),
-    "cli.py": Recorded(1125, CLI),
+    "cli.py": Recorded(1127, CLI),
     "compile/workflow_compiler.py": Recorded(964, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1042, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
