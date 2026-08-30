@@ -13,6 +13,12 @@ package **in-process**. Neither one shows a stream reaching a browser from the
 embedded shape, and neither collects the identity keys in one place. Both are
 here.
 
+> **No workflow yet, and an app that already exists?**
+> [Adding it to a project you already have](adding-openstategraph-to-your-project.md)
+> is the step before this one — install, `init` into a directory that is
+> already yours, a first package, and a blocking endpoint answering. Come back
+> here to stream it.
+
 ## 1. Which of the two shapes you are in
 
 Answer this first, because every later answer differs.
