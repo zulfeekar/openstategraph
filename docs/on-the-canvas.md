@@ -498,9 +498,9 @@ the canvas — the canvas gets shorter and the timeline sits below it, because i
 is a time axis you read *while* watching the thing it measures. Drag its top
 edge for more room.
 
-Two things are drawn side by side: **bars** on the left, one row per thing that
-was running, and the **trace** on the right, which is the detail for whichever
-bar you click.
+Two things are drawn side by side: **bars** on the left, one row per node with
+a time axis over them, and the **trace** on the right, which is the detail for
+whichever bar you click.
 
 Its header says **which run this is** — the question it was asked, whether it is
 running, the **thread** the run reported, and what it spent in **tokens**. The
@@ -527,16 +527,30 @@ the run **spawned**: a fanned-out worker, a subagent, a background task all
 carry the task they were handed, and that is quoted. A top-level node's prompt
 is assembled inside the runtime and never reaches the editor.
 
-### Lanes — one row per concurrent child
+### Rows — one per node, and a gutter for what ran inside what
 
-The run itself is one lane. Every child the run announced gets its own —
-a fanned-out worker, a subagent, a background task, a mounted workflow —
-because two children called `impact-analyst` are two actors and not one row.
-A child's bar is a **measured** start and end: the run dated both.
+**Every node of the workflow gets a row**, named down the left in the order the
+run first heard from it, and its bars sit on that row. A node that ran twice —
+a revision lap — is two bars on one row, badged `×2`, because it is the same
+node and not a second one.
 
-A bar in the run's own lane is a weaker claim, and the panel says so on every
-bar you select: it is the span between the frames that arrived, not two dated
-ends.
+**Every child the run dispatched gets a row of its own, indented under the node
+that dispatched it**: a fanned-out worker, a subagent, a background task. Three
+workers running at once read as three parallel rows, which is what happened;
+two children called `impact-analyst` are two actors and are numbered `1 of 2`
+and `2 of 2` so you can tell them apart. The `│` gutter down the left is how
+deep each row sits — a child dispatched from inside another child is one level
+further in again.
+
+A child's bar is a **measured** start and end: the run dated both. A bar in the
+workflow's own rows is a weaker claim, and the panel says so on every bar you
+select — it is the span between the frames that arrived, not two dated ends.
+The selected bar also says its **depth**, which is the same gutter counted.
+
+**A mounted workflow is a bar, not a row.** It is one node on your canvas, so
+it draws hatched on that node's row, at the length its own two dated frames
+give it. Its insides are not rows here; the compiled-graph preview is where you
+open a mount up.
 
 ### Replay — reading the recording back, and spending nothing
 

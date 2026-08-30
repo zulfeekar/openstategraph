@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import type { RunLane, RunLanes, StepKind, TimelineStep } from './timeline';
+import {
+  axisTicks,
+  chartRows,
+  type ChartRow,
+  type RunLane,
+  type RunLanes,
+  type StepKind,
+  type TimelineStep,
+} from './timeline';
 import { REPLAY_SPEEDS, replayTransport, stopsOf, transportOffered } from '../run/replayTransport';
 import { runProfile } from '../run/runProfile';
 import { WHY, barFacts, formatMs, laneCaption } from '../run/barDetail';
@@ -63,6 +71,10 @@ export function RunTimeline({
   readonly onSelect: (key: string | null) => void;
 }) {
   const profile = useMemo(() => runProfile({ lanes, totalMs }), [lanes, totalMs]);
+  // One row per node, every dispatched child indented under the node that
+  // announced it (`memory-and-replay` 64). The rows are the lanes projected,
+  // never a second reading of the frames.
+  const rows = useMemo(() => chartRows(lanes), [lanes]);
   const offered = transportOffered(running, totalMs);
   const stops = useMemo(() => (offered ? stopsOf(lanes, totalMs) : []), [offered, lanes, totalMs]);
 
@@ -158,66 +170,87 @@ export function RunTimeline({
       {tall ? <Profile profile={profile} /> : null}
 
       <div className="rtl__main">
-        {tall && totalMs !== null ? <Axis totalMs={totalMs} /> : null}
+        {/* At every height, not behind a drag. The profile strip and the
+            legend are still `tall`-gated — they are six numbers and a
+            reference — but a chart with rows and no numbers on them is the
+            half of the axis a reader cannot supply from looking
+            (`memory-and-replay` 64). It costs 16 px. */}
+        {/* Axis and lanes in one positioned box, because the playhead is a
+            rule down **the chart** and the lanes scroll. Drawn inside
+            `.rtl__lanes` it was a rule down the lanes' scroll content: it
+            crossed whatever happened to be on screen and slid away with it,
+            which was invisible while the chart had one row
+            (`memory-and-replay` 64). */}
+        <div className="rtl__chart">
+          {totalMs !== null ? <Axis totalMs={totalMs} /> : null}
 
-        {/* The lanes are the scrubber. A timeline you can read but not
+          {/* The lanes are the scrubber. A timeline you can read but not
               point at makes the reader translate "that bar" into a position
               on a separate strip below — so a click or drag anywhere on a
               track moves the playhead there, and the strip stays because it
               is still the easier target for a long drag. Every bar on these
               lanes is a real button, and the keyboard route to the playhead
               is the slider underneath. */}
-        <div className="rtl__lanes" onPointerDown={onLanePointerDown}>
-          {lanes.map((lane, index) => (
-            <div className="rtl__lane" key={lane.key} data-depth={lane.kind === 'run' ? 0 : 1}>
-              <div className="rtl__name" title={laneCaption(lane)}>
-                {laneCaption(lane)}
-              </div>
-              <div className="rtl__track" ref={index === 0 ? track : undefined}>
-                {lane.steps.map((step) => (
-                  <Bar
-                    key={step.key}
-                    step={step}
-                    totalMs={totalMs}
-                    at={offered ? at : null}
-                    selected={picked === step.key}
-                    onSelect={setPicked}
-                  />
-                ))}
-                {/* `54`'s `settled` frame, made visible: a 2 px tick where
+          <div className="rtl__lanes" onPointerDown={onLanePointerDown}>
+            {rows.map((row, index) => (
+              <div className="rtl__lane" key={row.key} data-depth={row.depth}>
+                {/* The gutter is the depth, drawn rather than captioned: a
+                  reader has to see that these three rows are inside that
+                  one, and an indent alone is ambiguous once a row's name is
+                  ellipsised. */}
+                <div className="rtl__name" title={rowName(row)}>
+                  {row.depth > 0 ? (
+                    <span className="rtl__gutter">{'│ '.repeat(row.depth)}</span>
+                  ) : null}
+                  {rowName(row)}
+                </div>
+                <div className="rtl__track" ref={index === 0 ? track : undefined}>
+                  {row.steps.map((step) => (
+                    <Bar
+                      key={step.key}
+                      step={step}
+                      totalMs={totalMs}
+                      at={offered ? at : null}
+                      selected={picked === step.key}
+                      onSelect={setPicked}
+                    />
+                  ))}
+                  {/* `54`'s `settled` frame, made visible: a 2 px tick where
                       the run said this child closed. A lane the run never
                       closed gets no tick — it gets the strip below instead,
                       because absence is not a mark a reader can see. */}
-                {lane.endMs !== null && totalMs !== null && totalMs > 0 ? (
-                  <span
-                    className="rtl__mark"
-                    style={{ insetInlineStart: `${(lane.endMs / totalMs) * 100}%` }}
-                    title={`settled at ${formatMs(lane.endMs)}`}
-                  />
-                ) : null}
-                {/* An open-ended lane runs to the edge and is cut off there
+                  {row.whole && row.lane.endMs !== null && totalMs !== null && totalMs > 0 ? (
+                    <span
+                      className="rtl__mark"
+                      style={{ insetInlineStart: `${(row.lane.endMs! / totalMs) * 100}%` }}
+                      title={`settled at ${formatMs(row.lane.endMs)}`}
+                    />
+                  ) : null}
+                  {/* An open-ended lane runs to the edge and is cut off there
                       (`memory-and-replay` 50). The strip starts where the
                       lane's last dated moment was and fades out at the right
                       margin: no closing border, no width anybody measured, and
                       a title saying which kind of open the run recorded. A bar
                       with no end must not look like a bar with one. */}
-                {lane.openEnded && totalMs !== null && totalMs > 0 ? (
-                  <span
-                    className="rtl__open"
-                    style={{ insetInlineStart: `${(openFrom(lane) / totalMs) * 100}%` }}
-                    title={openCaption(lane)}
-                  />
-                ) : null}
+                  {row.whole && row.lane.openEnded && totalMs !== null && totalMs > 0 ? (
+                    <span
+                      className="rtl__open"
+                      style={{ insetInlineStart: `${(openFrom(row.lane) / totalMs) * 100}%` }}
+                      title={openCaption(row.lane)}
+                    />
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+
           {/* The playhead and the scrubber are one decision, so they read one
-              predicate (`memory-and-replay` 63). A run in flight draws no
-              vertical line at all: it has no right-hand edge to reach, and a
-              rule down the chart that cannot be moved is a control's whole
-              affordance with none of its behaviour. It used to be drawn
-              wherever the run had a clock and pinned to the head by
-              `[data-live]`. */}
+            predicate (`memory-and-replay` 63). A run in flight draws no
+            vertical line at all: it has no right-hand edge to reach, and a
+            rule down the chart that cannot be moved is a control's whole
+            affordance with none of its behaviour. It used to be drawn
+            wherever the run had a clock and pinned to the head by
+            `[data-live]`. */}
           {offered ? (
             <div
               className="rtl__playhead"
@@ -269,7 +302,7 @@ export function SelectedBar({
   return (
     <div className="rtl__detail">
       <dl>
-        {barFacts(found.lane, found.step).map((fact) => (
+        {barFacts(found.lane, found.step, found.depth).map((fact) => (
           <div key={fact.term}>
             <dt>{fact.term}</dt>
             <dd>{fact.value}</dd>
@@ -279,6 +312,17 @@ export function SelectedBar({
       <p className="rtl__why">{WHY[found.step.kind]}</p>
     </div>
   );
+}
+
+/**
+ * What the gutter prints.
+ *
+ * A whole lane says which of its namesakes it is — `impact-analyst 1 of 2` —
+ * because four children with one name is the case `50` was filed for. A node
+ * row is a node, and a node's name is its name.
+ */
+function rowName(row: ChartRow): string {
+  return row.whole ? laneCaption(row.lane) : row.name;
 }
 
 /** One bar, and the three shapes that are not one. */
@@ -466,17 +510,6 @@ function Axis({ totalMs }: { readonly totalMs: number }) {
   );
 }
 
-/** Five or so round offsets across the run — never more than the width can hold. */
-export function axisTicks(totalMs: number): readonly number[] {
-  if (totalMs <= 0) return [0];
-  const raw = totalMs / 5;
-  const magnitude = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 5, 10].map((n) => n * magnitude).find((n) => n >= raw) ?? raw;
-  const ticks: number[] = [];
-  for (let at = 0; at < totalMs; at += step) ticks.push(at);
-  return ticks;
-}
-
 function Profile({ profile }: { readonly profile: ReturnType<typeof runProfile> }) {
   const cells: readonly (readonly [string, string, boolean])[] = [
     ['Duration', formatMs(profile.totalMs), false],
@@ -528,11 +561,13 @@ function Legend() {
 export function findStep(
   lanes: readonly RunLane[],
   key: string | null,
-): { lane: RunLane; step: TimelineStep } | null {
+): { lane: RunLane; step: TimelineStep; depth: number } | null {
   if (key === null) return null;
-  for (const lane of lanes) {
-    const step = lane.steps.find((candidate) => candidate.key === key);
-    if (step) return { lane, step };
+  // Through the rows rather than the lanes, so the pane's `Depth` is the depth
+  // the reader is looking at rather than a second answer computed beside it.
+  for (const row of chartRows(lanes)) {
+    const step = row.steps.find((candidate) => candidate.key === key);
+    if (step) return { lane: row.lane, step, depth: row.depth };
   }
   return null;
 }

@@ -8,8 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { barFacts, formatMs, laneCaption } from './barDetail';
 import { buildLanes, type RunLane, type TimelineStep } from '../ask/timeline';
 
-const value = (lane: RunLane, step: TimelineStep, term: string): string =>
-  barFacts(lane, step).find((fact) => fact.term === term)?.value ?? '';
+const value = (lane: RunLane, step: TimelineStep, term: string, depth = 0): string =>
+  barFacts(lane, step, depth).find((fact) => fact.term === term)?.value ?? '';
 
 const laneOf = (rows: Parameters<typeof buildLanes>[0], index: number): RunLane =>
   buildLanes(rows).lanes[index]!;
@@ -115,5 +115,25 @@ describe('a bar that was dated at both ends', () => {
     );
     const step = { ...lane.steps[0]!, concurrent: ['other#1'] };
     expect(value(lane, step, 'Alongside')).toMatch(/^at least 1 other bar$/);
+  });
+});
+
+describe('how far inside the run this bar sits — `memory-and-replay` 64', () => {
+  const run = (): RunLane =>
+    laneOf([{ node: 'in1', taskId: null, internal: false, elapsedMs: 10 }], 0);
+
+  it('says where a top-level node is, in words rather than in a zero', () => {
+    expect(value(run(), run().steps[0]!, 'Depth')).toBe('top level');
+  });
+
+  it('counts the rows a nested bar sits inside', () => {
+    expect(value(run(), run().steps[0]!, 'Depth', 2)).toBe('2 below');
+  });
+
+  it('does not name a lane the node row already is', () => {
+    // The design's pane has no LANE row, and on a node row it would repeat
+    // NODE: the run's own lane is the workflow, which is what the chart is.
+    // A dispatched child's lane is a different fact and keeps its line.
+    expect(barFacts(run(), run().steps[0]!, 0).map((fact) => fact.term)).not.toContain('Lane');
   });
 });

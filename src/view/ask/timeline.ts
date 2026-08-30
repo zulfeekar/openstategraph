@@ -1141,3 +1141,205 @@ function assignSiblings(
     close();
   }
 }
+
+/**
+ * One drawn row of the chart — `memory-and-replay` 64.
+ *
+ * A lane and a row are not the same thing, and the difference is the whole of
+ * this ticket. **A lane is what the run dispatched**: announced, owned,
+ * closed, and `50` settled that a branch through this same graph is not one.
+ * **A row is what the chart draws.** The run's own lane holds every top-level
+ * bar in sequence, which is true and is not a drawing: fifteen nodes crowded
+ * onto one line called `The workflow`, with a fan-out reading as overlapping
+ * bars rather than as parallel rows.
+ *
+ * So the run's lane is split **by node**, and every dispatched child is
+ * indented under the row that announced it. Nothing here is a second
+ * derivation of a bar: a row holds the lanes' own steps, which is what
+ * `chartRows` is asserted to preserve.
+ */
+export interface ChartRow {
+  /** Stable within a run; safe as a React key. */
+  readonly key: string;
+  /**
+   * The node's own name, or the name the run put on the child it announced.
+   *
+   * A `whole` row's siblings are not spelled here: "1 of 2" is a caption the
+   * pane beside the chart also prints, and one sentence written twice is the
+   * defect this repository names most often.
+   */
+  readonly name: string;
+  /** 0 at the top level; one more for each row this one sits inside. */
+  readonly depth: number;
+  /** The lane these bars came off — a child's own, or the run's. */
+  readonly lane: RunLane;
+  readonly steps: readonly TimelineStep[];
+  /**
+   * This row *is* a whole lane, so the lane's `settled` tick and open-ended
+   * strip belong to it.
+   *
+   * `false` for a node row, which is a slice of the run's own lane. That
+   * lane's end is the recording's end, so drawing a settled tick on every
+   * node row would say the run closed fifteen things it never announced —
+   * which is what the single-row chart did once, at the right-hand edge.
+   */
+  readonly whole: boolean;
+}
+
+/**
+ * The lanes, projected into the rows a chart draws.
+ *
+ * Ordering is depth-first and comes from the run twice over: a node row sits
+ * where the run first heard from that node, and a child row sits directly
+ * under the row that announced it, in the order the run announced them.
+ *
+ * # Which row a child belongs under
+ *
+ * A child lane records the canvas node that announced it (`RunLane.parent`)
+ * and the millisecond it was announced. The parent row is therefore the row
+ * carrying a bar with that label **whose window contains the spawn** — which
+ * is what resolves a nested subagent under its own parent rather than under
+ * the top-level namesake, since rows are added parents-first and the deepest
+ * match is the last one.
+ *
+ * With no window match the named top-level row is taken, and with no named
+ * row at all the child sits at the top level. Neither is a guess dressed as a
+ * fact: a child whose parent this recording has no bar for gets a row with no
+ * gutter, rather than a gutter under a row that was invented for it.
+ *
+ * # A mount is still not a row
+ *
+ * `50`'s table, unchanged. A mount is one node on the canvas, so it folds into
+ * that node's bar and draws hatched at the length its own two dated frames
+ * give it (`buildTimeline` rule 6). Giving it a row would claim a shape the
+ * fold deliberately does not produce.
+ */
+export function chartRows(lanes: readonly RunLane[]): readonly ChartRow[] {
+  type Draft = { -readonly [K in keyof ChartRow]: ChartRow[K] } & { steps: TimelineStep[] };
+  type Node = { readonly row: Draft; readonly kids: Node[] };
+
+  const added: Node[] = [];
+  const roots: Node[] = [];
+  const byLabel = new Map<string, Node>();
+
+  const run = lanes.find((lane) => lane.kind === 'run');
+  if (run) {
+    for (const step of run.steps) {
+      let node = byLabel.get(step.label);
+      if (!node) {
+        node = {
+          row: {
+            key: `node:${step.label}`,
+            name: step.label,
+            depth: 0,
+            lane: run,
+            steps: [],
+            whole: false,
+          },
+          kids: [],
+        };
+        byLabel.set(step.label, node);
+        added.push(node);
+        roots.push(node);
+      }
+      node.row.steps.push(step);
+    }
+  }
+
+  for (const lane of lanes) {
+    if (lane.kind === 'run') continue;
+    const parent = parentRow(added, lane);
+    const node: Node = {
+      row: {
+        key: lane.key,
+        name: lane.name,
+        depth: parent === null ? 0 : parent.row.depth + 1,
+        lane,
+        steps: [...lane.steps],
+        whole: true,
+      },
+      kids: [],
+    };
+    (parent === null ? roots : parent.kids).push(node);
+    added.push(node);
+  }
+
+  const drawn: ChartRow[] = [];
+  const walk = (nodes: readonly Node[]): void => {
+    for (const node of nodes) {
+      drawn.push(node.row);
+      walk(node.kids);
+    }
+  };
+  walk(roots);
+  return drawn;
+}
+
+/**
+ * The row a dispatched child belongs under, in three attempts and no guesses.
+ *
+ * 1. **A lane that was open on the child's own task.** This is `claim`'s rule
+ *    one level up: a child announced from inside another child carries that
+ *    child's task id, and its spawn lands inside that child's dated window. It
+ *    is tried first because it is the only one of the three that reads a value
+ *    the run wrote down rather than a name it repeated.
+ * 2. **The row that was drawing `lane.parent` when the spawn arrived.** Rows
+ *    are added parents-first, so the deepest match is the last one.
+ * 3. **The row named `lane.parent`**, whichever it is.
+ *
+ * `null` — the top level — when the recording has no bar by that name at all.
+ * A gutter under a row invented for the occasion would be worse than none.
+ */
+function parentRow<
+  T extends { readonly row: { readonly lane: RunLane; readonly steps: readonly TimelineStep[] } },
+>(rows: readonly T[], lane: RunLane): T | null {
+  const at = lane.startMs;
+  const opened = (row: T): boolean => {
+    const host = row.row.lane;
+    return (
+      host !== lane &&
+      host.taskId !== null &&
+      host.taskId === lane.taskId &&
+      host.startMs !== null &&
+      at !== null &&
+      at >= host.startMs &&
+      (host.endMs === null || at <= host.endMs)
+    );
+  };
+  const inherited = rows.filter(opened).at(-1);
+  if (inherited) return inherited;
+
+  const parent = lane.parent;
+  if (parent === null) return null;
+  const named = rows.filter((row) => row.row.steps.some((step) => step.label === parent));
+  const within =
+    at === null
+      ? []
+      : named.filter((row) =>
+          row.row.steps.some(
+            (step) =>
+              step.label === parent &&
+              step.startMs !== null &&
+              step.startMs <= at &&
+              step.startMs + (step.durationMs ?? 0) >= at,
+          ),
+        );
+  return within.at(-1) ?? named[0] ?? null;
+}
+
+/**
+ * Five or so round offsets across the run — never more than the width can hold.
+ *
+ * Here rather than in the chart because an axis tick is a number the run has,
+ * not a rectangle somebody draws: it is decidable, so it is tested directly
+ * (`memory-and-replay` 64).
+ */
+export function axisTicks(totalMs: number): readonly number[] {
+  if (totalMs <= 0) return [0];
+  const raw = totalMs / 5;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 5, 10].map((n) => n * magnitude).find((n) => n >= raw) ?? raw;
+  const ticks: number[] = [];
+  for (let at = 0; at < totalMs; at += step) ticks.push(at);
+  return ticks;
+}

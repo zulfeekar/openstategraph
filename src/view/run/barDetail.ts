@@ -57,16 +57,32 @@ export function formatMs(ms: number | null): string {
  * that ended at its start, and on an open-ended lane it says which *kind* of
  * open the run recorded (`50`'s `ending`) instead of a time.
  */
-export function barFacts(lane: RunLane, step: TimelineStep): readonly BarFact[] {
+export function barFacts(
+  lane: RunLane,
+  step: TimelineStep,
+  /**
+   * How many rows this bar's row sits inside — `ChartRow.depth`, and the
+   * design's own `DEPTH` field, which nothing in this pane could compute
+   * until `memory-and-replay` 64 gave the chart rows to be inside of.
+   */
+  depth: number,
+): readonly BarFact[] {
   const end =
     step.startMs !== null && step.durationMs !== null ? step.startMs + step.durationMs : null;
   const facts: BarFact[] = [
     { term: 'Node', value: step.label },
-    { term: 'Lane', value: laneCaption(lane) },
+    // The run's own lane is the workflow, which is what the whole chart is, so
+    // naming it here would repeat the row above. A dispatched child's lane is
+    // a different fact — who was asked, and which of the namesakes this is —
+    // and keeps its line.
+    ...(lane.kind === 'run' ? [] : [{ term: 'Lane', value: laneCaption(lane) }]),
     { term: 'What', value: WHAT[step.kind] },
     { term: 'Opened', value: formatMs(step.startMs) },
     { term: 'Closed', value: end === null ? closedUnknown(lane) : formatMs(end) },
     { term: 'Span', value: formatMs(step.durationMs) },
+    // Words rather than a number, because `0` in a field called Depth reads as
+    // a measurement that came out empty rather than as the top of the chart.
+    { term: 'Depth', value: depth === 0 ? 'top level' : `${depth} below` },
     {
       term: 'Ends',
       value: step.measured
