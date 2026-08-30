@@ -31,7 +31,7 @@ Nothing here is on a run path. It is asked for only when something draws.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 
 @dataclass(frozen=True)
@@ -101,21 +101,80 @@ def _trim_terminals(child: Any) -> None:
     ]
 
 
-def expand_mounts(graph: Any, mounts: Mapping[str, MountedGraph]) -> Any:
+#: How a mount path is spelled when it has to be one mermaid identifier.
+#:
+#: `:` is spoken for — `Graph.extend` puts it between a prefix and the child
+#: node it prefixes, and `draw_mermaid` splits on it to nest the blocks — so
+#: the separator *inside* one segment has to be something else, and it has to
+#: survive into a mermaid `subgraph <name>` unquoted.
+_PATH = "_"
+
+
+def mount_segment(path: Sequence[str]) -> str:
+    """The one name a mount is spliced and drawn under, from its mount path.
+
+    **A mount node id is unique within a document and nowhere else**, which is
+    the sentence `GraphNames.absorb` already carries about the other fold. It
+    spliced under the bare node name, so a composition where two *levels* each
+    call their mount `m1` produced two `subgraph m1` blocks and `draw_mermaid`
+    raised outright — a mermaid subgraph name is global to a diagram, and the
+    library dedupes on the **last** path segment, so `:`-joining the path
+    would not have helped (`the-cost-of-one-more` 10).
+
+    A mount *path* is unique, so the path is the segment. Joined rather than
+    hashed because both properties are wanted and only one of them is
+    uniqueness: `m1_m2` reads as *the `m2` inside `m1`*, and a reader chasing a
+    node three levels down can spell where it lives.
+
+    A first-level mount's path is just its name, so the common case — every
+    shipped example, and every composition one level deep — is drawn exactly
+    as it was before this existed. Qualification arrives with nesting, which
+    is where the ambiguity arrives.
+    """
+    return _PATH.join(path)
+
+
+def expand_mounts(
+    graph: Any,
+    mounts: Mapping[str, MountedGraph],
+    *,
+    path: tuple[str, ...] = (),
+    _drawn: dict[str, tuple[str, ...]] | None = None,
+) -> Any:
     """Replace each mount node in `graph` with the child it runs, in place.
 
     `graph` is a drawable `langchain_core.runnables.graph.Graph` — what
     `compiled.get_graph()` returns — and it is returned for convenience rather
     than copied. A mount whose child could not be resolved, or whose child has
     no single entry and exit, is left as the one box it honestly is.
+
+    `path` is the mount path of `graph` itself — empty at the top, and one
+    entry longer at each level down. Callers pass nothing; the recursion is
+    the only thing that has an answer.
     """
+    drawn = {} if _drawn is None else _drawn
     for name, mounted in mounts.items():
         if name not in graph.nodes:
             # A mount the compiler recorded but the drawing does not contain:
             # nothing to replace, and inventing a box would be the drift this
             # whole file exists to prevent.
             continue
-        child = expand_mounts(mounted.graph.get_graph(), mounted.mounts)
+        here = (*path, name)
+        segment = mount_segment(here)
+        claimed = drawn.setdefault(segment, here)
+        if claimed != here:
+            # Unreachable while `mount_segment` joins a path that is unique by
+            # construction — but this layer holds both paths and the library
+            # holds neither, so the day somebody respells a segment the
+            # failure says which two mounts collided instead of saying that
+            # somebody reused a subgraph node (`the-cost-of-one-more` 10).
+            raise ValueError(
+                f"Mounts {'/'.join(claimed)!r} and {'/'.join(here)!r} would both "
+                f"be drawn as {segment!r}; a mount path must name one mount."
+            )
+        child = expand_mounts(
+            mounted.graph.get_graph(), mounted.mounts, path=here, _drawn=drawn
+        )
         first_id, last_id = _boundary(child)
         if first_id is None or last_id is None:
             continue
@@ -123,8 +182,8 @@ def expand_mounts(graph: Any, mounts: Mapping[str, MountedGraph]) -> Any:
         if not child.nodes:
             continue
         graph.nodes.pop(name)
-        graph.extend(child, prefix=name)
-        entry, exit_ = f"{name}:{first_id}", f"{name}:{last_id}"
+        graph.extend(child, prefix=segment)
+        entry, exit_ = f"{segment}:{first_id}", f"{segment}:{last_id}"
         for index, edge in enumerate(graph.edges):
             if edge.source == name:
                 edge = edge.copy(source=exit_)
@@ -134,4 +193,4 @@ def expand_mounts(graph: Any, mounts: Mapping[str, MountedGraph]) -> Any:
     return graph
 
 
-__all__ = ["MountedGraph", "expand_mounts"]
+__all__ = ["MountedGraph", "expand_mounts", "mount_segment"]

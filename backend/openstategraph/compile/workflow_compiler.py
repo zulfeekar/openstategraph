@@ -1541,17 +1541,47 @@ def always_taken_cycles(plan: "CompiledPlan") -> list[tuple[str, ...]]:
 
     **What counts as an escape is read from the plan itself**, never from a
     second list of node types that would drift out of step with the one
-    `plan()` builds: an edge that reaches `plan.conditional` came from a node
-    that *decides*, and every other edge is taken on every lap. So the walk
-    below is over `plan.edges` plus `plan.fan_out`, and a router, a grader's
-    `revise`, a guard's, an approval's branches and a guardrail's are all
-    excluded by construction, together with whatever family declares a branch
-    port next.
+    `plan()` builds: an edge that reaches `plan.conditional` or `plan.fan_out`
+    came from a node that *decides*, and every other edge is taken on every
+    lap. So the walk below is over `plan.edges` alone, and a router, a
+    grader's `revise`, a guard's, an approval's branches, a guardrail's and an
+    orchestrator's `Send` are all excluded by construction, together with
+    whatever family declares a branch port next.
 
-    **A `Send` is not a decision.** `orchestrate.supervisor` chooses how many
-    tasks to dispatch, never whether to stop dispatching, so a loop closed
-    through a fan-out edge is as unable to end as any other. It is walked as
-    an ordinary edge for that reason.
+    **A `Send` is a decision, and this function used to say it was not.**
+    The premise it was written on — *"`orchestrate.supervisor` chooses how
+    many tasks to dispatch, never whether to stop dispatching"* — is
+    contradicted by the compiler six hundred lines down: a fan-out compiles to
+    `add_conditional_edges`, and `_fan_out_router` returns `[]` for an
+    orchestrator that planned no subtasks. An empty list dispatches nothing,
+    so the edge is not taken and the lap ends. The one edge kind this walk
+    went out of its way to include was the one edge kind that decides, and the
+    cost was a **false rejection**: a supervisor replan loop — `sup ⇒ w ->
+    sup`, the evaluator-optimizer pattern with a planner in the middle — was
+    reported here and therefore failed validation, which the paragraph below
+    names as the worse of the two outcomes (`the-cost-of-one-more` 07).
+
+    So `plan.fan_out` is not walked. **Nothing is lost by that**, and the two
+    halves of "lost" are separate questions:
+
+    - *A cycle that runs through a fan-out edge.* It has an escape by
+      construction — the orchestrator plans zero subtasks — so it was never a
+      cycle no decision can leave. Whether a given orchestrator ever will plan
+      zero is a fact about a model that has not run, and "we cannot know" is
+      the argument for the conservative answer, which is silence.
+    - *A cycle merely **reachable** through one.* Unaffected, because this
+      walk does not start from `plan.entry` and never asked about
+      reachability: the outer loop is `for start in sorted(successors)`, so an
+      all-static loop parked below a fan-out is still found. Pinned in
+      `tests/test_a_fan_out_is_not_an_edge_that_is_always_taken.py`, because
+      that is a property of the loop above rather than of this sentence.
+
+    **One channel, still all-or-nothing, and that stays right.** Every edge in
+    a cycle reported here is now unconditional in the compiled graph, so this
+    function is certain about what it reports and needs no softer register to
+    say so. There is no cap on the count either: one warning per back edge,
+    each naming a different closing edge, because a truncated list hides a
+    defect the author would then ship.
 
     **Conservative in the direction that costs nothing.** A cycle carrying a
     router whose every branch leads back into it is equally doomed and is not
@@ -1564,9 +1594,6 @@ def always_taken_cycles(plan: "CompiledPlan") -> list[tuple[str, ...]]:
     successors: dict[str, set[str]] = {}
     for source, destination in plan.edges:
         successors.setdefault(source, set()).add(destination)
-    for source, workers in plan.fan_out.items():
-        for worker in workers:
-            successors.setdefault(source, set()).add(worker)
 
     #: 0 unvisited, 1 on the current path, 2 finished. An explicit colour
     #: rather than recursion depth, because a back edge is exactly "a
@@ -1577,30 +1604,42 @@ def always_taken_cycles(plan: "CompiledPlan") -> list[tuple[str, ...]]:
     #: out by hand, and a `RecursionError` raised out of `plan()` would be
     #: reported as *"Compile failed"* — the compiler blaming itself for a
     #: large drawing.
+    #: Where each node on the current path sits in it, so a back edge can be
+    #: cut from the path in one lookup. `path.index(successor)` answered the
+    #: same question by scanning, O(E·V) over a document's back edges; the
+    #: depth is already known when the node is pushed and costs a dict entry
+    #: to keep (`the-cost-of-one-more` 07).
+    depth: dict[str, int] = {}
     colour: dict[str, int] = {}
     path: list[str] = []
     found: list[tuple[str, ...]] = []
 
+    def _push(node_id: str) -> tuple[str, list[str]]:
+        colour[node_id] = 1
+        depth[node_id] = len(path)
+        path.append(node_id)
+        #: Reverse-sorted, so `pop()` from the tail yields ascending order.
+        #: `pop(0)` walked a list strictly left to right at O(d) a step —
+        #: O(Σdeg²) over the document — for an ordering `reversed` gives free.
+        return node_id, sorted(successors.get(node_id, ()), reverse=True)
+
     for start in sorted(successors):
         if colour.get(start, 0) != 0:
             continue
-        stack: list[tuple[str, list[str]]] = [(start, sorted(successors.get(start, ())))]
-        colour[start] = 1
-        path.append(start)
+        stack: list[tuple[str, list[str]]] = [_push(start)]
         while stack:
             node_id, pending = stack[-1]
             if not pending:
                 stack.pop()
                 path.pop()
+                del depth[node_id]
                 colour[node_id] = 2
                 continue
-            successor = pending.pop(0)
+            successor = pending.pop()
             if colour.get(successor, 0) == 1:
-                found.append(tuple(path[path.index(successor) :]) + (successor,))
+                found.append(tuple(path[depth[successor] :]) + (successor,))
             elif colour.get(successor, 0) == 0:
-                colour[successor] = 1
-                path.append(successor)
-                stack.append((successor, sorted(successors.get(successor, ()))))
+                stack.append(_push(successor))
     return found
 
 

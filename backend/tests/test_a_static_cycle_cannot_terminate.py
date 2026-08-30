@@ -101,10 +101,27 @@ class TestTheDocumentIsReported:
         plan = WorkflowCompiler().plan(document)
         assert _cycle_warnings(plan), plan.warnings
 
-    def test_a_send_dispatch_is_fan_out_and_does_not_make_a_loop_terminable(self) -> None:
-        """`orchestrate.supervisor`'s dispatch is a `Send`. It chooses how many
-        tasks to run, never whether to leave the loop, so a cycle closed
-        through one is as non-terminating as any other all-static cycle.
+    def test_a_send_dispatch_is_a_decision_and_the_replan_loop_is_accepted(
+        self,
+    ) -> None:
+        """**Overturned, with the reason** — `the-cost-of-one-more` 07.
+
+        This test used to assert the opposite, on the premise that
+        `orchestrate.supervisor` "chooses how many tasks to run, never whether
+        to leave the loop". The compiler contradicts it: a fan-out compiles to
+        `add_conditional_edges`, and `_fan_out_router` returns `[]` for an
+        orchestrator that planned no subtasks, which dispatches nothing and
+        ends the lap. So the supervisor does choose whether to stop, and the
+        document below — the supervisor replan loop, an evaluator-optimizer
+        with a planner in the middle — was being *refused*: `plan.warnings` is
+        the hard channel, so this was a valid workflow failing validation.
+
+        The premise the test was written on is the thing that was wrong, so
+        the test is rewritten rather than deleted: what it now protects is
+        that a fan-out really is in the plan and the cycle really does close
+        through it, and that neither is reported.
+        `test_a_fan_out_is_not_an_edge_that_is_always_taken.py` carries the
+        rest, including what the guard still catches.
         """
         document = {
             "version": 1,
@@ -124,7 +141,8 @@ class TestTheDocumentIsReported:
         }
         plan = WorkflowCompiler().plan(document)
         assert plan.fan_out.get("sup1") == ["w1"], plan.fan_out
-        assert _cycle_warnings(plan), plan.warnings
+        assert ("w1", "sup1") in plan.edges
+        assert not _cycle_warnings(plan), plan.warnings
 
 
 class TestEveryConditionalStepLetsALoopOut:
