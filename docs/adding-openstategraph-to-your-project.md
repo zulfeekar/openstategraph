@@ -134,6 +134,28 @@ cd ~/svc  && openstategraph .      # svc's workflows
 cd ~/app2 && openstategraph .      # app2's workflows
 ```
 
+**While this lives on TestPyPI only, the global install needs two more flags**,
+and the reason is the same one `explicit = true` answers for a project
+dependency. `uv` will not, by default, take a package from one index and its
+dependencies from another — so the line above resolves nothing until it is told
+where each half comes from and that mixing is intended:
+
+```bash
+uv tool install \
+  --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ \
+  --index-strategy unsafe-best-match \
+  "openstategraph[server,ollama]==<version>"
+```
+
+`unsafe-best-match` is uv's own name for it, and the name is the warning: it
+lets a package on either index satisfy a requirement, which is exactly the
+shadowing risk a pre-release index carries. **Both flags disappear the day this
+reaches PyPI**, and the two-line form above is what remains.
+
+If the command installs and your shell still cannot find it, `~/.local/bin` is
+not on your `PATH`: `uv tool update-shell`, then a new terminal.
+
 It prints the directory it chose and why before it binds anything, because the
 alternative is the failure this verb was built to end: standing in the wrong
 place and silently editing another project's packages. [The CLI
