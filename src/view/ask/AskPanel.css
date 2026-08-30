@@ -25,6 +25,18 @@
   /* `.panel__body` scrolls by default; overridden here because only the
      thread should scroll — the composer stays anchored at the bottom. */
   overflow: hidden;
+  /* The canonical left/right inset for every row in this column — the
+     notice, the thread (bubbles, boxes, plain status lines alike) and the
+     composer all sit the same distance from the panel edge because none of
+     them supplies its own (`the-look-has-an-author-now/14`). Before this,
+     the column had no inset at all: a boxed row (the answer card, an
+     approval) looked correctly indented only because its OWN padding drew
+     it, a plain status line (`.ask__error`, `.ask__meta`) sat flush against
+     the raw panel edge, and the question bubble touched the right edge
+     outright. Same token the palette's own rows use
+     (`src/view/palette/Palette.css`), so the two side panels read as one
+     spacing system rather than two. */
+  padding: 0 var(--space-3);
 }
 
 .ask__thread {
@@ -34,7 +46,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  /* Room for the scrollbar so text never sits under it. */
+  /* On top of the column's own canonical inset (`.ask .panel__body`), a
+     little more room on the right so the scrollbar never sits under text. */
   padding-right: var(--space-1);
 }
 
