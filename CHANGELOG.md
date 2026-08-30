@@ -27,6 +27,37 @@
   (`launch-readiness/176`).
 
 ### Fixed
+- **Every run count on `docs/releasing.md`'s status table was wrong, and they
+  are gone rather than corrected.** The page said `openwiki-update.yml` had
+  "zero runs, ever" in one row and, forty lines below, named "the model key its
+  one run died for want of" — one file contradicting itself about whether a
+  workflow had ever executed, which is the difference between *not configured*
+  and *one secret away*. Measured against the remote: `openwiki-update.yml` has
+  fired repeatedly and failed every time for want of `secrets.OPENWIKI_API_KEY`;
+  `pages.yml` said six here and four in `CLAUDE.md` and was neither;
+  `release-pr.yml`'s two had become three. Five documents carried a stale
+  figure, two of them shipped Python docstrings. A run count changes on the next
+  push and nothing in this repository can check one, so each page now states
+  which halves have never succeeded and leaves the number to `gh run list` —
+  `docs-and-gaps/17`'s answer to a figure with no mechanical referent. The
+  retracted "zero runs, ever" and a paragraph-scoped rule against putting any
+  count beside a workflow's name are pinned by
+  `backend/tests/test_no_document_repeats_a_retracted_claim.py`
+  (`docs-and-gaps` 29).
+- **Two `var()` fallbacks in `Pill.css` that could not render in any theme, on
+  any element, ever.** `var(--color-text-quaternary, var(--color-text-tertiary))`
+  and `var(--color-border-strong, var(--color-border-default))` sat behind names
+  declared at `:root`, so the outer name was always in scope and the fallback
+  was unreachable — dead code with no signature on screen. `09` caught them only
+  by luck, because the inner names happened to be dead too. The rule that tells
+  them from the five **legitimate** `var(--accent-*, …)` fallbacks turned out to
+  be exact rather than a proxy: a name declared by a top-level rule whose
+  selector list contains a bare `:root` is in scope always, while
+  `--accent-solid` and `--accent-on-tint` are declared under `[data-accent]`
+  only and genuinely fall through. `tokensDoNotDriftBack.test.ts` §7 reads the
+  selector rather than a list of names, so a tenth accent re-classifies itself.
+  Nothing was minted and no computed value moved — confirmed in a running build
+  in both themes (`the-look-has-an-author-now` 10).
 - **A run that spends its whole step budget says so in this product's words,
   and leaves a row** (`launch-readiness/176`). Only the mount boundary
   translated LangGraph's `GraphRecursionError`; the top-level case — every
