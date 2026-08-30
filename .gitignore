@@ -62,3 +62,13 @@ playwright-report/
 # Internal planning substrate — local only, never published
 .scratch/
 HANDOVER.md
+
+# The refused-term table for `backend/tests/test_the_tree_is_publishable.py`.
+# The gate is the one place a client engagement is named, and `publishable/06`
+# measured what that cost: tracked, the gate would have published the list it
+# exists to keep out, in the commit and in the sdist both. So the words live
+# here, untracked, and the gate loads them — skipping loudly when the file is
+# absent rather than reporting a green it did not earn. At the repository root
+# on purpose: the sdist is built from `backend/`, so a table up here cannot
+# reach a distribution even if this rule were deleted.
+/.engagement-terms.json
