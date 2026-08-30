@@ -71,58 +71,60 @@
   --color-text-success: var(--green-600);
 
   /* ---------- Borders ---------- */
-  /* `the-look-has-an-author-now/15`. The owner's rule of thumb, verbatim:
-     "darker border only for the draggable. Other normal borders should be
-     the same border colour but a lighter variant or opacity of the dark
-     colour — about 60%, a greyish." So there are two weights, decided by
-     what a border *means* rather than where it sits — a resize grip earns
-     the dark one, a card outline or a table rule does not — and this is
-     the second of them: the same ink as `--color-rule` below, read through
-     `color-mix()` at the owner's own number rather than a hand-picked hex,
-     so a reader can see the arithmetic instead of trusting a swatch. It
-     flips with the theme for the same reason `--color-rule` does — through
-     `--osg-divider`, not by being redeclared per theme below.
-     Measured against both grounds this sits on: 4.40:1 on `--color-bg-
-     surface` (white), 4.24:1 on `--color-bg-canvas`; 6.16:1 and 6.35:1 on
-     the dark theme's equivalents. Old `--color-border-default` measured
-     1.25:1 and 1.11:1 on the same two grounds — a hairline nobody could
-     actually see, which is the defect the owner's number corrects. */
-  --color-border: color-mix(in srgb, var(--osg-divider) 60%, transparent);
+  /* `the-look-has-an-author-now/15`, corrected by `16`. The owner, on what
+     `15` shipped: *"Still inconsistent, and as I requested: the draggable
+     border should only be dark. Rule of thumb is normal borders are dark
+     grey so that the draggable borders stand out."*
+
+     The emphasis is on the *pair*, not on one of them being faint. `15`
+     read "a lighter variant, about 60%" as the instruction and produced
+     `#797877` on white — a mid grey, which a reader called absent. 60% was
+     the owner's first estimate; "dark grey" is the correction, and this is
+     the value that satisfies it.
+
+     Three strengths of one ink, at equal 15-point steps, so the ladder is
+     arithmetic a reader can check rather than three picked swatches. It
+     flips with the theme through `--osg-divider` — the same reason
+     `--color-rule` below needs no per-theme redeclaration.
+
+     Composited over the two grounds these actually sit on:
+
+       weight               light surface / canvas   dark surface / canvas
+       --color-border 70%    6.09:1 / 5.98:1          8.21:1 / 8.71:1
+       ...-emphasis   85%   10.35:1 / 9.88:1         11.52:1 / 12.52:1
+       --color-rule  100%   16.60:1 / 15.66:1        15.71:1 / 17.25:1
+
+     And the number the rule is about — normal against draggable, side by
+     side: 2.73:1 light, 1.91:1 dark. */
+  --color-border: color-mix(in srgb, var(--osg-divider) 70%, transparent);
   /* Interaction *state*, not a third structural weight — the one thing a
-     flat two-weight system cannot say on its own. A resting `:hover` on an
-     input, a button, a palette row used to step `default` → `strong`
-     border-only, with no other cue; collapsing that pair into the single
-     `--color-border` above would have made hovering an input silent. Kept
-     as a recorded exception rather than folded in, and narrowed to
-     `:hover`/`:focus`/`:active`/pressed rules only — never a resting
-     border — so the two-weight pin still measures the truth everywhere
-     else. 80%, one step short of the draggable ceiling. */
-  --color-border-emphasis: color-mix(in srgb, var(--osg-divider) 80%, transparent);
-  /* Retired from every stylesheet this ticket reaches — kept declared,
-     at their unchanged pre-existing values, only because `view/run/`
-     still spends all three and this ticket does not touch that directory
-     (a concurrent session owns it, applying the same rule there). Delete
-     these three once nothing names them. */
-  --color-border-subtle: var(--neutral-100);
-  --color-border-default: #e7e6e6;
-  --color-border-strong: var(--neutral-200);
-  /* The rule. Four borders in the product carry it — the toolbar's bottom
-     edge and the three panel edges that meet the canvas — and they are the
-     seams between regions of the shell rather than lines inside one. That
-     is a third, separately-argued use of full ink alongside the draggable
-     one above — `07`/`08` decided it before this ticket existed, it is
-     pinned by `ruleAndDisplayFace.test.ts`, and this ticket leaves it
-     standing rather than re-litigating it; see `15`'s own notes for the
-     tension and why it was not resolved here. `--osg-divider` is the
-     authored token, commented in the authored file as *"2px rules, full
-     ink"*, and it is full ink on purpose: a 2px line in `--color-border`
-     is only a thicker version of the normal weight. It needs no dark
-     override here because `--osg-divider` is itself theme-aware —
-     `#201e1d` on the light ground, `#f3f2f2` on the dark one. */
+     flat two-weight system cannot say on its own. A `:hover` on an input,
+     a button, a palette row steps up one rung with no other cue; collapsing
+     it into `--color-border` would make hovering an input silent. Narrowed
+     to `:hover`/`:focus`/`:active`/pressed rules only — never a resting
+     border — and held to an exact site list by the pin.
+
+     Raising the resting weight to dark grey costs this step, and the cost
+     is recorded rather than hidden: 60%→80% was 1.97:1 light / 1.64:1 dark;
+     70%→85% is 1.70:1 / 1.40:1. The owner narrowed the range on purpose,
+     and a hover arrives with a pointer and a transition behind it where a
+     resting border has neither. */
+  --color-border-emphasis: color-mix(in srgb, var(--osg-divider) 85%, transparent);
+  /* Full ink, and **only a border a pointer can drag** — `16`. Two of them
+     in the product: the node card's resize grip and the run dock's lower
+     edge, which `.run-dock__grip` straddles and which draws no line of its
+     own. The toolbar's bottom edge and the two panel edges wore this until
+     `16`; they keep `--border-width-rule` (2px) and take the normal ink,
+     because width is what says "a region ends here" and ink is what says
+     "take hold of this". `--osg-divider` is the authored token, commented
+     in the authored file as *"2px rules, full ink"*, and it is theme-aware
+     itself — `#201e1d` on the light ground, `#f3f2f2` on the dark one.
+
+     `--color-border-subtle`, `-default` and `-strong` stood here until
+     `16`, kept declared only because `view/run/` still spent them. It does
+     not, so they are gone: a declared token nothing spends is the shape
+     `09` filed twenty-eight of. */
   --color-rule: var(--osg-divider);
-  /* `--osg-focus: 2px solid var(--osg-accent)` — the design system says the
-     focus ring is the accent, and that is adopted. Its *geometry* is not;
-     `--focus-ring-width` in `tokens.css` carries that argument. */
   --color-border-focus: var(--osg-accent);
   --color-focus-ring: var(--osg-accent);
 
@@ -275,14 +277,12 @@
      `--osg-*` primitives, which flip underneath us. */
   --color-text-success: var(--color-status-success);
 
-  /* `--color-border` and `--color-border-emphasis` are not redeclared here:
-     both are `color-mix()` over `--osg-divider`, which is itself theme-aware
-     (`15`), so the single light-block declaration already carries the dark
-     value — the same reasoning `--color-rule` below has carried since `07`. */
-  --color-border-subtle: #272524;
-  --color-border-default: #312f2e;
-  /* The authored dark `--osg-border`. */
-  --color-border-strong: #3a3736;
+  /* No border weight is redeclared here. All three are `color-mix()` over
+     `--osg-divider`, which is itself theme-aware (`15`), so the single
+     light-block declaration already carries the dark value — the same
+     reasoning `--color-rule` has carried since `07`. The three fixed dark
+     hexes that stood here (`--color-border-subtle/-default/-strong`) went
+     with their light-block declarations in `16`. */
   /* The authored dark accent, `--osg-accent-400`. */
   --color-border-focus: #f4715c;
   --color-focus-ring: #f4715c;

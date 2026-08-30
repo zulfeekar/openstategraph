@@ -66,7 +66,7 @@ export class LinkToolsFeature extends PaperFeature {
                 attributes: {
                   r: 9,
                   fill: 'var(--color-bg-surface)',
-                  stroke: 'var(--color-border-strong)',
+                  stroke: 'var(--color-border)',
                   'stroke-width': 1,
                   cursor: 'pointer',
                 },

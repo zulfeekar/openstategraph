@@ -23,25 +23,18 @@
   border-bottom: var(--border-width-rule) solid var(--color-rule);
   z-index: var(--z-panel);
 
-  /* The owner's rule of thumb, applied inside this dock and nowhere else —
-     a separate ticket owns the rest of the app (`memory-and-replay` 64):
-     *"darker border only for the draggable; other normal borders should be
-     the same border colour but a lighter variant or opacity of the dark
-     colour, about 60% — a greyish."*
-
-     So there is **one** border colour in this panel, at two weights. The
-     dark one is `--color-rule`, and the only thing wearing it is the edge
-     above, which is the edge the grip drags. Every other hairline in here —
-     the head, the pane divider, the lane rules, the axis ticks, the stat
-     dividers, the transport buttons — is that same colour at 60%, so a
-     reader can tell the one border that is a control from the ones that are
-     structure without reading a cursor.
-
-     Local on purpose: the right answer is a shared `--color-rule-soft`
-     beside `--color-rule` in `design/styles/theme.css`, and `design/` is
-     being edited elsewhere. Recorded here so it is a token waiting to be
-     minted rather than a value somebody has to rediscover. */
-  --rtl-rule: color-mix(in srgb, var(--color-rule) 60%, transparent);
+  /* The owner's rule of thumb, which this dock now keeps with the rest of
+     the app rather than beside it. `memory-and-replay/64` minted a local
+     `--rtl-rule` here — `color-mix(in srgb, var(--color-rule) 60%,
+     transparent)` — because `design/` was being edited by a concurrent
+     session, and that session was minting `--color-border` from
+     `--osg-divider` at the same number in the same week. Two definitions of
+     one idea, from two base tokens, agreeing by coincidence rather than by
+     construction. `the-look-has-an-author-now/16` deleted the local one and
+     pointed every line in here at the shared token, which is what `64`'s
+     own comment asked for. There is still exactly one dark border in this
+     panel and it is still the edge below, because that is the edge the grip
+     drags. */
 }
 
 /* The draggable edge — the **lower** one, the edge this panel shares with
@@ -81,7 +74,7 @@
   flex: none;
   min-height: 36px;
   padding: var(--space-1) var(--space-3);
-  border-bottom: var(--border-width-hairline) solid var(--rtl-rule);
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
 }
 
 .run-dock__title {
@@ -173,7 +166,7 @@
 
 .run-dock__detail {
   flex: 2 1 0;
-  border-left: var(--border-width-hairline) solid var(--rtl-rule);
+  border-left: var(--border-width-hairline) solid var(--color-border);
   padding-left: var(--space-3);
 }
 
@@ -193,7 +186,7 @@
 
   .run-dock__detail {
     border-left: none;
-    border-top: var(--border-width-hairline) solid var(--rtl-rule);
+    border-top: var(--border-width-hairline) solid var(--color-border);
     padding-left: 0;
     padding-top: var(--space-2);
   }
@@ -252,7 +245,7 @@
 .rtl__transport button {
   font: var(--type-label);
   border-radius: var(--radius-sm);
-  border: var(--border-width-hairline) solid var(--rtl-rule);
+  border: var(--border-width-hairline) solid var(--color-border);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
   padding: 2px var(--space-2);
@@ -298,12 +291,12 @@
   grid-template-columns: repeat(6, minmax(0, 1fr));
   margin: 0;
   flex: none;
-  border-block: var(--border-width-hairline) solid var(--rtl-rule);
+  border-block: var(--border-width-hairline) solid var(--color-border);
 }
 
 .rtl__kpi {
   padding: var(--space-1) var(--space-2) var(--space-1) 0;
-  border-inline-end: var(--border-width-hairline) solid var(--rtl-rule);
+  border-inline-end: var(--border-width-hairline) solid var(--color-border);
 }
 
 .rtl__kpi:last-child {
@@ -355,7 +348,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  border-inline-start: var(--border-width-hairline) solid var(--rtl-rule);
+  border-inline-start: var(--border-width-hairline) solid var(--color-border);
   padding-inline-start: 3px;
   font: var(--type-label);
   font-family: var(--font-mono);
@@ -382,7 +375,7 @@
 }
 
 .rtl__lane {
-  border-block-end: var(--border-width-hairline) solid var(--rtl-rule);
+  border-block-end: var(--border-width-hairline) solid var(--color-border);
   min-height: 22px;
 }
 
@@ -727,7 +720,7 @@
      changed to `border-left` because the marker pin read a physical property
      name while its message talked about the token, and restored once the pin
      was asking about the token it is named for. */
-  border-inline-start: var(--border-width-marker) solid var(--color-border-strong);
+  border-inline-start: var(--border-width-marker) solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-bg-subtle);
   font: var(--type-caption);

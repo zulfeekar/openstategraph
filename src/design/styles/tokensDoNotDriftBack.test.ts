@@ -376,9 +376,11 @@ describe('a token a stylesheet spends is a token something declares', () => {
    * **The shape this census catches by luck, and the one it cannot catch at
    * all.** The build door read
    * `border-left: 3px solid var(--color-border-strong, var(--color-border))`.
-   * `--color-border-strong` is declared in both theme blocks, so the fallback
-   * was **unreachable** — it could never render, in any theme, on any
-   * element. Nothing about the screen would ever have reported it, and it was
+   * `--color-border-strong` was declared in both theme blocks at the time,
+   * so the fallback behind it was **unreachable** — it could never render,
+   * in any theme, on any element. (`the-look-has-an-author-now/16` retired
+   * that name outright; the account below is of the state this census was
+   * written against, and both halves of the pair are gone now.) Nothing about the screen would ever have reported it, and it was
    * reported here only because the name behind it happened to be dead: the
    * matcher below is global, so `var(--a, var(--b))` yields both names.
    *
@@ -547,9 +549,10 @@ describe('a bar beside a block is a marker, and a marker has a name', () => {
    * that proves the paragraph above: it was the 3px half of the ask panel's
    * own disagreement, and it went to 2px because the disagreement was never a
    * decision. What distinguishes it from the trace output beside it survives
-   * where it belongs — in the colour, `--color-border-strong` against
-   * `--color-border-default`, which is what "a different left edge" was
-   * reaching for.
+   * where it belongs — in the colour, which at the time was
+   * `--color-border-strong` against `--color-border-default` and since `16`
+   * is the one `--color-border`; "a different left edge" was reaching for a
+   * distinction the two-weight system no longer draws.
    */
   const MARKERS: ReadonlyArray<readonly [file: string, selector: string]> = [
     ['design/styles/typography.css', '.prose blockquote'],
@@ -712,9 +715,12 @@ describe('a fallback behind a name that always resolves is dead code', () => {
    * of scope"**, and the selector a declaration sits under answers it:
    *
    * - A rule whose selector list contains a bare `:root` matches the document
-   *   element **always**. `--color-border-strong`, `--color-text-quaternary`
-   *   and 291 others are declared there, so nothing behind them can ever
-   *   render, in any theme, on any element.
+   *   element **always**. `--color-border`, `--color-text-quaternary`
+   *   and hundreds of others are declared there, so nothing behind them can
+   *   ever render, in any theme, on any element. (The sample used to be
+   *   `--color-border-strong`, which `the-look-has-an-author-now/16`
+   *   retired — a vacuity check naming a token that can be deleted is a
+   *   test that quietly stops testing.)
    * - `--accent-solid` and `--accent-on-tint` are declared under
    *   `[data-accent]` only. An element outside an accented subtree genuinely
    *   falls through, so the five `var(--accent-*, …)` fallbacks in
@@ -788,7 +794,7 @@ describe('a fallback behind a name that always resolves is dead code', () => {
 
   it('finds both kinds, so neither assertion below is vacuous', () => {
     const always = unconditional();
-    expect(always.has('--color-border-strong')).toBe(true);
+    expect(always.has('--color-border')).toBe(true);
     expect(always.has('--color-text-quaternary')).toBe(true);
     expect(always.has('--accent-solid')).toBe(false);
     expect(always.has('--accent-on-tint')).toBe(false);
@@ -816,7 +822,7 @@ describe('a fallback behind a name that always resolves is dead code', () => {
    * and takes the row with it.
    */
   const HELD: readonly string[] = [
-    'view/topbar/TopBar.css:141 --space-1',
+    'view/topbar/TopBar.css:142 --space-1',
     'view/workflow/WorkflowManager.css:85 --radius-full',
     'view/workflow/WorkflowManager.css:88 --color-bg-subtle',
   ];

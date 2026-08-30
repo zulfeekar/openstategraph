@@ -31,7 +31,9 @@
   /* The rule, not a hairline (`the-look-has-an-author-now/07`): this is the
      seam between the toolbar and everything under it, and it is one of the
      four in the product. */
-  border-bottom: var(--border-width-rule) solid var(--color-rule);
+  /* The rule width, and the normal ink — `16`. The toolbar is a fixed-height
+     row of controls; this seam ends a region but nothing drags it. */
+  border-bottom: var(--border-width-rule) solid var(--color-border);
   z-index: var(--z-topbar);
 }
 

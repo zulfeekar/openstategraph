@@ -4,40 +4,56 @@ import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * The instrument for `the-look-has-an-author-now/15`, and the owner's rule
- * of thumb is the argument for its shape, quoted rather than paraphrased:
+ * The instrument for `the-look-has-an-author-now/15`, corrected by `16`.
+ *
+ * The owner's rule of thumb, as `15` recorded it:
  *
  * > "The rule of thumb is: darker border only for the draggable. Other
  * > normal borders should be the same border colour but a lighter variant
- * > or opacity of the dark colour — about 60%, a greyish. Find the correct
- * > balance."
+ * > or opacity of the dark colour — about 60%, a greyish."
  *
- * So there are exactly **two** structural border weights, and which one a
- * border gets is decided by what it means, never by where it sits:
- * `--color-rule` (full ink, `--osg-divider`) for the one thing on a card a
- * user actually takes hold of, `--color-border` (the same ink at 60%
- * through `color-mix()`) for everything else — a panel edge, a card
- * outline, a divider, an input field, a table rule.
+ * And their verdict on what `15` shipped from it:
+ *
+ * > "Still inconsistent, and as I requested: the draggable border should
+ * > only be dark. Rule of thumb is **normal borders are dark grey so that
+ * > the draggable borders stand out**."
+ *
+ * The emphasis moved, and with it the value. 60% of the ink over white is
+ * `#797877` — a mid grey, which is what a reader called *"reads as
+ * absent"*. The rule is not "one weight is faint and one is dark"; it is
+ * that **both weights are legible and the contrast that matters is between
+ * them**. So the normal weight is dark grey — 70% of the ink, `#636261` on
+ * white at 6.09:1 — and the draggable weight is full ink at 16.60:1, which
+ * is 2.73:1 against the normal weight beside it.
+ *
+ * Three weights are declared and each is a different kind of thing:
+ *
+ * - `--color-rule` — full ink, and **only a border a pointer can drag**.
+ *   Two of them in the whole product, asserted by site below.
+ * - `--color-border` — dark grey, 70%. Every other structural line: a
+ *   panel edge, a card outline, a divider, an input, a table rule, a chart
+ *   hairline.
+ * - `--color-border-emphasis` — 85%, interaction *state* only, never a
+ *   resting border. Equal 15-point steps put it between the two, which is
+ *   a rule a reader can check rather than three hand-picked numbers.
  *
  * **What this file does not try to settle.** A colour used to signal
  * something other than structural weight — danger, warning, focus, an
- * accent identity, a brand indicator — was never a candidate for either of
- * the two weights, and forcing one onto it would be answering a question
- * this ticket was not asked. Those are named below, each with the argument
- * for why it stays outside the two-weight system, the same way
- * `tokensDoNotDriftBack.test.ts` names its own quarantine rather than
- * writing a rule broad enough to wave at everything.
+ * accent identity, a brand indicator, a chart mark's own ink — was never a
+ * candidate for either of the two weights, and forcing one onto it would
+ * be answering a question this ticket was not asked. Those are named
+ * below, each with the argument for why it stays outside the two-weight
+ * system, the same way `tokensDoNotDriftBack.test.ts` names its own
+ * quarantine rather than writing a rule broad enough to wave at everything.
  *
- * **The one real exception, and it is a debt rather than a decision.**
- * `src/view/run/` still spends the three retired roles this ticket replaced
- * everywhere else (`--color-border-subtle/-default/-strong`) — a
- * concurrent session owns that directory and is applying this same rule
- * there itself. Excluding the directory from the census would have hidden
- * that debt behind a path check that outlives the reason for it; naming
- * every site instead means the row disappears the day someone actually
- * fixes it, and nothing else has to change here when they do.
+ * **`15`'s `HELD` list is gone, and that is the deliverable rather than a
+ * tidy-up.** It named nine `view/run/RunDock.css` rows parked because a
+ * concurrent session owned that directory. That session landed `--rtl-rule`
+ * — `color-mix(in srgb, var(--color-rule) 60%, transparent)`, a second
+ * definition of `--color-border` built from a different base token because
+ * neither session could edit the other's files. `16` deleted it, migrated
+ * the dock onto the shared tokens, and emptied the list. Nothing is held.
  */
-
 const SRC = fileURLToPath(new URL('../../', import.meta.url));
 const under = (path: string): string => relative(SRC, path).split(sep).join('/');
 const read = (path: string): string => readFileSync(path, 'utf8');
@@ -90,6 +106,8 @@ const BORDER_PROPS = new Set([
   'border-right',
   'border-bottom',
   'border-left',
+  'border-block',
+  'border-inline',
   'border-inline-start',
   'border-inline-end',
   'border-block-start',
@@ -191,6 +209,102 @@ describe('a border is drawn by what it means, and there are two weights', () => 
   });
 
   /**
+   * The three weights, as declared. A census can only say which names a
+   * line spends; whether those names are *legible and distinguishable* is
+   * a property of their values, and a value has no way to fail on its own.
+   *
+   * Measured, alpha-composited over the ground each weight actually sits
+   * on (`--color-bg-surface` / `--color-bg-canvas`):
+   *
+   * | | light surface | light canvas | dark surface | dark canvas |
+   * | --- | --- | --- | --- | --- |
+   * | `--color-border` 70% | 6.09:1 | 5.98:1 | 8.21:1 | 8.71:1 |
+   * | `--color-border-emphasis` 85% | 10.35:1 | 9.88:1 | 11.52:1 | 12.52:1 |
+   * | `--color-rule` 100% | 16.60:1 | 15.66:1 | 15.71:1 | 17.25:1 |
+   *
+   * And the number the owner's rule is actually about — the step **between
+   * the weights**, normal against draggable: 2.73:1 light, 1.91:1 dark.
+   *
+   * `15` shipped 60% / 80%. That gave a normal weight of 4.41:1 on white,
+   * a mid grey rather than a dark one; raising it to 70% costs the hover
+   * step, which went 1.97:1 → 1.70:1 in light and 1.64:1 → 1.40:1 in dark.
+   * That is the trade and it is recorded rather than hidden: the owner
+   * narrowed the range on purpose, and a hover has a pointer and a
+   * transition behind it where a resting border has neither.
+   */
+  it('declares the three weights as one ink at three strengths', () => {
+    const theme = read(join(SRC, 'design/styles/theme.css'));
+    const declared = (token: string): string =>
+      (new RegExp(`${token}\\s*:\\s*([^;]+);`).exec(theme)?.[1] ?? '').replace(/\s+/g, ' ').trim();
+
+    expect(declared('--color-border')).toBe(
+      'color-mix(in srgb, var(--osg-divider) 70%, transparent)',
+    );
+    expect(declared('--color-border-emphasis')).toBe(
+      'color-mix(in srgb, var(--osg-divider) 85%, transparent)',
+    );
+    expect(declared('--color-rule')).toBe('var(--osg-divider)');
+  });
+
+  /**
+   * `15` kept `--color-border-subtle`, `-default` and `-strong` declared
+   * because `view/run/` still spent them. Nothing does now, and a declared
+   * token nothing spends is the shape `09` filed twenty-eight of: a name a
+   * future author reaches for, believing it means something.
+   */
+  it('has retired the three roles it replaced, in both themes', () => {
+    const theme = read(join(SRC, 'design/styles/theme.css'));
+    for (const token of [
+      '--color-border-subtle',
+      '--color-border-default',
+      '--color-border-strong',
+    ]) {
+      expect(code(theme)).not.toContain(token);
+    }
+    // Not only in CSS: the canvas sets SVG strokes to `var(--token)` from
+    // TypeScript, where a dead name is a stroke that does not render.
+    for (const path of filesUnder(SRC, ['.ts', '.tsx'])) {
+      if (path.endsWith('.test.ts') || path.endsWith('.test.tsx')) continue;
+      expect(read(path), under(path)).not.toMatch(/var\(--color-border-(subtle|default|strong)\)/);
+    }
+  });
+
+  /**
+   * The owner's sentence, as an assertion: *"the draggable border should
+   * only be dark."* Full ink is spent in exactly two places and a pointer
+   * can take hold of both — the run dock's lower edge, which
+   * `.run-dock__grip` straddles with `cursor: ns-resize`, and the node
+   * card's resize grip, which draws two edges.
+   *
+   * This replaces `view/run/oneBorderColourTwoWeights.test.ts`, which
+   * asserted the same thing about the dock alone against a dock-local
+   * token. Two censuses that can disagree is what `16` was filed to end;
+   * the app-wide one is strictly the stronger statement, since it also
+   * fails when a *fifth* declaration appears in a file the dock pin never
+   * read.
+   */
+  const DRAGGABLE: ReadonlyArray<readonly [file: string, property: string]> = [
+    ['view/nodes/NodeCard.css', 'border-right'],
+    ['view/nodes/NodeCard.css', 'border-bottom'],
+    ['view/run/RunDock.css', 'border-bottom'],
+  ];
+
+  it('spends full ink only where a pointer can drag', () => {
+    const found = borderSites()
+      .filter((s) => s.token === '--color-rule')
+      .map((s) => `${s.file} ${s.property}`)
+      .sort();
+    expect(found).toEqual(DRAGGABLE.map(([file, property]) => `${file} ${property}`).sort());
+  });
+
+  it('leaves the grip and the dock edge actually draggable, not merely dark', () => {
+    expect(read(join(SRC, 'view/nodes/NodeCard.css'))).toMatch(/cursor: nwse-resize/);
+    expect(read(join(SRC, 'view/run/RunDock.css'))).toMatch(
+      /\.run-dock__grip \{[^}]*cursor: ns-resize/s,
+    );
+  });
+
+  /**
    * Colour used for something other than structural weight — a state, an
    * identity, a brand mark — was never a candidate for either of the two
    * weights. Recorded by token rather than by site: the question this file
@@ -214,6 +328,21 @@ describe('a border is drawn by what it means, and there are two weights', () => 
     ['currentColor', 'inherits the surrounding text colour on purpose'],
     ['transparent', 'a reserved slot with no line drawn (a tab underline, a focus ring, a reset)'],
     ['--amber-100', 'a warning-toned suggestion box in the ask panel'],
+    [
+      '--color-bg-inverse',
+      "the run dock's pressed transport button — its border is its own fill " +
+        'reaching the edge so the control does not resize when pressed, not a line',
+    ],
+    [
+      '--color-text-primary',
+      "a timeline mark's own ink — the lane bar and the legend swatch that has to " +
+        'match it, where the same token is also the fill (`.rtl__legend i[data-kind=model]`)',
+    ],
+    [
+      '--color-text-quaternary',
+      "an open-ended lane's mark — the dashed cap and the hatch behind it are one " +
+        'value, deliberately faint because the lane never said it ended',
+    ],
     ['--indigo-100', 'an info-toned suggestion box in the ask panel'],
   ];
 
@@ -283,35 +412,10 @@ describe('a border is drawn by what it means, and there are two weights', () => 
     expect(found).toEqual(EMPHASIS_SITES.map(([file, value]) => `${file} ${value}`).sort());
   });
 
-  /**
-   * The debt this file does not hide. `view/run/RunDock.css` still spends
-   * every one of the three roles this ticket retired elsewhere — a
-   * concurrent session owns that directory and applies this same rule
-   * there itself. Named exactly, by file and token, rather than by an
-   * excluded path, so the row disappears the day it is fixed and nothing
-   * here has to change when it does.
-   */
-  const HELD: ReadonlyArray<readonly [file: string, token: string, count: number]> = [
-    ['view/run/RunDock.css', '--color-border-subtle', 6],
-    ['view/run/RunDock.css', '--color-border-default', 1],
-    ['view/run/RunDock.css', '--color-border-strong', 1],
-    ['view/run/RunDock.css', '--color-bg-inverse', 1],
-    ['view/run/RunDock.css', '--color-text-primary', 2],
-    ['view/run/RunDock.css', '--color-text-quaternary', 1],
-  ];
-
-  it.each(HELD)(
-    '%s still spends %s at %i site(s), and that is a debt with a ticket',
-    (file, token, n) => {
-      expect(borderSites().filter((s) => s.file === file && s.token === token)).toHaveLength(n);
-    },
-  );
-
-  it('leaves no border/outline/inset-ring colour outside the two weights, a named exception, or a held row', () => {
+  it('leaves no border/outline/inset-ring colour outside the two weights or a named exception', () => {
     const allowed = new Set(['--color-border', '--color-rule']);
     const semantic = new Set(SEMANTIC_EXCEPTIONS.map(([token]) => token));
     const emphasisSites = new Set(EMPHASIS_SITES.map(([file, value]) => `${file} ${value}`));
-    const held = new Set(HELD.map(([file, token]) => `${file} ${token}`));
 
     const violations = borderSites()
       .filter((s) => {
@@ -320,7 +424,6 @@ describe('a border is drawn by what it means, and there are two weights', () => 
         if (/^rgba\(/.test(s.token)) return false; // named by site above
         if (s.token === '--color-border-emphasis')
           return !emphasisSites.has(`${s.file} ${s.value}`);
-        if (held.has(`${s.file} ${s.token}`)) return false;
         return true;
       })
       .map((s) => `${s.file} ${s.property}: ${s.value} (${s.token})`);
