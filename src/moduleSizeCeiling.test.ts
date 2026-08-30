@@ -86,7 +86,7 @@ interface Recorded {
 
 const RECORDED: Readonly<Record<string, Recorded>> = {
   'view/ask/AskPanel.tsx': {
-    lines: 907,
+    lines: 920,
     reason: `The largest module under \`src/\` and the one the ticket named: the counterpart
       of \`node_runtime.py\` with no split ticket behind it at all. Eight hundred and
       eighty-nine code lines out of 2,237 physical — the rest is JSX structure, imports and
@@ -143,7 +143,24 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       spent. Both were already on this turn's \`result\` and neither had a reader
       anywhere in \`src/\` — the publish is the same effect handing on two more
       of a record it already holds, and the reason to change stays the one 51
-      removed: this module is still not the thing that draws a run.`,
+      removed: this module is still not the thing that draws a run.
+
+      Then **907 -> 920** (\`the-cost-of-one-more/20\`). Thirteen lines that make an
+      arriving frame *queue* rather than commit: a buffer, a flush scheduled on
+      the next animation frame with a timer behind it, and one line at the top
+      of \`onEvent\` draining it before any event that is not an append. It
+      bought a factor of **227** on a two-thousand-frame burst — 128.6 s of
+      blocked main thread down to 0.57 s — and it is the reason ten and twenty
+      thousand frames finish at all.
+
+      No new reason to change, and this is the case worth stating rather than
+      asserting: the queue is not a seventh thing this module composes, it is
+      the same \`onEvent\` chain deciding *when* to write the state it already
+      wrote. Both append branches got shorter; the length is in the paragraph
+      explaining why an unpaced burst coalesces into one commit and a paced run
+      does not, which is exactly the kind of line this ceiling does not charge
+      for elsewhere and charges for here because a component's prose is code
+      lines away from its JSX. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
     lines: 717,

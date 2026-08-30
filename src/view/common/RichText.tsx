@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './RichText.css';
@@ -36,8 +37,31 @@ export const MARKDOWN_COMPONENTS: Components = {
  *   default is the security boundary for model-authored content and must
  *   not be "fixed" with rehype-raw.
  * - Links open in a new tab and never carry the opener.
+ *
+ * **Memoised, and the memo is load-bearing rather than a micro-optimisation**
+ * — `the-cost-of-one-more/20`. Parsing Markdown is not cheap: a CPU profile of
+ * a 700-frame run through the real editor spent **56% of the whole burst**
+ * inside `react-markdown`, most of it in `combineExtensions`/`syntaxExtension`,
+ * i.e. rebuilding the micromark pipeline rather than reading the text. The run
+ * trace renders one of these per step (`traceTree.tsx`), so an un-memoised
+ * `RichText` re-parses every step's output on every commit, and a stream
+ * commits once per frame — F parses of F rows, quadratic, measured at ×3.68
+ * per doubling.
+ *
+ * The memo is safe by construction and that is why it is the fix rather than
+ * a risk: both props are primitives, so the default shallow comparison is an
+ * exact one. There is no object or callback here whose identity could go
+ * stale, and nothing to keep in sync if one is added — adding one would make
+ * the comparison wrong, which is what `richTextIsMemoised.test.ts` watches
+ * for.
  */
-export function RichText({ text, className }: { text: string; className?: string }) {
+export const RichText = memo(function RichText({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
   return (
     <div className={className ? `rich-text ${className}` : 'rich-text'}>
       <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>
@@ -45,4 +69,4 @@ export function RichText({ text, className }: { text: string; className?: string
       </Markdown>
     </div>
   );
-}
+});

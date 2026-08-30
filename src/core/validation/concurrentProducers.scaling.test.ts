@@ -20,18 +20,31 @@ import { concurrentProducerCount, concurrentProducerCountOn } from './concurrent
  * The cause was one call recomputed with identical arguments: for each
  * branching node in the document, the reachability of the whole graph with
  * that node removed was walked once **per edge on the port**, and the answer
- * cannot depend on the edge. Two assertions, because wall-clock alone is
- * either flaky or toothless:
+ * cannot depend on the edge. Three assertions, and **not one of them is a
+ * clock** — `the-cost-of-one-more/19`:
  *
  *  - **counting**, which is exact and cannot be flaky: doubling the number of
  *    links on the port must not multiply how hard the document is
  *    interrogated. Asked twice — once of the model, which the old code could
  *    also have been asked, and once of the collaborator, where the claim is
  *    exactly "once per branching node, not once per branching node per edge".
- *  - a **ratio** at the rule's own level, the shape
- *    `acyclicGraphRule.scaling.test.ts` already uses, with a margin wide
- *    enough that a loaded machine cannot fail it and narrow enough that
- *    quadratic growth cannot pass it.
+ *  - a **ratio** across two document sizes, which is the right shape and was
+ *    the wrong instrument. It used to read
+ *    `expect(largeMs / smallMs).toBeLessThan(10)`, best-of-5 on
+ *    `performance.now()`, and it failed for two different sessions under load
+ *    — `0.890ms → 9.987ms`, and `10.5` — while passing alone every time. The
+ *    ratio survives; the clock does not. It is now a ratio of **counted walks
+ *    and counted node visits**, which a busy machine cannot move.
+ *
+ * Replacing the clock changed what the file claims, which is the part worth
+ * reading twice. The old block was titled *"grows with the document, not with
+ * its square"* and the counter says that is **false**: the walks are linear in
+ * the document and the node visits inside them are not — ×3.98 per doubling,
+ * ×15.5 across the 132 → 516 gap the block measures. So the ceiling of 10 was
+ * not merely loose, it was asserting the opposite of what the code does, and
+ * the flakiness was the measurement brushing against a curve it was written to
+ * forbid. Filed as `the-cost-of-one-more/21`; recorded exactly here so the day
+ * it is fixed this file goes red and somebody re-records it.
  */
 
 /**
@@ -93,36 +106,49 @@ function countingModel(model: WorkflowModel): { model: WorkflowModel; asked: () 
   return { model: proxy, asked: () => asked };
 }
 
-/** Counts the walks, which is the exact form of the claim. */
+/**
+ * Counts the walks, which is the exact form of the claim, and the **nodes
+ * those walks visit**, which is the size of the bill.
+ *
+ * Two numbers rather than one because they answer different questions and here
+ * they disagree: a walk is cheap to count and says how many times the search
+ * was started, while a visit says how much document each start read. `03` moved
+ * the first and left the second alone.
+ *
+ * A visit is counted as the size of the set the walk returns, which is exactly
+ * the number of nodes it added to `seen` — `walk` in `controlFlowGraph.ts`
+ * enqueues a node the same moment it marks it seen, so the returned set is the
+ * queue and its size is the step count. That equality is why this can be
+ * measured from outside without instrumenting the private walk.
+ */
 function countingGraph(graph: IControlFlowGraph): {
   graph: IControlFlowGraph;
   walks: () => number;
+  visits: () => number;
 } {
   let walks = 0;
+  let visits = 0;
   return {
     walks: () => walks,
+    visits: () => visits,
     graph: {
       roots: graph.roots,
       branchingNodes: graph.branchingNodes,
       targetsFrom: (branch: BranchPort) => graph.targetsFrom(branch),
       reachable: (from, options) => {
         walks += 1;
-        return graph.reachable(from, options);
+        const reached = graph.reachable(from, options);
+        visits += reached.size;
+        return reached;
       },
+      // Deliberately not counted. `ancestorsOf` runs once per *distinct
+      // producer* — the filter `03` added — so it is bounded by the links on
+      // the port and not by the branching nodes, which is the other claim
+      // entirely. Counting it here would put the edge count into a number the
+      // test below asserts is independent of it.
       ancestorsOf: (node) => graph.ancestorsOf(node),
     },
   };
-}
-
-/** Best of N, because a single sample measures the scheduler, not the code. */
-function bestOf(runs: number, work: () => void): number {
-  let best = Infinity;
-  for (let i = 0; i < runs; i += 1) {
-    const started = performance.now();
-    work();
-    best = Math.min(best, performance.now() - started);
-  }
-  return best;
 }
 
 describe('reachability is resolved once per branching node, not once per edge', () => {
@@ -163,32 +189,36 @@ describe('reachability is resolved once per branching node, not once per edge', 
   });
 });
 
-describe('one pointer-move onto a full port grows with the document, not with its square', () => {
-  it('is no worse than the size increase, on the gesture the rule exists for', () => {
+describe('one pointer-move onto a full port is counted, never timed', () => {
+  it('starts a walk per branching node whatever the document size, and reads the whole document in each', () => {
     // The sweep's own fixture: a full single-slot `prompt` and one more link
-    // dropped on it. 132 nodes → 516 nodes is four times the document; the old
-    // code measured ×4.1 per *doubling*, i.e. ~17× across this gap.
-    const gesture = (routers: number) => {
-      const { workbench } = chainFeedingOnePrompt(routers, 1);
+    // dropped on it. 132 nodes → 516 nodes is four times the document.
+    const gesture = (routers: number): { walks: number; visits: number; nodes: number } => {
+      const { workbench, edges } = chainFeedingOnePrompt(routers, 1);
       const nodes = workbench.model.nodes();
-      const target = nodes[nodes.length - 2]!;
       const dragged = addNode(workbench, TYPE.agent);
-      const source = { nodeId: dragged.id, portId: 'result' };
-      const port = { nodeId: target.id, portId: 'prompt' };
-      return () => {
-        workbench.connectionValidator.validate(source, port);
-      };
+      // Exactly the argument `capacityRule` builds when the pointer crosses a
+      // full `prompt`: the links already on it, plus the one being dragged.
+      const arriving = [...edges, { source: { nodeId: dragged.id, portId: 'result' } }];
+      const watched = countingGraph(new ControlFlowGraph(workbench.model));
+      concurrentProducerCountOn(watched.graph, arriving);
+      // The dragged node is part of the document the gesture happens in.
+      return { walks: watched.walks(), visits: watched.visits(), nodes: nodes.length + 1 };
     };
 
     const small = gesture(32);
     const large = gesture(128);
-    small();
-    large();
 
-    const smallMs = bestOf(5, small);
-    const largeMs = bestOf(5, large);
-    const growth = largeMs / smallMs;
+    // Exact, because the fixture is deterministic and nothing here is timed.
+    expect(small).toEqual({ nodes: 132, walks: 192, visits: 6272 });
+    expect(large).toEqual({ nodes: 516, walks: 768, visits: 98816 });
 
-    expect(growth, `${smallMs.toFixed(3)}ms → ${largeMs.toFixed(3)}ms`).toBeLessThan(10);
+    // What `03` fixed, and what it did not, stated as the ratio the deleted
+    // clock was reaching for. Walks track the document — ×4.00 against a ×3.91
+    // document. Visits track its square — ×15.76, which is ×3.98 per doubling,
+    // and is `the-cost-of-one-more/21`.
+    const documentGrowth = large.nodes / small.nodes;
+    expect(large.walks / small.walks).toBeLessThan(documentGrowth * 1.1);
+    expect(large.visits / small.visits).toBeGreaterThan(documentGrowth * 3);
   });
 });
