@@ -85,16 +85,22 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
     builtin: dict[str, Any] = {}
     try:
         builtin.update(chinook_tool_registry())
-    except Exception:
-        # The bundled Chinook tools live in `workflows/chinook-assistant/tools`,
-        # which is only importable inside *this* checkout (pytest.ini puts that
-        # directory on the path). Outside it — a consumer running their own
-        # package through `load_workflow` — the import raises, and it used to
-        # take the whole registry down before a single one of *their* tools was
+    except Exception as exc:
+        # The bundled Chinook tools live in `<workflows_root()>/chinook-assistant`,
+        # which exists in this checkout and in a deployment that ships the
+        # example, and nowhere else. For a consumer running their own package
+        # through `load_workflow` the lookup fails, and it used to take the
+        # whole registry down before a single one of *their* tools was
         # discovered. Debug, not warning: a demo fixture being absent is normal
         # elsewhere, and a document that actually binds a chinook tool still
         # reports it loudly through `unresolved_tools`.
-        logger.debug("Bundled Chinook tools unavailable in this environment", exc_info=True)
+        #
+        # The reason is now *in the line* rather than only in a traceback
+        # (`every-workflow-green/43`). This handler swallowed
+        # `ModuleNotFoundError: No module named 'tools'` for the whole life of
+        # the previous implementation — a defect, not an absence — and read as
+        # the normal case in every log it appeared in.
+        logger.debug("Bundled Chinook tools unavailable: %s", exc, exc_info=True)
     for family in (
         # Prebuilt SQL Explorer (ticket 66): any workflow can point these at its
         # own .sqlite file — the user's N-tables-with-JOIN-rules case as config.

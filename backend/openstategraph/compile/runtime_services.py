@@ -35,14 +35,58 @@ if TYPE_CHECKING:
 ToolRegistry = dict[str, Any]
 
 
-def chinook_tool_registry() -> ToolRegistry:
-    """The Chinook workflow's tools, keyed by node type."""
-    from tools.chinook import ExecuteSqlTool, GetTableSchemaTool, ListTablesTool
+#: The bundled example package whose tools the built-in layer republishes.
+CHINOOK_SLUG = "chinook-assistant"
 
+
+def chinook_tool_registry() -> ToolRegistry:
+    """The Chinook package's tools, keyed by node type, read from disk.
+
+    **This used to be `from tools.chinook import ...`, and that import only
+    ever worked under pytest** (`every-workflow-green/43`). `pytest.ini` puts
+    `workflows/chinook-assistant` on `pythonpath`, so a bare top-level `tools`
+    package exists in the test process and nowhere else; every process that
+    actually serves a run — the API server, the CLI, an installed wheel — got
+    `ModuleNotFoundError: No module named 'tools'`, which
+    `api/registries.py` catches and logs at DEBUG. The three `tool.chinook-*`
+    node types were therefore absent from the built-in layer of every real
+    process, silently, with a green suite behind them. A live run of
+    `chinook-assistant` that carried no `workflow_slug` — the shape `/api/runs`
+    explicitly supports, *"omit `workflow_slug` to run the document with the
+    default tools"* — reached its grader with all three capabilities missing
+    and was refused without a model call.
+
+    A slug-scoped run was never affected: `build_tool_registry` adds the
+    package's own `tools/` through `discover_tool_registry`, which loads by
+    file location and needs no `sys.path` entry. So the repair is to reach the
+    shipped package the same way the slug-scoped layer already does, rather
+    than through an import path one test runner happens to provide. The
+    built-in layer and the workflow-local layer now resolve the same files by
+    the same mechanism, which is why they can no longer disagree.
+
+    Empty is not a possible answer: outside a checkout there is no bundled
+    package, and this raises so `api/registries.py`'s existing handler names it
+    — a registry that silently publishes nothing is exactly what went wrong.
+    """
+    from openstategraph.api.capability_discovery import discover_tool_registry
+    from openstategraph.workflows_root import workflows_root
+
+    root = workflows_root()
+    package = root / CHINOOK_SLUG
+    if not (package / "workflow.json").is_file():
+        raise FileNotFoundError(
+            f"No bundled {CHINOOK_SLUG!r} package under {root} — set "
+            "OPENSTATEGRAPH_WORKFLOWS_ROOT to the directory holding your "
+            f"{CHINOOK_SLUG}/ package if a document binds its tools."
+        )
     return {
-        "tool.chinook-get-schema": GetTableSchemaTool(),
-        "tool.chinook-get-all-tables": ListTablesTool(),
-        "tool.chinook-execute-sql": ExecuteSqlTool(),
+        node_type: tool
+        for node_type, tool in discover_tool_registry(package, CHINOOK_SLUG).items()
+        # `discover_tool_registry` keys every tool twice — by qualified id
+        # (`chinook-assistant/tools.ExecuteSqlTool`) and by its declared
+        # `node_type`. Only the second belongs in a layer published to
+        # documents that are not this package's.
+        if node_type.startswith("tool.")
     }
 
 
@@ -140,4 +184,4 @@ class RuntimeServices:
 
 
 
-__all__ = ["PackageAssets", "RuntimeServices", "ToolRegistry", "chinook_tool_registry"]
+__all__ = ["CHINOOK_SLUG", "PackageAssets", "RuntimeServices", "ToolRegistry", "chinook_tool_registry"]
