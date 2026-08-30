@@ -60,7 +60,7 @@ PROGRESS_KEY = "openstategraph.progress"
 #: from inside the tool, and `NarrationMiddleware` from around it — and the
 #: duplication was invisible because every surface collapsed a line repeated
 #: back to back. `145` stopped the panel doing that (a repeat is evidence:
-#: `launch-readiness/146`), and the moment it did, a live `cpl-mcp` run read
+#: `launch-readiness/146`), and the moment it did, a live MCP run read
 #:
 #: ```
 #: Looking up which views of the data are available.

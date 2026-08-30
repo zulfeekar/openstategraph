@@ -89,8 +89,8 @@ from openstategraph.run_identity import run_identity
 #
 # Explicit allowlist, never a denylist: a denylist defaults every new tool to
 # "safe to cache", and the next tool added is then wrong by default. Sourced
-# from the 13 tools `~/osg-cpl-mcp`'s server actually advertises
-# (`docs/decisions/an-agent-that-reaches-cpl-through-mcp.md`):
+# from the 13 tools a lens-serving MCP server was observed to advertise
+# when this allowlist was written:
 #
 #   mcp_list_lenses, mcp_resolve_lens, mcp_describe_lens_tables,
 #   mcp_describe_table, mcp_search_tables, mcp_lookup_canonical_value,

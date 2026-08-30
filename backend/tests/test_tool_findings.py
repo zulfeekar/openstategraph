@@ -14,8 +14,10 @@ These tests pin the two properties that make a finding safe to say out loud:
   payload full of table names, request ids and ODBC driver text cannot leak
   through it.
 - **Every key is verified, not guessed.** The payload fixtures below are
-  *captured verbatim* from the live CPL MCP server on 2026-08-28, shape for
-  shape. A key nobody has seen resolves to nothing and the line is omitted.
+  captured *shape for shape* from a live lens-serving MCP server on 2026-08-28.
+  Their values are chinook ones, so a reader can place every table and column
+  named here; the keys and the nesting are the server's. A key nobody has seen
+  resolves to nothing and the line is omitted.
 """
 
 from __future__ import annotations
@@ -45,17 +47,17 @@ LIST_LENSES = {
     "data": {
         "lenses": [
             {
-                "lens_id": "area_activity",
-                "display_name": "Area activity",
-                "domain": "sm",
-                "primary_tables": ["sm.area_counts_latest", "sm.geofences_latest"],
+                "lens_id": "sales",
+                "display_name": "Sales",
+                "domain": "main",
+                "primary_tables": ["main.InvoiceLine", "main.Genre"],
                 "description": "",
             },
             {
-                "lens_id": "cargoflow",
-                "display_name": "Cargo flows",
-                "domain": "sm",
-                "primary_tables": ["sm.cargoflow_latest"],
+                "lens_id": "catalog",
+                "display_name": "Catalog",
+                "domain": "main",
+                "primary_tables": ["main.Invoice"],
                 "description": "",
             },
         ]
@@ -69,16 +71,16 @@ EXECUTE_SQL = {
         "row_count": 68,
         "sample_rows": [{"a": 1, "b": 2}],
         "columns": [
-            {"name": "load_port", "data_type": "varchar", "description": "", "sample_values": []},
+            {"name": "BillingCity", "data_type": "varchar", "description": "", "sample_values": []},
             {"name": "n", "data_type": "int", "description": "", "sample_values": []},
         ],
         "truncated": False,
         "digest": {"note": "quote these numbers VERBATIM", "computed_over_rows": 68},
-        "primary_table": "sm.cargoflow_latest",
+        "primary_table": "main.Invoice",
         "where_predicates": [],
         "next_step": None,
     },
-    "summary": "Returned 68 row(s) from sm.cargoflow_latest",
+    "summary": "Returned 68 row(s) from main.Invoice",
 }
 
 EXECUTE_SQL_FAILED = {
@@ -99,28 +101,28 @@ CANONICAL_MISS = {
         "exact_match": None,
         "candidates": [],
         "recommendation": {"action": "reject", "rationale": "no candidates returned"},
-        "user_term": "Persian Gulf",
+        "user_term": "classical music",
         "is_canonical": False,
         "canonical_value": None,
         "needs_clarification": False,
         "near_matches": [],
     },
     "summary": "Not canonical; no near match.",
-    "citations": ["cargoflow", "64e2c144469544eeb27193a35ff02265"],
+    "citations": ["catalog", "64e2c144469544eeb27193a35ff02265"],
 }
 
 CANONICAL_HIT = {
     "ok": True,
-    "data": {"is_canonical": True, "canonical_value": "MEG", "candidates": []},
+    "data": {"is_canonical": True, "canonical_value": "Classical", "candidates": []},
 }
 
 DESCRIBE_TABLE = {
     "ok": True,
     "data": {
-        "table": "sm.cargoflow_latest",
-        "lens": "cargoflow",
+        "table": "main.Invoice",
+        "lens": "catalog",
         "columns": [
-            {"name": "cargo_movement_id", "data_type": "varchar"},
+            {"name": "InvoiceLineId", "data_type": "varchar"},
             {"name": "group", "data_type": "varchar"},
             {"name": "quantity", "data_type": "int"},
         ],
@@ -130,15 +132,15 @@ DESCRIBE_TABLE = {
 LENS_TABLES = {
     "ok": True,
     "data": {
-        "lens": "cargoflow",
+        "lens": "catalog",
         # A *map* of table -> columns on the live server, not a list.
-        "tables": {"gb.ts_metadata_v1r0": [{"name": "metadata_id"}], "sm.cargoflow_latest": []},
+        "tables": {"main.MediaType": [{"name": "metadata_id"}], "main.Invoice": []},
     },
 }
 
 SKILL_LIST = {
     "ok": True,
-    "data": {"paths": ["AGENTS.md", "_cross_cutting/JOINS.md", "balances/SKILL.md"]},
+    "data": {"paths": ["AGENTS.md", "_cross_cutting/JOINS.md", "catalog/SKILL.md"]},
 }
 
 SKILL_GREP = {
@@ -156,9 +158,9 @@ FEW_SHOT = {
     "data": {
         "examples": [
             {
-                "id": "sm_ports_in_country",
-                "question": "List all ports tracked in a given country",
-                "sql": "SELECT DISTINCT load_port FROM sm.cargoflow_latest",
+                "id": "main_cities_in_country",
+                "question": "List all billing cities in a given country",
+                "sql": "SELECT DISTINCT BillingCity FROM main.Invoice",
             }
         ]
     },
@@ -168,8 +170,8 @@ SEARCH_TABLES = {
     "ok": True,
     "data": {
         "tables": [
-            {"table": "sm.cargoflow_latest", "score": 0.0, "description": "resolver=sm_cargoflow"},
-            {"table": "sm.geofence_events_latest", "score": 0.0, "description": "resolver=sm_geo"},
+            {"table": "main.Invoice", "score": 0.0, "description": "resolver=main_catalog"},
+            {"table": "main.Playlist", "score": 0.0, "description": "resolver=main_playlist"},
         ]
     },
 }
@@ -177,19 +179,19 @@ SEARCH_TABLES = {
 #: Every internal this project has ever caught reaching a customer surface, plus
 #: every internal the fixtures above actually carry.
 INTERNALS = (
-    "sm.cargoflow_latest",
-    "sm.geofence_events_latest",
-    "gb.ts_metadata_v1r0",
-    "cargo_movement_id",
-    "load_port",
+    "main.Invoice",
+    "main.Playlist",
+    "main.MediaType",
+    "InvoiceLineId",
+    "BillingCity",
     "request_id",
     "b375dd84f5d94da2b1756bc939e9bfe0",
     "ODBC",
     "SQLExecDirectW",
     "42000",
     "internal_error",
-    "area_activity",
-    "cargoflow",
+    "sales",
+    "catalog",
     "AGENTS.md",
     "SKILL.md",
     "JOINS.md",
@@ -198,8 +200,8 @@ INTERNALS = (
     "http://",
     "/offload/",
     "SELECT",
-    "Persian Gulf",
-    "MEG",
+    "classical music",
+    "Classical",
 )
 
 
@@ -268,7 +270,7 @@ class TestTheFindingIsDerivedFromTheResult:
 
 
 class TestFoundNothingAndNoSuchThingAreDifferentSentences:
-    """The handoff's own CPL finding: an empty answer and a rejection reached
+    """The handoff's own finding: an empty answer and a rejection reached
     the agent identically, so the model filled the gap itself."""
 
     def test_a_canonical_value_says_the_word_is_used_as_written(self) -> None:
@@ -470,7 +472,7 @@ READ_PAGINATED = (
 )
 #: The one that matters most: `launch-readiness/102` writes a large tool
 #: result to a file and the agent reads it back. It is one very long line.
-READ_OFFLOADED = '1  {"ok": true, "request_id": "b375dd84", "data": {"lenses": ["cargoflow"]}}'
+READ_OFFLOADED = '1  {"ok": true, "request_id": "b375dd84", "data": {"lenses": ["catalog"]}}'
 READ_EMPTY = "1  System reminder: File exists but has empty contents"
 READ_MISSING = "Error: File '/nope.txt' not found"
 WRITE_OK = "Updated file /new.txt"
@@ -518,7 +520,7 @@ class TestTheHarnessFileToolsNowSayWhatTheyFound:
         # character line. `"Read 1 line."` would be `143`'s `"1 result."`
         # defect in a new place — a number that looks real and is not.
         line = summarise_tool_result("read_file", READ_OFFLOADED)
-        assert line == "Read 73 characters on one line."
+        assert line == "Read 71 characters on one line."
         assert "1 line" not in (line or "")
 
     def test_an_empty_file_is_not_a_one_line_file(self) -> None:
@@ -562,7 +564,7 @@ class TestNoPathFromTheHarnessIsEverSpoken:
     A path is speakable when a **person** authored it as a name — the reader's
     own words, a repository file a developer asked about, or a document
     published under a name its author chose (`mcp_skill_read`'s
-    `cargoflow/SKILL.md`, which `tool_sentences.py` does speak). It is not
+    `catalog/SKILL.md`, which `tool_sentences.py` does speak). It is not
     speakable when the machinery minted it. The harness fails that test for a
     sharper reason than "internal": **one tool reads both kinds** — the same
     `read_file` fetches a published skill and an offload envelope — so the

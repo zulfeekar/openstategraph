@@ -2,13 +2,13 @@
 
 ## What the owner saw
 
-Asked `cpl-mcp` a real question, live, and read:
+Asked a live MCP-backed workflow a real question and read:
 
 > *"I'm currently unable to retrieve the necessary data … due to an
 > **authentication issue with the data source**."*
 
 **There was no authentication issue.** Probed the same minute: every metadata
-tool answered `ok: true`, and `mcp_execute_sql("SELECT 1", lens="cargoflow")`
+tool answered `ok: true`, and `mcp_execute_sql("SELECT 1", lens="catalog")`
 returned a row. What actually happened is that `mcp_resolve_lens` and
 `mcp_prepare` — the two tools that hand the agent real column names — nest
 their arguments under a field called `inp`, the model sent them flat, and the
@@ -74,7 +74,7 @@ THREAD = "156-thread"
 #: to say it so the run's own record has something to contradict.
 INVENTED = "I could not retrieve the data due to an authentication issue with the data source."
 
-#: What the CPL server really answered, quoted from the live run.
+#: What the server really answered, quoted from the live run.
 REJECTION = "1 validation error for mcp_resolve_lensArguments\ninp\n  Field required"
 
 #: `mcp_resolve_lens`'s real schema shape: one required property, an object.
@@ -382,7 +382,7 @@ class TestTheRunRecordsItWhateverTheModelSays:
     def test_a_call_that_worked_records_nothing(self, run) -> None:
         """Silence by default. A disclosure on every answer trains a reader to
         skip disclosures."""
-        state, _ = run(result=_accepted(json.dumps({"ok": True, "lens": "cargoflow"})))
+        state, _ = run(result=_accepted(json.dumps({"ok": True, "lens": "catalog"})))
 
         assert "rejected" not in str(state.get("answer", "")).lower()
 

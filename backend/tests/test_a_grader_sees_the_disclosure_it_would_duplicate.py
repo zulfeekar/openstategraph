@@ -6,12 +6,11 @@ raw text — and `127`'s disclosure is appended afterwards, by
 state which sense it used?"* was judging a document that did not yet contain
 the sentence the reader would actually see.
 
-Measured on `cpl-mcp`: the run's answer ended with
+Measured on a live MCP run: the answer ended with
 
-    You asked for "persian gulf". This data holds no such value, so the answer
-    above is for Middle East Gulf (MEG) on
-    `cargoflow_latest.load_shipping_region_v2` — a synonym this data declares
-    for it.
+    You asked for "classical music". This data holds no such value, so the
+    answer above is for Classical on `Genre.Name` — a synonym this data
+    declares for it.
 
 and the grader never saw that line. On a covered term the disclosure is
 unconditional, so a model that happens to be silent costs a full revise lap —
@@ -92,11 +91,11 @@ def _a_run_to_record_against(monkeypatch: pytest.MonkeyPatch) -> Any:
     take_notes(THREAD)
 
 
-def _meg() -> Substitution:
+def _classical() -> Substitution:
     return Substitution(
-        user_term="persian gulf",
-        axis="load_shipping_region_v2",
-        canonical_value="Middle East Gulf (MEG)",
+        user_term="classical music",
+        axis="Genre.Name",
+        canonical_value="Classical",
         how_matched="declared_synonym",
     )
 
@@ -111,7 +110,7 @@ def _grade(reply: str = "PASS\nit says which sense it used") -> tuple[dict[str, 
         conditional={"g1": {"pass": "out1", "revise": "a1"}},
     )
     run = runtime.factory(DOCUMENT)("g1", DOCUMENT["nodes"][1], plan)
-    outcome = run({"outputs": {"a1": CANDIDATE}, "question": "ports in the persian gulf",
+    outcome = run({"outputs": {"a1": CANDIDATE}, "question": "classical music tracks",
                    "revisions": {}})
     # `_grader.run` is `async def` (`async-first/14`) and `install_doors` gives
     # it a sync twin; which one a caller gets depends on the door, so this
@@ -142,29 +141,29 @@ def _publish() -> str:
 
 class TestTheGraderIsToldWhatTheReaderWillGet:
     def test_the_disclosure_is_in_the_prompt_it_judges_against(self) -> None:
-        record_notes((_meg(),))
+        record_notes((_classical(),))
         _, prompt = _grade()
-        assert "Middle East Gulf (MEG)" in prompt
+        assert "Classical" in prompt
         assert "a synonym this data declares for it" in prompt
 
     def test_it_is_told_the_answer_need_not_repeat_it(self) -> None:
         """Otherwise the grader is being shown text and left to guess whose it
         is — and the obvious guess is that the candidate already said it."""
-        record_notes((_meg(),))
+        record_notes((_classical(),))
         _, prompt = _grade()
         assert "does not have to repeat it" in prompt
 
     def test_it_arrives_as_context_and_not_as_the_candidate(self) -> None:
-        record_notes((_meg(),))
+        record_notes((_classical(),))
         update, prompt = _grade()
         head, _, tail = prompt.partition("</context>")
-        assert "Middle East Gulf (MEG)" in head
+        assert "Classical" in head
         # The text under judgement is still exactly what the producer wrote.
         assert update["outputs"]["g1"] == CANDIDATE
-        assert "Middle East Gulf (MEG)" not in tail
+        assert "Classical" not in tail
 
     def test_a_rejection_carries_only_the_graders_own_sentence(self) -> None:
-        record_notes((_meg(),))
+        record_notes((_classical(),))
         update, _ = _grade("FAIL\nname the ports, not just the count")
         assert update["feedback"] == "name the ports, not just the count"
         assert "Middle East Gulf" not in update["feedback"]
@@ -172,7 +171,7 @@ class TestTheGraderIsToldWhatTheReaderWillGet:
 
 class TestTheReadersDisclosureSurvivesBeingRead:
     def test_peeking_does_not_drain_the_rail(self) -> None:
-        record_notes((_meg(),))
+        record_notes((_classical(),))
         assert peek_notes(THREAD)
         assert peek_notes(THREAD)
         assert take_notes(THREAD)
@@ -181,12 +180,12 @@ class TestTheReadersDisclosureSurvivesBeingRead:
         """The whole reason this is a peek. A grader that *took* the notes
         would have deleted the reader's disclosure — `127`'s defect, caused by
         the fix for `154`."""
-        record_notes((_meg(),))
+        record_notes((_classical(),))
         _grade()
         assert "This data holds no such value" in _publish()
 
     def test_every_lap_of_a_revision_loop_still_leaves_it_there(self) -> None:
-        record_notes((_meg(),))
+        record_notes((_classical(),))
         _grade("FAIL\ntry again")
         _grade("FAIL\ntry again")
         _grade()
@@ -202,9 +201,9 @@ class TestSilenceIsStillTheDefault:
         record_notes(
             (
                 Substitution(
-                    user_term="Middle East Gulf (MEG)",
-                    axis="load_shipping_region_v2",
-                    canonical_value="Middle East Gulf (MEG)",
+                    user_term="Classical",
+                    axis="Genre.Name",
+                    canonical_value="Classical",
                     how_matched="exact",
                 ),
             )

@@ -11,7 +11,7 @@ made-up rate, and a viewer reads motion as duration.
 ## The grain, chosen against a measurement rather than a preference
 
 The ticket named three answers and assumed a tradeoff between them. Four real
-`ollama:gpt-oss:120b-cloud` runs of `stress-review` and `cpl-nl2sql` say the
+`ollama:gpt-oss:120b-cloud` runs of `stress-review` and a private 28-node package say the
 tradeoff does not exist, and `docs/decisions/keeping-the-cadence-2026-08-29.md`
 carries the table. The short version:
 

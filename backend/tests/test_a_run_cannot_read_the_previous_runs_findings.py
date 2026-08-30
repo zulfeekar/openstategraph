@@ -1,6 +1,6 @@
 """A run must not answer out of the previous run's findings — `launch-readiness/149`.
 
-Measured live on `cpl-mcp`, three consecutive runs of one question in one
+Measured live on an MCP package, three consecutive runs of one question in one
 server process: **run 2 called no query tool at all** and answered, fluently,
 out of the `/findings/*.json` files run 1 had written. Nothing on screen
 separated that answer from a fetched one.

@@ -15,7 +15,7 @@ describe('waitingLine', () => {
   });
 
   it('names the wait once steps have finished but nothing has spoken', () => {
-    // The measured case (launch-readiness/141): on `cpl-nl2sql` the wire
+    // The measured case (launch-readiness/141): on a 28-node package the wire
     // carries `in1` at 0.06 s and `router1` at 2.16 s, and the first
     // narration frame does not leave the server until 4.99 s.
     expect(waitingLine({ ...base, stepsSoFar: 2 })).toBe(WAITING_FOR_THE_NEXT_STEP);

@@ -1,17 +1,20 @@
 """A bare `COUNT(*)` counts rows. Publishing it as a count of things is a claim.
 
-`launch-readiness/165`. A run answered *"there are **1,454,449 dark vessels**"*
-from
+`launch-readiness/165`. A run published a bare `COUNT(*)` under a plural
+entity noun. The same defect is reachable against
+`workflows/chinook-assistant`'s database, which ships with this repository, so
+the worked example below is one anybody can re-run:
 
-    SELECT COUNT(*) AS dark_vessels_count FROM sm.area_counts_dark_v1r0 WHERE dark = 1
+    SELECT COUNT(*) AS track_count FROM main.PlaylistTrack
 
-against a geofence x day x IMO fact table — 2,208,572 rows over 10,096 vessels,
-6,119 of them dark. The published figure was about 219x too large, stated with
-a confident gloss, and no gate on the path had anything to say about it.
+answers **8,715**, and `main.PlaylistTrack` is a playlist x track junction —
+8,715 rows over **3,503** distinct tracks in 14 playlists. Published as a
+count of tracks that figure is about 2.5x too large, stated with a confident
+gloss, and no gate on the path had anything to say about it.
 
 ## Why this is not `151`, in one sentence
 
-`1,454,449` **was** retrieved — the query really returned it — so
+`8,715` **was** retrieved — the query really returned it — so
 `numbers_in_prose` finds it grounded and passes, correctly. `151` checks a
 number's **provenance**; here the provenance is impeccable and the **meaning**
 is wrong. Its compile-time half, `UNDECLARED_FALLBACK`, is silent for an
@@ -22,7 +25,7 @@ because they *are* the run's store.
 
 It knows one thing, and it is SQL semantics rather than schema knowledge, so it
 needs no declaration from anybody: **`SELECT COUNT(*) FROM t` returns a number
-of rows of `t`.** Whether a row of `t` happens to be one vessel is a property
+of rows of `t`.** Whether a row of `t` happens to be one track is a property
 only `t` can declare, and nothing in this repository can see that declaration
 for a table behind an MCP server.
 
@@ -30,9 +33,9 @@ So the check never says *"that number is wrong"* — it could not know. It says
 **"you counted rows; say so, or count the entity"**, and both repairs are one
 revision lap away:
 
-- `COUNT(DISTINCT imo)` — after which this module is silent, because the
+- `COUNT(DISTINCT TrackId)` — after which this module is silent, because the
   statement is no longer a row count;
-- *"1,454,449 rows"* — after which this module is silent, because the answer
+- *"8,715 rows"* — after which this module is silent, because the answer
   now says what it counted.
 
 That is the ticket's own *"either not published, or published with what it
@@ -55,10 +58,10 @@ must all hold before a word is said:
 Anything else is silent, including a number with no noun after it.
 
 **What it cannot see, stated so nobody rediscovers it as a bug.** A table that
-genuinely holds one row per entity — `sm.dim_vessel_latest` — is reported too,
+genuinely holds one row per entity — `main.Track` — is reported too,
 because this module cannot tell it apart from the fan-out table without the
 declaration that does not exist. That is a known cost, and it is bounded: the
-repair it asks for (`COUNT(DISTINCT imo)`) is correct on such a table as well
+repair it asks for (`COUNT(DISTINCT TrackId)`) is correct on such a table as well
 and makes the answer strictly more defensible. Turning "reported" into "wrong"
 needs the table to declare its row key, which is `docs-and-gaps/16`'s and
 `125`'s territory and is filed as `launch-readiness/166`.
@@ -117,7 +120,7 @@ _NOT_A_NOUN: frozenset[str] = frozenset(
 )
 
 #: How far past the number to look for the noun it labels. Four words covers
-#: *"1,454,449 dark vessels"* and *"1,454,449 daily geofence rows"* and stops
+#: *"8,715 distinct tracks"* and *"8,715 playlist track rows"* and stops
 #: well before the next clause.
 _WINDOW = 4
 
@@ -239,9 +242,9 @@ def statement_was_answered(result: Any) -> bool:
     characters), and an ODBC failure message is longer than that, so what the
     record holds is a Python repr cut mid-string: `ast.literal_eval` refuses
     it, `payloads_of` hands back the raw text, and `cells_of` — correctly, for
-    a CSV or a Markdown table — passes it through as data. Measured on
-    `cpl-mcp` on 2026-08-29: three refusals in a row, every one of them
-    carrying its own `"ok": false` in text that could not be parsed.
+    a CSV or a Markdown table — passes it through as data. Measured on a live
+    MCP run on 2026-08-29: three refusals in a row, every one of them carrying
+    its own `"ok": false` in text that could not be parsed.
 
     Tolerant in reading, strict in trusting: the flag is the one
     `abc/tool_findings` already treats as the envelope's failure, matched
@@ -258,8 +261,8 @@ def statement_was_answered(result: Any) -> bool:
 #: Every table a statement names, not only the first. A join reaches two, and
 #: a check that read only `FROM` would judge a two-table statement by the one
 #: that happened to be written first (`launch-readiness/166`, found on a live
-#: run whose `FROM sm.cargoflow_latest ... EXISTS (SELECT 1 FROM
-#: sm.area_counts_dark_v1r0 ...)` put the table under suspicion in second
+#: run whose statement had the shape `FROM main.Track ... EXISTS (SELECT 1 FROM
+#: main.PlaylistTrack ...)`, putting the table under suspicion in second
 #: place).
 _FROM_OR_JOIN = re.compile(r"\b(?:from|join)\s+([A-Za-z_][\w.]*)", re.IGNORECASE)
 
@@ -349,7 +352,7 @@ def row_counts_retrieved(state: Mapping[str, Any]) -> list[tuple[Decimal, str]]:
     own (`{"row_count": 1, "rows": [...]}`), and there is no way to tell the
     cell from the envelope without knowing the tool. The plural-noun rule
     below is what keeps that widening harmless: an envelope's `1` cannot be
-    published as *"1 vessels"*.
+    published as *"1 tracks"*.
     """
     found: list[tuple[Decimal, str]] = []
     for sql, result in exchanges_in(state):
@@ -427,8 +430,8 @@ def check_row_counts_in_prose(
     the table has declared a row key of more than one column, a row provably is
     **not** one of anything, so the doubt becomes a statement of fact and the
     repair stops being a suggestion. That is the whole of what `row_key` buys,
-    and it buys it without this module ever deciding which column identifies a
-    vessel — a key of length > 1 settles the question on its own.
+    and it buys it without this module ever deciding which column identifies the
+    entity — a key of length > 1 settles the question on its own.
     """
     from openstategraph.table_coverage import declarations_in
 

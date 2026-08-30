@@ -614,7 +614,7 @@ class TestOneCallHasOneNarrator:
     identical line, composed from the identical table in
     `abc/tool_sentences.py`. Nobody saw it because every surface collapsed a
     line repeated back to back. `145` stopped the panel doing that, because a
-    repeat is evidence (`146`), and a live `cpl-mcp` run then read
+    repeat is evidence (`146`), and a live MCP run then read
     `"Looking up which views of the data are available."` twice in a row.
 
     The fix is a declaration rather than a filter: a filter cannot tell one
@@ -696,10 +696,10 @@ class TestOneCallHasOneNarrator:
                 args_schema=_Args,
                 coroutine=_coroutine,
                 response_format="content_and_artifact",
-                metadata={"server": "cpl"},
+                metadata={"server": "lenses"},
             ),
-            "cpl",
+            "lenses",
         )
         assert wrapped.metadata[NARRATES_ITSELF] is True
         # Whatever the original carried is kept, never replaced.
-        assert wrapped.metadata["server"] == "cpl"
+        assert wrapped.metadata["server"] == "lenses"

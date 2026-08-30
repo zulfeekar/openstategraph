@@ -1,27 +1,37 @@
 """launch-readiness 165 — a bare `COUNT(*)` is a count of rows, and nothing else.
 
-A run published *"there are **1,454,449 dark vessels**"*. The SQL behind it was
+A run published a bare `COUNT(*)` under a plural entity noun. The same defect
+is reachable against `workflows/chinook-assistant`'s database, which ships with
+this repository, so the fixtures below are figures anybody can re-measure:
 
-    SELECT COUNT(*) AS dark_vessels_count FROM sm.area_counts_dark_v1r0 WHERE dark = 1
+    SELECT COUNT(*) AS track_count FROM main.PlaylistTrack
 
-and `sm.area_counts_dark_v1r0` is a geofence × day × IMO fact table: 2,208,572
-rows over 10,096 vessels. The true distinct dark-vessel count is 6,119. The
-published figure was ~219x too large and carried a confident gloss.
+answers **8,715**, and `main.PlaylistTrack` is a playlist × track junction: its
+row key is `(PlaylistId, TrackId)`, and those 8,715 rows cover **3,503**
+distinct tracks across 14 playlists. Published as a count of tracks the figure
+is ~2.5x too large and carries a confident gloss.
 
 **Why `151` cannot catch this, and the sentence is the whole reason this module
-exists:** `1,454,449` *was* retrieved — the query really returned it — so
+exists:** `8,715` *was* retrieved — the query really returned it — so
 `numbers_in_prose` finds it grounded and passes, correctly. `151` checks a
 number's **provenance**; this number's provenance is impeccable and its
 **meaning** is wrong. `UNDECLARED_FALLBACK`, 151's compile-time half, is silent
-for an equally correct reason: the CPL MCP tools declare `open_world = False`
+for an equally correct reason: the MCP tools in question declare
+`open_world = False`
 because they *are* the run's store.
 
 So this is a different axis, and it is answerable without any declaration at
 all, because it is SQL semantics rather than schema knowledge: `COUNT(*)`
-returns a number of **rows**. Whether those rows happen to be one-per-vessel is
+returns a number of **rows**. Whether those rows happen to be one-per-track is
 a property of the table that only the table can declare — which is why this
 check never says *"that number is wrong"*. It says *"you counted rows; say so,
 or count the entity"*, and both repairs are one lap away.
+
+**The filename is older than its fixtures.** It was written when the worked
+example was a maritime one; `publishable/03` moved the evidence to chinook and
+left the name, because the publishability gate names this path as its worked
+example of a permitted English word in a filename and a rename would delete
+that illustration to satisfy a preference the gate declined to hold.
 
 **Both directions are pinned here, because `133` is the counter-example this
 project already paid for.** *"How many rows are in this table"* is a real
@@ -44,7 +54,7 @@ from openstategraph.counted_rows import (
 )
 
 
-DARK_COUNT_SQL = "SELECT COUNT(*) AS dark_vessels_count FROM sm.area_counts_dark_v1r0 WHERE dark = 1"
+ROW_COUNT_SQL = "SELECT COUNT(*) AS track_count FROM main.PlaylistTrack"
 
 
 def _run(sql: str, result: str) -> dict:
@@ -58,7 +68,7 @@ def _run(sql: str, result: str) -> dict:
             ToolMessage(content=result, tool_call_id="c1", name="mcp_execute_sql"),
         ],
         "outputs": {},
-        "question": "How many dark vessels departed Mongstad last month?",
+        "question": "How many tracks appear on a playlist?",
     }
 
 
@@ -69,31 +79,32 @@ def _run(sql: str, result: str) -> dict:
 
 class TestWhatCountsRowsAndNothingElse:
     def test_the_published_query_counts_rows(self) -> None:
-        assert counts_rows_only(DARK_COUNT_SQL) is True
+        assert counts_rows_only(ROW_COUNT_SQL) is True
 
     def test_count_one_is_the_same_statement_spelled_differently(self) -> None:
-        assert counts_rows_only("SELECT COUNT(1) FROM sm.area_counts_dark_v1r0") is True
+        assert counts_rows_only("SELECT COUNT(1) FROM main.PlaylistTrack") is True
 
     def test_counting_an_entity_is_not_counting_rows(self) -> None:
         """The repair, and it must take the check off the answer."""
-        assert counts_rows_only("SELECT COUNT(DISTINCT imo) FROM sm.area_counts_dark_v1r0") is False
+        assert counts_rows_only("SELECT COUNT(DISTINCT TrackId) FROM main.PlaylistTrack") is False
 
     def test_any_distinct_anywhere_puts_the_statement_out_of_reach(self) -> None:
         """`COUNT(*)` over a de-duplicated subquery is an entity count, and this
         module will not try to prove which. Silent is the honest answer."""
         assert (
-            counts_rows_only("SELECT COUNT(*) FROM (SELECT DISTINCT imo FROM sm.a) t") is False
+            counts_rows_only("SELECT COUNT(*) FROM (SELECT DISTINCT TrackId FROM main.a) t")
+            is False
         )
 
     def test_a_grouped_count_is_a_breakdown_not_a_headline(self) -> None:
-        assert counts_rows_only("SELECT geofence, COUNT(*) FROM sm.a GROUP BY geofence") is False
+        assert counts_rows_only("SELECT PlaylistId, COUNT(*) FROM main.a GROUP BY PlaylistId") is False
 
     def test_a_query_that_does_not_count_is_not_this_modules_business(self) -> None:
-        assert counts_rows_only("SELECT imo FROM sm.area_counts_dark_v1r0") is False
+        assert counts_rows_only("SELECT TrackId FROM main.PlaylistTrack") is False
 
     def test_a_sum_of_a_declared_quantity_column_is_left_alone(self) -> None:
-        """`dark_fleet`'s own declared idiom. It must never be reported."""
-        assert counts_rows_only("SELECT SUM(dark_vessel_count) FROM sm.area_counts_dark_v1r0") is False
+        """A table's own declared quantity idiom. It must never be reported."""
+        assert counts_rows_only("SELECT SUM(Milliseconds) FROM main.Track") is False
 
 
 # ------------------------------------------------------------------ #
@@ -103,11 +114,11 @@ class TestWhatCountsRowsAndNothingElse:
 
 class TestReadingTheRunsOwnRecord:
     def test_the_value_and_the_table_come_back_together(self) -> None:
-        found = row_counts_retrieved(_run(DARK_COUNT_SQL, '{"row_count": 1, "rows": [{"dark_vessels_count": 1454449}]}'))
-        assert (Decimal("1454449"), "sm.area_counts_dark_v1r0") in found
+        found = row_counts_retrieved(_run(ROW_COUNT_SQL, '{"row_count": 1, "rows": [{"track_count": 8715}]}'))
+        assert (Decimal("8715"), "main.PlaylistTrack") in found
 
     def test_a_refused_call_returned_nothing_to_publish(self) -> None:
-        state = _run(DARK_COUNT_SQL, "lock guard refused: out-of-lens table")
+        state = _run(ROW_COUNT_SQL, "lock guard refused: out-of-lens table")
         state["messages"][1].status = "error"
         assert row_counts_retrieved(state) == []
 
@@ -120,44 +131,44 @@ class TestReadingTheRunsOwnRecord:
 # ------------------------------------------------------------------ #
 
 
-ROWS = [(Decimal("1454449"), "sm.area_counts_dark_v1r0")]
+ROWS = [(Decimal("8715"), "main.PlaylistTrack")]
 
 
 class TestItFiresOnTheFanOutCount:
     def test_the_published_sentence(self) -> None:
         prose = (
-            "Additionally, there are 1,454,449 dark vessels identified, which are "
-            "vessels marked with dark = 1."
+            "Additionally, there are 8,715 tracks identified, which are tracks "
+            "that appear on at least one playlist."
         )
-        assert mislabelled_row_counts(prose, ROWS) == [("1,454,449", "vessels")]
+        assert mislabelled_row_counts(prose, ROWS) == [("8,715", "tracks")]
 
     def test_the_thousands_separator_is_not_required(self) -> None:
-        assert mislabelled_row_counts("1454449 vessels were dark.", ROWS) == [("1454449", "vessels")]
+        assert mislabelled_row_counts("8715 tracks were listed.", ROWS) == [("8715", "tracks")]
 
 
 class TestItStaysSilentOnTheHonestAnswer:
     def test_a_row_count_published_as_rows(self) -> None:
         """*How many rows are in this table* is a real question."""
-        assert mislabelled_row_counts("The table holds 1,454,449 rows.", ROWS) == []
+        assert mislabelled_row_counts("The table holds 8,715 rows.", ROWS) == []
 
     def test_records_and_entries_are_the_same_word(self) -> None:
-        assert mislabelled_row_counts("1,454,449 records matched.", ROWS) == []
-        assert mislabelled_row_counts("1,454,449 entries matched.", ROWS) == []
+        assert mislabelled_row_counts("8,715 records matched.", ROWS) == []
+        assert mislabelled_row_counts("8,715 entries matched.", ROWS) == []
 
     def test_a_row_noun_later_in_the_phrase_still_answers_the_question(self) -> None:
-        assert mislabelled_row_counts("1,454,449 daily geofence rows.", ROWS) == []
+        assert mislabelled_row_counts("8,715 playlist track rows.", ROWS) == []
 
     def test_a_number_with_no_noun_attached_is_not_a_claim_about_entities(self) -> None:
-        assert mislabelled_row_counts("The count was 1,454,449.", ROWS) == []
+        assert mislabelled_row_counts("The count was 8,715.", ROWS) == []
 
     def test_a_verb_is_not_a_noun_because_it_ends_in_s(self) -> None:
-        assert mislabelled_row_counts("1,454,449 was the figure as of today.", ROWS) == []
+        assert mislabelled_row_counts("8,715 was the figure as of today.", ROWS) == []
 
     def test_a_number_the_run_never_counted_belongs_to_151(self) -> None:
-        assert mislabelled_row_counts("There are 6,119 vessels.", ROWS) == []
+        assert mislabelled_row_counts("There are 3,503 tracks.", ROWS) == []
 
     def test_a_singular_subject_is_not_a_population_claim(self) -> None:
-        assert mislabelled_row_counts("Row 1,454,449 is the last one.", ROWS) == []
+        assert mislabelled_row_counts("Row 8,715 is the last one.", ROWS) == []
 
 
 # ------------------------------------------------------------------ #
@@ -167,24 +178,24 @@ class TestItStaysSilentOnTheHonestAnswer:
 
 class TestTheCheckContract:
     def test_it_refuses_the_run_that_shipped(self) -> None:
-        state = _run(DARK_COUNT_SQL, '{"row_count": 1, "rows": [{"dark_vessels_count": 1454449}]}')
+        state = _run(ROW_COUNT_SQL, '{"row_count": 1, "rows": [{"track_count": 8715}]}')
         reason = check_row_counts_in_prose(
-            "Additionally, there are 1,454,449 dark vessels identified.", state, []
+            "Additionally, there are 8,715 tracks identified.", state, []
         )
-        assert "1,454,449" in reason
-        assert "sm.area_counts_dark_v1r0" in reason
+        assert "8,715" in reason
+        assert "main.PlaylistTrack" in reason
         assert "COUNT(DISTINCT" in reason
 
     def test_an_empty_return_is_a_pass(self) -> None:
-        state = _run(DARK_COUNT_SQL, '{"row_count": 1, "rows": [{"dark_vessels_count": 1454449}]}')
-        assert check_row_counts_in_prose("The table holds 1,454,449 rows.", state, []) == ""
+        state = _run(ROW_COUNT_SQL, '{"row_count": 1, "rows": [{"track_count": 8715}]}')
+        assert check_row_counts_in_prose("The table holds 8,715 rows.", state, []) == ""
 
     def test_the_entity_count_repair_passes(self) -> None:
         state = _run(
-            "SELECT COUNT(DISTINCT imo) AS n FROM sm.area_counts_dark_v1r0 WHERE dark = 1",
-            '{"row_count": 1, "rows": [{"n": 6119}]}',
+            "SELECT COUNT(DISTINCT TrackId) AS n FROM main.PlaylistTrack",
+            '{"row_count": 1, "rows": [{"n": 3503}]}',
         )
-        assert check_row_counts_in_prose("There are 6,119 dark vessels.", state, []) == ""
+        assert check_row_counts_in_prose("There are 3,503 distinct tracks.", state, []) == ""
 
 
 # ------------------------------------------------------------------ #
@@ -205,8 +216,8 @@ class TestABuiltInCheckIsDiscoverableFromTheEditor:
     `151` shipped `numbers_in_prose` into `_BUILT_IN_CHECKS` and left the
     `guard.check` card's only hint saying *"the package function to run"* — so
     the one check core supplies for free was reachable only by reading Python.
-    `cpl-mcp`, the package this ticket's defect shipped from, has no guard on
-    its path at all.
+    The package this ticket's defect shipped from has no guard on its path at
+    all.
 
     Pinned rather than described, because a hand-mirror in TypeScript of a
     Python dict is exactly the drift CLAUDE.md's DRY rule forbids without one.
@@ -233,7 +244,7 @@ class TestAGraderCanStandBehindAGuard:
     """A grader reads its candidate from `plan.edges` only — so a guard in
     front of it is invisible.
 
-    Found by wiring this ticket's gate into `cpl-mcp` and running it live:
+    Found by wiring this ticket's gate into an MCP package and running it live:
     every run came back *"I could not produce an answer after 2 attempts. The
     last review said: The answer is empty."* while `outputs[guard1]` held the
     full draft. `guard.check`'s `pass` is a **conditional** edge, exactly like a
@@ -243,7 +254,7 @@ class TestAGraderCanStandBehindAGuard:
 
     `compile/diagnostics.py` tells people to *"put a guard.check between that
     step and the output"*. When the output sits behind a grader — which is the
-    ordinary NL2SQL shape and what `cpl-mcp` ships — following that advice
+    ordinary NL2SQL shape and what that package ships — following that advice
     silently emptied the answer.
     """
 
@@ -277,12 +288,12 @@ class TestAGraderCanStandBehindAGuard:
         from conftest import RespondingModel
 
         is_grader = lambda content: "You are a grader" in content  # noqa: E731
-        answer = "Mongstad shipped 12 cargoes last month."
+        answer = "Rock accounts for 12 of the playlists' tracks."
         model = RespondingModel([(is_grader, "PASS")], default=answer)
         runtime = NodeRuntime(model=model)
         graph = WorkflowCompiler().build(self._document(), RunState, runtime.factory(self._document()))
         graph.invoke(
-            {"question": "How many cargoes?", "attempts": 0, "decisions": {}, "outputs": {}},
+            {"question": "How many tracks?", "attempts": 0, "decisions": {}, "outputs": {}},
             {"recursion_limit": 40},
         )
         return answer, [c for c in model.calls if is_grader(c)]
@@ -308,10 +319,10 @@ class TestAnAgentsQueriesReachTheGate:
     rows come back as `ToolMessage`s"* — they come back to the **agent's own
     loop**, and `_agent` returns `outputs`/`answer`/`tool_use` and no messages
     at all. So every check reading `state["messages"]` is blind on the agent
-    rail, which is the rail `cpl-mcp` runs on.
+    rail, which is the rail an MCP-backed agent runs on.
 
     Measured, not reasoned: with the gate wired and the check green in unit
-    tests, a live run republished *"1,454,449 dark vessels"* and `guard1` said
+    tests, a live run republished the mislabelled row count and `guard1` said
     `pass`. The candidate was right there in `outputs[guard1]`; the evidence
     was not anywhere.
 
@@ -326,10 +337,10 @@ class TestAnAgentsQueriesReachTheGate:
         return [
             AIMessage(
                 content="",
-                tool_calls=[{"name": "mcp_execute_sql", "args": {"sql": DARK_COUNT_SQL}, "id": "c1"}],
+                tool_calls=[{"name": "mcp_execute_sql", "args": {"sql": ROW_COUNT_SQL}, "id": "c1"}],
             ),
             ToolMessage(
-                content='{"row_count": 1, "rows": [{"dark_vessels_count": 1454449}]}',
+                content='{"row_count": 1, "rows": [{"track_count": 8715}]}',
                 tool_call_id="c1",
                 name="mcp_execute_sql",
             ),
@@ -344,9 +355,9 @@ class TestAnAgentsQueriesReachTheGate:
         # what this tool actually did.
         assert row["queries"] == [
             {
-                "sql": DARK_COUNT_SQL,
+                "sql": ROW_COUNT_SQL,
                 "tool": "mcp_execute_sql",
-                "result": '{"row_count": 1, "rows": [{"dark_vessels_count": 1454449}]}',
+                "result": '{"row_count": 1, "rows": [{"track_count": 8715}]}',
             }
         ]
 
@@ -366,11 +377,11 @@ class TestAnAgentsQueriesReachTheGate:
             "outputs": {},
             **tool_report("agent1", self._messages(), ["mcp_execute_sql"], ()),
         }
-        assert (Decimal("1454449"), "sm.area_counts_dark_v1r0") in row_counts_retrieved(state)
+        assert (Decimal("8715"), "main.PlaylistTrack") in row_counts_retrieved(state)
         reason = check_row_counts_in_prose(
-            "There are a total of **1,454,449 dark vessels** identified.", state, []
+            "There are a total of **8,715 tracks** identified.", state, []
         )
-        assert "1,454,449" in reason
+        assert "8,715" in reason
 
 
 class TestTheEnvelopeIsNotTheAnswer:
@@ -385,12 +396,12 @@ class TestTheEnvelopeIsNotTheAnswer:
     def test_a_row_count_wrapper_is_not_a_result(self) -> None:
         from openstategraph.counted_rows import cells_of
 
-        assert numbers_in_of(cells_of('{"row_count": 1, "rows": [{"n": 1454449}]}')) == {
-            Decimal("1454449")
+        assert numbers_in_of(cells_of('{"row_count": 1, "rows": [{"n": 8715}]}')) == {
+            Decimal("8715")
         }
 
     def test_the_measured_mcp_envelope(self) -> None:
-        """Captured off the live CPL MCP server, not composed here.
+        """The envelope shape captured off a live MCP server, not composed here.
 
         Three layers at once: a **Python repr** of LangChain content blocks
         (not JSON), each block's `text` a JSON document, and the rows under
@@ -403,11 +414,11 @@ class TestTheEnvelopeIsNotTheAnswer:
         payload = (
             "[{'type': 'text', 'text': '{\\n  \"ok\": true,\\n  \"request_id\": "
             "\"95903ea18f10418aa419dfb6f22104e5\",\\n  \"data\": {\\n    \"row_count\": 1,"
-            "\\n    \"sample_rows\": [\\n      {\\n        \"total_rows\": 2658929\\n"
+            "\\n    \"sample_rows\": [\\n      {\\n        \"total_rows\": 3503\\n"
             "      }\\n    ],\\n    \"truncated\": false\\n  }\\n}', "
             "'id': 'lc_ea4d8514-cf52-4957-8623-d41f540efa61'}]"
         )
-        assert numbers_in_of(cells_of(payload)) == {Decimal("2658929")}
+        assert numbers_in_of(cells_of(payload)) == {Decimal("3503")}
 
     def test_a_refused_call_carries_no_data(self) -> None:
         """`lock_violation` arrives as an ordinary successful `ToolMessage` on
@@ -424,9 +435,9 @@ class TestTheEnvelopeIsNotTheAnswer:
     def test_an_unrecognised_shape_is_left_whole(self) -> None:
         from openstategraph.counted_rows import cells_of
 
-        assert numbers_in_of(cells_of("count\n1454449\n")) == {Decimal("1454449")}
+        assert numbers_in_of(cells_of("count\n8715\n")) == {Decimal("8715")}
         assert numbers_in_of(cells_of('{"total": 12}')) == {Decimal("12")}
 
     def test_the_envelope_never_reaches_the_prose_check(self) -> None:
-        state = _run(DARK_COUNT_SQL, '{"row_count": 1, "rows": [{"dark_vessels_count": 1454449}]}')
-        assert check_row_counts_in_prose("There was 1 vessel that departed.", state, []) == ""
+        state = _run(ROW_COUNT_SQL, '{"row_count": 1, "rows": [{"track_count": 8715}]}')
+        assert check_row_counts_in_prose("There was 1 track that matched.", state, []) == ""

@@ -30,15 +30,15 @@ The ticket named three grains and assumed a tradeoff between fidelity and disk:
 
 **Priced against six real `ollama:gpt-oss:120b-cloud` runs** of
 `.scratch/stress-2026-08-29/workflows/stress-review` (router, `Send` fan-out,
-grader loop, nested mounts) and `~/osg-demo/workflows/cpl-nl2sql`, in both
+grader loop, nested mounts) and a private 28-node package, in both
 audiences, each package twice. Marginal bytes per run, measured by writing 200
 runs' worth of rows into one sqlite file and dividing after a `VACUUM`:
 
 | run | chunks | (a) per-chunk rows | (b) burst rows, span only | **(b+) burst rows, every offset** |
 | --- | --- | --- | --- | --- |
 | stress-review | 242 | 242 rows, 26.0 KiB | 29 rows, 5.9 KiB | **17 rows, 4.9 KiB** |
-| cpl-nl2sql | 515 | 515 rows, 53.9 KiB | 15 rows, 4.3 KiB | **10 rows, 4.7 KiB** |
-| cpl-nl2sql | 1014 | 1014 rows, 107.0 KiB | 18 rows, 8.3 KiB | **8 rows, 8.2 KiB** |
+| 28-node package | 515 | 515 rows, 53.9 KiB | 15 rows, 4.3 KiB | **10 rows, 4.7 KiB** |
+| 28-node package | 1014 | 1014 rows, 107.0 KiB | 18 rows, 8.3 KiB | **8 rows, 8.2 KiB** |
 
 **The tradeoff does not exist.** What a per-chunk row pays for is not the
 cadence — it is repeating one node's id, namespace, block and kind 242 to 1014

@@ -7,16 +7,19 @@ bare `COUNT(*)` counts rows, so publishing that figure under a plural entity
 noun is asked to say what it counted. Two things stayed out of reach, and both
 are facts only the table can state:
 
-1. **What one row is.** `dark_fleet`'s `SCHEMA.yaml` says `grain: daily`, which
-   is a word about the *date* axis and not a key.
-2. **What the table covers.** Measured against the live CPL warehouse on
-   2026-08-29: `sm.area_counts_dark_v1r0` runs `2026-01-01 -> 2026-05-12`,
-   while its sibling `sm.area_counts_latest` runs `2024-02-01 -> 2026-08-27`.
+1. **What one row is.** A declaration saying `grain: daily` is a word about
+   the *date* axis and not a key. `main.PlaylistTrack` is the worked case: its
+   row is `(PlaylistId, TrackId)`, so a row is one track *in one playlist* and
+   never one track.
+2. **What the table covers.** `workflows/chinook-assistant`'s database ships
+   with this repository, so the second fact is one anybody can re-measure:
+   `main.Invoice` runs `2009-01-01 -> 2013-12-22`, and `main.PlaylistTrack`
+   carries no date column at all.
 
-So *"last month"* over the dark table is guaranteed empty, and every run that
-answers *"0 dark vessels"* is right by accident and reads **identically** to a
-run that looked and found none. That is this project's most expensive shape,
-and it is the whole of the ticket.
+So *"last month"* over `main.Invoice` is guaranteed empty, and every run that
+answers *"0 invoices"* is right by accident and reads **identically** to a run
+that looked and found none. That is this project's most expensive shape, and
+it is the whole of the ticket.
 
 ## The declaration is the lens's, and the enforcement is ours
 
@@ -30,9 +33,9 @@ returns — a payload that names a table, carrying `row_key` and `coverage`
 beside the columns:
 
 ```json
-{"table": "sm.area_counts_dark_v1r0",
- "row_key": ["geofence", "day", "imo", "dt_last", "pos_last"],
- "coverage": {"column": "day", "min": "2026-01-01", "max": "2026-05-12"}}
+{"table": "main.Invoice",
+ "row_key": ["CustomerId", "InvoiceDate"],
+ "coverage": {"column": "InvoiceDate", "min": "2009-01-01", "max": "2013-12-22"}}
 ```
 
 `docs/declaring-a-table.md` is the publication of that contract.
@@ -59,7 +62,7 @@ say about it.
 ## Why `outside` revises and the other two disclose
 
 `outside` is **correctable in one lap and by the model only**: the sentence a
-reader needs — *"none, and none was possible: this data stops on 2026-05-12"* —
+reader needs — *"none, and none was possible: this data stops on 2013-12-22"* —
 is prose about the question that was asked, and the model is the thing holding
 that question. `165`'s repair has the same shape.
 
@@ -74,12 +77,12 @@ mentions them.
 
 - **It will not fabricate a window.** An undeclared table is reported as
   undeclared, forever, until somebody measures it and writes it down.
-- **It will not read a coverage window out of returned rows.** The live CPL
+- **It will not read a coverage window out of returned rows.** A live MCP
   envelope carries a `date_columns` block with `min`/`max` — computed over the
   rows *this statement returned*, not over the table. Reading it as coverage
   would turn *"the sample I fetched spans one day"* into *"this table holds one
   day"*, which is a confident wrong answer where the honest one is "undeclared".
-- **It will not decide which column identifies a vessel.** A `row_key` of more
+- **It will not decide which column identifies the entity.** A `row_key` of more
   than one column is enough to know a row is not one of anything; naming which
   member is the entity is a second declaration nobody has made.
 """
@@ -527,8 +530,9 @@ def coverage_findings(
         # join reaches two tables and a zero could have come from either, so
         # reading only the first `FROM` would clear a statement on the strength
         # of the table that happened to be written first — observed on a live
-        # run (2026-08-29) whose `FROM sm.cargoflow_latest ... EXISTS (SELECT 1
-        # FROM sm.area_counts_dark_v1r0 …)` put the suspect table second.
+        # run (2026-08-29) whose statement had the shape `FROM main.Invoice
+        # ... EXISTS (SELECT 1 FROM main.PlaylistTrack …)`, putting the suspect
+        # table second.
         best: tuple[str, str, TableDeclaration | None] | None = None
         for table in tables_in(sql) or [""]:
             declaration = declarations.get(table.casefold())

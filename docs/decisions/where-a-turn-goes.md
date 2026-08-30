@@ -67,7 +67,7 @@ Per-node, at the stream: `in1` 2.94 / 0.07 · `router` 0.95 / 0.91 ·
 
 Model round trips, pass 2: 0.90, 1.48, 1.91, 2.42, 1.30, 2.27, 3.59 s.
 
-## `cpl-nl2sql` — the 28-node pipeline
+## A private package — the 28-node pipeline
 
 Router → prefetch → agent → validate → grader → relay → execute → summarize.
 
@@ -98,7 +98,7 @@ here rests on their absence. Recorded rather than quietly omitted.
 
 ```
 stress-review   14.02 s wall  −  13.88 s providers  =  0.14 s ours   (1.0 %)
-cpl-nl2sql      26.51 s wall  −  26.40 s providers  =  0.11 s ours   (0.4 %)
+28-node pkg     26.51 s wall  −  26.40 s providers  =  0.11 s ours   (0.4 %)
 ```
 
 And of that tenth of a second, the part that could be a *design* defect —
@@ -117,7 +117,7 @@ tens of milliseconds, not seconds.
 **Cold — the first turn of a server process, and only that one:**
 
 ```
-head, pass 1:  2.94 s (stress-review) / 2.89 s (cpl-nl2sql)
+head, pass 1:  2.94 s (stress-review) / 2.89 s (28-node pkg)
 head, pass 2:  0.07 s                 / 0.07 s
 ```
 

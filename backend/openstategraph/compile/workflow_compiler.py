@@ -409,7 +409,7 @@ def unbound_capability_claim(tool_use: Any, nodes: Any = ()) -> str | None:
 
     `launch-readiness` 103. An agent whose MCP card bound nothing — the server
     was down and tools bind at compile time — answered *"I cannot properly
-    answer because this workflow does not have the CPL MCP tools"*, and the
+    answer because this workflow does not have the MCP tools"*, and the
     grader passed it, because a refusal is trivially grounded and
     `BaseGrader`'s refusal clause says an honest decline is a correct answer.
     It is, when the workflow is whole. This is the fact that says it is not.

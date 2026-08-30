@@ -1,7 +1,7 @@
 """`retry_policy` does not re-run a call a tool refused. Measured, not assumed.
 
-`launch-readiness/164`. The ticket arrived carrying a theory: every CPL MCP
-failure declares `"retryable": false`, `agent1`'s `maxRetries` is blank so it
+`launch-readiness/164`. The ticket arrived carrying a theory: every failure
+from the MCP server measured here declares `"retryable": false`, `agent1`'s `maxRetries` is blank so it
 inherits the graph default of three, and a failure the tool itself calls
 unretryable is therefore re-run twice more.
 

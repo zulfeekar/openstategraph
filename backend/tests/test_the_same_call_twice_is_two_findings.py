@@ -17,8 +17,8 @@ inherits the other's remedy.
 
 **What the real store said, and it decided two of the rules below.** Run over
 the two `runs.sqlite` files this machine actually holds — 39 turns across
-`stress-review`, `stress-deep`, `stress-parallel-drop`, `stress-bad-*` and
-`cpl-nl2sql`:
+`stress-review`, `stress-deep`, `stress-parallel-drop`, `stress-bad-*` and a
+private 28-node package:
 
 - **A fired 12 times**, including the instance the owner watched:
   `service_registry {"service": "checkout-api"}`, twice in one `stress-deep`
@@ -26,7 +26,7 @@ the two `runs.sqlite` files this machine actually holds — 39 turns across
   `service_registry {"service": "ledger-svc"}` **four** times in 78 seconds.
 - **B fired zero times** — and three times before the argument rule below,
   every one of them false. That is the whole evidence for it.
-- **`RunRecord.statements` was `[]` on all 39 rows**, `cpl-nl2sql` included. It
+- **`RunRecord.statements` was `[]` on all 39 rows**, that package included. It
   is the source the ticket named first and it holds nothing on this machine,
   because it admits only an argument some recogniser accepted as a *statement*.
   So the calls come from the checkpointer, through `read_thread`, and this file

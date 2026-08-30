@@ -1,20 +1,20 @@
-"""launch-readiness 166 — "0 dark vessels" over a table that stops in May.
+"""launch-readiness 166 — "0 invoices" over a table that stops in 2013.
 
-`165` repaired *"1,454,449 dark vessels"* to *"6,119 dark vessels"* in one lap
-and stayed `partially` for one reason: runs still answer **"0 dark vessels" as
-though they looked.**
+`165` repaired a mislabelled row count in one lap and stayed `partially` for
+one reason: runs still answer **"0 of them" as though they looked.**
 
-Measured against the live CPL warehouse on **2026-08-29**, through the same MCP
-server the demo drives:
+The fixtures below are measured against `workflows/chinook-assistant`'s
+database, which ships with this repository, so every figure here is one a
+reader can re-run:
 
 ```
-SELECT MIN(day), MAX(day), COUNT(*), COUNT(DISTINCT imo) FROM sm.area_counts_dark_v1r0
-  -> 2026-01-01 .. 2026-05-12   2,208,572 rows   10,096 vessels
-SELECT MIN(day), MAX(day), COUNT(*) FROM sm.area_counts_latest
-  -> 2024-02-01 .. 2026-08-27     984,788 rows
+SELECT MIN(InvoiceDate), MAX(InvoiceDate), COUNT(*) FROM main.Invoice
+  -> 2009-01-01 .. 2013-12-22     412 rows
+SELECT MIN(HireDate), MAX(HireDate), COUNT(*) FROM main.Employee
+  -> 2002-04-01 .. 2004-03-04       8 rows
 ```
 
-So a *"last month"* filter over the dark table cannot match a row. The answer
+So a *"last month"* filter over `main.Invoice` cannot match a row. The answer
 *"none"* is right by accident and reads identically to one that looked — this
 project's most expensive shape, and the whole of the ticket.
 
@@ -51,29 +51,29 @@ from openstategraph.table_coverage import (
     window_of,
 )
 
-DARK = "sm.area_counts_dark_v1r0"
+DARK = "main.Invoice"
 
 #: What the lens must declare, in the wire shape a schema tool returns. Every
 #: value here was measured, not chosen — see this module's docstring.
 DARK_DECLARATION = {
     "table": DARK,
-    "row_key": ["geofence", "day", "imo", "dt_last", "pos_last"],
-    "coverage": {"column": "day", "min": "2026-01-01", "max": "2026-05-12"},
+    "row_key": ["CustomerId", "InvoiceDate", "BillingCity"],
+    "coverage": {"column": "InvoiceDate", "min": "2009-01-01", "max": "2013-12-22"},
 }
 
 #: "Last month", as of the day this was written.
 LAST_MONTH_SQL = (
-    f"SELECT COUNT(*) AS dark FROM {DARK} "
-    "WHERE dark = 1 AND day >= '2026-07-01' AND day < '2026-08-01'"
+    f"SELECT COUNT(*) AS n FROM {DARK} "
+    "WHERE InvoiceDate >= '2026-07-01' AND InvoiceDate < '2026-08-01'"
 )
 
 #: The same question over a period the table really holds.
 COVERED_SQL = (
-    f"SELECT COUNT(*) AS dark FROM {DARK} "
-    "WHERE dark = 1 AND day >= '2026-03-01' AND day < '2026-04-01'"
+    f"SELECT COUNT(*) AS n FROM {DARK} "
+    "WHERE InvoiceDate >= '2011-03-01' AND InvoiceDate < '2011-04-01'"
 )
 
-ZERO_ANSWER = "There are no dark vessels departing Mongstad in that period."
+ZERO_ANSWER = "There are no invoices in that period."
 
 
 def _state(sql: str, *, declared: bool) -> dict:
@@ -81,11 +81,11 @@ def _state(sql: str, *, declared: bool) -> dict:
     row: dict = {
         "bound": ["mcp_execute_sql"],
         "ran": ["mcp_execute_sql"],
-        "queries": [{"sql": sql, "result": '{"ok": true, "data": {"sample_rows": [{"dark": 0}]}}'}],
+        "queries": [{"sql": sql, "result": '{"ok": true, "data": {"sample_rows": [{"n": 0}]}}'}],
     }
     if declared:
         row["declares"] = [DARK_DECLARATION]
-    return {"messages": [], "tool_use": {"sql1": row}, "outputs": {}, "question": "dark vessels?"}
+    return {"messages": [], "tool_use": {"sql1": row}, "outputs": {}, "question": "invoices?"}
 
 
 def _reader_rail(sql: str, *, declared: bool) -> str:
@@ -119,60 +119,60 @@ class TestReadingADeclaration:
         declaration = declaration_in(DARK_DECLARATION)
         assert declaration is not None
         assert declaration.table == DARK
-        assert declaration.row_key == ("geofence", "day", "imo", "dt_last", "pos_last")
-        assert declaration.coverage_min == date(2026, 1, 1)
-        assert declaration.coverage_max == date(2026, 5, 12)
+        assert declaration.row_key == ("CustomerId", "InvoiceDate", "BillingCity")
+        assert declaration.coverage_min == date(2009, 1, 1)
+        assert declaration.coverage_max == date(2013, 12, 22)
         assert declaration.declares_coverage() is True
         assert declaration.a_row_is_not_one_thing() is True
 
     def test_a_payload_that_declares_nothing_is_not_a_declaration(self) -> None:
         """Strict in trusting: a table name on its own claims nothing."""
-        assert declaration_in({"table": DARK, "columns": ["geofence", "day"]}) is None
+        assert declaration_in({"table": DARK, "columns": ["CustomerId", "InvoiceDate"]}) is None
 
     def test_a_declaration_with_no_table_belongs_to_no_table(self) -> None:
-        assert declaration_in({"row_key": ["a", "b"], "coverage": {"min": "2026-01-01"}}) is None
+        assert declaration_in({"row_key": ["a", "b"], "coverage": {"min": "2009-01-01"}}) is None
 
     def test_half_a_window_is_not_a_window(self) -> None:
-        declaration = declaration_in({"table": DARK, "coverage": {"min": "2026-01-01"}})
+        declaration = declaration_in({"table": DARK, "coverage": {"min": "2009-01-01"}})
         assert declaration is None or declaration.declares_coverage() is False
 
     def test_a_window_that_ends_before_it_starts_is_dropped_not_reversed(self) -> None:
         declaration = declaration_in(
-            {"table": DARK, "row_key": ["a"], "coverage": {"min": "2026-05-12", "max": "2026-01-01"}}
+            {"table": DARK, "row_key": ["a"], "coverage": {"min": "2013-12-22", "max": "2009-01-01"}}
         )
         assert declaration is not None
         assert declaration.declares_coverage() is False
 
     def test_a_hand_written_row_key_may_be_a_comma_string(self) -> None:
-        declaration = declaration_in({"table": DARK, "row_key": "geofence, day, imo"})
+        declaration = declaration_in({"table": DARK, "row_key": "CustomerId, InvoiceDate"})
         assert declaration is not None
-        assert declaration.row_key == ("geofence", "day", "imo")
+        assert declaration.row_key == ("CustomerId", "InvoiceDate")
 
     def test_the_flat_spelling_is_the_same_contract(self) -> None:
         declaration = declaration_in(
             {
                 "canonical_table": DARK,
-                "coverage_column": "day",
-                "coverage_min": "2026-01-01",
-                "coverage_max": "2026-05-12",
+                "coverage_column": "InvoiceDate",
+                "coverage_min": "2009-01-01",
+                "coverage_max": "2013-12-22",
             }
         )
         assert declaration is not None
-        assert declaration.coverage_max == date(2026, 5, 12)
+        assert declaration.coverage_max == date(2013, 12, 22)
 
 
 class TestFindingADeclarationInsideAToolAnswer:
     def test_a_bulk_schema_dump_carries_one_per_table(self) -> None:
         result = (
             '{"ok": true, "data": {"tables": ['
-            '{"table": "sm.area_counts_dark_v1r0", "row_key": ["geofence", "day", "imo"],'
-            ' "coverage": {"column": "day", "min": "2026-01-01", "max": "2026-05-12"}},'
-            '{"table": "sm.area_counts_latest",'
-            ' "coverage": {"column": "day", "min": "2024-02-01", "max": "2026-08-27"}}]}}'
+            '{"table": "main.Invoice", "row_key": ["CustomerId", "InvoiceDate"],'
+            ' "coverage": {"column": "InvoiceDate", "min": "2009-01-01", "max": "2013-12-22"}},'
+            '{"table": "main.Employee",'
+            ' "coverage": {"column": "HireDate", "min": "2002-04-01", "max": "2004-03-04"}}]}}'
         )
         found = {d.table: d for d in declarations_in_result(result)}
-        assert set(found) == {DARK, "sm.area_counts_latest"}
-        assert found["sm.area_counts_latest"].coverage_max == date(2026, 8, 27)
+        assert set(found) == {DARK, "main.Employee"}
+        assert found["main.Employee"].coverage_max == date(2004, 3, 4)
 
     def test_an_answer_with_neither_marker_word_is_never_parsed(self) -> None:
         assert declarations_in_result('{"ok": true, "data": {"sample_rows": [{"n": 1}]}}') == []
@@ -180,9 +180,9 @@ class TestFindingADeclarationInsideAToolAnswer:
     def test_the_measured_mcp_envelope_is_undone(self) -> None:
         """The three layers `165` measured: a Python repr, then JSON, then `data`."""
         inner = (
-            '{"ok": true, "data": {"table": "sm.area_counts_dark_v1r0", '
-            '"row_key": ["geofence", "day", "imo"], '
-            '"coverage": {"column": "day", "min": "2026-01-01", "max": "2026-05-12"}}}'
+            '{"ok": true, "data": {"table": "main.Invoice", '
+            '"row_key": ["CustomerId", "InvoiceDate"], '
+            '"coverage": {"column": "InvoiceDate", "min": "2009-01-01", "max": "2013-12-22"}}}'
         )
         blocks = repr([{"type": "text", "text": inner, "id": "x"}])
         found = declarations_in_result(blocks)
@@ -191,16 +191,16 @@ class TestFindingADeclarationInsideAToolAnswer:
     def test_the_live_date_columns_block_is_not_read_as_coverage(self) -> None:
         """The measured envelope's own `min`/`max` are about the rows returned.
 
-        `sm.area_counts_dark_v1r0` answered a one-row `SELECT TOP 1 *` with
-        `date_columns: [{"column": "day", "min": "2026-02-26", "max":
-        "2026-02-26"}]` — the span of the **sample**, not of the table. Reading
+        A table answered a one-row `SELECT TOP 1 *` with
+        `date_columns: [{"column": "InvoiceDate", "min": "2011-02-26", "max":
+        "2011-02-26"}]` — the span of the **sample**, not of the table. Reading
         it as coverage would turn *"the row I fetched is from one day"* into
         *"this table holds one day"*, which is a confident wrong answer where
         the honest one is `undeclared`.
         """
         envelope = (
-            '{"ok": true, "data": {"primary_table": "sm.area_counts_dark_v1r0", '
-            '"date_columns": [{"column": "day", "min": "2026-02-26", "max": "2026-02-26"}], '
+            '{"ok": true, "data": {"primary_table": "main.Invoice", '
+            '"date_columns": [{"column": "InvoiceDate", "min": "2011-02-26", "max": "2011-02-26"}], '
             '"row_count": 1}}'
         )
         assert declarations_in_result(envelope) == []
@@ -208,7 +208,7 @@ class TestFindingADeclarationInsideAToolAnswer:
     def test_the_run_record_is_the_second_rail(self) -> None:
         """`_agent` returns no messages, so `tool_use[node]["declares"]` is it."""
         found = declarations_in(_state(LAST_MONTH_SQL, declared=True))
-        assert found[DARK.casefold()].coverage_max == date(2026, 5, 12)
+        assert found[DARK.casefold()].coverage_max == date(2013, 12, 22)
 
     def test_a_run_shown_nothing_holds_nothing(self) -> None:
         assert declarations_in(_state(LAST_MONTH_SQL, declared=False)) == {}
@@ -225,14 +225,14 @@ class TestFindingADeclarationInsideAToolAnswer:
         from openstategraph.compile.node_runtime import tool_report
 
         payload = (
-            '{"ok": true, "data": {"table": "sm.area_counts_dark_v1r0", '
-            '"row_key": ["geofence", "day", "imo"], '
-            '"coverage": {"column": "day", "min": "2026-01-01", "max": "2026-05-12"}}}'
+            '{"ok": true, "data": {"table": "main.Invoice", '
+            '"row_key": ["CustomerId", "InvoiceDate"], '
+            '"coverage": {"column": "InvoiceDate", "min": "2009-01-01", "max": "2013-12-22"}}}'
         )
         messages = [ToolMessage(content=payload, tool_call_id="c1", name="mcp_describe_table")]
         row = tool_report("a1", messages, ["mcp_describe_table"])["tool_use"]["a1"]
         assert row["declares"][0]["table"] == DARK
-        assert row["declares"][0]["coverage"]["max"] == "2026-05-12"
+        assert row["declares"][0]["coverage"]["max"] == "2013-12-22"
 
     def test_and_leaves_the_key_out_when_nothing_declared(self) -> None:
         """Absent rather than empty — the same claim `queried` and `queries` make."""
@@ -254,7 +254,7 @@ class TestTheWindowAStatementAsked:
         assert window_of(LAST_MONTH_SQL) == (date(2026, 7, 1), date(2026, 8, 1))
 
     def test_one_literal_is_still_a_window(self) -> None:
-        assert window_of(f"SELECT 1 FROM {DARK} WHERE day >= '2026-07-01'") == (
+        assert window_of(f"SELECT 1 FROM {DARK} WHERE InvoiceDate >= '2026-07-01'") == (
             date(2026, 7, 1),
             date(2026, 7, 1),
         )
@@ -263,7 +263,7 @@ class TestTheWindowAStatementAsked:
         assert window_of(f"SELECT COUNT(*) FROM {DARK}") == (None, None)
 
     def test_a_timestamp_literal_is_read_as_its_date(self) -> None:
-        assert window_of(f"SELECT 1 FROM {DARK} WHERE dt_last > '2026-07-01T08:00:00'") == (
+        assert window_of(f"SELECT 1 FROM {DARK} WHERE InvoiceDate > '2026-07-01T08:00:00'") == (
             date(2026, 7, 1),
             date(2026, 7, 1),
         )
@@ -272,16 +272,16 @@ class TestTheWindowAStatementAsked:
 class TestAJoinIsJudgedByItsWeakestSide:
     """Found live on 2026-08-29 and by nothing else.
 
-    The model answered the dark half with `FROM sm.cargoflow_latest ... EXISTS
-    (SELECT 1 FROM sm.area_counts_dark_v1r0 ...)`, so the table whose coverage
-    is in question was named **second**. A check reading only the first `FROM`
-    would have cleared the statement on the strength of the wrong table.
+    The model answered with a statement of the shape `FROM <covered> ... EXISTS
+    (SELECT 1 FROM <uncovered> ...)`, so the table whose coverage is in question
+    was named **second**. A check reading only the first `FROM` would have
+    cleared the statement on the strength of the wrong table.
     """
 
     JOINED = (
-        "SELECT * FROM sm.cargoflow_latest c WHERE c.load_date >= '2026-07-01' "
-        "AND c.load_date < '2026-08-01' AND EXISTS (SELECT 1 FROM "
-        "sm.area_counts_dark_v1r0 d WHERE d.imo = c.vessel_imo AND d.dark = 1)"
+        "SELECT * FROM main.Employee e WHERE e.HireDate >= '2003-01-01' "
+        "AND e.HireDate < '2003-02-01' AND EXISTS (SELECT 1 FROM "
+        "main.Invoice i WHERE i.CustomerId = e.EmployeeId)"
     )
 
     def _state(self, declarations: list[dict]) -> dict:
@@ -301,26 +301,26 @@ class TestAJoinIsJudgedByItsWeakestSide:
     def test_both_tables_are_named(self) -> None:
         from openstategraph.counted_rows import tables_in
 
-        assert tables_in(self.JOINED) == ["sm.cargoflow_latest", "sm.area_counts_dark_v1r0"]
+        assert tables_in(self.JOINED) == ["main.Employee", "main.Invoice"]
 
     def test_the_covered_first_table_does_not_clear_the_uncovered_second(self) -> None:
         covered = {
-            "table": "sm.cargoflow_latest",
-            "coverage": {"column": "load_date", "min": "2024-01-01", "max": "2026-08-27"},
+            "table": "main.Employee",
+            "coverage": {"column": "HireDate", "min": "2002-04-01", "max": "2004-03-04"},
         }
         reason = check_zero_outside_coverage(
             ZERO_ANSWER, self._state([covered, DARK_DECLARATION]), ()
         )
-        assert "2026-05-12" in reason and DARK in reason
+        assert "2013-12-22" in reason and DARK in reason
 
     def test_and_a_join_of_two_covered_tables_is_still_silent(self) -> None:
         covered = {
-            "table": "sm.cargoflow_latest",
-            "coverage": {"column": "load_date", "min": "2024-01-01", "max": "2026-08-27"},
+            "table": "main.Employee",
+            "coverage": {"column": "HireDate", "min": "2002-04-01", "max": "2004-03-04"},
         }
         wide = {
             "table": DARK,
-            "coverage": {"column": "day", "min": "2024-01-01", "max": "2026-08-27"},
+            "coverage": {"column": "InvoiceDate", "min": "2002-01-01", "max": "2004-12-31"},
         }
         assert check_zero_outside_coverage(ZERO_ANSWER, self._state([covered, wide]), ()) == ""
 
@@ -328,10 +328,10 @@ class TestAJoinIsJudgedByItsWeakestSide:
 class TestTheFourStates:
     DECLARED = TableDeclaration(
         table=DARK,
-        row_key=("geofence", "day", "imo"),
-        coverage_column="day",
-        coverage_min=date(2026, 1, 1),
-        coverage_max=date(2026, 5, 12),
+        row_key=("CustomerId", "InvoiceDate"),
+        coverage_column="InvoiceDate",
+        coverage_min=date(2009, 1, 1),
+        coverage_max=date(2013, 12, 22),
     )
 
     def test_last_month_is_entirely_outside(self) -> None:
@@ -341,7 +341,7 @@ class TestTheFourStates:
         assert assess(window_of(COVERED_SQL), self.DECLARED) == "covered"
 
     def test_a_window_running_past_the_end_is_partial(self) -> None:
-        assert assess((date(2026, 5, 1), date(2026, 6, 1)), self.DECLARED) == "partial"
+        assert assess((date(2013, 12, 1), date(2014, 1, 1)), self.DECLARED) == "partial"
 
     def test_no_declaration_is_undeclared(self) -> None:
         assert assess(window_of(LAST_MONTH_SQL), None) == "undeclared"
@@ -362,10 +362,10 @@ class TestTheFourStates:
 
 class TestWhatCountsAsReportingNone:
     def test_the_published_sentence(self) -> None:
-        assert nothing_claims_in(ZERO_ANSWER) == ["vessels"]
+        assert nothing_claims_in(ZERO_ANSWER) == ["invoices"]
 
     def test_a_digit_zero_says_the_same_thing(self) -> None:
-        assert nothing_claims_in("I found 0 dark vessels last month.") == ["vessels"]
+        assert nothing_claims_in("I found 0 invoices last month.") == ["invoices"]
 
     def test_a_word_about_the_record_is_not_a_word_about_the_world(self) -> None:
         """The same rule `165` applies to the opposite claim."""
@@ -378,23 +378,23 @@ class TestWhatCountsAsReportingNone:
     def test_a_country_code_is_not_the_word_no(self) -> None:
         """Found on the first live run, 2026-08-29, and by nothing else.
 
-        The owner's own question produced a correct breakdown reading
-        *"32,759 barrels to Floro [NO]"* three times over — `[NO]` is Norway —
-        and the disclosure came out as *"no barrels and instances"*: a sentence
-        about nothing, attached to an answer that was right. `133` in person,
-        one live run to find and no fixture that would have caught it.
+        The owner's own question produced a correct breakdown whose rows each
+        ended in a bracketed country code — `[NO]` is Norway — and the
+        disclosure came out as a sentence about nothing, attached to an answer
+        that was right. `133` in person, one live run to find and no fixture
+        that would have caught it.
         """
         prose = (
-            "Biodiesel: 32,759 barrels to Floro [NO]. Diesel/Gasoil: 109,724 barrels "
-            "to Alesund [NO]. Regarding dark vessels, there were no recorded instances "
-            "of dark vessels departing from Mongstad during this period."
+            "Rock: 1,297 tracks sold to Oslo [NO]. Latin: 579 tracks to Oslo [NO]. "
+            "Regarding classical tracks, there were no recorded instances of "
+            "classical tracks purchased during this period."
         )
-        assert nothing_claims_in(prose) == ["vessels"]
+        assert nothing_claims_in(prose) == ["tracks"]
 
     def test_it_walks_past_the_word_that_is_not_the_subject(self) -> None:
-        """*"no recorded instances of dark vessels"* is about vessels."""
-        assert nothing_claims_in("There were no recorded instances of dark vessels.") == [
-            "vessels"
+        """*"no recorded instances of classical tracks"* is about tracks."""
+        assert nothing_claims_in("There were no recorded instances of classical tracks.") == [
+            "tracks"
         ]
 
 
@@ -407,7 +407,7 @@ class TestItRefusesTheZeroThatCouldNotHaveBeenAnythingElse:
     def test_the_reason_names_the_last_date_the_data_holds(self) -> None:
         reason = check_zero_outside_coverage(ZERO_ANSWER, _state(LAST_MONTH_SQL, declared=True), ())
         assert reason
-        assert "2026-05-12" in reason
+        assert "2013-12-22" in reason
         assert DARK in reason
         assert "not a measurement" in reason
 
@@ -418,17 +418,17 @@ class TestItRefusesTheZeroThatCouldNotHaveBeenAnythingElse:
     def test_hedging_is_not_saying_it(self) -> None:
         """The exit below is one literal, not a tone. A sentence that gestures at
         doubt without naming the date leaves the reader exactly where they were."""
-        candidate = "There are no dark vessels, though I cannot vouch for the period."
+        candidate = "There are no invoices, though I cannot vouch for the period."
         assert check_zero_outside_coverage(candidate, _state(LAST_MONTH_SQL, declared=True), ())
 
 
 class TestTheCheckCanSeeItsOwnRepair:
     """Found live on 2026-08-29, after the fix, and by nothing else.
 
-    The model complied **completely** — *"The data for the dark fleet only goes
-    up to May 12, 2026. Therefore, there were no distinct dark vessels recorded
-    from July 1, 2026, to August 1, 2026, because this period is beyond the
-    available data coverage."* — and the guard rejected it again, exhausted, and
+    The model complied **completely** — *"The data for invoices only goes up to
+    December 22, 2013. Therefore, there were no invoices recorded from July 1,
+    2026, to August 1, 2026, because this period is beyond the available data
+    coverage."* — and the guard rejected it again, exhausted, and
     the reader was told the answer was unverified. A gate that cannot recognise
     its own repair is `167` built on purpose, and `133`'s failure exactly: it
     fired on work that was correct.
@@ -438,8 +438,8 @@ class TestTheCheckCanSeeItsOwnRepair:
     """
 
     COMPLIANT = (
-        "The data for the dark fleet only goes up to May 12, 2026. Therefore, there were "
-        "no distinct dark vessels recorded from July 1, 2026 to August 1, 2026, because "
+        "The data for invoices only goes up to December 22, 2013. Therefore, there were "
+        "no invoices recorded from July 1, 2026 to August 1, 2026, because "
         "this period is beyond the available data coverage."
     )
 
@@ -447,12 +447,12 @@ class TestTheCheckCanSeeItsOwnRepair:
         assert check_zero_outside_coverage(self.COMPLIANT, _state(LAST_MONTH_SQL, declared=True), ()) == ""
 
     def test_the_iso_spelling_too(self) -> None:
-        candidate = "No dark vessels: this data stops on 2026-05-12."
+        candidate = "No invoices: this data stops on 2013-12-22."
         assert check_zero_outside_coverage(candidate, _state(LAST_MONTH_SQL, declared=True), ()) == ""
 
     def test_a_different_date_is_not_the_date(self) -> None:
         """Strict in trusting: the exit is the declared end and nothing near it."""
-        candidate = "No dark vessels. This data stops on May 11, 2026."
+        candidate = "No invoices. This data stops on December 21, 2013."
         assert check_zero_outside_coverage(candidate, _state(LAST_MONTH_SQL, declared=True), ())
 
     def test_the_spellings_it_reads(self) -> None:
@@ -460,8 +460,8 @@ class TestTheCheckCanSeeItsOwnRepair:
 
         from openstategraph.table_coverage import states_the_date
 
-        day = _date(2026, 5, 12)
-        for spelling in ("2026-05-12", "May 12, 2026", "12 May 2026", "may 12 2026"):
+        day = _date(2013, 12, 22)
+        for spelling in ("2013-12-22", "December 22, 2013", "22 December 2013", "december 22 2013"):
             assert states_the_date(f"the data stops on {spelling}.", day), spelling
 
     def test_an_ambiguous_numeric_spelling_is_not_read(self) -> None:
@@ -470,7 +470,7 @@ class TestTheCheckCanSeeItsOwnRepair:
 
         from openstategraph.table_coverage import states_the_date
 
-        assert not states_the_date("the data stops on 12/05/2026.", _date(2026, 5, 12))
+        assert not states_the_date("the data stops on 12/22/2013.", _date(2013, 12, 22))
 
 
 class TestItIsSilentOnCorrectWork:
@@ -485,11 +485,11 @@ class TestItIsSilentOnCorrectWork:
         assert _reader_rail(COVERED_SQL, declared=True) == ""
 
     def test_an_answer_reporting_something_is_not_this_checks_business(self) -> None:
-        answer = "6,119 dark vessels were seen."
+        answer = "412 invoices were found."
         assert check_zero_outside_coverage(answer, _state(LAST_MONTH_SQL, declared=True), ()) == ""
 
     def test_a_run_that_filtered_on_no_period_is_not_reported(self) -> None:
-        state = _state(f"SELECT COUNT(DISTINCT imo) FROM {DARK} WHERE dark = 1", declared=True)
+        state = _state(f"SELECT COUNT(DISTINCT CustomerId) FROM {DARK}", declared=True)
         assert check_zero_outside_coverage(ZERO_ANSWER, state, ()) == ""
 
     def test_a_run_that_ran_nothing_is_not_reported(self) -> None:
@@ -529,15 +529,15 @@ class TestAnUndeclaredTableFailsSafe:
         assert "SELECT" not in sentence.upper()
 
     def test_a_window_running_past_a_declared_end_names_the_last_date(self) -> None:
-        note = UncoveredWindow(subject="vessels", table=DARK, declared_max="2026-05-12")
+        note = UncoveredWindow(subject="invoices", table=DARK, declared_max="2013-12-22")
         sentence = notes_for_reader([note])
-        assert "2026-05-12" in sentence
+        assert "2013-12-22" in sentence
         assert "could not have appeared" in sentence
         assert DARK not in sentence
 
     def test_the_two_sentences_are_different(self) -> None:
-        declared = notes_for_reader([UncoveredWindow(subject="vessels", declared_max="2026-05-12")])
-        undeclared = notes_for_reader([UncoveredWindow(subject="vessels")])
+        declared = notes_for_reader([UncoveredWindow(subject="invoices", declared_max="2013-12-22")])
+        undeclared = notes_for_reader([UncoveredWindow(subject="invoices")])
         assert declared and undeclared and declared != undeclared
 
 
@@ -547,8 +547,8 @@ class TestAnUndeclaredTableFailsSafe:
 
 
 class TestRowKeyTurnsADoubtIntoAFact:
-    COUNT_SQL = f"SELECT COUNT(*) AS n FROM {DARK} WHERE dark = 1"
-    PUBLISHED = "There are 1,454,449 dark vessels."
+    COUNT_SQL = f"SELECT COUNT(*) AS n FROM {DARK}"
+    PUBLISHED = "There are 8,715 invoices."
 
     def _state(self, *, declared: bool) -> dict:
         row: dict = {
@@ -557,7 +557,7 @@ class TestRowKeyTurnsADoubtIntoAFact:
             "queries": [
                 {
                     "sql": self.COUNT_SQL,
-                    "result": '{"ok": true, "data": {"sample_rows": [{"n": 1454449}]}}',
+                    "result": '{"ok": true, "data": {"sample_rows": [{"n": 8715}]}}',
                 }
             ],
         }
@@ -576,21 +576,21 @@ class TestRowKeyTurnsADoubtIntoAFact:
         from openstategraph.counted_rows import check_row_counts_in_prose
 
         reason = check_row_counts_in_prose(self.PUBLISHED, self._state(declared=True), ())
-        assert "declares its row key as (geofence, day, imo, dt_last, pos_last)" in reason
-        assert "not one vessel" in reason
+        assert "declares its row key as (CustomerId, InvoiceDate, BillingCity)" in reason
+        assert "not one invoice" in reason
         assert "never established that" not in reason
 
     def test_a_declared_one_row_per_entity_table_keeps_the_softer_sentence(self) -> None:
         """A key of one column says a row **is** one of something.
 
-        `165`'s known cost — `sm.dim_vessel_latest` reported too — is bounded by
+        `165`'s known cost — a genuine one-row-per-entity table reported too — is bounded by
         exactly this: the declaration that would make the harder sentence true
         is also the declaration that withholds it.
         """
         from openstategraph.counted_rows import check_row_counts_in_prose
 
         state = self._state(declared=True)
-        state["tool_use"]["sql1"]["declares"] = [{"table": DARK, "row_key": ["imo"]}]
+        state["tool_use"]["sql1"]["declares"] = [{"table": DARK, "row_key": ["InvoiceId"]}]
         reason = check_row_counts_in_prose(self.PUBLISHED, state, ())
         assert "declares its row key" not in reason
         assert "never established that" in reason
@@ -648,7 +648,7 @@ class TestTheDisclosureReachesTheAnswer:
         seed = _state(LAST_MONTH_SQL, declared=declared)
         final = graph.invoke(
             {
-                "question": "Any dark vessels last month?",
+                "question": "Any invoices last month?",
                 "attempts": 0,
                 "decisions": {},
                 "outputs": {},
@@ -677,7 +677,7 @@ class TestTheDisclosureReachesTheAnswer:
         )
         final = graph.invoke(
             {
-                "question": "Any dark vessels in March?",
+                "question": "Any invoices in March 2011?",
                 "attempts": 0,
                 "decisions": {},
                 "outputs": {},

@@ -214,7 +214,7 @@ class TestMcp:
     def test_a_tool_the_table_knows_says_what_it_is_doing(self) -> None:
         from openstategraph.prebuilt_mcp import _wrap_async_tool
 
-        wrapped = _wrap_async_tool(self._fake_tool("mcp_search_tables"), "cpl")
+        wrapped = _wrap_async_tool(self._fake_tool("mcp_search_tables"), "lenses")
         messages = [r.message for r in _inside_a_run(lambda: wrapped.func(q="vessel"))]
 
         # The whole point of `112`: not *that* something is happening, but

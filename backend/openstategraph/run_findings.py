@@ -33,7 +33,8 @@ so it has its own name and inherits none of A's remedy.
 The ticket named `statements` first, and on this machine it holds nothing.
 Measured over both `runs.sqlite` files that exist here — 39 turns across
 `stress-review`, `stress-deep`, `stress-parallel-drop`, `stress-bad-*` and
-`cpl-nl2sql` — `statements` was `[]` on **every row**. It is not a defect in
+a private NL2SQL package — `statements` was `[]` on **every row**. It is not
+a defect in
 that column: `executed_statements` admits only an argument some recogniser
 accepted as a *statement*, which is `looks_like_sql_query` and nothing else, so
 a registry lookup or a policy read is correctly absent from it.

@@ -4,7 +4,7 @@
 already names `"skills"` and `"filesystem"` and nothing fills either. Both
 built here as plain functions/middleware that a compiler contributes into
 `resolve_middleware()`'s slot table — never a new base member, never a new
-node type. `docs/decisions/nl2sql-lens-layer.md` records why `create_deep_agent`'s
+node type. A private NL2SQL package's build recorded why `create_deep_agent`'s
 own `skills=` kwarg is not the seam (it wants `StateBackend` + `invoke(files=)`,
 which nothing provisions for a compiled node).
 
@@ -75,7 +75,7 @@ class OffloadMiddleware(AgentMiddleware):
 
     **The pointer is deferred, and that is `launch-readiness/162`.** Until then
     the substitution happened in `wrap_tool_call`, on arrival, so a result over
-    threshold was *never once* seen by the model. Measured on `cpl-mcp`:
+    threshold was *never once* seen by the model. Measured on a private MCP package:
     `mcp_describe_lens_tables` returned 14,101 characters of column names and
     the model received a path, so it wrote SQL against `loading_time` where the
     column is `load_date` — six failed queries in one run, then six paged

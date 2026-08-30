@@ -19,7 +19,7 @@ something is — which is what this module supplies, as a contribution into the
 
 ## Derived, not restated — and why that is the point
 
-The live `cpl-mcp` run of 2026-08-27 answered the Persian Gulf question
+A live MCP-backed run of 2026-08-27 answered one question
 correctly three times running and *described itself wrongly twice*: one run's
 prose said "69 distinct ports" while listing 68, another's findings note
 claimed 83. A count the model writes can drift from the result; a count read
@@ -54,8 +54,8 @@ retries, because narration reads the result and does not touch it.
 
 ## Every key is verified against a running server
 
-The keys below were read off the live CPL MCP server at
-`http://localhost:8080/mcp/` on 2026-08-28, one call per entry, and the
+The keys below were read off a running lens-serving MCP server on
+2026-08-28, one call per entry, and the
 captured payloads are the test fixtures. That is deliberate: a guessed key
 resolves to nothing, produces no line, and looks exactly like a tool that has
 nothing to report. A tool whose result shape has not been verified is simply
@@ -116,7 +116,7 @@ class _Finding:
 
 #: `name -> how to read its result`. Every key verified live, 2026-08-28.
 _TABLE: dict[str, _Finding] = {
-    # --- the CPL MCP surface -------------------------------------------
+    # --- the lens-serving MCP surface -----------------------------------
     "mcp_list_lenses": _Finding("view of the data", "views of the data", ("lenses",)),
     "mcp_describe_lens_tables": _Finding("table", "tables", ("tables",)),
     "mcp_describe_table": _Finding("column", "columns", ("columns",)),
@@ -197,7 +197,7 @@ _TABLE: dict[str, _Finding] = {
 # - **Speakable**: a name a person authored. The reader's own words
 #   (`web_search`'s query), a repository file a developer asked about
 #   (`code_read`, `platform_read_file`), or a document published under a name
-#   its author chose — `mcp_skill_read`'s `cargoflow/SKILL.md`, which
+#   its author chose — `mcp_skill_read`'s `<lens>/SKILL.md`, which
 #   `tool_sentences.py` speaks for exactly that reason.
 # - **Not speakable**: a string the machinery minted. `/offload/<tool>/<call
 #   id>.txt` is this platform's own envelope (`abc/deep_tier_offload.py`), and
@@ -465,7 +465,7 @@ _HARNESS_SHAPES: tuple[str, ...] = (
 )
 
 
-#: `{"ok": false}` — the CPL MCP envelope's own failure flag. Read only for a
+#: `{"ok": false}` — that MCP envelope's own failure flag. Read only for a
 #: tool this table already knows, so an unrelated payload that happens to
 #: carry an `ok` key is never spoken for.
 _FAILED_TEXT = "That did not work."
@@ -661,7 +661,7 @@ def result_envelope(content: Any) -> dict[str, Any] | None:
       `content_and_artifact` across, so the text lands inside
       `[{"type": "text", "text": "{…}"}]`.
 
-    The third was found on the live `cpl-mcp` run this ticket was verified
+    The third was found on the live MCP run this ticket was verified
     against, and it is why the shape floor read a 121-row query as
     `"1 result."`: one text block is one list item. A parser and the thing it
     parses disagreeing is the case CLAUDE.md says to suspect the parser for.

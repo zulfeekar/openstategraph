@@ -137,7 +137,7 @@ saying the filesystem "is private to this run and confined to it". *Confined*
 was true; *private to this run* was not — the store was one root per package
 **per process**, so a long-lived server handed every run of that package the
 same writable scratch directory. It was measured, not reasoned about: three
-consecutive `cpl-mcp` runs of one question, and run 2 called no query tool at
+consecutive MCP runs of one question, and run 2 called no query tool at
 all and answered out of run 1's files. A locked sentence a package author
 cannot edit is the worst place for a false claim, which is this document's own
 argument for putting the contract here, so the fix had to make the sentence
@@ -160,7 +160,8 @@ neither see it nor fix it. `BaseAgentNode.PROMPT.preamble` therefore stays
 to whatever preamble a tier declares.
 
 The reason it belongs here rather than in a package's `rules`: it was being
-written in `rules`. `cpl-mcp`'s own `systemPrompt` carried a longer version of
+written in `rules`. A private MCP package's own `systemPrompt` carried a
+longer version of
 the same paragraph, which is the platform having failed to say it once.
 
 **Ambient package skills stay context.** `workflows/<slug>/skills/*.md`, loaded

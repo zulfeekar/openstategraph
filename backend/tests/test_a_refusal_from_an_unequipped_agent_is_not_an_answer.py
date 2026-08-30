@@ -2,7 +2,7 @@
 
 Asked *"how many vessels departed mongstad last week?"*, the MCP workflow's
 agent answered *"I cannot properly answer because this workflow does not have
-the CPL MCP tools…"* — correct, and the honest thing to say. `grader1` returned
+the MCP tools…"* — correct, and the honest thing to say. `grader1` returned
 **pass**, and that sentence was delivered as the answer, with the same shape and
 confidence a working run produces. Silent wrongness.
 
@@ -71,7 +71,7 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "openstategraph" / "examples
 
 #: The refusal, near enough verbatim from the live 2026-08-25 run.
 REFUSAL = (
-    "I cannot properly answer because this workflow does not have the CPL MCP "
+    "I cannot properly answer because this workflow does not have the MCP "
     "tools needed to locate the shipping lens and run the query."
 )
 

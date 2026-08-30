@@ -353,7 +353,7 @@ renders only part of a result has to make the bound visible inside what it
 renders — a sibling return value carrying the true count is not disclosure,
 because nothing the model reads mentions it.
 
-The worked example is `cpl-nl2sql`'s `execute_sql`
+The worked example is a private NL2SQL package's `execute_sql`
 (`launch-readiness/129`). It rendered the first 50 rows and returned
 `len(rows)` alongside, so **a complete result and a truncated one rendered
 identically** and the reader could not tell which they had. A live run wrote

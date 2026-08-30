@@ -11,7 +11,7 @@ it made up, and a viewer reads motion as duration.
 and assumed a tradeoff: (a) a row per chunk — perfect cadence, most disk; (b)
 coalesced bursts — cadence "to within a frame", far less disk; (c) nothing.
 Measured against four real `ollama:gpt-oss:120b-cloud` runs of `stress-review`
-and `cpl-nl2sql`, the tradeoff does not exist. What (a) costs is not the
+and a private 28-node package, the tradeoff does not exist. What (a) costs is not the
 cadence, it is the **row**: 242 to 1014 rows each repeating one node's
 identity. Pack the identity once per burst and carry the per-chunk offsets as
 a delta blob, and the same information costs 5–13x less than (a) and, in two

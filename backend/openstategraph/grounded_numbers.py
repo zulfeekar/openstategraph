@@ -1,8 +1,8 @@
 """Every number in the prose appears in something the run retrieved.
 
-`launch-readiness/151`. Rule **F3** of the NL2SQL rule contract, classified
-CLOSEABLE on 2026-08-25 and left unbuilt for one stated reason — *"it needs a
-new node after `summarize1`"* (`docs/decisions/nl2sql-rule-sweep-2026-08-25.md`).
+`launch-readiness/151`. Rule **F3** of a private NL2SQL package's rule
+contract, classified CLOSEABLE on 2026-08-25 and left unbuilt for one stated
+reason — *"it needs a new node after `summarize1`"*.
 That node type now exists (`guard.check`, `launch-readiness/65`).
 
 **The sweep note says the check was "implemented as a standalone

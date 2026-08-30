@@ -9,7 +9,8 @@ same dozen words.
 
 This is that contribution. `describe_tool_call` is a pure
 `(name, args) -> sentence | None` function over a table of this project's own
-tool surface — the 13 tools `~/osg-cpl-mcp` advertises and the 19 built-ins
+tool surface — the 13 tools a lens-serving MCP server advertises and the 19
+built-ins
 `prebuilt_*.py` / `knowledge_explorer.py` ship. No state, no I/O, no round
 trip.
 
@@ -84,8 +85,8 @@ _MAX_VALUE_LEN = 60
 _Sentence = tuple[str, str, tuple[str, ...]]
 
 _TABLE: dict[str, _Sentence] = {
-    # --- the CPL MCP surface (13) ---------------------------------------
-    # `docs/decisions/an-agent-that-reaches-cpl-through-mcp.md`. "Lens" is the
+    # --- the lens-serving MCP surface (13) -------------------------------
+    # Read off a running server, one call per entry. "Lens" is the
     # server's word, not a reader's, so every sentence says *view of the data*.
     "mcp_list_lenses": (
         "",
@@ -244,12 +245,12 @@ _TABLE: dict[str, _Sentence] = {
     # `create_deep_agent` pre-assembles these, so every `DeepAgentNode` has
     # them whether or not its author added a tool. They are the platform's,
     # not a package's — which is why they belong in this table and a
-    # package's own tools do not. Measured on a live `cpl-mcp` run
+    # package's own tools do not. Measured on a live MCP run
     # (`launch-readiness/112`): three of the fourteen lines in one card's
     # stack were `"Calling a tool."`, and all three were these.
     #
     # **None of these declares an argument, and that is the decision.** Caught
-    # on the live `cpl-mcp` run this table was verified against: `read_file`
+    # on the live MCP run this table was verified against: `read_file`
     # declared `file_path`, and what reached the customer chat was
     # `Reading /offload/mcp_list_lenses/call_eeR8/3LoOli2BeA5Cqk4p6ik.txt.`
     # A path on this filesystem is never a path a person named — it is the

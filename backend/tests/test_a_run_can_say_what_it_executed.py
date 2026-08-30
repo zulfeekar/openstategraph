@@ -175,9 +175,10 @@ class TestNoCredentialCanAppear:
         """The narrowness is the safety, and it is the part that regresses."""
         for statement in (
             SQL,
-            "SELECT COUNT(*) FROM area_counts WHERE day >= '2026-01-01'",
-            "SELECT port, SUM(barrels) FROM cargoflow_latest "
-            "WHERE shipping_region_v2 = 'Middle East Gulf (MEG)' GROUP BY port",
+            "SELECT COUNT(*) FROM main.Invoice WHERE InvoiceDate >= '2009-01-01'",
+            "SELECT g.Name, SUM(l.Quantity) FROM main.InvoiceLine l "
+            "JOIN main.Track t ON t.TrackId = l.TrackId "
+            "JOIN main.Genre g ON g.GenreId = t.GenreId GROUP BY g.Name",
             "SELECT secret_ingredient FROM recipes WHERE token_count > 3",
         ):
             assert scrubbed(statement) == statement
