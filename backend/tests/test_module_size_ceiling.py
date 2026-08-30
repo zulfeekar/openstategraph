@@ -298,6 +298,15 @@ grew here is the copy — the case where `init` declined to write an existing
 which is exactly the branch where it may not, and printing the missing rules
 as lines to paste costs more lines than a claim does. That is the module's own
 job: this command says what it did.
+
+**1137 -> 1144** (`install-experience/25`). Seven lines, six of which are a
+table and a comment. The brief a coding agent reads now lands in the project
+`init` makes, and the table is `_AGENTS_MD_STATE`: four states, because "we
+wrote the file", "we added our block to yours", "we replaced a stale block"
+and "it was already right" are four different things to have done to a file
+the user may own, and this command's one job is to say which. The knowledge —
+what the brief says, where it goes, what the markers mean — is
+`agent_brief.py`; nothing about it is duplicated here.
 """
 
 WORKFLOW_COMPILER = """
@@ -667,7 +676,7 @@ and the reader read.
 #: worried about.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1137, CLI),
+    "cli.py": Recorded(1144, CLI),
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

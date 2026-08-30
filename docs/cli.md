@@ -56,9 +56,26 @@ openstategraph init [directory] [--workflows-dir NAME] [--empty] [--force]
 ```
 
 Makes a directory an OpenStateGraph project: an `openstategraph.yaml`, a
-`.gitignore`, a workflows folder and a starter package. Defaults to the
-current directory. **This is the one command that creates a project**, and the
-only thing an install line cannot carry.
+`.gitignore`, an `AGENTS.md`, a workflows folder and a starter package.
+Defaults to the current directory. **This is the one command that creates a
+project**, and the only thing an install line cannot carry.
+
+The `AGENTS.md` is the brief a coding agent reads — the lexicon, the compiler
+position, the rules that decide whether what it writes is right, and where the
+rest of these pages are. It exists because `docs/` and the architecture
+principles are repository files: someone who ran `pip install openstategraph`
+has the worked examples and none of the rules, so their agent can copy the
+*shape* of a package and cannot learn how one is built. A wheel cannot deliver
+that at install time — the format is an unpack with no hook to run, which is a
+property worth keeping — so the distribution carries the brief and this command
+places it.
+
+It goes between `<!-- OPENSTATEGRAPH:START -->` and `<!-- OPENSTATEGRAPH:END -->`
+in a file that is otherwise yours. Inside the markers is generated and is
+replaced whole on the next run; outside them is never read or moved, so your
+own house rules can live in the same file. Re-run `openstategraph init . --force`
+after an upgrade to take a newer brief. The bytes placed are the bytes in the
+distribution, never a second rendering.
 
 It is written for a directory that is already yours. A directory with files in
 it is not refused — it is reported (*"already has N files in it — this looks

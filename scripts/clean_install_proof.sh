@@ -151,6 +151,11 @@ LISTING="$(python3 -m zipfile -l "$WHEEL")"
 # and `sql-qa`'s 1 MB database — the one file big enough that somebody will
 # eventually be tempted to exclude it, at which point the only example with a
 # machine-gradable eval stops working on arrival.
+#
+# `agent_brief.md` is the third instance of the same claim, for the reader
+# who never reads (install-experience/25): a wheel without it makes
+# `openstategraph init` write an empty block, and a stranger's coding agent
+# goes on inferring the rules from the examples.
 for required in "py.typed" "LICENSE" "entry_points.txt" "static/chat.html" \
                 "compile/port_specs.json" "static/editor/index.html" \
                 "templates/index.json" "templates/minimal/workflow.json" \
@@ -158,7 +163,8 @@ for required in "py.typed" "LICENSE" "entry_points.txt" "static/chat.html" \
                 "templates/team/workflow.json" \
                 "examples/index.json" "examples/chained-summarizer/workflow.json" \
                 "examples/chained-summarizer/AGENTS.md" \
-                "examples/sql-qa/data/Chinook_Sqlite.sqlite"; do
+                "examples/sql-qa/data/Chinook_Sqlite.sqlite" \
+                "openstategraph/agent_brief.md"; do
   # No pipe here on purpose: `printf | grep -q` lets grep exit at first
   # match while printf is mid-write — SIGPIPE, which pipefail turns into a
   # nondeterministic failure (it did, on the second-ever CI run).
