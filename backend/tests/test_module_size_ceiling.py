@@ -534,6 +534,20 @@ from *this read could not get it*, which had been one `except` and one
 exception class is not a second concern here: it is how this module says what
 it could not answer, which is what `_could_not_write` already does for the
 writing half.
+
+**600 -> 618** (`the-cost-of-one-more/11`). Eighteen lines, and seventeen of
+them are the argument. `now()` writes local wall clock with a numeric offset
+and every reader ordered that column as **text**, which compares the offset as
+text — so two rows either side of a DST fall-back came back in the order of
+their local clocks. `CHRONOLOGICAL` is the column read as the instant it
+names, the four indexes are rebuilt on it, and the `ORDER BY` names it. The
+code is a constant and four statements that were four statements before; what
+the file actually gained is the paragraph saying why the ordering is
+**derived** rather than stored — a new UTC column would be the first backfill
+over a store that never sweeps, and re-spelling `now()` would sort the same
+instant a day apart in two spellings. That reasoning is the module's, because
+the store's growth is what makes it expensive to get wrong, and this file is
+where a reader will look for it.
 """
 
 #: Eight modules, derived and then argued for one at a time. Nothing in this
@@ -549,7 +563,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(698, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
-    "run_sinks.py": Recorded(600, RUN_SINKS),
+    "run_sinks.py": Recorded(618, RUN_SINKS),
 }
 
 

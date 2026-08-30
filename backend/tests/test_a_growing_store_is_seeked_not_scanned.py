@@ -108,24 +108,31 @@ def plan_for(path: Path, sql: str, args: tuple[Any, ...] = ()) -> list[str]:
 # 1. Every listing seeks
 # --------------------------------------------------------------------------
 
+#: The ordering every listing asks for, read out of the module rather than
+#: spelled again here.
+#:
+#: It used to be the literal `ORDER BY at DESC`, and `the-cost-of-one-more/11`
+#: is why it is not: an expression index answers only an `ORDER BY` naming the
+#: *same* expression, so a second spelling of it in this file would not have
+#: gone red — it would have quietly gone on measuring a query nobody runs, and
+#: reported a plan for it.
+ORDER = f"ORDER BY {run_sinks.CHRONOLOGICAL} DESC, rowid DESC"
+
 LISTINGS = {
     "the default listing": (
-        "SELECT rowid,at FROM runs ORDER BY at DESC, rowid DESC LIMIT ?",
+        f"SELECT rowid,at FROM runs {ORDER} LIMIT ?",
         (25,),
     ),
     "--workflow": (
-        "SELECT rowid,at FROM runs WHERE workflow_slug = ? "
-        "ORDER BY at DESC, rowid DESC LIMIT ?",
+        f"SELECT rowid,at FROM runs WHERE workflow_slug = ? {ORDER} LIMIT ?",
         ("w1", 25),
     ),
     "--session": (
-        "SELECT rowid,at FROM runs WHERE session_id = ? "
-        "ORDER BY at DESC, rowid DESC LIMIT ?",
+        f"SELECT rowid,at FROM runs WHERE session_id = ? {ORDER} LIMIT ?",
         ("s1", 25),
     ),
     "--thread": (
-        "SELECT rowid,at FROM runs WHERE thread_id = ? "
-        "ORDER BY at DESC, rowid DESC LIMIT ?",
+        f"SELECT rowid,at FROM runs WHERE thread_id = ? {ORDER} LIMIT ?",
         ("t1", 25),
     ),
 }
@@ -140,9 +147,14 @@ def test_every_listing_is_answered_out_of_an_index(tmp_path: Path, listing: str)
     run ever recorded) to print a page of 25.
 
     A bare `SCAN` is the tell, not the word: the unfiltered listing is `SCAN
-    runs USING COVERING INDEX runs_at`, which walks the index in the order the
+    runs USING INDEX runs_at_utc`, which walks the index in the order the
     query asked for and stops at the `LIMIT` — proved to be O(limit) by the
     counting test below rather than by reading the word "SCAN".
+
+    `--thread` joined the other three in `the-cost-of-one-more/11`. `08` left
+    it with a temp sort on the argument that one conversation is bounded by a
+    person's patience, which was right; the index it needed anyway for the
+    equality search is now one column longer and the sort is gone for free.
     """
     store = a_store(tmp_path / "runs.sqlite", 200)
     sql, args = LISTINGS[listing]
@@ -214,17 +226,17 @@ def test_an_index_arrives_on_a_store_that_already_exists(tmp_path: Path) -> None
     """
     store = a_store(tmp_path / "runs.sqlite", 50)
     with sqlite3.connect(store) as connection:
-        for name in ("runs_at", "runs_session_at"):
+        for name in ("runs_at_utc", "runs_session_utc"):
             connection.execute(f"DROP INDEX IF EXISTS {name}")
     with readonly_closing(store) as connection:
         before = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='index'")}
-    assert "runs_at" not in before
+    assert "runs_at_utc" not in before
 
     a_store(store, 1)  # one more run, through the ordinary write path
 
     with readonly_closing(store) as connection:
         after = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='index'")}
-    assert {"runs_at", "runs_session_at"} <= after
+    assert {"runs_at_utc", "runs_session_utc"} <= after
     assert not any("TEMP B-TREE" in step for step in plan_for(store, *LISTINGS["the default listing"]))
 
 

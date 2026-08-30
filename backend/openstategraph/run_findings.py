@@ -68,13 +68,20 @@ Three things it misses, stated rather than implied:
   here. Both shapes are in the real store. Closing it needs the tool's own
   schema, and a normaliser that guessed would accuse a run of repeating itself
   for asking two genuinely different things.
-- **Anything past 4,000 characters.** `api/threads` caps a rendered value —
-  though it appends the true length, so two long values of different sizes
-  still differ.
+- **Anything past 4,000 characters.** `api/threads` caps a rendered value.
+  This line used to end *"though it appends the true length, so two long
+  values of different sizes still differ"*, which is true and was doing the
+  work of a claim it does not make: two values of the **same** length truncate
+  to the same 4,000 characters and the same `(+N chars)` suffix, and were
+  reported as a repeat. It bites the largest payloads — a query against a wide
+  schema, a document pasted into a call — which are the ones a
+  `REDUNDANT_TOOL_CALL` is least helpful about being wrong on. A truncated
+  argument is now refused rather than grouped (`grouping_key`), so this is a
+  miss and no longer a false finding.
 - **Where a call happened.** Two workers of one fan-out that each look the same
   thing up are reported as a repeat, because the run paid for both.
 
-**A call whose arguments were not recorded is not a call at all**, and that
+**A call whose arguments we do not know is not a call at all**, and that
 rule was bought with evidence. `_ToolCallReader` reports a `ToolMessage` whose
 request is gone with no arguments — a truncated history, or a thread joined
 mid-run — and grouped on `""` those are "the same call" by construction while
@@ -119,6 +126,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any, Iterable, Sequence
 
 from pydantic import BaseModel, Field
@@ -133,6 +141,7 @@ __all__ = [
     "UNSTABLE_TOOL_RESULT",
     "FindingRun",
     "RunFinding",
+    "grouping_key",
     "normalised_arguments",
     "run_findings",
 ]
@@ -142,6 +151,16 @@ REDUNDANT_TOOL_CALL = "redundant-tool-call"
 
 #: B — the same call, answered differently. Information.
 UNSTABLE_TOOL_RESULT = "unstable-tool-result"
+
+#: The tail `api.threads._cap` appends to a value it had to cut short.
+#:
+#: Matched rather than imported. The cap is a **display** decision made one
+#: layer down for a rendering door, and this module is reading that projection
+#: to do analysis — so it recognises the mark by its shape and asks that layer
+#: for nothing. `tests/test_the_same_call_twice_is_two_findings.py` pins the
+#: shape against `_cap` itself, so a change to the marker is a red test here
+#: rather than a detector that silently stops recognising it.
+_TRUNCATED = re.compile(r"… \(\+\d+ chars\)\Z")
 
 #: How much of a digest is carried. Long enough that two answers colliding is
 #: not a thing that happens, short enough to read in a ticket.
@@ -212,6 +231,56 @@ def normalised_arguments(text: str) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
+def grouping_key(name: str, arguments: str) -> tuple[str, str] | None:
+    """The key two calls share when they are the same call — or `None`.
+
+    **This is the only place in this module that builds a grouping key, and
+    that is the fix rather than an accident of layout** (`the-cost-of-one-more/
+    09`). The rule *"a call whose arguments we do not know is not a call"* was
+    written at the call site as `if not call.arguments: continue`, one line
+    above `key = (call.name, normalised_arguments(call.arguments))`. The guard
+    read the raw string and the key read the normalised one, so `'   '` — which
+    is truthy, and `''` once normalised — walked straight past a guard that
+    existed to refuse exactly that key. A guard beside a key is a guard with a
+    door next to it; a guard *inside* the key has none, and
+    `test_the_same_call_twice_is_two_findings.py` counts the doors rather than
+    trusting this paragraph.
+
+    Three answers, and the module's own rule — tolerant in reading, strict in
+    trusting — decides all three:
+
+    - **Nothing left after normalising** (`''`, `'   '`, `'\t\n'`) → `None`.
+      Not *"called with nothing"* but *"we do not know what it was called
+      with"*, and unknown is not the same as the other unknown. This is the
+      rule the three false B findings bought, now spelled over the value that
+      is actually compared.
+    - **A value the display layer had to cut short** → `None`. Two distinct
+      arguments of the same length truncate to the same 4,000 characters and
+      the same `(+N chars)` suffix, and the honest answer to *"are these the
+      same call?"* over two values we hold only the heads of is **we do not
+      know**. Refusing costs a real repeat of a very large argument, which is a
+      miss; grouping costs a false accusation, which is a published untruth
+      about somebody's run. The narrowness is the safety.
+    - **`{}`, `[]`, `null`, and every other value that parsed** → a key.
+      `{}` means *this tool takes no arguments and was called twice*, which is
+      a known argument and a real repeat. It is the one collapse this module
+      performs deliberately and it was nowhere stated, so it is stated here:
+      an empty *object* groups; an empty *string* does not.
+
+    What it does **not** do is reach past the cap for the untruncated value.
+    That is the deeper fix — the finding path reading the checkpoint itself
+    rather than a projection `api/threads` shaped for a display door — and it
+    is a change to that module's readers, so it is out of scope here and
+    recorded as such in the ticket rather than left as an implication.
+    """
+    normalised = normalised_arguments(arguments)
+    if not normalised:
+        return None
+    if _TRUNCATED.search(arguments):
+        return None
+    return (name, normalised)
+
+
 def run_findings(
     savers: Iterable[Any],
     records: Sequence[RunRecord],
@@ -257,13 +326,13 @@ def _findings_in(
     for step in history.steps:
         for call in step.tool_calls or []:
             total += 1
-            if not call.arguments:
-                # An answer whose request is gone. Its arguments are unknown,
-                # and unknown is not "the same as the other unknown one" — see
-                # the module docstring for the three false findings this rule
-                # was bought with.
+            key = grouping_key(call.name, call.arguments)
+            if key is None:
+                # Not a call this module can say anything about — see
+                # `grouping_key` for the three shapes and why each is refused.
+                # The call is still counted: `thread_tool_calls` is what the
+                # conversation cost, not what was groupable.
                 continue
-            key = (call.name, normalised_arguments(call.arguments))
             groups.setdefault(key, []).append((step.checkpoint_id, call.result))
 
     runs = [
