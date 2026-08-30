@@ -110,7 +110,12 @@ describe('an execution override a user typed reaches the saved document', () => 
     const { workbench, nodeId } = workbenchWithOverrides(typed);
     const { client, saved } = recordingClient();
 
-    const outcome = await saveWorkflow({ client, workbench, confirm: () => true });
+    const outcome = await saveWorkflow({
+      client,
+      workbench,
+      confirm: () => true,
+      promptName: (s: string) => s,
+    });
 
     expect(outcome.kind).toBe('saved');
     const node = nodesOf(saved()).find((n) => n.id === nodeId);
@@ -130,7 +135,7 @@ describe('an execution override a user typed reaches the saved document', () => 
     const { workbench, nodeId } = workbenchWithOverrides({});
     const { client, saved } = recordingClient();
 
-    await saveWorkflow({ client, workbench, confirm: () => true });
+    await saveWorkflow({ client, workbench, confirm: () => true, promptName: (s: string) => s });
 
     const node = nodesOf(saved()).find((n) => n.id === nodeId);
     for (const key of EXECUTION_OVERRIDE_KEYS) {
@@ -152,6 +157,7 @@ describe('an execution override a user typed reaches the saved document', () => 
     const outcome = await saveWorkflow({
       client,
       workbench,
+      promptName: (suggestion: string) => suggestion,
       confirm: () => {
         asked += 1;
         return true;

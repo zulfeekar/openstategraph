@@ -87,6 +87,16 @@
   white-space: nowrap;
 }
 
+/* An unnamed document, marked in the slot that carries the name rather than
+   beside it (`say-it-on-the-surface/09`). Dimmed and italic: both are ways of
+   saying "this is not a word anybody typed" that spend no new colour, and
+   `--color-text-tertiary` is the token every other secondary surface in
+   `design/` already uses for exactly that claim. */
+.topbar__doc[data-unnamed='true'] {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
 .topbar__group {
   display: flex;
   align-items: center;

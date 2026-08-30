@@ -42,17 +42,26 @@ function memoryStorage(): Storage {
 
 const DOCUMENT = { version: 3, name: 'Draft', nodes: [], edges: [] };
 
-const workbench = (name: string): SavableWorkbench => ({
-  model: { name },
-  serializer: {
-    toJSONString: () => JSON.stringify({ ...DOCUMENT, name }),
-    canonicalise: (document: unknown) => document,
-    // Every card but a frame, which is what the real registry answers for the
-    // node types this stub's empty document does not have.
-    sizeIsMeasured: () => true,
-  },
-  controller: { document: { mountContext: () => null } },
-});
+function workbench(initial: string): SavableWorkbench {
+  // The name is live rather than captured: `toJSONString` reads whatever the
+  // model currently holds, so a test that renames at save time proves the new
+  // name reached the serialised bytes and not just the create call.
+  const model = {
+    name: initial,
+    setName(next: string) {
+      model.name = next;
+    },
+  };
+  return {
+    model,
+    serializer: {
+      toJSONString: () => JSON.stringify({ ...DOCUMENT, name: model.name }),
+      canonicalise: (document: unknown) => document,
+      sizeIsMeasured: () => true,
+    },
+    controller: { document: { mountContext: () => null } },
+  };
+}
 
 function recordingClient(overrides: Partial<IWorkflowSaving> = {}) {
   const calls: string[] = [];
@@ -76,6 +85,13 @@ function recordingClient(overrides: Partial<IWorkflowSaving> = {}) {
 }
 
 const alwaysYes = () => true;
+/**
+ * The name prompt, answered with whatever the document already holds — so
+ * these tests keep asserting what they were written to assert. That a first
+ * save *asks* at all, and what happens when it is dismissed, is
+ * `aFirstSaveAsksForAName.test.ts` (`say-it-on-the-surface/09`).
+ */
+const keepsTheName = (suggestion: string) => suggestion;
 const alwaysNo = () => false;
 
 describe('saveWorkflow', () => {
@@ -91,6 +107,7 @@ describe('saveWorkflow', () => {
       client,
       workbench: workbench('Draft'),
       confirm: alwaysYes,
+      promptName: keepsTheName,
     });
 
     expect(outcome).toEqual({ kind: 'created', slug: 'draft-a1b2c3', name: 'Draft' });
@@ -101,7 +118,12 @@ describe('saveWorkflow', () => {
 
   it('adopts the minted slug so the next page load finds the work', async () => {
     const { client } = recordingClient();
-    await saveWorkflow({ client, workbench: workbench('Draft'), confirm: alwaysYes });
+    await saveWorkflow({
+      client,
+      workbench: workbench('Draft'),
+      confirm: alwaysYes,
+      promptName: keepsTheName,
+    });
     // Press Save, press reload: the address bar and the autosave key both know
     // this document now. Ticket 49's failure was an empty canvas here.
     expect(getOpenSlug()).toBe('draft-a1b2c3');
@@ -114,6 +136,7 @@ describe('saveWorkflow', () => {
       client,
       workbench: workbench('Chinook'),
       confirm: alwaysYes,
+      promptName: keepsTheName,
     });
 
     expect(outcome).toEqual({ kind: 'saved', slug: 'chinook-assistant', name: 'Chinook' });
@@ -133,6 +156,7 @@ describe('saveWorkflow', () => {
       client,
       workbench: workbench('Draft'),
       confirm: asked,
+      promptName: keepsTheName,
     });
 
     expect(asked).toHaveBeenCalledOnce();
@@ -154,7 +178,12 @@ describe('saveWorkflow', () => {
         ),
     });
     const asked = vi.fn(alwaysNo);
-    await saveWorkflow({ client, workbench: workbench('Draft'), confirm: asked });
+    await saveWorkflow({
+      client,
+      workbench: workbench('Draft'),
+      confirm: asked,
+      promptName: keepsTheName,
+    });
     expect(asked).not.toHaveBeenCalled();
   });
 
@@ -166,6 +195,7 @@ describe('saveWorkflow', () => {
       client,
       workbench: workbench('Draft'),
       confirm: alwaysYes,
+      promptName: keepsTheName,
     });
 
     expect(outcome.kind).toBe('refused');

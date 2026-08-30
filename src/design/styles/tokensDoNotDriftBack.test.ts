@@ -839,7 +839,7 @@ describe('a fallback behind a name that always resolves is dead code', () => {
    * and takes the row with it.
    */
   const HELD: readonly string[] = [
-    'view/topbar/TopBar.css:142 --space-1',
+    'view/topbar/TopBar.css:148 --space-1',
     'view/workflow/WorkflowManager.css:85 --radius-full',
     'view/workflow/WorkflowManager.css:88 --color-bg-subtle',
   ];

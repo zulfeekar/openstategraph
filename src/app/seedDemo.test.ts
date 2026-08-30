@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Workbench } from './Workbench';
+import { UNNAMED_DOCUMENT } from '@core/model/documentName';
 import { DEMO_URL_PARAM, seedDemoWorkflow, shouldSeedDemo } from './seedDemo';
 
 const repoRoot = join(__dirname, '..', '..');
@@ -124,10 +125,12 @@ describe('the shipped bundle carries no example document', () => {
 
     expect(workbench.model.nodes()).toHaveLength(0);
     expect(workbench.model.edges()).toHaveLength(0);
-    // A generic name the customer can account for, not a package name they
-    // have never heard of. The Save button reads "Save AI Workflow", which is
-    // an offer to name their own thing rather than to adopt someone else's.
-    expect(workbench.model.name).toBe('AI Workflow');
+    // Not a package name they have never heard of — and, since
+    // `say-it-on-the-surface/09`, not a plausible title either. It was
+    // `AI Workflow`, which read as a name somebody had typed on a document
+    // that had never been saved; `Untitled` is the offer to name their own
+    // thing, and the first save is where the offer is made.
+    expect(workbench.model.name).toBe(UNNAMED_DOCUMENT);
   });
 
   it('seeds only under import.meta.env.DEV', () => {

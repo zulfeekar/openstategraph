@@ -44,7 +44,12 @@ import {
   discardDeclined,
   discardWarning,
 } from './workflow/createNewWorkflow';
-import { saveMessage, saveSucceeded, saveWorkflow } from './workflow/saveWorkflow';
+import {
+  namePromptMessage,
+  saveMessage,
+  saveSucceeded,
+  saveWorkflow,
+} from './workflow/saveWorkflow';
 import './AppShell.css';
 
 const THEME_STORAGE_KEY = 'openstategraph.theme';
@@ -325,6 +330,14 @@ export function AppShell() {
       client: workflowFiles,
       workbench,
       confirm: (message) => window.confirm(message),
+      // **The one moment a folder name is decided**
+      // (`say-it-on-the-surface/09`). `Mod+S` runs this same callback rather
+      // than a quieter path: a keyboard save that minted `workflows/untitled/`
+      // in silence is the defect, not a convenience worth keeping. Autosave
+      // cannot reach here at all — `diskAutosaveTarget` returns null while
+      // there is no slug — so there is no route to a minted slug that skips
+      // the question.
+      promptName: (suggestion) => window.prompt(namePromptMessage(), suggestion),
     });
     setSaving(false);
     const message = saveMessage(outcome);

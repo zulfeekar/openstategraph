@@ -67,6 +67,7 @@ import { subscribeOpenSlug } from '@app/openWorkflow';
 import { subscribeOpenAddress } from '@app/openAddress';
 import { subscribeWatchReach } from '@app/workflowFileWatch';
 import { saveAffordance } from './saveAffordance';
+import { isUnnamedDocument } from '@core/model/documentName';
 import { usePublishState } from './usePublishState';
 import { publishedMessage, unpublishedMessage } from '@view/workflow/consequences';
 import './TopBar.css';
@@ -392,7 +393,25 @@ export function TopBar({
               (`the-cost-of-one-more/16`). Renders nothing unless the served
               bundle is actually stale. */}
           <EditorFreshnessChip />
-          <span className="topbar__doc" title={workbench.model.name}>
+          {/* **The document's identity, and whether it has one yet**
+              (`say-it-on-the-surface/09`). The slot answers "what is this
+              called"; the dot on Save answers "is there a folder", and the
+              `Draft` badge answers "can customers see it". Three questions,
+              three marks, no duplicate — which is why an unnamed document is
+              marked *here* rather than given a fourth signal of its own.
+
+              `data-unnamed` rather than a second element: the state belongs to
+              the name, and two things in the identity slot is how a reader
+              stops knowing which one is the document. */}
+          <span
+            className="topbar__doc"
+            data-unnamed={isUnnamedDocument(workbench.model.name) ? 'true' : undefined}
+            title={
+              isUnnamedDocument(workbench.model.name)
+                ? 'Not saved yet — this workflow has no name and no folder on the backend. Saving asks for a name, and that name becomes the folder.'
+                : workbench.model.name
+            }
+          >
             {workbench.model.name}
           </span>
         </div>

@@ -60,7 +60,25 @@ export interface IWorkflowSaving {
  * untestable without one.
  */
 export interface SavableWorkbench {
-  readonly model: { readonly name: string };
+  readonly model: {
+    readonly name: string;
+    /**
+     * Adopt the name the first save was given.
+     *
+     * Needed because the bytes are serialised from the model: without it the
+     * package's `workflow.json` would carry `Untitled` while its listing row
+     * and its folder carried the name the user typed — one workflow with two
+     * names, which is the ambiguity `07` spent a ticket removing.
+     *
+     * Deliberately **not** routed through `RenameWorkflowCommand`. A command
+     * is undoable, and the slug this name mints is frozen the instant the
+     * backend answers; an undo that walked the name back to `Untitled` while
+     * `workflows/customer-triage/` stayed put would manufacture exactly that
+     * disagreement. The rename is a consequence of the save, not a canvas
+     * gesture, so it does not belong in the canvas's history.
+     */
+    setName(name: string): void;
+  };
   readonly serializer: {
     toJSONString(model: SavableWorkbench['model']): string;
     canonicalise(document: unknown): unknown;
@@ -101,9 +119,42 @@ export interface SaveDeps {
    * that has a better dialog than the browser's can supply one.
    */
   readonly confirm: (message: string) => boolean;
+  /**
+   * How this surface asks for the name a new package will carry — returning
+   * `null` when the person dismissed the question.
+   *
+   * Required, with no default, on purpose. A default would let a fourth
+   * surface reach `create` without asking, which is the exact defect
+   * `say-it-on-the-surface/09` was filed for: the slug is minted here and
+   * frozen for the life of the directory, so every path that can mint one has
+   * to say out loud how it asks. Injected like `confirm` beside it, for the
+   * same two reasons — testable without a DOM, and replaceable by a surface
+   * with a better dialog than the browser's.
+   */
+  readonly promptName: (suggestion: string) => string | null;
 }
 
-export async function saveWorkflow({ client, workbench, confirm }: SaveDeps): Promise<SaveOutcome> {
+/**
+ * The sentence above the box, and the one thing a user is never otherwise
+ * told.
+ *
+ * `03` removed this vocabulary problem from the mount field: a slug is a
+ * machine name nobody explained. The other half is that it is *minted from
+ * what you type here and then frozen*, because a slug that moves renames a
+ * directory — so this is the last moment the answer is free. Two sentences,
+ * because a dialog nobody reads is a dialog that did not happen; the length is
+ * pinned in `aFirstSaveAsksForAName.test.ts` rather than left to taste.
+ */
+export function namePromptMessage(): string {
+  return 'Name this workflow. The name becomes its folder on the backend and cannot be changed later.';
+}
+
+export async function saveWorkflow({
+  client,
+  workbench,
+  confirm,
+  promptName,
+}: SaveDeps): Promise<SaveOutcome> {
   const address = getOpenAddress();
   if (address && isInstance(address)) {
     const mounts = workbench.controller.document.mountContext();
@@ -131,18 +182,36 @@ export async function saveWorkflow({ client, workbench, confirm }: SaveDeps): Pr
   }
 
   const open = getOpenSlug();
-  // A create, not an overwrite, is the one path that can mint a second package
-  // of a name that already has one — and it used to do so in silence, which is
-  // how a review ended with three "AI Workflow"s
-  // (the-editor-makes-a-real-package 07). Still allowed, just announced.
+  // **The name the package will carry**, which on a create is not necessarily
+  // the one the document is wearing (`say-it-on-the-surface/09`).
+  let name = workbench.model.name;
   if (!open) {
+    // Ask *before* the clash check below, because the answer is what the
+    // clash is against. Asking afterwards would have warned about the default
+    // and then missed a genuine collision with the word actually typed.
+    const answer = promptName(name);
+    // Dismissal and blank are one branch. `slugify('')` falls back to
+    // `workflow`, so an empty answer does not fail — it quietly mints
+    // `workflows/workflow/`, which is a worse outcome than not saving.
+    if (answer === null || answer.trim() === '') {
+      return { kind: 'cancelled', name };
+    }
+    name = answer.trim();
+    // Before the serialise below, so the document, the listing row and the
+    // folder all carry one name.
+    workbench.model.setName(name);
+
+    // A create, not an overwrite, is the one path that can mint a second
+    // package of a name that already has one — and it used to do so in
+    // silence, which is how a review ended with three "AI Workflow"s
+    // (the-editor-makes-a-real-package 07). Still allowed, just announced.
     const listing = await client.list();
-    const wanted = workbench.model.name.trim().toLocaleLowerCase();
+    const wanted = name.trim().toLocaleLowerCase();
     const clashes = (listing.ok ? listing.value : [])
       .filter((row) => row.name.trim().toLocaleLowerCase() === wanted)
       .map((row) => row.slug);
-    if (clashes.length > 0 && !confirm(duplicateNameConfirmation(workbench.model.name, clashes))) {
-      return { kind: 'cancelled', name: workbench.model.name };
+    if (clashes.length > 0 && !confirm(duplicateNameConfirmation(name, clashes))) {
+      return { kind: 'cancelled', name };
     }
   }
 
@@ -150,10 +219,10 @@ export async function saveWorkflow({ client, workbench, confirm }: SaveDeps): Pr
   let slug = open;
   let failure: string | null = null;
   if (open) {
-    const outcome = await client.save(open, workbench.model.name, document);
+    const outcome = await client.save(open, name, document);
     if (!outcome.ok) failure = outcome.error;
   } else {
-    const outcome = await client.create(workbench.model.name, document);
+    const outcome = await client.create(name, document);
     if (outcome.ok) slug = outcome.value;
     else failure = outcome.error;
   }
@@ -180,7 +249,7 @@ export async function saveWorkflow({ client, workbench, confirm }: SaveDeps): Pr
   // save has to leave one behind — otherwise a workflow saved for the first
   // time here would never autosave again, which is precisely the moment a
   // developer starts expecting it to.
-  rememberDiskDocument(slug, workbench.model.name, document, workbench.serializer);
+  rememberDiskDocument(slug, name, document, workbench.serializer);
   // This tab's own write — recorded as known-good so the file watch never
   // mistakes this save for an external change. Read back by slug, not looked up
   // in a refreshed listing: a hidden package is not in that listing, so saving
@@ -188,9 +257,7 @@ export async function saveWorkflow({ client, workbench, confirm }: SaveDeps): Pr
   const row = await client.summary(slug);
   recordKnownSavedAt(slug, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
 
-  return open
-    ? { kind: 'saved', slug, name: workbench.model.name }
-    : { kind: 'created', slug, name: workbench.model.name };
+  return open ? { kind: 'saved', slug, name } : { kind: 'created', slug, name };
 }
 
 /**

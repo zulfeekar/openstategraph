@@ -3,6 +3,7 @@ import { openAncestry } from '@app/openAncestry';
 import { provideMountAncestry } from '@core/runtime/mountAncestry';
 import { ModelRegistry } from '@core/model/ModelRegistry';
 import { WorkflowModel } from '@core/model/WorkflowModel';
+import { UNNAMED_DOCUMENT } from '@core/model/documentName';
 import { WorkflowSerializer } from '@core/serialization/WorkflowSerializer';
 import {
   ConnectionValidator,
@@ -36,7 +37,14 @@ export class Workbench {
   readonly registry = new ModelRegistry();
   /** Chrome-level user preferences (flow direction). Ticket 45. */
   readonly preferences = new PreferencesStore();
-  readonly model = new WorkflowModel('AI Workflow');
+  /**
+   * **Unnamed, and saying so** (`say-it-on-the-surface/09`). This was
+   * `AI Workflow` — a plausible title, in the slot where a saved document's
+   * name goes, on a document with no folder on the backend. The word is not
+   * only cosmetic: the backend slugifies it at first save and freezes the
+   * directory, so the default decided a folder name nobody chose.
+   */
+  readonly model = new WorkflowModel(UNNAMED_DOCUMENT);
   readonly credentials = new CredentialStore();
   readonly providers: ProviderRegistry;
   readonly connectionValidator: ConnectionValidator;
