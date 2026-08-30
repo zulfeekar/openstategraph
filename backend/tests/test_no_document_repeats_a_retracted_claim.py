@@ -247,3 +247,53 @@ def test_no_document_puts_a_run_count_beside_a_workflow() -> None:
         "here can check it, so say what has never succeeded and leave the "
         "number to `gh run list` (docs-and-gaps/29)."
     )
+
+
+#: A distance between two trees, stated as a figure. `178 commits behind
+#: `main`` is the instance; the shape is the same for `ahead`.
+COMMIT_DISTANCE = re.compile(
+    r"\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|\d+)"
+    r"\s+commits?\s+(?:behind|ahead)\b",
+    re.IGNORECASE,
+)
+
+
+def test_no_document_counts_how_far_behind_a_branch_is() -> None:
+    """`docs-and-gaps/30`, and `CLAUDE.md` already said so about the wiki stamp.
+
+    `docs/releasing.md` carried a paragraph asserting that the last CI run was
+    `2026-08-16T08:23Z`, that nothing had been pushed since, and that every
+    gate on the page described a checkout **178 commits behind `main`**. All
+    three were false when `29` read them back, and the third could not have
+    been anything else: a commit distance is a difference between a moving tree
+    and a moving remote, so it is stale in the direction of *understating* the
+    gap the moment anybody commits.
+
+    This is the sibling of the run-count rule above, from the same root
+    (`docs-and-gaps/17`: a number in prose has no way to fail), and the answer
+    is the one `scripts/stamp_wiki_freshness.py` already ships — *"nothing in
+    the stamp counts days or commits behind: it names the commit and hands the
+    reader `git log <sha>..HEAD`"*. That sentence was a rule stated in
+    `CLAUDE.md` and enforced on exactly one generated stamp; this makes it
+    reach the pages a reader treats as authoritative.
+
+    **It is a separate rule rather than a widening**, and the distinction is
+    the finding `30` asks for: the run-count rule is paragraph-scoped on a
+    *workflow name*, and this paragraph named `ci.yml`, so the scoping was not
+    what missed it. `178 commits` is not a count of runs, and stretching
+    `RUN_COUNT` until it were would have made a rule nobody could state.
+    """
+    offenders = {}
+    for page in CORPUS:
+        for number, line in enumerate(page.read_text(encoding="utf-8").splitlines(), 1):
+            if PAST_TENSE.search(line):
+                continue
+            hit = COMMIT_DISTANCE.search(line)
+            if hit:
+                offenders[f"{page.relative_to(REPO_ROOT)}:{number}"] = hit.group(0)
+    assert not offenders, (
+        "these lines put a figure on how far one tree is from another: "
+        f"{offenders}. That distance changes on the next commit and on the "
+        "next push, so name the commit and hand the reader `git log "
+        "<sha>..HEAD` instead (docs-and-gaps/30)."
+    )

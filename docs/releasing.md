@@ -557,24 +557,38 @@ available before anything downstream assumes it. Measured 2026-08-21:
 Nothing on the real index has to be worked around, and the rehearsal artefact
 a stranger would fetch demonstrably exists on the test index.
 
-### CI is blind to everything committed since 2026-08-16
+### CI only ever sees what was pushed
 
-The last CI run on the `beta` remote was `2026-08-16T08:23Z`, and it was green.
-Nothing has been pushed since. Every gate on this page describes a checkout
-that is now **178 commits behind `main`** on this machine — including
-`ci.yml`'s `gallery-diagrams-check` job, which was added after that run and has
-therefore never executed in Actions at all.
+Every gate on this page runs in Actions, against the `beta` remote. So it
+describes the tree that was last pushed there — never the working tree on this
+machine, and never `main` as it stands while you read this. The two drift apart
+silently, and **this page cannot tell you how far**: any figure written here
+for the distance, or for when CI last ran, is a fact about a moving remote and
+a moving branch, false by the next commit either side of it. This section
+carried three such figures until 2026-08-30 — a date, a "nothing has been
+pushed since", and a commit distance — and all three were false when somebody
+finally checked. `backend/tests/test_no_document_repeats_a_retracted_claim.py`
+keeps them out now.
 
-So "CI is green" is a true statement about a five-day-old tree, and it is not
-evidence about the tree a release would be cut from. **Push before you release**,
-and watch that run finish before starting the train.
+So the answer is a command rather than a number. Before starting the train:
 
-> **Corrected 2026-08-23.** That push happened. `gallery-diagrams-check` has
-> now executed, and the first thing it did was fail on a commit whose artefact
-> was correct: it re-rendered the diagrams and compared the SVG **bytes**, and
-> mermaid lays a flowchart out from the browser's own font metrics, so a runner
-> without Inter installed cannot agree with a developer who has it. The job now
-> compares the *graph* each committed picture draws, through
-> `scripts/diagram_gate.py`, and installs neither node nor chromium
-> (`workflow-gallery` 80). The paragraph above stands as a record of the state
-> it described; the sentence about never executing does not.
+```bash
+git push beta main
+gh run list --repo zulfeekar/openstategraph-beta --workflow ci.yml --limit 5
+```
+
+**Watch that run finish, and read whether it ran at all.** A run that ends in
+seconds having executed no steps has tested nothing, and a green badge from an
+earlier tree is not evidence about this one. If runs are not executing, that is
+a condition on the repository rather than a fault in your checkout — find out
+what it is before you read any gate on this page as evidence that anything
+passes.
+
+`ci.yml`'s `gallery-diagrams-check` job is the worked example of why this
+matters. Its first execution in Actions failed on a commit whose artefact was
+correct: it re-rendered the diagrams and compared the SVG **bytes**, and mermaid
+lays a flowchart out from the browser's own font metrics, so a runner without
+Inter installed cannot agree with a developer who has it. The job now compares
+the *graph* each committed picture draws, through `scripts/diagram_gate.py`,
+and installs neither node nor chromium (`workflow-gallery` 80). Nothing local
+could have found that — it needed the job to actually run.
