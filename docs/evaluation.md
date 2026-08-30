@@ -31,7 +31,7 @@ reports what came back. It is not an eval: there is no dataset, no reference
 output and no score — the verdict is *answered / refused / paused / empty /
 errored*, with the attempts and the routing decisions beside it. It is the
 smoke test the gallery had no other way to get, because twenty-two of the
-twenty-four examples are covered by tests that deliberately need no model at
+twenty-three examples are covered by tests that deliberately need no model at
 all, and one defect (`launch-readiness/185`) lived entirely below that line.
 Hand-run, never CI, for the reason every driver in `scripts/` is: it spends
 real money. `docs/decisions/asking-the-whole-gallery.md` is what it found.
@@ -54,14 +54,22 @@ diagonal of that square, on purpose:
 | | Deterministic code | LLM judge |
 | --- | --- | --- |
 | **Offline** — a committed dataset | ✅ `openstategraph eval` — execution accuracy | ❌ rejected, with a named trigger: [Should we add an LLM judge?](#should-we-add-an-llm-judge) |
-| **Online** — a live run | ❌ no trace store, so nothing to point one at | ✅ `route.grader`, `RubricMiddleware` — and it *steers* the run rather than observing it |
+| **Online** — a live run | ❌ no **per-node span** store, so nothing to point one at | ✅ `route.grader`, `RubricMiddleware` — and it *steers* the run rather than observing it |
 
 Both blanks are decisions rather than oversights, and they are not the same
-decision. The offline judge is refused below. The online *monitor* is missing
-because we have no tracing project to aim one at. Everything the eval
-vocabulary offers that we lack — online evaluation, backtesting, experiment
-comparison — is downstream of that one absent capability, not of an eval
-feature we skipped.
+decision. The offline judge is refused below.
+
+**The online monitor's blank needs its reason narrowing.** There *is* a run
+store now — local sqlite, written with no configuration at all, from all four
+run doors, carrying the question, the answer, the routing decisions, the
+warnings, the per-model tokens, the duration and how the turn ended
+(`openstategraph runs list`). So "we record nothing about live runs" is no
+longer the obstacle and must not be given as one. What is still absent is the
+level below a turn: **per-node spans**, with a start and an end for every step
+of every run, which is what an online monitor scores and what a backtest
+replays. Everything the eval vocabulary offers that we lack — online
+evaluation, backtesting, experiment comparison — is downstream of that, not of
+an eval feature we skipped.
 
 **Per-run token cost is no longer on that list** (`workflow-gallery` 35). It
 was, and the reason given was the tracer; that reason was wrong.
@@ -156,7 +164,7 @@ the gold used a subquery. `COUNT(*)` and `COUNT(id)` are the same answer.
 | `sql_recovery_rate` | how often a query could be recovered from the answer at all. A system that is right but silent about its query is unverifiable, and that is a finding, not a rounding error |
 | `attempts_total`, `retried_items` | model-node invocations across the graded runs — how hard the workflow is working for the score. Not a lap count: a cycle holding two agents spends two per lap (`workflow-gallery` 21) |
 | `latency_p50`, `latency_p95` | nearest-rank percentiles, defined explicitly so two runs agree |
-| `cost` | usually `null` with the reason: `RunResult` carries no token usage. Attach LangSmith (`LANGSMITH_TRACING=true`) for real per-run token and dollar accounting |
+| `cost` | the **measured** tokens the graded runs actually spent, per model plus their sum, taken from `RunResult.usage`. Only `usd` is `null`, and it says why: prices are per-account and live in no file this project owns. An unmetered provider leaves `total_tokens` **`null`**, never `0` — unknown is not free. No tracer is involved |
 
 ### What it does not measure
 
