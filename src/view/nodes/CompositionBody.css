@@ -9,8 +9,11 @@
 }
 
 .node__composition--missing {
+  max-width: 100%;
   color: var(--color-text-quaternary);
   font-style: italic;
+  text-align: right;
+  overflow-wrap: break-word;
 }
 
 /* The census line and its two affordances share one row: disclosure on the
@@ -53,6 +56,7 @@
   min-width: 0;
   color: var(--color-text-quaternary);
   font-style: italic;
+  overflow-wrap: break-word;
 }
 
 .node__composition-caret {
@@ -63,9 +67,22 @@
 
 /* The button plus the one sentence that makes it safe to press
  * (`say-it-on-the-surface/08`) — stacked so the fact sits under the verb
- * rather than crowding the row it shares with the disclosure toggle. */
+ * rather than crowding the row it shares with the disclosure toggle.
+ *
+ * `flex: none` means this group never shrinks on its own — its width is
+ * whatever its widest child asks for. `.node__composition-scope` already
+ * carried its own cap; the refusal sentence
+ * (`.node__composition--missing`, shown after a refused press) did not, so
+ * a long sentence took its natural single-line width and the group grew
+ * past the card (`the-look-has-an-author-now`, reported from a live
+ * screenshot: the group at x=700–880 against a card ending at x=290). The
+ * `max-width` here is the actual fix — every child's own wrap constraint
+ * only matters once the box they wrap inside has a ceiling. Sized to the
+ * button's own natural width (measured ~115px) with headroom, so ordinary
+ * content never wraps and only a runaway sentence does. */
 .node__composition-open-group {
   flex: none;
+  max-width: 8rem;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -206,4 +223,5 @@
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: break-word;
 }
