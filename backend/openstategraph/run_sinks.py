@@ -730,6 +730,35 @@ _BURST_TYPES: dict[str, str] = {
 }
 
 
+#: How many run ids one cadence query may name.
+#:
+#: `_attach_bursts` binds one SQL variable per row id, and sqlite refuses a
+#: statement with more than `SQLITE_LIMIT_VARIABLE_NUMBER` of them — 32,766 on
+#: the build this checkout links, and **999** on anything older than 3.32.
+#: `openstategraph runs export` defaults to `--limit 100000`, so a store that
+#: only grows reaches the ceiling on its own and the export lost the cadence it
+#: exists to carry (`the-cost-of-one-more/08`). The bound is named rather than
+#: written into a loop so that a test can shrink it and reproduce the failure
+#: at forty rows instead of thirty-three thousand.
+#:
+#: Chosen under the oldest ceiling rather than this build's, because the number
+#: that matters is the one on the machine the store is read on.
+CADENCE_BATCH = 900
+
+
+class RunCadenceUnavailable(Exception):
+    """A cadence read this build could not perform — not *a store with none*.
+
+    The two were one `except` and one `logger.debug`, which is how 33,000 rows
+    came back with `bursts = []` and exit code 0. They are different answers:
+    a store written before `memory-and-replay/47` has no `run_bursts` table and
+    *no cadence* is the truth about it, while a refused query means the file
+    holds cadence this read did not get. Only the second raises, and it exists
+    so `runs export` can refuse rather than write a file missing the half it
+    was run for.
+    """
+
+
 def _table_columns(connection: sqlite3.Connection, table: str) -> tuple[str, ...]:
     """What this file actually holds for `table`, in its own order.
 
@@ -949,6 +978,25 @@ class SqliteRunSink:
                 connection.execute(
                     "CREATE INDEX IF NOT EXISTS runs_workflow_at ON runs (workflow_slug, at)"
                 )
+                # And the question the listing asks when nobody narrowed it —
+                # *newest first, out of everything*. `runs list` with no flag
+                # supplies no `WHERE`, so it had nothing to seek on and read
+                # and sorted every row ever written to print a page of 25
+                # (`the-cost-of-one-more/08`). A store that never sweeps makes
+                # that a cost that only ever rises. Sqlite carries `rowid` as
+                # the last column of every index, so `(at)` is `(at, rowid)`
+                # and satisfies `ORDER BY at DESC, rowid DESC` outright.
+                connection.execute("CREATE INDEX IF NOT EXISTS runs_at ON runs (at)")
+                # `--session` had no index at all — the one filter of the four
+                # that scanned. Shaped like `runs_workflow_at` because it is
+                # the same question about a different key: *this session,
+                # newest first*. `--thread` deliberately gets no second index:
+                # `runs_thread` already seeks, and the sort it leaves behind is
+                # over one conversation, which is bounded by a person rather
+                # than by the store.
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS runs_session_at ON runs (session_id, at)"
+                )
                 # The cadence table (`memory-and-replay` 47). Created here, on
                 # the same first row, so the two tables cannot exist apart.
                 connection.execute(
@@ -1167,7 +1215,7 @@ def read_runs(
             # Keyed by `runs.rowid`, never by `thread_id`: a thread is a
             # conversation and holds many turns, so filtering by it would give
             # every turn the whole conversation's cadence.
-            _attach_bursts(connection, [row[0] for row in rows], records)
+            _attach_bursts(connection, [row[0] for row in rows], records, target)
     except sqlite3.Error as exc:
         logger.warning("Could not read the run store at %s: %s", target, exc)
         return []
@@ -1180,29 +1228,59 @@ def _attach_bursts(
     connection: sqlite3.Connection,
     rowids: list[Any],
     records: list[RunRecord],
+    target: Path,
 ) -> None:
-    """Each row's cadence onto the record that produced it, in one query.
+    """Each row's cadence onto the record that produced it, a batch at a time.
 
     A store written before `memory-and-replay` 47 has no `run_bursts` table,
     and every row in every store has runs that predate capture. Both are *no
     cadence*, which is an answer — so this leaves the records alone rather than
     failing the listing that asked.
+
+    **`CADENCE_BATCH` ids per statement, rather than all of them.** One
+    variable per row id met sqlite's own ceiling at 32,766 runs and the whole
+    listing's cadence was lost in a `logger.debug`. Batching was chosen over
+    driving the burst read off the run read's own `WHERE`, because the reason
+    written at the call site — keyed on `runs.rowid`, never on `thread_id`,
+    since a thread holds many turns and would give each of them the whole
+    conversation's cadence — is a property of the id list, and a second query
+    shape would have had to re-derive it from filters that do not carry it.
+    Batching keeps the key and removes only the ceiling.
+
+    **A refused read raises.** It is not *no cadence*; it is cadence this read
+    did not get, and the caller that asked for it is the export somebody runs
+    before truncating.
     """
     if not rowids:
         return
-    placeholders = ",".join("?" for _ in rowids)
     try:
         known = _known_burst_columns(connection)
         if not known:
             return
-        rows = connection.execute(
-            f"SELECT run_rowid,{','.join(known)} FROM run_bursts "
-            f"WHERE run_rowid IN ({placeholders}) ORDER BY run_rowid, ord",
-            rowids,
-        ).fetchall()
+        rows: list[Any] = []
+        for start in range(0, len(rowids), CADENCE_BATCH):
+            batch = rowids[start : start + CADENCE_BATCH]
+            placeholders = ",".join("?" for _ in batch)
+            rows.extend(
+                connection.execute(
+                    f"SELECT run_rowid,{','.join(known)} FROM run_bursts "
+                    f"WHERE run_rowid IN ({placeholders}) ORDER BY run_rowid, ord",
+                    batch,
+                ).fetchall()
+            )
     except sqlite3.Error as exc:
-        logger.debug("No run cadence available: %s", exc)
-        return
+        logger.error(
+            "Could not read the run cadence out of %s: %s. The %d run(s) this "
+            "read returned will carry no cadence — the answers are there and "
+            "how they arrived is not — so a file written from them is not a "
+            "complete copy of the store and must not be truncated against. "
+            "Check the file with `sqlite3 \"$(openstategraph runs path)\" "
+            "\"PRAGMA integrity_check\"`.",
+            target,
+            exc,
+            len(records),
+        )
+        raise RunCadenceUnavailable(str(exc)) from exc
     by_run: dict[Any, list[RunBurst]] = {}
     for row in rows:
         by_run.setdefault(row[0], []).append(_burst(row[1:], known))
