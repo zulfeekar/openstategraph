@@ -47,6 +47,7 @@ import {
   type DraftRestoreReport,
 } from './workflowDrafts';
 import { followOpenPackage } from './capabilityRefresh';
+import { hasPlacedStarter, placeFirstRunStarter, shouldPlaceStarter } from './firstRunStarter';
 
 interface WorkbenchValue {
   readonly workbench: Workbench;
@@ -343,12 +344,17 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
       writer.lastSeenAt = draftSavedAt(request.slug, localStorage);
     }
 
+    // Read once, before anything below can write: it is both an input to
+    // `resolveSession` and the evidence `shouldPlaceStarter` uses to tell a
+    // browser that has never held work from one that has.
+    const mostRecentId = mostRecentWorkflowId(localStorage);
+
     const session =
       request.action === 'fetch'
         ? { id: draftIdForSlug(request.slug), shouldRestore: false, notice: undefined }
         : resolveSession({
             sessionId: sessionStorage.getItem(DRAFT_SESSION_KEY),
-            mostRecentId: mostRecentWorkflowId(localStorage),
+            mostRecentId,
             mintId: () => `wf-${Date.now()}`,
           });
     if (session.notice != null) reportRef.current(session.notice);
@@ -359,6 +365,29 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     // difference used to be a package overwritten by a blank document.
     const restore = restoreSessionDraft(session, workbench, writer, localStorage);
     if (restore.notice != null) reportRef.current(restore.notice);
+
+    // **The first visit, and only the first** (`install-experience` 24). A
+    // browser holding no draft and no marker has never opened this editor, and
+    // an empty canvas beside twenty node types teaches nothing; it is handed
+    // Input → Agent → Output with a Note saying what they are.
+    //
+    // Deliberately *after* every decision above, and gated on all of them: 23
+    // is the ticket that removed a document from this canvas, and the way back
+    // into its defect is placing anything before knowing that the URL named
+    // nothing, this tab restored nothing, and nobody's draft is in this
+    // browser. What goes on is nobody's — four nodes composed here — unsaved,
+    // `Untitled`, one undo away and one delete away, and never offered twice.
+    if (
+      shouldPlaceStarter({
+        opening: request.action,
+        restored: restore.restored,
+        nodeCount: workbench.model.nodeCount,
+        mostRecentId,
+        alreadyPlaced: hasPlacedStarter(localStorage),
+      })
+    ) {
+      placeFirstRunStarter(workbench, localStorage);
+    }
 
     sessionStorage.setItem(DRAFT_SESSION_KEY, session.id);
     claimSession(localStorage, session.id, writer);
