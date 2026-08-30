@@ -28,7 +28,10 @@
   min-height: var(--layout-topbar-height);
   padding-inline: var(--space-3);
   background: var(--color-bg-surface);
-  border-bottom: 1px solid var(--color-border-default);
+  /* The rule, not a hairline (`the-look-has-an-author-now/07`): this is the
+     seam between the toolbar and everything under it, and it is one of the
+     four in the product. */
+  border-bottom: var(--border-width-rule) solid var(--color-rule);
   z-index: var(--z-topbar);
 }
 
@@ -68,7 +71,7 @@
 }
 
 .topbar__product {
-  font: var(--type-heading-sm);
+  font: var(--type-wordmark);
   letter-spacing: var(--letter-spacing-tighter);
   color: var(--color-text-primary);
 }

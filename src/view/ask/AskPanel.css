@@ -85,7 +85,7 @@
 .ask__break::after {
   content: '';
   flex: 1;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: var(--border-width-hairline) solid var(--color-border-subtle);
 }
 
 .ask__question {
@@ -113,7 +113,7 @@
   gap: var(--space-2);
   padding: var(--space-1-5);
   background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
+  border: var(--border-width-hairline) solid var(--color-border-strong);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   transition:
@@ -167,7 +167,7 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-2-5);
   background: var(--color-bg-surface-sunken);
-  border: 1px solid var(--color-border-subtle);
+  border: var(--border-width-hairline) solid var(--color-border-subtle);
   border-radius: var(--radius-md);
 }
 
@@ -229,7 +229,7 @@
   margin: 0;
   padding: var(--space-2) var(--space-3);
   background: var(--color-bg-surface-sunken);
-  border: 1px dashed var(--color-border-default);
+  border: var(--border-width-hairline) dashed var(--color-border-default);
   border-radius: var(--radius-md);
   color: var(--color-text-tertiary);
   font: var(--type-mono-sm);
@@ -257,7 +257,7 @@
 }
 
 .ask__tool {
-  border: 1px solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border-default);
   border-radius: var(--radius-md);
   background: var(--color-bg-surface-sunken);
   overflow: hidden;
@@ -312,7 +312,7 @@
   margin: 0;
   padding: var(--space-3);
   background: var(--color-bg-surface-raised);
-  border: 1px solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border-default);
   border-radius: var(--radius-lg);
   color: var(--color-text-primary);
   font: var(--type-body-md);
@@ -362,7 +362,7 @@
   margin: 0;
   padding: var(--space-2) var(--space-3);
   background: var(--amber-50);
-  border: 1px solid var(--amber-100);
+  border: var(--border-width-hairline) solid var(--amber-100);
   border-radius: var(--radius-md);
   color: var(--amber-600);
   font: var(--type-body-sm);
@@ -406,7 +406,7 @@
   gap: var(--space-2);
   padding: var(--space-3);
   background: var(--amber-50);
-  border: 1px solid var(--amber-100);
+  border: var(--border-width-hairline) solid var(--amber-100);
   border-radius: var(--radius-lg);
 }
 
@@ -446,7 +446,7 @@
   gap: var(--space-2);
   padding: var(--space-3);
   background: var(--indigo-50);
-  border: 1px solid var(--indigo-100);
+  border: var(--border-width-hairline) solid var(--indigo-100);
   border-radius: var(--radius-lg);
 }
 
@@ -545,7 +545,7 @@
 .ask__activity-row--child {
   margin-left: var(--space-4);
   opacity: 0.75;
-  border-left: 1px solid var(--color-border-default);
+  border-left: var(--border-width-hairline) solid var(--color-border-default);
   padding-left: var(--space-2);
 }
 
@@ -555,7 +555,7 @@
 .ask__activity-row--spawn {
   margin-left: var(--space-4);
   padding-left: var(--space-2);
-  border-left: 1px solid var(--color-border-default);
+  border-left: var(--border-width-hairline) solid var(--color-border-default);
   justify-content: flex-start;
 }
 
@@ -614,7 +614,7 @@
   font: var(--type-caption);
   color: var(--color-text-tertiary);
   background: none;
-  border: 1px solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border-default);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: var(--transition-colors);
@@ -637,7 +637,7 @@
   margin: 0 0 var(--space-3);
   padding: var(--space-2) var(--space-3);
   background: var(--color-bg-surface-sunken);
-  border: 1px solid var(--color-border-subtle);
+  border: var(--border-width-hairline) solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   font: var(--type-body-sm);
@@ -806,7 +806,7 @@
   width: 100%;
   margin: var(--space-3) 0;
   padding: var(--space-2);
-  border: 1px solid var(--color-border);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);

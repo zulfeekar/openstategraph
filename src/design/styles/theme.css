@@ -64,6 +64,15 @@
   --color-border-default: #e7e6e6;
   --color-border-strong: var(--neutral-200);
   --color-border-emphasis: var(--neutral-300);
+  /* The rule. Four borders in the product carry it — the toolbar's bottom
+     edge and the three panel edges that meet the canvas — and they are the
+     seams between regions of the shell rather than lines inside one.
+     `--osg-divider` is the authored token, commented in the authored file
+     as *"2px rules, full ink"*, and it is full ink on purpose: a 2px line
+     in `--color-border-default` is only a thicker hairline. It needs no
+     dark override here because `--osg-divider` is itself theme-aware —
+     `#201e1d` on the light ground, `#f3f2f2` on the dark one. */
+  --color-rule: var(--osg-divider);
   /* `--osg-focus: 2px solid var(--osg-accent)` — the design system says the
      focus ring is the accent, and that is adopted. Its *geometry* is not;
      `--focus-ring-width` in `tokens.css` carries that argument. */

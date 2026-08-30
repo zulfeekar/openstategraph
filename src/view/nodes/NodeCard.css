@@ -124,7 +124,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 0 var(--space-2);
   padding: var(--space-1-5) var(--space-3) var(--space-2);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: var(--border-width-hairline) solid var(--color-border-subtle);
 }
 
 .node__ports:empty {
@@ -268,7 +268,7 @@
   font: var(--type-caption);
   color: var(--color-text-quaternary);
   border-radius: var(--radius-md);
-  border: 1px dashed var(--color-border-strong);
+  border: var(--border-width-hairline) dashed var(--color-border-strong);
 }
 
 /* The question the run is carrying, when the saved field says something else
@@ -280,7 +280,7 @@
   gap: var(--space-1);
   padding: var(--space-2);
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-border-strong);
+  border: var(--border-width-hairline) solid var(--color-border-strong);
   background: var(--color-bg-surface-sunken);
 }
 
@@ -430,7 +430,7 @@
   font: var(--type-caption);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border-default);
   background: var(--color-bg-input);
 }
 
@@ -475,7 +475,7 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border-default);
   background: var(--color-bg-surface);
   color: var(--color-text-tertiary);
   font-size: 18px;
@@ -493,7 +493,7 @@
 .repeatable-group__add {
   padding: var(--space-1-5) var(--space-3);
   border-radius: var(--radius-md);
-  border: 1px dashed var(--color-border-default);
+  border: var(--border-width-hairline) dashed var(--color-border-default);
   background: transparent;
   color: var(--color-text-secondary);
   font: var(--type-caption);
@@ -518,7 +518,7 @@
   display: inline-block;
   margin-right: var(--space-1);
   padding: 0 var(--space-1);
-  border: 1px solid var(--color-border-subtle);
+  border: var(--border-width-hairline) solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   font: var(--type-caption);
   font-size: 0.85em;
@@ -548,6 +548,6 @@
 .node--mount .node__header {
   background: var(--accent-tint);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: var(--border-width-hairline) solid var(--color-border-subtle);
   margin-bottom: var(--space-2);
 }

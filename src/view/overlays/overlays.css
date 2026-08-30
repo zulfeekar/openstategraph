@@ -40,7 +40,7 @@
   max-height: 46vh;
   overflow-y: auto;
   padding: var(--space-1) var(--space-3) var(--space-3);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: var(--border-width-hairline) solid var(--color-border-subtle);
 }
 
 .shortcuts__group + .shortcuts__group {
@@ -183,7 +183,7 @@
   justify-content: flex-end;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--color-border-default);
+  border-top: var(--border-width-hairline) solid var(--color-border-default);
 }
 
 /* ---------- Provider rows ---------- */
@@ -329,7 +329,7 @@
   gap: var(--space-2);
   width: 260px;
   padding: var(--space-3);
-  border: 1px solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border-default);
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface);
   box-shadow: var(--shadow-xl);
@@ -355,8 +355,8 @@
   width: 8px;
   height: 8px;
   transform: rotate(45deg);
-  border-top: 1px solid var(--color-border-default);
-  border-left: 1px solid var(--color-border-default);
+  border-top: var(--border-width-hairline) solid var(--color-border-default);
+  border-left: var(--border-width-hairline) solid var(--color-border-default);
   background: var(--color-bg-surface);
 }
 

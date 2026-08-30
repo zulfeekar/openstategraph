@@ -1,5 +1,5 @@
 .workflow-manager {
-  border-left: 1px solid var(--color-border-default);
+  border-left: var(--border-width-hairline) solid var(--color-border-default);
 }
 
 .workflow-manager__empty {
@@ -36,7 +36,7 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-2);
-  border: 1px solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border-default);
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
 }
@@ -91,7 +91,7 @@
   font-weight: var(--font-weight-medium);
   padding: 0 var(--space-2);
   border-radius: var(--radius-full, 999px);
-  border: 1px solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border-default);
   color: var(--color-text-secondary);
   background: var(--color-bg-subtle, transparent);
 }
@@ -116,7 +116,7 @@
    store, not a thing to read before the workflows are. Bordered off the list
    so it is not mistaken for a row. */
 .workflow-manager__storage {
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: var(--border-width-hairline) solid var(--color-border-subtle);
   color: var(--color-text-secondary);
   font-size: var(--font-size-12);
   line-height: 1.5;
