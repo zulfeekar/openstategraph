@@ -1320,3 +1320,115 @@ class ThreadHistoryResponse(BaseModel):
     #: answer, not machinery that produced it, and a customer reading a
     #: partial history needs it exactly as much as a developer does.
     truncation: ThreadTruncation | None = None
+
+
+class RecordedBurst(BaseModel):
+    """One contiguous burst of a stored run's output — `RunBurst`, on the wire.
+
+    `memory-and-replay` 72. A burst is **one node's output of one block kind,
+    uninterrupted**, and it is the only thing in this store that carries a
+    *measured* start and end: `firstMs` and `lastMs` are the server's own
+    `elapsedMs` (`46`), minted where the frame was built, and stored by `47`.
+
+    **The per-chunk cadence is deliberately not here.** `RunBurst.cadence`
+    carries every chunk's own offset, and it exists so an answer can be
+    re-typed at the rate it arrived — which is `60`, and `60` is open. A field
+    with no reader is a field that drifts, so this publishes the two ends a
+    bar is drawn between and the counts a person asks in SQL, and the day `60`
+    ships is the day the blob earns a place beside them.
+    """
+
+    #: The graph node whose output this is — **inside an agent this is
+    #: LangGraph's own loop node**, `model` or `tools`, and not the canvas node
+    #: a reader drew.
+    node: str = ""
+    #: The canvas node the run said was working, which is the one a reader
+    #: recognises (`memory-and-replay` 74). `""` is *this recording did not
+    #: say*, never a node inferred after the fact.
+    activeNode: str = ""
+    namespace: list[str] = Field(default_factory=list)
+    #: `text` or `reasoning` — a reasoning model's deliberation and its answer
+    #: are two bursts, never one.
+    block: str = "text"
+    #: Who produced it — `model`, `tool`.
+    kind: str = ""
+    #: The customer channel refused this text, so `text` is empty and the burst
+    #: is kept anyway: a withheld burst still says a node was working, and a
+    #: replay must show the stall rather than a hole.
+    withheld: bool = False
+    #: Milliseconds from the stream opening to the first and last chunk.
+    firstMs: int = 0
+    lastMs: int = 0
+    chunks: int = 0
+    chars: int = 0
+    text: str = ""
+    #: Recording stopped here — the run produced more bursts than the cap, and
+    #: this says *the recording ends here* rather than *the run ended here*.
+    capped: bool = False
+
+
+class RecordedUsage(BaseModel):
+    """What one model cost this run — `audience.run_usage`'s row, typed.
+
+    **Keyed by model, never summed into one integer.** *Which node cost what*
+    is only answerable while they are apart, and a single number cannot say
+    that a grader on one provider and an agent on another have two prices.
+    """
+
+    #: The provider's own name for the model — not a canvas node.
+    model: str = ""
+    inputTokens: int = 0
+    outputTokens: int = 0
+    totalTokens: int = 0
+
+
+class RecordedRun(BaseModel):
+    """One turn out of the local run store — `RunRecord`, on the wire.
+
+    Not `ThreadSummary`'s replacement and not its rival: that shape is read out
+    of the **checkpointer** and answers *what supersteps ran*; this is read out
+    of `runs.sqlite` and answers *how the output arrived*. Only one of them can
+    drive a playhead, which is why this door exists.
+    """
+
+    #: ISO-8601 with an offset — the machine's own clock, as the store keeps it.
+    at: str = ""
+    workflowSlug: str = ""
+    threadId: str = ""
+    #: The browser tab the run was asked from. `""` means the run had no
+    #: sitting — the MCP and CLI doors mint none — never that one was lost.
+    sessionId: str = ""
+    question: str = ""
+    answer: str = ""
+    seconds: float = 0.0
+    #: How many grader laps the run took.
+    attempts: int = 0
+    #: A node wrote the failure sentinel.
+    failed: bool = False
+    #: What the run spent, one row per model. **Three answers, and they are
+    #: three**: a list is what it spent, `[]` is *no model was called* — a real
+    #: measurement — and `null` is *this reader was not told*, which a customer
+    #: always is. Built by `audience.run_usage`, so the boundary is applied in
+    #: the one place that already owns it rather than restated here.
+    usage: list[RecordedUsage] | None = None
+    #: Empty on the listing, which does not pay for it, and empty on a
+    #: recording this audience is refused.
+    bursts: list[RecordedBurst] = Field(default_factory=list)
+
+
+class RecordedRunsResponse(BaseModel):
+    """`GET /api/runs/recorded` — every recorded run, newest first."""
+
+    #: In the store's own indexed order. A client groups over this and must not
+    #: re-sort it: `at` is local wall clock with an offset and does not sort as
+    #: text (`the-cost-of-one-more/11`).
+    runs: list[RecordedRun] = Field(default_factory=list)
+
+
+class RecordedThreadResponse(BaseModel):
+    """`GET /api/runs/recorded/{thread_id}` — one conversation's recordings."""
+
+    threadId: str
+    #: **Oldest first**, unlike the listing. A list is browsed from the newest
+    #: and a conversation is read from its beginning.
+    runs: list[RecordedRun] = Field(default_factory=list)

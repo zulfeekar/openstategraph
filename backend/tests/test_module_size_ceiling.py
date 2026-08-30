@@ -282,6 +282,13 @@ here is only the statement that a **process** the user launched may
 reconfigure their interpreter from a committed file while a **function** this
 suite calls in-process may not. That boundary is this module's, and there is
 nowhere else to draw it.
+
+**1127 -> 1129** (`memory-and-replay/71`). Two lines, and they are the export
+command answering a question the reader now asks it: `read_runs(with_bursts=…)`
+takes an `audience`, and `runs export` says `developer` because it is an
+operator reading their own machine's store from that machine's own terminal.
+Whose store this is has always been this command's to know; nothing else here
+could answer it.
 """
 
 WORKFLOW_COMPILER = """
@@ -609,6 +616,23 @@ failure this is rather than reading sqlite's message, and two named handlers
 say what each costs, because *"a column is missing"* at `warning` and *"no run
 will be recorded for the rest of this process"* are different facts and had one
 line between them.
+
+**640 -> 661** (`memory-and-replay/71` and `/74`). Twenty-one lines. Eighteen of them give the module's
+*second* cadence reader the gate its first one has had since
+`the-boundary-nobody-checked/02`. `read_run_bursts` requires an `audience` and
+argues it from the column — `RunBurst.audience` is stored so a reader can
+refuse — and `read_runs(with_bursts=True)` reached the same table through
+`_attach_bursts` with no such parameter. Two readers of one column disagreeing
+about whether it is a gate is a property of *this module*, and the eighteen
+lines are the raise, the `WHERE` clause, and the paragraph saying that a
+boolean flag cannot be made un-skippable by a signature the way a required
+keyword can — so it is made un-skippable by not running.
+
+The other three are `74`: `RunBurst.active_node`, its place in
+`_BURST_COLUMNS`, and its place in `_burst_row`. A column is three lines here
+by construction — the field, the schema, the writer — which is the shape this
+module chose when it made the column list the one declaration both the writer
+and the reader read.
 """
 
 #: Eight modules, derived and then argued for one at a time. Nothing in this
@@ -618,13 +642,13 @@ line between them.
 #: worried about.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1127, CLI),
+    "cli.py": Recorded(1129, CLI),
     "compile/workflow_compiler.py": Recorded(964, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1034, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(698, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
-    "run_sinks.py": Recorded(640, RUN_SINKS),
+    "run_sinks.py": Recorded(661, RUN_SINKS),
 }
 
 

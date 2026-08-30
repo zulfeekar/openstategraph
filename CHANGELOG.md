@@ -2,7 +2,40 @@
 
 ## Unreleased
 
+### Added
+- **Stored runs — every recording the local run store kept, on the run
+  timeline** (`memory-and-replay` 72, 73). A control in the top bar opens a
+  popover listing every run in `runs.sqlite`, grouped by **sitting → conversation
+  → turn**; choosing a turn replaces what the run timeline is drawing with that
+  recording, and a control in the timeline's own header goes back to the run
+  this tab is on. Reading a recording spends nothing: every door it can reach is
+  a `GET` against a store, and no model is called.
+  - Two endpoints behind it, documented in `docs/api.md` and published in
+    `docs/openapi.json`: `GET /api/runs/recorded` (newest first, no cadence) and
+    `GET /api/runs/recorded/{thread_id}` (one conversation, oldest first, each
+    turn with its recording). Both take the same `audience` parameter as the
+    other run doors, capped by the same ceiling; it decides whether the
+    *recordings* come back, never whether the turns do.
+  - **Only three of the four levels asked for exist**, and the missing one is
+    not invented: nothing in this store records a *subthread*, so the third rung
+    is a **turn** — one question asked and answered inside a conversation, which
+    is what the store actually appends a row of.
+
 ### Fixed
+- **A recorded burst now says which canvas node produced it**
+  (`memory-and-replay` 74). The `token` frame has always carried `activeNode`
+  — the node to show as working, and the only frame that arrives while one
+  still is — and the recorder read every other field of that frame. Inside an
+  agent the recorded `node` is LangGraph's own `model` and `tools`, so twelve
+  of a real thirteen-burst `chinook-assistant` recording named no canvas node
+  at all. One column; an older row reads `""`, which is *this recording did not
+  say*.
+- **Asking the run store for a recording now costs an audience**
+  (`memory-and-replay` 71). `read_run_bursts` has required one since
+  `the-boundary-nobody-checked/02`, because `RunBurst.audience` is stored so a
+  reader can refuse — and `read_runs(with_bursts=True)` reached the same table
+  with no such parameter. Nothing leaked: the one caller was `runs export`, an
+  operator reading their own machine. The next caller was an HTTP route.
 - **A package `tools/` module that imports the project it lives in now says so
   when it cannot** (`launch-readiness/195`). `from myapp.inventory import
   stock_level` — the whole point of `tools/` in a codebase you already have —

@@ -1253,7 +1253,13 @@ def cmd_runs_export(args: argparse.Namespace) -> int:
     # before truncating. A partial export is the failure this command exists to
     # prevent, so it is not a file.
     try:
-        rows = read_runs(path, limit=args.limit, with_bursts=True)
+        # `audience="developer"` because this is an operator exporting their
+        # own machine's store from that machine's own terminal, and an export
+        # that silently dropped half the cadence is the partial file this
+        # command refuses to write (`memory-and-replay` 71).
+        rows = read_runs(
+            path, limit=args.limit, with_bursts=True, audience="developer"
+        )
     except RunCadenceUnavailable as exc:
         return _error(
             f"could not read the run cadence out of {path}: {exc}. Nothing was "

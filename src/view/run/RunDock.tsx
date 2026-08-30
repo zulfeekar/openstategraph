@@ -5,6 +5,7 @@ import { laneFold, type RunLanes, type TimelineRow } from '../ask/timeline';
 import { reusableFold } from '../ask/incrementalFold';
 import type { RunView } from './runView';
 import { runCost } from './runCost';
+import { runView } from './runView';
 import { PayloadPane } from './PayloadPane';
 import { DOCK_MIN_HEIGHT, dockHeightFromArrow, dockHeightFromDrag } from '../layout/dockFit';
 // The bars and the trace rows keep their styles where they were written. They
@@ -73,12 +74,16 @@ import './RunDock.css';
  *
  * # What was left out of the port, and why
  *
- * - **The answer re-typing at its recorded cadence.** It needs `47`'s bursts,
- *   and `47` is `partially`: the store keeps the cadence and the reader is
- *   Python-level — no HTTP route, and `burst` appears nowhere in
- *   `docs/openapi.json`. A paragraph re-typed at a uniform tick is exactly the
- *   fabricated measurement `52` exists to forbid, so it is absent rather than
- *   faked. `memory-and-replay` 60.
+ * - **The answer re-typing at its recorded cadence.** Still absent, and the
+ *   reason has narrowed rather than gone. This paragraph said the cadence had
+ *   *"no HTTP route, and `burst` appears nowhere in `docs/openapi.json`"* —
+ *   both are false since `memory-and-replay` 72: `GET /api/runs/recorded/{id}`
+ *   publishes a recording, and `StoredRuns` puts one on this dock. What that
+ *   door deliberately does **not** carry is `RunBurst.cadence`, the per-chunk
+ *   blob, because nothing reads it yet and a field with no reader drifts. So
+ *   `60` is still open and still for the same underlying reason: a paragraph
+ *   re-typed at a uniform tick is the fabricated measurement `52` forbids, and
+ *   the real offsets stay in the store until a surface asks for them.
  * The two the port went back for are now here, and one is still short:
  *
  * - **The payload pane** — what the selected step *asked* and *produced*
@@ -230,6 +235,23 @@ export function RunDock({
           <code>{cost.total}</code>
         </span>
         <span className="run-dock__actions">
+          {/* The way back out of a recording (`memory-and-replay` 73), and it
+              lives here rather than only in the picker that opened it: that
+              picker is a popover and closes on Escape, on a click outside and
+              on its own control, so a reader looking at the chart they came
+              for would have no way back at exactly the moment they want one.
+              Offered only over a stored run, because a live run has nothing to
+              return to. */}
+          {view.source === 'stored' ? (
+            <button
+              type="button"
+              className="run-dock__back"
+              onClick={() => runView.release()}
+              title="Show the run this tab is on again. Nothing re-runs either way."
+            >
+              Back to this tab&apos;s run
+            </button>
+          ) : null}
           {!view.running && view.rows.length > 0 ? (
             // Export travels with the trace, which is what it exports. It is
             // the one thing 51 said must stay reachable when these two views

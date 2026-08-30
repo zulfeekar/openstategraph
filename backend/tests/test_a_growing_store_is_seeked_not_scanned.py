@@ -270,7 +270,7 @@ def test_a_store_larger_than_the_batch_still_exports_every_run_s_cadence(
     monkeypatch.setattr(run_sinks, "CADENCE_BATCH", 7)
     store = a_store(tmp_path / "runs.sqlite", 40)
 
-    rows = read_runs(path=store, limit=1000, with_bursts=True)
+    rows = read_runs(path=store, limit=1000, with_bursts=True, audience="developer")
 
     assert len(rows) == 40
     assert [len(row.bursts) for row in rows] == [1] * 40
@@ -298,7 +298,7 @@ def test_the_batches_stay_in_step_with_the_rows_they_belong_to(
         )
     sink.close()
 
-    rows = read_runs(path=tmp_path / "runs.sqlite", limit=100, with_bursts=True)
+    rows = read_runs(path=tmp_path / "runs.sqlite", limit=100, with_bursts=True, audience="developer")
 
     assert [row.bursts[0].text for row in rows] == [
         f"burst-{index}" for index in reversed(range(20))
@@ -324,7 +324,7 @@ def test_a_store_with_no_cadence_table_is_an_answer_and_not_an_error(
         connection.execute("DROP TABLE run_bursts")
 
     with caplog.at_level(logging.DEBUG, logger=run_sinks.logger.name):
-        rows = read_runs(path=store, limit=10, with_bursts=True)
+        rows = read_runs(path=store, limit=10, with_bursts=True, audience="developer")
 
     assert [row.bursts for row in rows] == [[], [], []]
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
@@ -346,7 +346,7 @@ def test_a_refused_cadence_read_is_an_error_that_names_what_is_missing(
 
     with caplog.at_level(logging.DEBUG, logger=run_sinks.logger.name):
         with pytest.raises(run_sinks.RunCadenceUnavailable):
-            read_runs(path=store, limit=10, with_bursts=True)
+            read_runs(path=store, limit=10, with_bursts=True, audience="developer")
 
     errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert errors, "a refused cadence read must not be a debug line"

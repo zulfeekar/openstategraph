@@ -80,7 +80,7 @@ class BurstRecorder:
         self._audience = audience
         self._bursts: list[RunBurst] = []
         #: The open burst's identity, or `None` before the first chunk.
-        self._key: tuple[str, str, str, str, bool] | None = None
+        self._key: tuple[str, str, str, str, str, bool] | None = None
         self._steps: list[int] = []
         self._lengths: list[int] = []
         self._text: list[str] = []
@@ -106,6 +106,11 @@ class BurstRecorder:
             return
         key = (
             str(payload.get("node") or ""),
+            # The owner is part of the identity, not a label hung on it: two
+            # agents' loops both run through a LangGraph node called `model`,
+            # so folding on the loop name alone would make them one burst
+            # attributed to whichever spoke first (`memory-and-replay` 74).
+            str(payload.get("activeNode") or ""),
             json.dumps(payload.get("namespace") or []),
             str(payload.get("block") or ""),
             str(payload.get("kind") or ""),
@@ -147,10 +152,11 @@ class BurstRecorder:
     def _close(self) -> None:
         if self._key is None:
             return
-        node, namespace, block, kind, withheld = self._key
+        node, active_node, namespace, block, kind, withheld = self._key
         self._bursts.append(
             RunBurst(
                 node=node,
+                active_node=active_node,
                 namespace=json.loads(namespace),
                 block=block,
                 kind=kind,

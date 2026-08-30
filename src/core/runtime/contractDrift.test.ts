@@ -38,7 +38,12 @@ const openapi = JSON.parse(readFileSync(fileURLToPath(new URL('docs/openapi.json
  * them was documented on the day it was added, which is the argument for
  * adding the file now rather than after a fourteenth is not.
  */
-const client = ['RuntimeClient.ts', 'McpRegistryClient.ts', 'WorkflowFileClient.ts']
+const client = [
+  'RuntimeClient.ts',
+  'McpRegistryClient.ts',
+  'WorkflowFileClient.ts',
+  'RecordedRunsClient.ts',
+]
   .map((name) => readFileSync(fileURLToPath(new URL(`src/core/runtime/${name}`, REPO)), 'utf8'))
   .join('\n');
 
