@@ -10,6 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildLanes, buildTimeline, isModelStep, isToolStep, type TimelineRow } from './timeline';
+import { chartRows } from './chartRows';
 import { runProfile } from '../run/runProfile';
 import recorded from './recordedFanOutRun.json';
 
@@ -90,7 +91,18 @@ describe('a bar knows what kind of bar it is', () => {
     // them. Counting the hooks reported 75 model calls in a strip whose whole
     // job is to be quotable — found in the browser, not in a test.
     expect(runProfile(buildLanes(theRun())).modelCalls).toBe(22);
-    expect(runProfile(buildLanes(theRun())).toolCalls).toBe(15);
+  });
+
+  it('will not put a number on tool calls a recording never counted', () => {
+    // This recording predates `55`, so it carries fifteen `tools` frames —
+    // fifteen **laps** — and not one `invoked` frame. `66` made the strip's
+    // number mean calls, and a lap is not a call: one lap asking for three
+    // tools is three. So the honest answers are a dash and a chart with no
+    // tool bars on it, and this test is the reason the field is nullable.
+    expect(runProfile(buildLanes(theRun())).toolCalls).toBeNull();
+    expect(
+      chartRows(buildLanes(theRun()).lanes).filter((row) => row.event && row.name !== 'model'),
+    ).toEqual([]);
   });
 
   it('spends the accent only on a refusal the run actually reported', () => {

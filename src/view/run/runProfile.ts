@@ -1,4 +1,4 @@
-import type { RunLanes } from '../ask/timeline';
+import type { RunLanes, TimelineStep } from '../ask/timeline';
 
 /**
  * The strip above the chart: what the whole run *did*, in five numbers.
@@ -29,8 +29,39 @@ export interface RunProfile {
   readonly totalMs: number | null;
   /** Bars, across every lane. */
   readonly steps: number;
+  /**
+   * Model calls, counted as the bars the chart draws for them.
+   *
+   * Derived from `TimelineStep.events` rather than from the counters beside
+   * them, so the strip and the chart cannot come to disagree about a number a
+   * reader is invited to check by counting (`memory-and-replay` 66).
+   */
   readonly modelCalls: number;
-  readonly toolCalls: number;
+  /**
+   * Tool **calls** — not the laps its loop took.
+   *
+   * Until `66` this summed `TimelineStep.toolCalls`, which counts internal
+   * frames named `tools`: the loop's tool *step*, which runs once per lap and
+   * executes every call the model asked for in that lap. A lap asking for
+   * three tools counted one. The two agreed on the recorded run only because
+   * every lap there made exactly one call, which is why nobody saw it.
+   *
+   * `invoked` is the count of calls and has been on the wire since `55`. Now
+   * that the chart draws one bar per call, the strip has to say the same
+   * number or a reader cannot tell which of the two lied.
+   *
+   * **`null` is a third answer and it is the important one**: this run's loop
+   * took tool laps and the recording does not say how many calls they made.
+   * That is every run captured before `55`, and every stream whose tool names
+   * the audience boundary withheld. Printing `0` there would say no tool ran,
+   * which is false; printing the lap count would put laps and calls under one
+   * label, which is the confusion this field exists to end. The dash is
+   * `launch-readiness` 108's rule — a number the recording does not carry is
+   * not a zero — and it is the one value that keeps the promise the rest of
+   * this field makes: whenever a number is printed, that many bars can be
+   * counted on the chart.
+   */
+  readonly toolCalls: number | null;
   /**
    * Bars that are a second or later visit to their lane's node — the revise
    * laps, which is the number an evaluator-optimizer graph is built around.
@@ -44,13 +75,23 @@ export interface RunProfile {
 
 export function runProfile({ lanes, totalMs }: RunLanes): RunProfile {
   const steps = lanes.flatMap((lane) => lane.steps);
+  const events = steps.flatMap((step) => step.events);
   return {
     totalMs,
     steps: steps.length,
-    modelCalls: steps.reduce((sum, step) => sum + step.modelCalls, 0),
-    toolCalls: steps.reduce((sum, step) => sum + step.toolCalls, 0),
+    modelCalls: events.filter((each) => each.kind === 'model').length,
+    toolCalls: toolCalls(steps, events),
     reviseLaps: steps.filter((step) => step.visit > 1).length,
     measured: steps.filter((step) => step.measured).length,
     openEnded: lanes.filter((lane) => lane.openEnded).length,
   };
+}
+
+/** See `RunProfile.toolCalls` — three answers, and the third is `null`. */
+function toolCalls(steps: readonly TimelineStep[], events: readonly TimelineStep[]): number | null {
+  const calls = events.filter((each) => each.kind === 'tool').length;
+  if (calls > 0) return calls;
+  // Laps its loop took, which is what `TimelineStep.toolCalls` counts. Read
+  // here only to tell "no tool ran" from "the recording does not say".
+  return steps.some((step) => step.toolCalls > 0) ? null : 0;
 }

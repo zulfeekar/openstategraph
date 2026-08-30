@@ -13,7 +13,8 @@
  * cannot come to disagree about what ran.
  */
 import { describe, expect, it } from 'vitest';
-import { axisTicks, buildLanes, chartRows, type RunLane, type TimelineRow } from './timeline';
+import { buildLanes, type RunLane, type TimelineRow } from './timeline';
+import { axisLabels, axisTicks, chartRows } from './chartRows';
 import recorded from './recordedFanOutRun.json';
 
 function rowsOf(frames: readonly Record<string, unknown>[]): TimelineRow[] {
@@ -88,19 +89,36 @@ describe('the chart draws a row per node, where it used to draw one row', () => 
   it('indents a dispatched child under the node that announced it', () => {
     // The four `impact-analyst` children were announced by `lead` at 5 060 ms
     // and 27 564 ms. They sit under `lead`, not beside it and not at the end.
+    //
+    // The `model` rows are `memory-and-replay` 66's, and this test is the one
+    // that had to change for it, so the ordering rule is stated where it can
+    // be checked: a node's **own** work is drawn directly under it, and a
+    // child the run **dispatched** comes after — `lead`'s `model` row above
+    // its four analysts. They are indented the same way and are not the same
+    // thing, which is why `ChartRow.event` is a word rather than a depth.
+    //
+    // This recording predates `55`, so it carries no `invoked` frame and
+    // therefore no tool row. Its model rows are still here, which is the
+    // point: the two halves of 66 fail independently.
     expect(drawn()).toEqual([
       { name: 'in1', depth: 0 },
       { name: 'router', depth: 0 },
       { name: 'deep', depth: 0 },
+      { name: 'model', depth: 1 },
       { name: 'lead', depth: 0 },
       { name: 'impact-analyst', depth: 1 },
+      { name: 'model', depth: 2 },
       { name: 'impact-analyst', depth: 1 },
+      { name: 'model', depth: 2 },
       { name: 'impact-analyst', depth: 1 },
+      { name: 'model', depth: 2 },
       { name: 'impact-analyst', depth: 1 },
+      { name: 'model', depth: 2 },
       { name: 'out2', depth: 0 },
       { name: 'join', depth: 0 },
       { name: 'grader', depth: 0 },
       { name: 'audit', depth: 0 },
+      { name: 'model', depth: 1 },
       { name: 'out1', depth: 0 },
     ]);
   });
@@ -120,9 +138,19 @@ describe('the chart draws a row per node, where it used to draw one row', () => 
     // Every bar on exactly one lane, and now on exactly one row. The two
     // cannot come to disagree about what ran, because the rows hold the lanes'
     // own steps.
+    //
+    // `event` rows are excluded and that is not a loosening: an event row
+    // holds bars that live **inside** a lane's steps (`TimelineStep.events`,
+    // `memory-and-replay` 66), so it is a projection of the same fold one
+    // level down rather than a second reading of the frames. The property this
+    // test protects — that nothing on the chart was derived a second time —
+    // is asserted for those in `stepEvents.test.ts`, against the run that has
+    // any.
     const { lanes } = buildLanes(theRun());
     const onLanes = lanes.flatMap((lane) => lane.steps.map((step) => step.key));
-    const onRows = chartRows(lanes).flatMap((row) => row.steps.map((step) => step.key));
+    const onRows = chartRows(lanes)
+      .filter((row) => !row.event)
+      .flatMap((row) => row.steps.map((step) => step.key));
 
     expect([...onRows].sort()).toEqual([...onLanes].sort());
   });
@@ -213,5 +241,35 @@ describe('the axis is the row model’s, not the renderer’s', () => {
 
   it('gives a run with no length a single tick rather than an empty loop', () => {
     expect(axisTicks(0)).toEqual([0]);
+  });
+});
+
+describe('the axis reads in one unit', () => {
+  it('picks the unit from the step, so no two ticks are in different ones', () => {
+    // `memory-and-replay` 68. The shipped axis read `0 ms · 5.0 s · 10.0 s`,
+    // because each tick went through `formatMs`, which switches unit at a
+    // second. A reader compares an axis's numbers to each other.
+    expect(axisLabels(24_100).map(([, label]) => label)).toEqual(['0s', '5s', '10s', '15s', '20s']);
+    // A sub-second run is a millisecond axis all the way across, including
+    // the tick that happens to be a round second.
+    expect(axisLabels(900).map(([, label]) => label)).toEqual([
+      '0ms',
+      '200ms',
+      '400ms',
+      '600ms',
+      '800ms',
+    ]);
+    // Never a decimal place, because `axisTicks` steps in `[1,2,5,10]·10^n`
+    // and a step of a second or more is therefore whole seconds. This is the
+    // assertion that would fail if the step rule changed under `axisLabels`.
+    expect(
+      [900, 2_400, 12_000, 24_100, 300_000].every((total) =>
+        axisLabels(total).every(([, label]) => !label.includes('.')),
+      ),
+    ).toBe(true);
+  });
+
+  it('labels exactly the ticks the axis has', () => {
+    expect(axisLabels(24_100).map(([at]) => at)).toEqual([...axisTicks(24_100)]);
   });
 });

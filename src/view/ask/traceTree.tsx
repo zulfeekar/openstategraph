@@ -81,6 +81,20 @@ export interface ActivityRow {
   readonly check?: string;
   /** The grader's sentence for `check`. Carried with it, never alone. */
   readonly reason?: string;
+  /**
+   * One end of a tool call — `memory-and-replay` 66, and see
+   * `TimelineRow.tool`, which is the shape this feeds.
+   *
+   * The trace tree renders none of these: they are `internal` rows, and this
+   * view has shown internal frames as children of their owning node since
+   * ticket 63. They are on the row so the timeline's fold can pair them,
+   * which is the one place that pairing belongs.
+   */
+  readonly tool?: {
+    readonly name: string;
+    readonly callId: string;
+    readonly phase: 'invoked' | 'result';
+  };
 }
 
 export interface SpawnDetail {
