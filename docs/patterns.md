@@ -209,11 +209,19 @@ node, not a new node type — ask for it.
 
 ### Why the intuitive shape cannot work
 
-`function.format_report` **ignores its incoming edges**. Its runtime reads two
-state keys and nothing else
-(`backend/openstategraph/compile/nodes/functions.py`, `_format_report_function`): `worker_results`, keyed by subtask id, and
-`subtasks`. It reports the intersection, and renders `_No results._` when that
-intersection is empty.
+**This sub-section described the join as it was before that fix, and the
+correction above is the one to believe.** It read two state keys and ignored
+its incoming edges; it now reads three, and the edges are the third
+(`backend/openstategraph/compile/nodes/functions.py`, `_format_report_function`):
+`worker_results` keyed by subtask id, `subtasks` for the ids the *current* plan
+declared, and — **only when no worker fan-out reached it** — `outputs`, walked
+along the edges that land on this node. It reports the intersection of the
+first two, falls back to the third, and when nothing at all was dispatched it
+says so in a named sentence rather than printing `_No results._` and leaving
+you to guess which of the two happened.
+
+The rest of this sub-section is why the fan-out reading is *first*, and it is
+still worth having: it is the shape a supervisor produces.
 
 Only two node types ever write those keys — `orchestrate.supervisor` writes
 `subtasks`, `orchestrate.worker` writes `worker_results[task_id]` — and
@@ -224,30 +232,35 @@ it compiles to a plain `add_edge`: it sequences the join after the agents and
 transfers no data at all. Meanwhile `agent.llm` writes `outputs[node_id]` and
 `answer`, never `worker_results`.
 
-So all fan-in here is `Send`-shaped. The three edges are decoration, and
-nothing reports the loss:
+So all *dispatched* fan-in is `Send`-shaped, and that is the path the join
+reads first. Until `every-workflow-green` 27 it was the only path it read, and
+the three drawn edges were decoration nothing reported the loss of:
 
-- `openstategraph validate` says `VALID` — `candidate` is a bus
-  (`maxConnections: null`) and `required`, so three edges satisfy both the
+- `openstategraph validate` said `VALID` — `candidate` is a bus
+  (`maxConnections: null`) and `required`, so three edges satisfied both the
   capacity rule and the required-port check. The port advertised a fan-in the
-  runtime does not implement.
-- the **canvas preview disagrees with the compiler**. Its browser executor does
+  runtime did not implement.
+- the **canvas preview disagreed with the compiler**. Its browser executor does
   read `candidate` and will show you a joined document; its own source says it
   "demonstrates the formatting, not the fan-out/join semantics that only the
   compiled graph has". A shape could look right in preview and return
   `_No results._` on the backend.
 
+Both are history. The join's fallback reads exactly those edges now, so a
+hand-authored document with three agents wired into `candidate` gets a report
+with three sections rather than an empty one.
+
 **What changed (production-ready ticket 31), and what did not.** The port now
 declares who may feed it — a source that itself takes a `worker` input, which
 is exactly "is dispatched by a fan-out" — so the editor refuses the agent edge
 at connection time with a sentence naming the mechanism, and the preview can no
-longer render a join the compiler will not produce. A join that never was
+longer render a shape the canvas itself refuses. A join that never was
 dispatched to now says so in its own report instead of a bare `_No results._`.
 
-**Static fan-in is still unbuilt.** Refusing the drawing is not implementing
-it: there is no mechanism by which *N* drawn nodes' outputs converge into one
-join, and adding one is a multi-writer state key with a named reducer, not a
-port change. A hand-authored or generated document can still contain the edge —
+**The editor still refuses to draw it, and that has not changed.** The runtime
+gained the fallback; `sourceCapabilityRule` did not lose the refusal, so this
+shape is reachable from a hand-authored or generated document and not from a
+gesture on the canvas. A hand-authored or generated document can still contain the edge —
 `openstategraph validate` does not enforce this rule, only the canvas does.
 
 Recorded as `.scratch/workflow-gallery/tickets/14-all-fan-in-is-send-shaped.md`

@@ -5,11 +5,12 @@ the endpoints in [`openapi.json`](openapi.json). There is no private API behind
 them: every path either surface calls is in that document, so a third client is
 a supported thing to build rather than a reverse-engineering exercise.
 
-**This page is not the path list.** `openapi.json` is, and it carries roughly
-three times as many paths as this page walks through — the editor's own writing,
-knowledge, provider, MCP-registry, template and example endpoints among them.
-What follows is the subset a **custom chat client** needs, in the order it
-needs them.
+**This page is not the path list.** `openapi.json` is, and it carries many
+paths this page never walks through — the editor's own writing, knowledge,
+provider, MCP-registry, template and example endpoints among them. Count them
+there rather than believing a multiplier written here; this page has carried a
+wrong one. What follows is the subset a **custom chat client** needs, in the
+order it needs them.
 
 This page is the whole contract in two halves:
 
@@ -105,6 +106,12 @@ parser handles both.
 | `done` | **terminal** — the run finished | `threadId`, `answer`, `decisions`, `routes`, `outputs`, `nested`, `attempts`, `mermaid`, `publishedRejected`, and `developer` **only for a developer run**, plus `usage`, `seq` and `elapsedMs` |
 | `error` | **terminal** — the run failed | `threadId`, `detail`, plus `usage`, `seq` and `elapsedMs` |
 
+The field lists above are also published machine-readably: each SSE endpoint in
+`openapi.json` carries a `Frame fields:` sentence written straight from the
+emitters. This table is the same lists with meanings attached, and
+`backend/tests/test_api_guide.py` fails if the two disagree — but if you are
+generating code, parse the artifact.
+
 #### Every frame says when it happened — `seq` and `elapsedMs`
 
 Two fields on all ten, minted by the server as it builds the frame.
@@ -168,9 +175,11 @@ Two things it deliberately never carries:
 
 - **The tool's arguments**, in any form. An argument is routinely an internal
   id, a path this platform invented, or a credential.
-- **Anything for the four spawning tools.** A `task` or `start_async_task` call
-  is announced as a `spawn`, not here — one tool call never appears twice under
-  two different words.
+- **Anything for the two spawning tools.** `task` and `start_async_task` are
+  announced as a `spawn`, not here — one tool call never appears twice under two
+  different words. (Two *tools*; the `spawn` frame's `kind` has four values,
+  and they are not the same count. `subgraph` is a mounted workflow and
+  `fanout` is a dispatched worker — neither is a tool anyone calls.)
 
 **A customer's copy is blanked, not withheld.** `name` and `callId` read `""`
 and `withheld: true` rides the frame, exactly as a tool's identity is already
@@ -309,6 +318,7 @@ frame, and that object is where everything an editor may see now lives:
 | --- | --- |
 | `developer.warnings` | authoring diagnostics — unbound tool types, unresolved functions and subgraphs, mount overrides, capability-discovery failures |
 | `developer.suggestion` | the one capability-gap suggestion an agent may offer when it is blocked for want of a tool, as an object (`nodeType`, `attachTo`, `port`, `label`, `reason`) |
+| `developer.redactions` | what each Guardrail node removed, as `{node, entity, strategy, count}` — **counts and entity types, never values**, which is why it rides this channel rather than the answer |
 | `developer.statements` | **what the run actually executed** — one row per statement, as `{node, tool, statement, result, truncated}` |
 
 The key is **absent**, not empty, on a customer run — so a client cannot read
@@ -491,8 +501,9 @@ held anyone else's nodes in the first place.
 
 > **Every stream ends with a frame that says how it ended.** Exactly one of
 > `done`, `interrupt` or `error` is the last frame of every stream that lives
-> long enough to send one. `update`, `token`, `progress`, `spawn` and
-> `settled` are progress: after any of them, keep waiting.
+> long enough to send one. `started` opens; `update`, `token`, `progress`,
+> `spawn`, `settled` and `invoked` are progress: after any of them, keep
+> waiting.
 
 A client must never tell "still working", "finished" and "died" apart by
 waiting and guessing. There is exactly one exception, and it is honest rather
@@ -617,6 +628,20 @@ the shipped `concierge` and `chinook-assistant` both have `in1`, `router1` and
 `out1` — so walking inward-first would light the *parent's* input node while
 the child's input step ran.
 
+**`pathSlugs` says which *document* each of those levels is.** It is the same
+length as `path` and lines up with it entry for entry, naming the workflow slug
+each id belongs to.
+
+```
+"path": ["wf-music", "agent-sql"], "pathSlugs": ["concierge", "chinook-assistant"]
+```
+
+Ids are unique only inside one document, and the two shipped packages prove why
+that matters: `concierge` mounts `chinook-assistant`, and both have an `in1`, a
+`router1` and an `out1`. A client matching on id alone lights the child's
+`router1` when the parent's router ran. Match on the pair — the id **and** the
+slug the same index names — and there is nothing left to collide.
+
 `path` is empty when nothing on the frame resolves to a card, and absent on
 terminal frames and on any backend that predates it; fall back to `activeNode`
 in that case. When both are non-empty, `activeNode` equals `path[0]`.
@@ -690,9 +715,10 @@ still working*:
 
 ```
 event: progress
-data: {"node":"agent-sql","message":"Read 40 of 100 invoices","current":40,"total":100,
+data: {"node":"agent-sql","namespace":["agent_sql:7f3c"],
+       "message":"Read 40 of 100 invoices","current":40,"total":100,
        "activeNode":"agent-sql","path":["agent-sql"],"pathSlugs":["chinook-assistant"],
-       "namespace":["agent_sql:7f3c"]}
+       "interruptible":true,"detail":null,"seq":118,"elapsedMs":41207}
 ```
 
 `current` and `total` are `int` or `null` — `null` means "no claim", so render
@@ -998,6 +1024,12 @@ GET /api/workflows/concierge/mounts/wf-music
   longer exists runs the package default and says so, rather than refusing to
   open.
 
+`?inherited=true` answers the neighbouring question: **what this instance would
+run if it overrode nothing.** That is what an inspector shows beside an
+overridden field, and what a revert restores, and a client cannot compute it —
+the override has already replaced the inherited value in the document above.
+Default `false`, which is the effective document shown here.
+
 `404` covers both "no such workflow" and "that path names nothing" — a stale
 link and a deleted mount read the same way to a client. `422` is reserved for
 an address that could not be a request at all.
@@ -1019,6 +1051,25 @@ No `audience` here, and that is the point: a chat client omits it and gets
 `"customer"`, which is the surface that may not be shown authoring guidance.
 See "Audience" above for what a `"developer"` run additionally receives.
 
+`model` is optional and wins over the document: an explicit `model` on the
+request beats the document's own `settings.model`, which beats the environment
+default. A workflow that names its model runs the same everywhere it is opened,
+and a client that names one is deliberately overriding that.
+
+`context` is optional and is **declared by the document**, not by you. A
+workflow's `settings.context` says which keys it asks its caller for and of
+what type; this field fills them. Scalars only — string, number or boolean. A
+key the document does not declare, a key it requires and you omitted, or a value
+of the wrong declared type is a **`422`** whose message names the key and the
+workflow. A document that declares nothing accepts nothing here.
+
+`session_id` is optional and names the **conversation's memory**, which is a
+different thing from `thread_id`. Note what is deliberately *not* on this
+request: there is no `user_email` and no way to say who a run is for. That is
+the server's to determine — see "Who the run is for" in §5 — because the value
+keys a per-person memory namespace, and a client that could name the person
+could read and write that person's memories.
+
 `workflow_slug` is optional and additive: it layers the tools that live in that
 workflow's own `tools/` folder over the defaults. It must be a **slug this
 deployment has**, though — it also names the workflow's memory namespace and,
@@ -1032,30 +1083,69 @@ client that sends a *second* question should pass the first one's `threadId`,
 or the second question opens its own conversation and cannot refer back to the
 first. See "A thread is the conversation" above.
 
-The response, with the twenty token frames elided:
+The response, with the twenty token frames elided. Frames are shown whole —
+every field the server sends, so a client can be written against this block
+rather than against a shape that has been tidied:
 
 ```
+event: started
+data: {"threadId": "chat-8f2a1c", "seq": 0, "elapsedMs": 0}
+
 event: token
-data: {"node": "in1", "namespace": [], "content": "How did revenue do this quarter?"}
+data: {"node": "in1", "namespace": [], "content": "How did revenue do this quarter?",
+       "block": "text", "usage": null, "activeNode": "in1", "path": ["in1"],
+       "pathSlugs": ["quarterly-brief"], "kind": "ai", "tool": {"name": "", "callId": ""},
+       "interruptible": true, "seq": 1, "elapsedMs": 14}
 
 event: update
-data: {"node": "in1", "namespace": [], "taskId": "__turn_reset__", "internal": false, "activeNode": "in1", "output": "How did revenue do this quarter?"}
+data: {"node": "in1", "namespace": [], "taskId": "__turn_reset__", "internal": false,
+       "activeNode": "in1", "path": ["in1"], "pathSlugs": ["quarterly-brief"],
+       "output": "How did revenue do this quarter?", "interruptible": true,
+       "seq": 2, "elapsedMs": 15}
 
 event: spawn
-data: {"kind": "subgraph", "parent": "in1", "label": "agent1", "instruction": "", "taskId": null, "namespace": ["agent1:d03d731c-…"]}
+data: {"spawnId": "sp-1", "kind": "subgraph", "parent": "in1", "label": "agent1",
+       "instruction": "", "taskId": null, "namespace": ["agent1:d03d731c-…"],
+       "seq": 3, "elapsedMs": 21}
 
 event: token
-data: {"node": "model", "namespace": ["agent1:d03d731c-…"], "content": "Revenue"}
+data: {"node": "model", "namespace": ["agent1:d03d731c-…"], "content": "Revenue",
+       "block": "text", "usage": null, "activeNode": "agent1",
+       "path": ["agent1"], "pathSlugs": ["quarterly-brief"], "kind": "ai",
+       "tool": {"name": "", "callId": ""}, "interruptible": true, "seq": 4, "elapsedMs": 1180}
 
 event: update
-data: {"node": "model", "namespace": ["agent1:d03d731c-…"], "taskId": null, "internal": true, "activeNode": "agent1", "output": null}
+data: {"node": "model", "namespace": ["agent1:d03d731c-…"], "taskId": null,
+       "internal": true, "activeNode": "agent1", "path": ["agent1"],
+       "pathSlugs": ["quarterly-brief"], "output": null, "interruptible": true,
+       "seq": 24, "elapsedMs": 3402}
+
+event: settled
+data: {"spawnId": "sp-1", "kind": "subgraph", "parent": "in1", "label": "agent1",
+       "taskId": null, "namespace": ["agent1:d03d731c-…"], "outcome": "ok",
+       "seq": 25, "elapsedMs": 3404}
 
 event: update
-data: {"node": "agent1", "namespace": [], "taskId": null, "internal": false, "activeNode": "agent1", "output": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue."}
+data: {"node": "agent1", "namespace": [], "taskId": null, "internal": false,
+       "activeNode": "agent1", "path": ["agent1"], "pathSlugs": ["quarterly-brief"],
+       "output": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.",
+       "interruptible": true, "seq": 26, "elapsedMs": 3405}
 
 event: interrupt
-data: {"threadId": "chat-8f2a1c", "node": "approve1", "message": "Send this brief to the team?", "candidate": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue."}
+data: {"threadId": "chat-8f2a1c", "node": "approve1",
+       "message": "Send this brief to the team?",
+       "candidate": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.",
+       "usage": null, "seq": 27, "elapsedMs": 3418}
 ```
+
+Three things in that block are the audience rule rather than a coincidence.
+`usage` is `null` and every `token` frame's `usage` is `null` because the
+request named no audience and therefore got `"customer"` — a developer run
+carries the list shown under "`usage`" above. The `spawn`/`settled` pair joins
+on `spawnId` and on nothing else. And `verdict`, `reason` and `check` are
+absent from that `interrupt` because no grader produced the candidate: the keys
+the frame table marks *only when* are the only ones that may be missing from a
+frame that is otherwise whole.
 
 The stream ended on `interrupt`, so the run is paused and waiting — not
 finished, and not broken.
@@ -1074,7 +1164,10 @@ data: {"threadId": "smoke-triage-2", "node": "gate1",
        "message": "This reply goes to a customer under your name.",
        "candidate": "I'm sorry your invoice contains an error. …",
        "verdict": "revise",
-       "reason": "'if appropriate' is a hedge and the rubric forbids holding phrases."}
+       "reason": "'if appropriate' is a hedge and the rubric forbids holding phrases.",
+       "usage": [{"model": "gpt-oss:120b-cloud", "inputTokens": 2104, "outputTokens": 143,
+                  "totalTokens": 2247}],
+       "seq": 44, "elapsedMs": 12908}
 ```
 
 Three things about those two fields:
@@ -1142,9 +1235,10 @@ as a broken timer, and the timer was right.
 event: update
 data: {"node": "grader-sql", "namespace": [], "taskId": null, "internal": false,
        "activeNode": "grader-sql", "path": ["grader-sql"], "pathSlugs": ["chinook-assistant"],
-       "output": "Error: no such table: Track",
+       "output": "Error: no such table: Track", "interruptible": true,
        "check": "error",
-       "reason": "The step failed: Error: no such table: Track"}
+       "reason": "The step failed: Error: no such table: Track",
+       "seq": 61, "elapsedMs": 8942}
 ```
 
 Absence carries the same meaning it does on the interrupt frame, and it is the
@@ -1168,15 +1262,35 @@ the node that gets the rejection. The stream that comes back is the same
 vocabulary again:
 
 ```
+event: started
+data: {"threadId": "chat-8f2a1c", "seq": 0, "elapsedMs": 0}
+
 event: update
-data: {"node": "approve1", "namespace": [], "taskId": null, "internal": false, "activeNode": "approve1", "output": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue."}
+data: {"node": "approve1", "namespace": [], "taskId": null, "internal": false,
+       "activeNode": "approve1", "path": ["approve1"], "pathSlugs": ["quarterly-brief"],
+       "output": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.",
+       "interruptible": true, "seq": 1, "elapsedMs": 6}
 
 event: token
-data: {"node": "out1", "namespace": [], "content": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue."}
+data: {"node": "out1", "namespace": [], "content": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.",
+       "block": "text", "usage": null, "activeNode": "out1", "path": ["out1"],
+       "pathSlugs": ["quarterly-brief"], "kind": "ai", "tool": {"name": "", "callId": ""},
+       "interruptible": true, "seq": 2, "elapsedMs": 9}
 
 event: done
-data: {"threadId": "chat-8f2a1c", "answer": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.", "decisions": {"approve1": "approved"}, "outputs": {"in1": "…", "agent1": "…", "approve1": "…", "out1": "…"}, "nested": {}, "attempts": 1, "mermaid": "graph TD;…"}
+data: {"threadId": "chat-8f2a1c",
+       "answer": "Revenue grew 12% quarter over quarter, driven by the Rock catalogue.",
+       "decisions": {"approve1": "approved"}, "routes": {},
+       "outputs": {"in1": "…", "agent1": "…", "approve1": "…", "out1": "…"},
+       "nested": {}, "attempts": 1, "mermaid": "graph TD;…",
+       "publishedRejected": false, "usage": null,
+       "seq": 3, "elapsedMs": 11}
 ```
+
+`started` opens a resumed stream too — the same first frame, the same `seq: 0`,
+and `elapsedMs` counting from *this* segment rather than from the run. There is
+no `developer` key because this was a customer run; that is the one field of a
+`done` frame a client must treat as optional.
 
 **The `done` frame of a resumed run reports the whole run, not the segment you
 just watched.** `in1` and `agent1` ran before the pause and are in `outputs`
@@ -1201,11 +1315,33 @@ while `POST /api/runs` reported both).
 ```
 
 This is what the **compiler actually produced**, not a redrawing of the canvas.
-It is asked for with `xray=True`, which today expands **nothing**: this
-compiler emits no LangGraph subgraph — a mount is a closure over the child's
-`invoke()` and an agent is built lazily inside its node's closure, and neither
-is a node LangGraph can open. So a mounted child shows as one box, and
-`backend/tests/test_behind_the_scenes.py` fails the day that stops being true.
+
+**Every mount is opened, to any depth** — a composition comes back as nested
+`subgraph` blocks, not as one box per mount. That is done by us and not by
+LangGraph: `xray=True` expands nothing here, because a mount compiles to a
+closure over the child's `invoke()` and a function is opaque, so the
+composition is spliced from what the compiler recorded while it built each
+child. An **agent** does stay one box either way — it has no second document to
+show. (This paragraph has now been wrong in both directions; the behaviour is
+pinned by `backend/tests/test_mount_composition_preview.py`, and
+`backend/tests/test_behind_the_scenes.py` pins the narrower fact about
+LangGraph's own `xray`. Believe those, not this sentence.)
+
+`?audience=` picks the vocabulary, and it defaults to **`developer`** — which
+is the opposite default from a run, deliberately: the compiler's own ids are
+what a mount bug gets reported under.
+
+```
+GET /api/workflows/quarterly-brief/graph?audience=customer
+```
+
+A customer diagram hides `__start__`, `__default_error_handler__`, `safe_name`d
+ids and branch ids, and labels every node with the name its author gave it —
+**inside an opened mount, the name the child's own author gave it**. A chat
+client that copies the call above without the parameter renders the compiler's
+vocabulary to a customer. A child document that cannot be loaded costs the
+labels below it and nothing else; the composition is still drawn.
+
 Mermaid *text*, never a PNG — LangGraph's `draw_mermaid_png()` posts the graph
 to a third-party API, and a user's graph is not ours to send anywhere. Render
 it client-side.
@@ -1223,7 +1359,7 @@ POST /api/workflows            {"name": "My Workflow", "document": {...}}
   → 201 {"slug": "my-workflow", "document": {...}}
 
 POST /api/workflows            {"name": "My Workflow", "document": {...}}
-  → 201 {"slug": "my-workflow-k7m3qp", "document": {...}}
+  → 201 {"slug": "my-workflow-2", "document": {...}}
 ```
 
 **A name is not an identity, so a client must not derive a slug from one.** The
@@ -1656,6 +1792,60 @@ full access. Do not put the token in a public page — a browser client on a
 shared network wants the proxy, not the shared secret. See
 [deploying](deploying.md).
 
+### `credentials` on a run are ignored on a shared deployment
+
+`POST /api/runs` and both stream endpoints accept a `credentials` object —
+provider keys the caller holds — and it exists for exactly one situation: the
+editor running on your own laptop, where you pasted a key into the browser and
+the backend has none.
+
+```json
+{ "workflow": {}, "question": "…", "credentials": {"OPENAI_API_KEY": "sk-…"} }
+```
+
+Two rules govern it, and the second is the one to read before building
+anything on this field.
+
+1. **Fallback, never override.** A key already set in the server's environment
+   is deployment configuration and wins. Absent → filled; present → left alone.
+2. **On a shared deployment the whole object is refused.** Not the request —
+   the run still executes, on the operator's own credentials, and you get the
+   ordinary missing-key message if there are none. Only the keys are dropped.
+
+A deployment counts as shared if **any** of three things is true: a token is
+configured (`OPENSTATEGRAPH_API_TOKEN`), the request carries the proxy's own
+assertion header `X-OpenStateGraph-Proxy`, or the caller's address is not
+provably loopback. Every reverse-proxy config in `deploy/` sets that header, so
+anything you deploy is shared by this test.
+
+The reason is process-global state: a key from a request goes into the server's
+environment, so on an unconfigured shared server the **first request to arrive
+becomes the configuration**, and every later caller's prompts then bill to — and
+are logged by — that one person's vendor account.
+
+**So a browser client on a deployed server must not post keys.** There is no
+error to catch: a refused `credentials` object looks exactly like one that was
+accepted and happened not to be needed. Configure the provider on the server.
+
+### Who the run is for — the server decides, not the client
+
+There is no `user_email` on any request body, and adding one would not work.
+Identity comes from a header a **trusted proxy** sets, whose name you configure
+with `OPENSTATEGRAPH_PRINCIPAL_HEADER` — `X-Forwarded-Email` for Cloudflare
+Access, `X-Auth-Request-Email` for oauth2-proxy, whatever your load balancer
+uses. Nothing is read from a header the client could also set.
+
+This matters to a client for one reason: that value keys a **per-person memory
+namespace**. A client that could name the person could read and write that
+person's memories, which is why the field a reader might look for is not there.
+`user_email` appears again in this document as a filter on `GET /api/threads`.
+That is a filter over what the server already recorded, not a claim you get to
+make — and it is a filter rather than a gate, so it narrows a list for somebody
+already trusted with the whole deployment.
+
+With no proxy configured there is one principal and it is the machine's
+operator; that is the single-user laptop case and it is the default.
+
 ---
 
 ## 6. Is there a typed client? No — and here is what to use instead
@@ -1686,8 +1876,13 @@ the reasoning: a typed client would still hand you an untyped `fetch` for the
 three endpoints that matter most, and the whole-file example above is a more
 useful answer than a wrapper that stops exactly where the difficulty starts.
 
-If you want types for the frames, they are six small interfaces — copy them out
-of the table in §2 and own them, rather than depending on us to version them.
+If you want types for the frames, **the field lists are machine-readable
+already**: the SSE endpoints in `openapi.json` carry a `Frame fields:` sentence
+naming every field of every frame, generated from the emitters themselves. Take
+them from there and own the interfaces, rather than depending on us to version
+them. The table in §2 is the same lists with the *meanings* attached, and it is
+checked against the emitters by `backend/tests/test_api_guide.py` — but a
+generated artifact is the better thing to parse.
 
 **If you are embedding a workflow in a Python program, do not use HTTP at all.**
 `load_workflow()` is Tier 1, stable, and skips the server entirely — see

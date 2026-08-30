@@ -60,7 +60,7 @@ That is one process serving the whole product from **one origin**:
 
 | Path | What it is |
 | --- | --- |
-| `/` | the editor — the canvas, the inspector, the run panel |
+| `/` | the editor — the canvas, the inspector, the chat panel, and the run timeline along the bottom |
 | `/chat` | the customer chat surface: no canvas, just a conversation |
 | `/api/…` | the HTTP API both surfaces use |
 
@@ -153,8 +153,13 @@ expected shape of the dev backend, not a broken install.
 
 **The repository is the workspace.** There is no "install OpenStateGraph into
 your app" step, because your workflows live inside the checkout, next to the
-shipped example (`chinook-assistant` — one visible package; `concierge` and
-`workflow-architect` ship hidden).
+shipped packages. Seven are visible — `chinook-assistant`,
+`classifier-router-qa`, `morning-brief`, `ops-desk`, `skill-driven-rubric`,
+`support-triage` and `workflow-2026` — and `concierge` and
+`workflow-architect` ship **hidden**, which means a customer surface is not
+offered them. Hidden is not invisible to you: the editor lists them, because
+the flag answers *should a customer be offered this*, not *is there anything
+here*.
 
 ```bash
 git clone <your-fork-of-openstategraph> openstategraph
@@ -373,10 +378,10 @@ seam the library already has — there is no behaviour in the CLI that
 | `openstategraph new --list-templates` | the templates and one line on what each is for |
 | `openstategraph examples list` | the worked examples in the wheel, in reading order: slug, the pattern it demonstrates, and its one-line purpose |
 | `openstategraph examples copy <slug>` | copy one into `./workflows` (`--root` to change that), **with every package it mounts**. The copy is severed — an upgrade never touches it. An unknown slug exits **2** and lists the real ones; `<slug>` itself already existing always exits **1** and nothing is written, but a *mounted dependency* that already exists byte-identical to the shipped copy is left alone and named "already yours, unchanged — kept" rather than refused — an actually-edited dependency still exits **1**, same as before. `--all` takes the whole gallery instead of one slug, all-or-nothing, printing the size before the first byte |
-| `openstategraph eval <package>` | grade the package against the golden dataset in its `evals/` folder — this one **runs a model**. `--dataset`, `--limit N`, `--model`, `--json` for the scorecard, and `--threshold 0.8` to exit **1** below a number you are willing to defend (default 0, i.e. report but do not gate). The metric is in [Evaluation](evaluation.md) |
+| `openstategraph eval <package>` | grade the package against the golden dataset in its `evals/` folder — this one **runs a model**. `--dataset`, `--limit N`, `--model`, `--json` for the scorecard, `--repeat N` to ask each case N times and report whether the answers agreed (each repetition on its own thread, so it is the question asked again rather than a follow-up; reported, never gated), and `--threshold 0.8` to exit **1** below a number you are willing to defend (default 0, i.e. report but do not gate). The metric is in [Evaluation](evaluation.md) |
 | `openstategraph export plugin <package> [--out DIR]` | write the package out as an [Agent Plugins](decisions/agent-plugins.md) v1 bundle — the same thing `GET /api/workflows/<slug>/plugin-export` previews, actually written down. Defaults to `./<the package's folder name>`; a destination that already holds files exits **1** and writes nothing. What no portable v1 component type can carry travels under `org.openstategraph/`, and every lossy edge is printed as a `note:` on stderr. Needs no extra and calls no model |
 | `openstategraph threads list\|show` | past runs the checkpointer stored, newest first; `show` replays one checkpoint by checkpoint without re-running it. A `paused` thread's `show` also prints the gate's message, the candidate, and the exact `resume` line that finishes it — `list` only notes in a footer that something is waiting, so the table stays scannable |
-| `openstategraph runs list` | what this machine has run, one row per turn, newest first — **whichever door ran it**: the library (`ask`/`resume`, and so the CLI and a package's own `tests/`), `POST /api/runs`, `POST /api/runs/stream` and the MCP `run_workflow` tool all write the same row. A turn a reader stopped — Stop, or a closed tab — is written too, as `kind="stopped"` rather than as a failure, because the model call already issued was still paid for. Each row carries what the turn cost and how long it took. Read from the **run store**, a local sqlite file written with no configuration at all; `--workflow`, `--thread` (one conversation), `--session` (a grouping that spans them), `--limit`, and `--json` for the same rows as JSON. The complement of `threads list`, which reads the checkpointer and holds what a run *said*: this holds what it *cost* and *executed* |
+| `openstategraph runs list` | what this machine has run, one row per turn, newest first — **whichever door ran it**: the library (`ask`/`resume`, and so the CLI and a package's own `tests/`), `POST /api/runs`, `POST /api/runs/stream` and the MCP `run_workflow` tool all write the same row. A turn a reader stopped — Stop, or a closed tab — is written too, as `kind="stopped"` rather than as a failure, because the model call already issued was still paid for. A turn that spent its **whole step budget** and reached no answer is the third kind, `kind="exhausted"`: not a failure either, because no node failed — the ceiling stopped a graph that was running perfectly well — and the most expensive row in the table, since it was billed for the entire budget. Each row carries what the turn cost and how long it took. Read from the **run store**, a local sqlite file written with no configuration at all; `--workflow`, `--thread` (one conversation), `--session` (a grouping that spans them), `--limit`, and `--json` for the same rows as JSON. The complement of `threads list`, which reads the checkpointer and holds what a run *said*: this holds what it *cost* and *executed* |
 | `openstategraph runs path` | print the run store's path, so you can point `sqlite3` at it and write your own query. Prints `memory` when the store has been opted out with `OPENSTATEGRAPH_RUN_STORE_PATH=memory` |
 | `openstategraph runs export [--to FILE]` | the same rows as a JSON array, to stdout or to a file, **with the cadence** — every burst of streamed output a run produced, with each chunk's own measured offset, so a replay of an exported run shows what it actually looked like arriving. What you run **before** truncating a store that has grown large — nothing here ever deletes a run, because a conversation is the raw material for replay. It **refuses rather than under-delivers**: if the cadence cannot be read the command writes no file and exits non-zero, because a file missing how its answers arrived is not a copy of the store and must not be truncated against |
 | `openstategraph providers` | which model providers are registered, whether each has a credential, its default model, **which** of the variables it reads actually supplied one, and the extra it needs. The first thing to run when a model call fails. It **calls nobody**, so `configured` on a row means a credential is present in this environment — never that the endpoint is reachable or that a request will be answered, and the command says so under the list |

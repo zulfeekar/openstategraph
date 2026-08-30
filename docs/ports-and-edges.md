@@ -27,8 +27,8 @@ can register more without touching the editor.
 | `text` | amber | a prompt or question | `input.text`, each `route.classifier` branch | `agent.llm.prompt`, `orchestrate.supervisor.instruction`, `route.classifier.question` |
 | `skill` | orange | a system instruction that shapes behaviour | `input.skill`, `input.markdown` | the `skill` port of all five model-driven types: `agent.llm`, `route.classifier`, `route.grader`, `orchestrate.supervisor`, `orchestrate.worker` |
 | `tool` | violet | a callable handle | every tool node's `tool` port | `agent.llm.tools`, `orchestrate.worker.tools` |
-| `result` | green | a finished answer | `agent.llm.result`, `orchestrate.worker.result`, `route.grader.pass`, `function.format_report.report`, `human.approval.approved`, `guard.policy.allowed`, `guard.policy.blocked`, `memory.segment.onward`, `workflow.subgraph.result` | `route.grader.candidate`, `function.format_report.candidate`, `human.approval.candidate`, `guard.policy.content`, `memory.segment.crossing`, `output.formatted.result`, `workflow.subgraph.input` |
-| `feedback` | red | a rejection, travelling **upstream** | `route.grader.revise`, `human.approval.rejected` | `agent.llm.feedback`, `orchestrate.supervisor.feedback` |
+| `result` | green | a finished answer | `agent.llm.result`, `orchestrate.worker.result`, `route.grader.pass`, `guard.check.pass`, `function.format_report.report`, `human.approval.approved`, `guard.policy.allowed`, `guard.policy.blocked`, `memory.segment.onward`, `resolve.source.result`, `resolve.vocabulary.result`, `workflow.subgraph.result` | `route.grader.candidate`, `guard.check.candidate`, `function.format_report.candidate`, `human.approval.candidate`, `guard.policy.content`, `memory.segment.crossing`, `output.formatted.result`, `resolve.source.question`, `resolve.vocabulary.question`, `workflow.subgraph.input` |
+| `feedback` | red | a rejection, travelling **upstream** | `route.grader.revise`, `guard.check.revise`, `human.approval.rejected` | `agent.llm.feedback`, `orchestrate.supervisor.feedback`, `route.classifier.feedback` |
 | `worker` | blue | a fan-out *declaration* | `orchestrate.supervisor.workers` | `orchestrate.worker.dispatch` |
 
 ### Two node types produce `skill`, and the difference is not cosmetic
@@ -64,8 +64,16 @@ A connection is legal if **either** holds:
    chaining drawable without every `text` input in the catalogue silently
    gaining the same affordance.
 
-Both are **consumer-declared and additive only**: a port may open itself up,
-never close down what its type already allows.
+Both are **consumer-declared and additive**: a port may open itself up beyond
+what its type allows.
+
+There is a third mechanism, and it goes the other way. `IPortDescriptor`'s
+**`sourceMustDeclare`** *narrows* one port — it refuses any source that does
+not itself declare an input of a named type. `function.format_report.candidate`
+uses it to take edges only from a node that declares a `worker` input, because
+a worker's `result` and an agent's `result` are the same type and the type
+system therefore could not refuse this on its own. The refusal sentence belongs
+to the node, and `sourceCapabilityRule` enforces it.
 
 `'*'` accepts anything, and is meant for pass-through and debug nodes.
 
@@ -89,8 +97,16 @@ not survive its own round trip and nothing would report the loss. The resolver
 checks `=== undefined` rather than `!= null`, so an explicit `null` (unlimited)
 and an explicit `0` both mean what they say.
 
-Buses today: `agent.llm.tools`, `orchestrate.worker.tools`,
-`orchestrate.supervisor.workers`, `function.format_report.candidate`.
+**A bus is an input that declares `maxConnections: null`.** An *output* is
+unlimited without declaring anything, so `orchestrate.supervisor.workers` and
+every tool node's `tool` port fan out freely and are not buses.
+
+Eight inputs are buses today: `agent.llm.tools` and `orchestrate.worker.tools`;
+`function.format_report.candidate`; and the `skill` input of all five
+model-driven types — `agent.llm.skill`, `route.classifier.skill`,
+`route.grader.skill`, `orchestrate.supervisor.skill` and
+`orchestrate.worker.skill`. A `skill` input takes many deliberately: layering
+two rules documents onto one agent is the point of the family.
 
 **Prefer varying the number of ports over toggling one port's cardinality.**
 `ports` is a function of node data, so a node whose port *count* depends on
@@ -145,12 +161,15 @@ is left.
 Registered in order by `ConnectionValidator`, each independently testable; an
 embedding app can drop one or insert its own.
 
+Seven of them, in this order:
+
 | Order | Rule | Rejects |
 | --- | --- | --- |
 | 10 | `direction` | in→in and out→out; links run output → input |
 | 20 | `self-loop` | a node feeding itself |
 | 30 | `duplicate` | the same pair of ports linked twice |
 | 40 | `type-compatibility` | *"Text output can't feed a Tool input"* |
+| 45 | `source-capability` | a source that does not declare the input `sourceMustDeclare` names — *"only a node that dispatches workers may feed this"* |
 | 50 | `capacity` | more *concurrent producers* than the port allows (a full single-slot input *replaces*) |
 | 60 | `acyclic` | any cycle that does not close on a `feedback` edge |
 
@@ -184,9 +203,12 @@ with the archetype it should reach.
 ## Why `feedback` is the only cycle-closer
 
 `acyclicRule` permits a cycle **only** when the closing edge's source port is
-`feedback`. Since the only `feedback` sources are `route.grader.revise` and
-`human.approval.rejected`, and the only sinks are `agent.llm.feedback` and
-`orchestrate.supervisor.feedback`, the type system *is* the gate:
+`feedback`. The `feedback` sources are `route.grader.revise`,
+`guard.check.revise` and `human.approval.rejected`; the sinks are
+`agent.llm.feedback`, `orchestrate.supervisor.feedback` and
+`route.classifier.feedback`. Three ways out of a loop and three ways back in,
+and nothing else in the catalogue touches the type — so the type system *is*
+the gate:
 
 - An **accidental** loop stays impossible to draw. Nothing else accepts
   `feedback`, so there is no wire you can drag by mistake that closes a cycle.

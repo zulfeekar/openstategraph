@@ -163,13 +163,24 @@ the default of 50; a number between 10 and 1000 is saved into the document's
 number still overrides it. Raising it is rarely the fix for a loop that will
 not settle; a grader that can actually pass is.
 
-**What happens when it runs out.** The run does not crash. When a grader is
-asked for another lap and there are barely any supersteps left, it stops
-revising, takes its own wired `pass` edge, and the answer it had is published
-along with a warning naming the grader and how many supersteps were left. A
-budget stop is a *report*, not a failed run: it does not change an exit code,
-and it is worded differently from the grader running out of its own attempts,
-because those are two ceilings with two different fixes.
+**What happens when it runs out — the good case first, and it needs a grader.**
+When a grader is asked for another lap and there are barely any supersteps
+left, it stops revising, takes its own wired `pass` edge, and the answer it had
+is published along with a warning naming the grader and how many supersteps
+were left. That is a *report*, not a failed run: it does not change an exit
+code, and it is worded differently from the grader running out of its own
+attempts, because those are two ceilings with two different fixes.
+
+**And the plain case, which is reachable on any document.** The guard above is
+a grader looking ahead; a cycle with no grader on it has no guard at all. Then
+the budget simply runs out, and the run **ends as an error** — the ceiling
+stops it. You get a sentence naming the workflow and the number, explaining
+that supersteps are not laps, and saying that what a loop which never settles
+needs is a grader that can pass it or an exit its own state can reach, rather
+than a bigger number. It is recorded as its own kind of turn — neither a
+finished run nor a failed node — because the graph was working perfectly well
+when the ceiling stopped it, and because that run was billed for the whole
+budget.
 
 **"Barely any left" is read off the drawing, not a fixed number.** A grader
 looks at the budget once per lap, so what it needs before it may ask for
@@ -478,6 +489,70 @@ and run, and its `AGENTS.md` records what it answered.
 
 ---
 
+## 7. Watching a run — the timeline, and the word for what the playhead does
+
+A run gets its own surface at the bottom of the editor. The first run of a tab
+brings it up by itself; after that your own answer stands. **`Mod+Shift+L`**
+opens and closes it, and there is a control for it in the top bar. It does not cover
+the canvas — the canvas gets shorter and the timeline sits below it, because it
+is a time axis you read *while* watching the thing it measures. Drag its top
+edge for more room.
+
+Two things are drawn side by side: **bars** on the left, one row per thing that
+was running, and the **trace** on the right, which is the detail for whichever
+bar you click.
+
+### Lanes — one row per concurrent child
+
+The run itself is one lane. Every child the run announced gets its own —
+a fanned-out worker, a subagent, a background task, a mounted workflow —
+because two children called `impact-analyst` are two actors and not one row.
+A child's bar is a **measured** start and end: the run dated both.
+
+A bar in the run's own lane is a weaker claim, and the panel says so on every
+bar you select: it is the span between the frames that arrived, not two dated
+ends.
+
+### Replay — reading the recording back, and spending nothing
+
+When a run has finished, the timeline gains a **transport**: play and pause, a
+restart, one step forward or back, and three speeds. A **playhead** moves along
+the recording, and a scrub track lets you drag it.
+
+> **Replay here does not re-run anything.** It moves a marker over frames that
+> already arrived. No model is called, no graph is executed, nothing is
+> charged. It is a profiler.
+>
+> **LangGraph uses the same word for the opposite thing.** Its *replay* forks
+> from a checkpoint, re-executes the nodes and fires the model calls again,
+> producing a different run and a new bill. If you arrived from those docs,
+> that is not this button.
+
+**Re-run** — forking a run from a checkpoint and executing it again — is not
+built here at all. To ask the same question again, ask it again.
+
+Stepping moves **by frame, not by second**: the useful unit is *what happened
+next*, and a ten-second model call is one thing happening. The keyboard rows
+for play/pause and stepping are in the shortcuts drawer with everything else —
+that drawer is the published list of shortcuts, and it is printed from the same
+table the editor dispatches from, so it cannot fall behind.
+
+### Three things the timeline refuses to tell you, on purpose
+
+- **A live run gets no scrubber.** While frames are still arriving there is no
+  right-hand edge to drag to, and a slider that cannot reach its end is lying
+  about what it can do. You get a playhead pinned to the head instead, and the
+  transport appears when the run stops.
+- **An unmeasured span reads `—`, never `0 ms`.** A dash means *nobody timed
+  this*, and it is a different fact from a step that took no time. A run with
+  no clock at all is drawn as a run nobody timed, never as an instant one.
+- **A lane the run never closed is drawn open-ended**, and says which kind of
+  open: a background task still running outside this run, a recording that
+  ended owing an account, or a child that simply had not finished. None of them
+  is given a number, because the run measured none.
+
+---
+
 ## Glossary
 
 The words this product uses, and what each one must not be mistaken for.
@@ -497,6 +572,10 @@ The words this product uses, and what each one must not be mistaken for.
 | **example** | a finished package shipped in the install; you take a **copy** | one of your workflows; something you mount |
 | **organism** | a whole assembly — drawn or mounted | only the things you can drag |
 | **resolver** | a step that looks up what a word means here, before the model runs, and reports what it **covered** as well as what it found | a tool the agent may choose to call; a table or column lookup |
+| **replay** | moving a playhead over a run that already happened — a profiler; nothing is executed and nothing is charged | LangGraph's *replay*, which re-executes nodes and fires the model calls again |
+| **re-run** | forking from a checkpoint and executing again, at the cost of the model calls | **not built here** — ask the question again instead |
+| **eval** | grading a workflow **offline** against a committed dataset whose answers are known — `openstategraph eval` | the grader node's in-run verdict, which routes rather than scores |
+| **slug** | a package's folder name, minted by the backend at first save and then frozen — `workflows/<slug>/`, `?w=<slug>` | a title or display name, or anything you choose |
 | **system of record** | the store a figure actually came from — named in the answer, with the ones it was not taken from listed beside it | the workflow's database connection; a table |
 
 ---

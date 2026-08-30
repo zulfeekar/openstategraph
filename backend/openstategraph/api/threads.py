@@ -82,11 +82,17 @@ def list_threads(
     """Past runs across every given saver, newest first.
 
     The filters are a **filter, not an authorization check**. This platform
-    authenticates one shared token and `user_email` is whatever the client
-    said it was on the run, so `user_email=` narrows a list for a person who
-    is already trusted with the whole deployment. Anything stronger has to
-    wait for per-user auth, and pretending otherwise here would be the
+    authenticates one shared token, so `user_email=` narrows a list for a
+    person who is already trusted with the whole deployment. Anything stronger
+    has to wait for per-user auth, and pretending otherwise here would be the
     dangerous kind of convenience.
+
+    (This paragraph used to add *"and `user_email` is whatever the client said
+    it was on the run"*, which stopped being true when identity moved to
+    `principal.py`: the value is determined by the server from the header a
+    trusted proxy sets, and no request body can assert it. The conclusion is
+    unchanged — a filter is still not a gate — but the reason given for it was
+    the opposite of the truth, which is worse than no reason.)
     """
     scan = max(limit * _SCAN_MULTIPLIER, _SCAN_FLOOR)
     latest: dict[str, ThreadSummary] = {}
