@@ -80,15 +80,25 @@ def _labels(
     document: Any,
     mounts: Mapping[str, MountedDocument] | None = None,
     prefix: str = "",
+    path: tuple[str, ...] = (),
 ) -> dict[str, str]:
     """Path → the title its author gave it, where there is one.
 
     The path is the mermaid identifier with `\3a` read back as `:`, so a node
-    three levels down is `mount_mid:mount_inner:summarise1`. Scoped by path
-    and not by bare id on purpose: `in1` exists in all three of
+    three levels down is `mount_mid:mount_mid_mount_inner:summarise1`. Scoped
+    by path and not by bare id on purpose: `in1` exists in all three of
     `nested-mounts`' documents and each author titled it for their own
     workflow. A flat map would answer the parent's word for every one of them.
+
+    **The segment inside that path is the splice's, asked for rather than
+    respelled.** `compile.composition.mount_segment` decides what a mount is
+    drawn under — a mount path, because a mount node id is unique within a
+    document and nowhere else (`the-cost-of-one-more` 10) — and a second
+    spelling of it here would be a labeller that silently stops matching the
+    diagram it is labelling.
     """
+    from openstategraph.compile.composition import mount_segment
+
     nodes = (document or {}).get("nodes") or []
     titles: dict[str, str] = {}
     for node in nodes:
@@ -97,9 +107,17 @@ def _labels(
         if node_id and title:
             titles[f"{prefix}{_safe_name(node_id)}"] = title
     for name, mounted in (mounts or {}).items():
-        titles.update(
-            _labels(mounted.document, mounted.mounts, f"{prefix}{name}:")
-        )
+        here = (*path, name)
+        block = f"{prefix}{mount_segment(here)}"
+        # An opened mount is a *block*, and a block is looked up by the stack
+        # of segments above it — so the title its parent's author gave the
+        # mount is filed under the segment too, not only under the mount node
+        # id it no longer draws. One line, because the alternative is the
+        # labeller and the splice disagreeing about one name.
+        own = titles.get(f"{prefix}{name}")
+        if own:
+            titles[block] = own
+        titles.update(_labels(mounted.document, mounted.mounts, f"{block}:", here))
     return titles
 
 

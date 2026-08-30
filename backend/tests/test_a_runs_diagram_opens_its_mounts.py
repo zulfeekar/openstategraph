@@ -122,7 +122,7 @@ class TestTheCustomerChannelStopsSpeakingCompiler:
 
     def test_the_composition_is_open(self, diagram: str) -> None:
         assert "subgraph mount_mid" in diagram
-        assert "subgraph mount_inner" in diagram
+        assert "subgraph mount_mid_mount_inner" in diagram
 
     def test_every_node_carries_its_own_authors_title(self, diagram: str) -> None:
         assert "(Summarise)" in diagram
@@ -193,7 +193,7 @@ class TestTheDeveloperLosesNothing:
 
     def test_and_the_composition_is_open_here_too(self, diagram: str) -> None:
         assert "subgraph mount_mid" in diagram
-        assert r"mount_mid\3amount_inner\3asummarise1" in diagram
+        assert r"mount_mid\3amount_mid_mount_inner\3asummarise1" in diagram
 
 
 class TestAMountlessWorkflowIsUnchanged:

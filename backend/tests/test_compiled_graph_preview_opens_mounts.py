@@ -65,15 +65,15 @@ class TestTheDeveloperSeesTheComposition:
         assert "subgraph mount_mid" in developer_diagram
 
     def test_the_grandchild_is_a_block_inside_it(self, developer_diagram: str) -> None:
-        assert "subgraph mount_inner" in developer_diagram
+        assert "subgraph mount_mid_mount_inner" in developer_diagram
 
     def test_the_innermost_documents_own_nodes_are_drawn(
         self, developer_diagram: str
     ) -> None:
         """`chained-summarizer`, three levels down. `\\3a` is how
         `draw_mermaid` escapes the `:` in a prefixed id."""
-        assert r"mount_mid\3amount_inner\3asummarise1" in developer_diagram
-        assert r"mount_mid\3amount_inner\3ashorten1" in developer_diagram
+        assert r"mount_mid\3amount_mid_mount_inner\3asummarise1" in developer_diagram
+        assert r"mount_mid\3amount_mid_mount_inner\3ashorten1" in developer_diagram
 
     def test_the_compilers_own_names_are_kept(self, developer_diagram: str) -> None:
         """A mount bug is reported under the name the compiler used."""
