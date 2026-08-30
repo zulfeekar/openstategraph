@@ -32,6 +32,20 @@ export class ServerReadiness {
   /** `/api/health`'s `model_configured`, or `null` before it answers. */
   private configuredSomewhere: boolean | null = null;
 
+  /**
+   * `/api/health`'s `editor_stale` — **three-valued, and `null` is not
+   * "unasked"** (`the-cost-of-one-more/16`).
+   *
+   * `null` covers two things the surface treats identically and must never
+   * confuse with `false`: the server has not answered yet, and the server
+   * answered *cannot tell* (an installed wheel with no `src/`, a fresh clone
+   * with no `dist/`). Both mean **say nothing**. Only `false` is the server
+   * stating the bundle is not stale, and no surface renders that either —
+   * see `view/topbar/staleEditorNotice.ts` for why the warning has no
+   * "everything is fine" face.
+   */
+  private editorStaleness: boolean | null = null;
+
   /** Provider ids `/api/providers` called configured, or `null` before it answers. */
   private configuredProviders: ReadonlySet<string> | null = null;
 
@@ -114,10 +128,25 @@ export class ServerReadiness {
     return this.uninstalledProviders?.get(providerId)?.extra ?? null;
   }
 
-  /** Records `/api/health`. Notifies only on a real change. */
-  recordHealth(modelConfigured: boolean): void {
-    if (this.configuredSomewhere === modelConfigured) return;
+  /**
+   * Whether the editor bundle this process serves predates its source —
+   * `null` when the server has not answered or cannot tell them apart.
+   */
+  editorStale(): boolean | null {
+    return this.editorStaleness;
+  }
+
+  /**
+   * Records `/api/health`. Notifies only on a real change — **in either
+   * field**. A rebuild moves `editor_stale` and nothing else, so a guard that
+   * watched only `model_configured` would leave the toolbar warning about a
+   * bundle that is no longer stale until some unrelated answer moved.
+   */
+  recordHealth(modelConfigured: boolean, editorStale: boolean | null = null): void {
+    if (this.configuredSomewhere === modelConfigured && this.editorStaleness === editorStale)
+      return;
     this.configuredSomewhere = modelConfigured;
+    this.editorStaleness = editorStale;
     this.announce();
   }
 
@@ -176,6 +205,7 @@ export class ServerReadiness {
   /** Forgets what it was told. For tests, so one file's server is not another's. */
   reset(): void {
     this.configuredSomewhere = null;
+    this.editorStaleness = null;
     this.configuredProviders = null;
     this.uninstalledProviders = null;
     this.runReadinessNote = null;
@@ -199,7 +229,10 @@ export const serverReadiness = new ServerReadiness();
 
 /** The two calls that answer "can this install run a model?", in one place. */
 export interface ReadinessSource {
-  health(): Promise<{ ok: boolean; value?: { readonly modelConfigured: boolean } }>;
+  health(): Promise<{
+    ok: boolean;
+    value?: { readonly modelConfigured: boolean; readonly editorStale: boolean | null };
+  }>;
   providers(): Promise<{ ok: boolean; value?: ProviderStatusList }>;
 }
 
@@ -219,7 +252,7 @@ export async function probeServerReadiness(
 ): Promise<boolean> {
   const health = await client.health();
   if (!health.ok) return false;
-  if (health.value) store.recordHealth(health.value.modelConfigured);
+  if (health.value) store.recordHealth(health.value.modelConfigured, health.value.editorStale);
   const listed = await client.providers();
   if (listed.ok && listed.value)
     store.recordProviders(listed.value.rows, listed.value.runReadiness);

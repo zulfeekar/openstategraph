@@ -443,22 +443,27 @@ describe('the client and the published contract', () => {
    * the *schema* still declares those five, which a client-side census cannot.
    */
   const UNREAD_BY_DESIGN: Readonly<Record<string, string>> = {
-    // **Three, and each names its own ticket now.** `14` asked whether its
-    // five were one session or five, and the answer measured out at two and
-    // three. `default_model` and `findings` needed a line and a badge on rows
-    // that already existed, so they were mirrored and shown together; the
-    // three below each need an **affordance the editor does not have** — a
-    // staleness warning with nowhere to live, a disclosure of what a parked
+    // **One left, and the debt is nearly paid.** `14` asked whether its five
+    // were one session or five, and the answer measured out at two and three.
+    // `default_model` and `findings` needed a line and a badge on rows that
+    // already existed, so they were mirrored and shown together; the three
+    // that remained each needed an **affordance the editor does not have** —
+    // a staleness warning with nowhere to live, a disclosure of what a parked
     // run is asking, a control that rebuilds routing knowledge. Three
     // features on three surfaces with three design questions is not one
     // ticket, and mirroring them into this client to clear a row here would
     // be the exact defect the census exists to name, inverted: a field read
     // by a client that no consumer of it can see.
     //
-    // An exemption pointing at a ticket is a debt; each one below says which.
-    editor_stale: 'the-cost-of-one-more/16 — nothing warns that this editor bundle is stale',
+    // `editor_stale` and `note` are gone from this list because they now have
+    // those surfaces (`16` and `18`): a toolbar chip that says the served
+    // bundle predates its source, and a publish toast whose routing clause is
+    // conditional on the backend still sending the note rather than hardcoded
+    // beside it. Both are asserted by name in the reader test below, which is
+    // the assertion that stops either one from being a line in a mapper.
+    //
+    // An exemption pointing at a ticket is a debt; the one below says which.
     pause: 'the-cost-of-one-more/17 — the History lane says a run is parked, not what it asks',
-    note: 'the-cost-of-one-more/18 — publish drops the backend sentence about routing knowledge',
     // The one genuine by-design entry. `MountDocumentResponse` echoes the
     // address the client just asked with; `WorkflowFileClient` built that URL
     // out of an address it already holds, so reading the echo back would be
@@ -606,6 +611,27 @@ describe('the client and the published contract', () => {
     expect(read('findings'), 'the package-contract lines reach no surface').toContain(
       'src/view/workflow/WorkflowManager.tsx',
     );
+    // `the-cost-of-one-more/16`. The bundle-freshness answer, which was the
+    // hardest of `14`'s three to place because there was no surface in this
+    // product that said anything about the editor you are running. There is
+    // one now, and it is a *named* one for the reason the two above are: the
+    // store publishes `editorStale()` and a component that stopped rendering
+    // it would leave the census green while the warning went back to reaching
+    // nobody.
+    expect(
+      read('editorStale'),
+      'the server said this bundle predates its source and no surface says so',
+    ).toContain('src/view/topbar/EditorFreshnessChip.tsx');
+    // `the-cost-of-one-more/18`. The publish note — read as a *signal* rather
+    // than printed: its presence is the backend saying it did not rebuild
+    // routing knowledge, and `consequences` turns that into the editor's own
+    // sentence about the editor's own control. Forwarding the backend's
+    // string, which names an HTTP verb and a path template, is what this
+    // ticket refused to do; dropping it is what it was filed for.
+    expect(
+      read('note'),
+      'the publish note reaches no surface — the routing clause is hardcoded again',
+    ).toContain('src/view/workflow/consequences.ts');
   });
 
   it('sends run fields the contract declares', () => {

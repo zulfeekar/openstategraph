@@ -672,7 +672,13 @@
   padding: var(--space-2);
   max-height: 12em;
   overflow: auto;
-  border-left: var(--border-width-marker) solid var(--color-border-strong);
+  /* The logical spelling, which is what this file already writes two selectors
+     up (`border-inline-end`, `border-inline-start`) and what the bar layout
+     writes for its offsets. `memory-and-replay/62`: it was authored this way,
+     changed to `border-left` because the marker pin read a physical property
+     name while its message talked about the token, and restored once the pin
+     was asking about the token it is named for. */
+  border-inline-start: var(--border-width-marker) solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-bg-subtle);
   font: var(--type-caption);

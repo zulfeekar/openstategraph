@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
+import { WorkflowFileClient, type PublishOutcome } from '@core/runtime/WorkflowFileClient';
 import { getOpenAddress, subscribeOpenAddress } from '@app/openAddress';
 import { getOpenSlug } from '@app/openWorkflow';
 import { draftSavedAt } from '@app/workflowDrafts';
 import { draftIsAhead } from '@app/staleDraft';
 import { publishAffordance, type PublishAffordance } from './publishAffordance';
+
+/**
+ * The result of flipping the flag: the error to report, or the backend's own
+ * publish answer for the toast to read.
+ *
+ * Two fields rather than a union so a caller cannot forget one branch: the
+ * error is what to say when it failed, the outcome is what the sentence is
+ * built from when it did not.
+ */
+export interface PublishFlip {
+  readonly error: string | null;
+  readonly outcome: PublishOutcome | null;
+}
 
 /**
  * Keeps the toolbar's lifecycle badge current — `ship-it` 39.
@@ -44,7 +57,7 @@ export function usePublishState(): {
   readonly affordanceNow: () => PublishAffordance;
   readonly slug: string | null;
   readonly refresh: () => void;
-  readonly setPublished: (published: boolean) => Promise<string | null>;
+  readonly setPublished: (published: boolean) => Promise<PublishFlip>;
 } {
   const clientRef = useRef<WorkflowFileClient | null>(null);
   if (!clientRef.current) clientRef.current = new WorkflowFileClient();
@@ -107,18 +120,24 @@ export function usePublishState(): {
   const affordance = useMemo(() => describe(), [describe]);
 
   /**
-   * Flip the flag. Returns the error to report, or `null` on success — the
-   * toast itself is the caller's, from `consequences`, so both surfaces that
-   * publish say the same sentence.
+   * Flip the flag. Returns the error to report, or the backend's own answer
+   * on success — the toast itself is the caller's, from `consequences`, so
+   * both surfaces that publish say the same sentence.
+   *
+   * The success case carries a `PublishOutcome` rather than nothing since
+   * `the-cost-of-one-more/18`: the toast's routing clause is conditional on
+   * the note the endpoint sends, and a hook that returned only `null` would
+   * make this surface hardcode what the Workflows panel reads.
    */
-  const flip = useCallback(async (next: boolean): Promise<string | null> => {
+  const flip = useCallback(async (next: boolean): Promise<PublishFlip> => {
     const client = clientRef.current;
     const open = getOpenSlug();
-    if (!client || open === null) return 'This workflow is not on disk yet.';
-    const outcome = await client.setPublished(open, next);
-    if (!outcome.ok) return outcome.error;
+    if (!client || open === null)
+      return { error: 'This workflow is not on disk yet.', outcome: null };
+    const result = await client.setPublished(open, next);
+    if (!result.ok) return { error: result.error, outcome: null };
     setPublished(next);
-    return null;
+    return { error: null, outcome: result.value };
   }, []);
 
   return { affordance, affordanceNow: describe, slug, refresh, setPublished: flip };

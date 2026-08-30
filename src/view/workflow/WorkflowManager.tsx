@@ -289,7 +289,7 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       if (outcome.ok) {
         // The wording is `consequences.ts`, shared and tested: what changed,
         // not merely which state it landed in.
-        onNotify(published ? publishedMessage(name) : unpublishedMessage(name));
+        onNotify(published ? publishedMessage(name, outcome.value) : unpublishedMessage(name));
         void refreshList();
       } else {
         onNotify(`Could not ${published ? 'publish' : 'unpublish'}: ${outcome.error}`);

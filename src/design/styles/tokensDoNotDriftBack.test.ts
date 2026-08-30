@@ -559,6 +559,58 @@ describe('a bar beside a block is a marker, and a marker has a name', () => {
     ['view/run/RunDock.css', '.rtl__payload-text'],
   ];
 
+  /**
+   * **One marker, two spellings, and the token is the fact** —
+   * `memory-and-replay/62`.
+   *
+   * This pattern used to be the literal string `border-left: var(...)`, which
+   * made the per-selector half of the cage a rule about a **physical**
+   * property while its own failure message talked about the **token**. A
+   * marker authored `border-inline-start` — the logical, RTL-correct spelling
+   * this codebase already ships (`RunDock.css` writes `border-inline-start`
+   * and `border-inline-end` beside `insetInlineStart`) — was caged correctly
+   * by the file-level assertion below and rejected here, so the first person
+   * to write correct CSS would read a failure about a design token and
+   * conclude the token was wrong.
+   *
+   * **The repository's position is that both spellings are one thing, and it
+   * was already taking it in code before it was written down here.** Measured
+   * rather than assumed: `padding-inline`, `margin-inline-start`,
+   * `inset-inline-start`, `border-block-end` and `border-inline-start` are all
+   * in shipped stylesheets. So this is not the place to legislate a house
+   * style — a gate that forced one spelling would be deciding a layout
+   * question it was not written to have an opinion on, which is exactly the
+   * complaint that opened the ticket. What it is written to decide is that a
+   * bar beside a block spends the **name** rather than a number, and that is
+   * side-agnostic.
+   *
+   * Loosened here and **not** in the file-level cage, which is the assertion
+   * that actually stops drift: this half only proves a registered selector
+   * still draws one.
+   */
+  const MARKER_BAR = /border-(?:left|inline-start):\s*var\(--border-width-marker\)\s+solid/;
+
+  /**
+   * The matcher itself, before it is pointed at any stylesheet — the two
+   * spellings it must accept, and the two near-misses it must still refuse.
+   * Without this the loosening below could widen to "anything vaguely
+   * border-ish" and nothing would say so.
+   */
+  it('reads a marker in either spelling, and still refuses a bar that is neither', () => {
+    expect(
+      MARKER_BAR.test('border-left: var(--border-width-marker) solid var(--color-border);'),
+    ).toBe(true);
+    expect(
+      MARKER_BAR.test('border-inline-start: var(--border-width-marker) solid var(--color-border);'),
+    ).toBe(true);
+    // A bar on the other side is a different line, and a literal is the thing
+    // the token exists to replace.
+    expect(
+      MARKER_BAR.test('border-right: var(--border-width-marker) solid var(--color-border);'),
+    ).toBe(false);
+    expect(MARKER_BAR.test('border-left: 2px solid var(--color-border);')).toBe(false);
+  });
+
   it.each(MARKERS)('%s %s draws the marker', (file, selector) => {
     /* `.rich-text blockquote` has two blocks — one for margins and one for
        the bar — so every block carrying the selector is read, not the first. */
@@ -568,7 +620,13 @@ describe('a bar beside a block is a marker, and a marker has a name', () => {
       ),
     ].map((m) => m[1] ?? '');
     expect(blocks.length).toBeGreaterThan(0);
-    expect(blocks.join('')).toContain('border-left: var(--border-width-marker) solid');
+    expect(
+      blocks.join(''),
+      `${file} ${selector} does not spend \`--border-width-marker\` on a bar down its ` +
+        `leading edge. Checked for \`border-left:\` and \`border-inline-start:\` — either ` +
+        `spelling registers, so this is about the token and the side, not about which of ` +
+        `the two you wrote.`,
+    ).toMatch(MARKER_BAR);
   });
 
   /**
@@ -620,9 +678,14 @@ describe('a bar beside a block is a marker, and a marker has a name', () => {
    */
   it('leaves no literal left bar anywhere — every marker names the token', () => {
     const literal = declarations()
-      .filter((d) => d.property.startsWith('border-left') && /^\s*[23]px\s/.test(d.value))
-      .map((d) => `${d.file}: ${d.value}`);
-    expect(literal.sort()).toEqual([]);
+      .filter((d) => /^border-(left|inline-start)/.test(d.property) && /^\s*[23]px\s/.test(d.value))
+      .map((d) => `${d.file}: ${d.property}: ${d.value}`);
+    expect(
+      literal.sort(),
+      'a bar down a leading edge written as a bare 2px or 3px — in either spelling, ' +
+        'since `border-inline-start` is the same line as `border-left`. Name ' +
+        '`--border-width-marker` and join MARKERS, or argue here that it is not a marker.',
+    ).toEqual([]);
   });
 });
 

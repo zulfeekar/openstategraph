@@ -333,11 +333,37 @@ export interface IWorkflowFileClient {
   create(name: string, document: unknown): Promise<Result<string, string>>;
   save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
   remove(slug: string): Promise<Result<void, string>>;
-  setPublished(slug: string, published: boolean): Promise<Result<void, string>>;
+  setPublished(slug: string, published: boolean): Promise<Result<PublishOutcome, string>>;
   /** Copy a whole package to a new slug — see `DuplicatedWorkflow`. */
   duplicate(slug: string, name?: string): Promise<Result<DuplicatedWorkflow, string>>;
   capabilities(slug: string): Promise<Result<WorkflowCapabilities, string>>;
   compiledGraph(slug: string): Promise<Result<string, string>>;
+}
+
+/**
+ * What `POST /api/workflows/{slug}/publish` answered with, beyond the flag.
+ *
+ * **The note was dropped on the floor until `the-cost-of-one-more/18`** — by a
+ * method whose own docstring named the note it was dropping. The backend
+ * sends it because publishing deliberately does *not* rebuild concierge
+ * routing knowledge as a side effect (`routes/workflows.py::publish_workflow`:
+ * knowledge builds are build-time-only), so a developer publishes, sees
+ * *"customers can find it in their list"*, and never learns that automatic
+ * routing will not send anyone there until somebody rebuilds.
+ *
+ * It is carried **verbatim and unread by this client**, which has no opinion
+ * about wording. What a surface may do with it is the other half of that
+ * ticket, and the answer is *not* "print it": the sentence names an HTTP verb
+ * and a path template, and it is addressed to an API caller. `consequences.ts`
+ * reads its **presence** — the backend still declining to rebuild — and writes
+ * the editor's own sentence about the editor's own control.
+ *
+ * `null` when the response carried none, so a build that did rebuild on
+ * publish makes the toast stop claiming otherwise rather than requiring this
+ * client to be edited.
+ */
+export interface PublishOutcome {
+  readonly note: string | null;
 }
 
 /** Why the catalogue changed — the backend's `workflows.changed` vocabulary. */
@@ -854,7 +880,7 @@ export class WorkflowFileClient
     }
   }
 
-  async setPublished(slug: string, published: boolean): Promise<Result<void, string>> {
+  async setPublished(slug: string, published: boolean): Promise<Result<PublishOutcome, string>> {
     let response: Response;
     try {
       response = await this.fetchImpl(
@@ -869,7 +895,17 @@ export class WorkflowFileClient
       return Err(this.unreachable());
     }
     if (!response.ok) return Err(await describeFailure(response));
-    return Ok(undefined);
+    try {
+      const payload = (await response.json()) as { note?: unknown };
+      return Ok({
+        note: typeof payload.note === 'string' && payload.note !== '' ? payload.note : null,
+      });
+    } catch {
+      // The flag flipped server-side before this body was written. Failing
+      // here would report an error for work that succeeded, and the note is
+      // advice — losing it costs a sentence, not the publish.
+      return Ok({ note: null });
+    }
   }
 
   /**

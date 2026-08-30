@@ -142,6 +142,72 @@ describe('ServerReadiness', () => {
  * one place the editor holds it, so `OnboardingHint` and `CredentialsDialog`
  * cannot each keep a stale copy.
  */
+/**
+ * `the-cost-of-one-more/16`. The store already held one three-valued answer
+ * (`modelConfigured`); this is the second, and it is three-valued for a
+ * stronger reason — `false` is a claim the backend can only sometimes make.
+ */
+describe('editorStale', () => {
+  it('says nothing before the server has answered', () => {
+    expect(new ServerReadiness().editorStale()).toBeNull();
+  });
+
+  it('holds what health said, all three of it', () => {
+    const readiness = new ServerReadiness();
+
+    readiness.recordHealth(true, true);
+    expect(readiness.editorStale()).toBe(true);
+
+    readiness.recordHealth(true, false);
+    expect(readiness.editorStale()).toBe(false);
+
+    readiness.recordHealth(true, null);
+    expect(readiness.editorStale()).toBeNull();
+  });
+
+  /**
+   * The half a `modelConfigured`-only change guard would have swallowed: a
+   * rebuild moves `editor_stale` and nothing else, and the chip has to
+   * disappear on that poll rather than on the next unrelated one.
+   */
+  it('notifies when only the bundle answer moved', () => {
+    const readiness = new ServerReadiness();
+    readiness.recordHealth(true, true);
+    let calls = 0;
+    readiness.onChange(() => {
+      calls += 1;
+    });
+
+    readiness.recordHealth(true, false);
+    expect(calls).toBe(1);
+
+    readiness.recordHealth(true, false);
+    expect(calls).toBe(1);
+  });
+
+  it('is forgotten on reset, like everything else the server told it', () => {
+    const readiness = new ServerReadiness();
+    readiness.recordHealth(true, true);
+    readiness.reset();
+
+    expect(readiness.editorStale()).toBeNull();
+  });
+
+  it('is published by the probe, so the toolbar reads the same poll the dot does', async () => {
+    const store = new ServerReadiness();
+
+    await probeServerReadiness(
+      {
+        health: async () => ({ ok: true, value: { modelConfigured: true, editorStale: true } }),
+        providers: async () => ({ ok: false }),
+      },
+      store,
+    );
+
+    expect(store.editorStale()).toBe(true);
+  });
+});
+
 describe('runReadiness', () => {
   it('says nothing before the server has answered', () => {
     expect(new ServerReadiness().runReadiness()).toBeNull();
@@ -175,7 +241,7 @@ describe('probeServerReadiness', () => {
 
     const reachable = await probeServerReadiness(
       {
-        health: async () => ({ ok: true, value: { modelConfigured: true } }),
+        health: async () => ({ ok: true, value: { modelConfigured: true, editorStale: null } }),
         providers: async () => ({
           ok: true,
           value: {
@@ -217,7 +283,7 @@ describe('probeServerReadiness', () => {
 
     await probeServerReadiness(
       {
-        health: async () => ({ ok: true, value: { modelConfigured: true } }),
+        health: async () => ({ ok: true, value: { modelConfigured: true, editorStale: null } }),
         providers: async () => ({ ok: false }),
       },
       store,

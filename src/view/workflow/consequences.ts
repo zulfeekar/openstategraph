@@ -1,3 +1,4 @@
+import type { PublishOutcome } from '@core/runtime/WorkflowFileClient';
 import { CHAT_APP_AUDIENCE } from '@view/topbar/publishAffordance';
 
 /**
@@ -124,10 +125,7 @@ export function draftKeptForAnotherTabMessage(): string {
  *
  * Names the transition, not the new state alone: *what changed* is the thing
  * the canvas could not show — the badge beside Save already says the steady
- * state, so repeating it here would be noise, not information. The knowledge
- * reminder stays because publishing deliberately does not rebuild routing as
- * a side effect — the workflow keeps being answered from what it last learned
- * until someone rebuilds its knowledge.
+ * state, so repeating it here would be noise, not information.
  *
  * The audience is `CHAT_APP_AUDIENCE`, the same words `publishAffordance`'s
  * badge uses (`ship-it` 52) — until this ticket the toast said "/chat picker"
@@ -135,11 +133,52 @@ export function draftKeptForAnotherTabMessage(): string {
  * the same fact in plain words. `HIDDEN_PACKAGE_NOTE` was corrected for this
  * exact shape once already: an explanation that needs an explanation has not
  * been given.
+ *
+ * ## The routing clause, and why it takes an argument now
+ *
+ * `the-cost-of-one-more/18`. `POST /api/workflows/{slug}/publish` has always
+ * answered with a note saying concierge routing knowledge was **not** rebuilt
+ * and how to rebuild it, and `WorkflowFileClient` dropped it. The obvious
+ * repair — print the note — is the one this ticket was filed to refuse: the
+ * sentence names an HTTP verb and a path template, so forwarding it tells
+ * somebody who just clicked a button to make a REST call by hand. `13` made
+ * the same finding about `_truncation`'s *"ask again with a higher limit"*:
+ * whatever a surface says has to be true of **that surface's** affordances.
+ *
+ * So the note is read as a **signal** and answered in the editor's own words.
+ * Its presence means the backend declined to rebuild; `null` means it has
+ * nothing to add, and then this says nothing about routing at all rather than
+ * repeating a claim from beside the call. The clause was hardcoded here
+ * before, which is why an install that started rebuilding on publish would
+ * have been contradicted by its own toast.
+ *
+ * ## What it points at, and what it deliberately is not
+ *
+ * It names the control **this editor has**: "Build second brain" on the
+ * Knowledge card (`view/nodes/KnowledgeBody.tsx`). And it says whose card,
+ * because the obvious wrong reading is the expensive one — routing docs are
+ * `RootKnowledgeBuilder`'s, and its topics are the children a document
+ * *mounts*, so the card to press is on the workflow that mounts this one. A
+ * leaf pressing its own card gets a 422 saying it has no knowledge source.
+ *
+ * **There is no Rebuild button in this toast, and that is priced rather than
+ * skipped.** `POST .../knowledge/build` is synchronous and calls the model
+ * once per topic (`knowledge_builders.BaseKnowledge.build`), so its cost and
+ * its duration scale with the package and it can run for minutes — which is
+ * why `KnowledgeBody` gives it a card, a busy state and somewhere to report a
+ * failure. A toast has none of those, it is transient, and this one does not
+ * know which package mounts the published workflow, so the only slug it could
+ * send is the wrong one. An action with a model bill behind it that fires
+ * from a disappearing strip, at a guess, is worse than the sentence.
  */
-export function publishedMessage(name: string): string {
-  return (
+export function publishedMessage(name: string, outcome: PublishOutcome): string {
+  const published =
     `Published: ${name} — no longer a draft: ${CHAT_APP_AUDIENCE} can now find it in their ` +
-    `list. It stays out of automatic answers until you rebuild its knowledge.`
+    `list.`;
+  if (outcome.note === null) return published;
+  return (
+    `${published} Automatic routing still answers from what it last learned: rebuild it with ` +
+    `“Build second brain” on the Knowledge card of the workflow that mounts this one.`
   );
 }
 
