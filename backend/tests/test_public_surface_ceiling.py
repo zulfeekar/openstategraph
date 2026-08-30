@@ -210,6 +210,18 @@ def test_the_runtimes_members_are_each_nameable_without_and() -> None:
         # and while each resolved the fields for itself one of them was
         # reading a stale copy with nothing able to notice.
         "static_sources",
+        # The tenth, and the ceiling exactly. The same kind again — a fact
+        # about the graph this compile produced — answering the other half of
+        # what a `token` frame's text is: `machinery_nodes` says *this is not
+        # the reply*, this says *this IS the reply and a grader has still to
+        # judge it* (`every-workflow-green` 45). Both clients that render that
+        # text are blind to it through a mount, which is where the ticket's own
+        # recording puts it.
+        #
+        # An eleventh needs a recorded exception, and this member is why the
+        # sentence is worth reading twice: it was added at nine, which is the
+        # last time adding one is free.
+        "checked_nodes",
     }
 
 

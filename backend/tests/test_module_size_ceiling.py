@@ -191,6 +191,13 @@ rewrite last — and every step of it has re-recorded here on the way past:
 now 569, with every node family this build implements living in its own module
 under `compile/nodes/`.
 
+**574** (`every-workflow-green` 45). Four lines: one import, `self.checked_nodes`,
+and the two that populate it from the plan on the first node built. It is the
+same kind of fact as `machinery_nodes` and sits beside it — which streamed text
+a grader has still to judge — and the *computation* is not here: reachability
+lives in `compile/checked_nodes.py`, a module of its own, because it is a
+question about a plan rather than about building a node.
+
 **570** (`the-cost-of-one-more` 02). One line: `self._mount_memo`, the dict that
 makes a mounted package compile once per instance rather than once per mount
 *site* — the difference between eight builds and 255 for eight packages on
@@ -329,6 +336,13 @@ the first pull, so suspending earlier moved the turn's token meter into a
 different task from `graph.astream` and stopped the run's cost being counted at
 all. Caught live, and pinned twice in
 `test_a_run_says_when_it_starts.py`.
+
+**1042 -> 1046 (`every-workflow-green` 45).** Four lines: the `checked` set
+handed to `AnswerChannel`, the `draft` key computed once per chunk beside
+`withheld`, its optional emission in `_token_frame`, and its name in the frame
+pin. The judgement itself is `AnswerChannel.is_draft` and stays in
+`api/audience.py`, where every other question about who may see what already
+lives.
 
 **1026 -> 1042 (`memory-and-replay` 65), and sixteen lines is what it cost
 to stop the stream calling an agent a mounted workflow.** Two of them are
@@ -582,10 +596,10 @@ line between them.
 #: hand-picked pins were found to cover only the classes somebody had already
 #: worried about.
 RECORDED: dict[str, Recorded] = {
-    "compile/node_runtime.py": Recorded(570, NODE_RUNTIME),
+    "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
     "cli.py": Recorded(1125, CLI),
     "compile/workflow_compiler.py": Recorded(964, WORKFLOW_COMPILER),
-    "api/streaming.py": Recorded(1042, STREAMING),
+    "api/streaming.py": Recorded(1046, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(698, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),

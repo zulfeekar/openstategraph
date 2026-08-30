@@ -86,7 +86,7 @@ interface Recorded {
 
 const RECORDED: Readonly<Record<string, Recorded>> = {
   'view/ask/AskPanel.tsx': {
-    lines: 946,
+    lines: 964,
     reason: `The largest module under \`src/\` and the one the ticket named: the counterpart
       of \`node_runtime.py\` with no split ticket behind it at all. Eight hundred and
       eighty-nine code lines out of 2,237 physical — the rest is JSX structure, imports and
@@ -162,6 +162,15 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       for elsewhere and charges for here because a component's prose is code
       lines away from its JSX. The transcript seam is still the next one.
 
+      **946 -> 964** (\`every-workflow-green/45\`). A second streamed-text
+      buffer and the region that renders it: a reply a grader has still to
+      judge, marked as one and unselectable, above the block that holds the
+      settled stream. Eighteen lines, thirteen of them the region itself. The
+      *rule* for when it shows is not among them — that is
+      \`draftNotice.ts\`, beside the sentence it shows, for the reason
+      \`settledThinking.ts\` was extracted: what goes wrong in a rule like this
+      is invisible from the panel.
+
       **920 -> 946** (\`memory-and-replay/66\`). Two frames the stream has
       carried since \`55\` and this reader threw away: an \`invoked\` frame is a
       tool call's ask, a \`token\` frame with \`kind: 'tool'\` is its answer, and
@@ -173,7 +182,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       reason to change, and the transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 728,
+    lines: 730,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -238,6 +247,12 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       \`false\` for the wheel's \`null\` and made a claim the server declined to
       make. Declared members and a two-line reader: the same bill this entry
       has taken four times and the same shape.
+      Then **728 -> 730** (\`every-workflow-green/45\`). \`draft\` on the
+      \`token\` frame — whether a grader downstream has still to judge this
+      reply. Two lines: the field and its parse. It is compiler knowledge and
+      cannot be derived here, because the reply often streams from inside a
+      mounted document judged by a grader no client has heard of.
+
       Then **723 -> 728** (\`the-cost-of-one-more/17\`). \`PastRun.pause\` — what a
       parked run is waiting to be told — plus \`asPausePayload\`, a four-line
       reader beside \`asTokens\` and \`asTruncation\`. Same shape as the two

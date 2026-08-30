@@ -779,6 +779,27 @@ export type RunStreamEvent =
        * covers both "there was text" and a backend that predates the field.
        */
       readonly withheld: boolean;
+      /**
+       * Whether a grader downstream has **still to judge this reply**
+       * (`every-workflow-green` 45).
+       *
+       * The text on a `token` frame is on screen the moment it arrives, and on
+       * a grader-checked workflow the first attempt is complete, confident and
+       * about to be rejected — the run that produced the ticket published
+       * `$96,699.19` against a database holding `$2,328.60` and settled on
+       * `$826.65` thirteen seconds later. Nothing on the wire said which of
+       * the two a reader was looking at.
+       *
+       * Compiler knowledge, and not derivable here: the reply often streams
+       * from inside a **mounted** document, judged by a grader neither the
+       * editor's copy of the canvas nor `/chat`'s diagram has ever heard of.
+       *
+       * Emitted only when true, and `false` must keep meaning *no grader is
+       * downstream of the node that said this* — never "checked". That is what
+       * stops an ungraded workflow gaining a label that appears and vanishes
+       * on every ordinary answer.
+       */
+      readonly draft: boolean;
     } & RunFrameStamp)
   | ({
       /**
@@ -1519,6 +1540,9 @@ export class RuntimeClient implements IRuntimeClient {
           // Emitted only when true, so its absence is "there was text" — the
           // same shape the backend uses, and what a pre-field backend sends.
           withheld: payload['withheld'] === true,
+          // Same shape, same reason: true-only on the wire, so `false` covers
+          // both "no grader is downstream" and a backend that predates it.
+          draft: payload['draft'] === true,
         });
       } else if (eventName === 'error') {
         failure = asString(payload['detail']) || 'The workflow failed while streaming.';

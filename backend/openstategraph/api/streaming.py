@@ -981,6 +981,12 @@ def _token_frame(common: dict[str, Any], block: str, text: str, usage: Any) -> s
             # than the reply. Absent on every frame a developer receives, so
             # "did I get the whole stream" stays answerable.
             **({"withheld": True} if withheld else {}),
+            # Present and true only while a grader has still to judge this
+            # reply (`every-workflow-green` 45). A client that has never heard
+            # of the field renders exactly what it rendered before, which is
+            # what makes this safe to add to a frame two surfaces already
+            # consume.
+            **({"draft": True} if common.get("draft") else {}),
             # Ticket 02, and the whole point of it: `activeNode` means exactly
             # what it means on an `update` frame — the canvas node to show as
             # running — but a `token` frame is the only one that arrives while
@@ -1216,6 +1222,12 @@ _PAYLOAD_FIELDS: dict[str, tuple[str, ...]] = {
         "node", "namespace", "content", "block", "usage",
         "activeNode", "path", "pathSlugs", "kind", "tool", "withheld",
         "interruptible",
+        # Optional and true-only, like `withheld` above: this reply is on
+        # screen and a grader has still to pass it (`every-workflow-green` 45).
+        # Absent means *no grader is downstream of the node that said this*,
+        # never "checked" — which is what keeps a workflow with no grader in it
+        # from gaining a label that appears and vanishes on every answer.
+        "draft",
     ),
     "progress": (
         "node", "namespace", "message", "current", "total",
@@ -2121,8 +2133,13 @@ async def _run_frames(
     # from every mounted child. `getattr` because the fold is also driven by
     # scripted stubs, and a stub that declares nothing must degrade to the
     # `kind` test rather than crash.
+    #
+    # `checked_nodes` is the same shape of declaration answering the other half
+    # of what a frame's text is (`every-workflow-green` 45): the reply is on
+    # screen the moment a model types it, and a grader has still to judge it.
     answer_channel = AnswerChannel(
-        machinery=frozenset(getattr(runtime, "machinery_nodes", None) or ())
+        machinery=frozenset(getattr(runtime, "machinery_nodes", None) or ()),
+        checked=frozenset(getattr(runtime, "checked_nodes", None) or ()),
     )
 
     stream = None
@@ -2575,6 +2592,12 @@ async def _run_frames(
                         "kind": kind,
                         "message": message,
                         "withheld": withheld,
+                        # Both audiences, and for the same reason `attempts`
+                        # and `decisions` ride both: this is a fact about the
+                        # customer's own turn, not an authoring diagnostic. It
+                        # is also the one audience whose reader cannot open a
+                        # trace and work it out.
+                        "draft": answer_channel.is_draft(token_node, kind, namespace),
                     }
 
                     # Reasoning first, because that is the order it was

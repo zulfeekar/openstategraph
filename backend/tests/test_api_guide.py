@@ -128,8 +128,11 @@ CONDITIONAL_FIELDS: dict[str, frozenset[str]] = {
     # A grader's own frame, when a deterministic check rejected the candidate
     # before any model was invoked — `streaming.py` `_grader_check_payload`.
     "update": frozenset({"check", "reason"}),
-    # Rides only a frame that was emptied for a customer.
-    "token": frozenset({"withheld"}),
+    # `withheld` rides only a frame that was emptied for a customer; `draft`
+    # only a reply a grader downstream has still to judge
+    # (`every-workflow-green` 45). Both are true-only, so an example of an
+    # ordinary answer on an ungraded workflow carries neither.
+    "token": frozenset({"withheld", "draft"}),
     "invoked": frozenset({"withheld"}),
     # `verdict` and `reason` only when a grader produced the candidate;
     # `check` only when that verdict cost no model call.
