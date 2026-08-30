@@ -478,7 +478,7 @@
   border: var(--border-width-hairline) solid var(--color-border-default);
   background: var(--color-bg-surface);
   color: var(--color-text-tertiary);
-  font-size: 18px;
+  font-size: var(--font-size-16);
   line-height: 1;
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-out);

@@ -66,7 +66,7 @@
 }
 
 .palette-item--scoped {
-  border-left: 2px solid var(--color-border-emphasis);
+  border-left: var(--border-width-marker) solid var(--color-border-emphasis);
   border-top-left-radius: var(--radius-sm);
   border-bottom-left-radius: var(--radius-sm);
 }

@@ -143,6 +143,14 @@ export function exportSVG(paper: PaperController): Result<string, string> {
   background.setAttribute('y', String(bounds.y));
   background.setAttribute('width', String(bounds.width));
   background.setAttribute('height', String(bounds.height));
+  /* The one colour literal in this file, and it is a fallback rather than a
+     value: `--color-bg-canvas` in `design/styles/theme.css` is what actually
+     paints this rectangle, read off the live document so an export carries the
+     theme it was taken in. `#ffffff` applies only if that read comes back
+     empty — a detached document, a stylesheet that has not linked yet — and it
+     is the light theme's own value. **If `--color-bg-canvas` moves, move it
+     too**; nothing else will notice, which is why this sentence is here and
+     why `styles/tokensDoNotDriftBack.test.ts` counts this literal by name. */
   background.setAttribute(
     'fill',
     getComputedStyle(document.documentElement).getPropertyValue('--color-bg-canvas').trim() ||

@@ -90,7 +90,7 @@
 }
 
 .rich-text blockquote {
-  border-left: 3px solid var(--color-border);
+  border-left: var(--border-width-marker) solid var(--color-border-default);
   padding-left: var(--space-2-5);
   color: var(--color-text-muted);
 }

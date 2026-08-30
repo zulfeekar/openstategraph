@@ -376,7 +376,7 @@
 
 .rtl__bar > span {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   line-height: 1;
   padding: 0 3px;
   white-space: nowrap;
@@ -408,7 +408,7 @@
 }
 
 .rtl__bar[data-kind='refusal'] > span {
-  color: #fff;
+  color: var(--color-primary-text);
 }
 
 /* The playhead has not reached it. */
