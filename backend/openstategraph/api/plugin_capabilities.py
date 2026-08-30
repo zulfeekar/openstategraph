@@ -35,9 +35,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 
 from openstategraph.abc.tool import PLUGIN_FIELD_KINDS
+
+if TYPE_CHECKING:  # a type name only, so this stays import-cheap
+    from collections.abc import Mapping
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +147,49 @@ def _declared_fields(tool: Any, node_type: str, distribution: str) -> tuple[list
             )
         fields.append(payload)
     return fields, warnings
+
+
+def shadowed_plugin_warnings(
+    plugin_sources: "Mapping[str, str]",
+    local_types: Iterable[str],
+    *,
+    slug: str | None = None,
+) -> list[str]:
+    """One sentence per plugin tool a package's own `tools/` takes the type of.
+
+    The third of the registry's three claimant pairs, and the last one to be
+    said out loud (`rules-that-can-fail/02`). The other two are one person's
+    decision — whoever ran `pip install` chose to replace a bundled tool, and
+    whoever installed two colliding wheels can uninstall one. This one is two
+    authors who never met, and the editor sharpens it rather than softening
+    it: the two tools are minted as **different palette cards**
+    (`<slug>/tools.LocalPing` and `tool.acme-ping`), so a user can place the
+    plugin's card and the run binds the package's tool. That is precisely the
+    outcome `pluginNodes.ts` says the precedence rule exists to prevent —
+    *"anything else would show one tool on the canvas and run another"*.
+
+    The precedence itself is **not** in question and does not change: a
+    package's own tools outranking a plugin is what stops a workflow's
+    behaviour from depending on an unrelated `pip install`. What changes is
+    that losing is now reported to the person who can act on it.
+
+    Narrow on purpose. Only a `node_type` claimed on both sides produces a
+    sentence; a venv full of plugins a package never touches stays silent,
+    which is what makes the sentence worth reading when it appears.
+    """
+    local = set(local_types)
+    messages: list[str] = []
+    for node_type in sorted(set(plugin_sources) & local):
+        distribution = plugin_sources[node_type] or "an installed distribution"
+        owner = f'The package "{slug}"' if slug else "This package"
+        messages.append(
+            f'{owner} ships its own tool for node type "{node_type}", which '
+            f"{distribution} also installs. A package's own tools/ outranks an "
+            "installed plugin (built-in < plugin < workflow-local), so this workflow "
+            f"runs the package's tool and {distribution}'s card can never be bound "
+            "here — the palette shows both. Give one of them its own node_type."
+        )
+    return messages
 
 
 def plugin_tool_capabilities() -> tuple[list[PluginToolCapability], list[str]]:

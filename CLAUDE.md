@@ -645,6 +645,48 @@ absent from `port_specs.json`, resolvable only by importing the package's
 Python. The editor already handles that case as an unknown node type, preserved
 exactly as saved.
 
+**And there is a fourth channel, which is the third one's shape without its
+second property** (`rules-that-can-fail/02`). `src/app/pluginNodes.ts` mints an
+**app-scoped** node type per tool an installed **pip distribution** contributes
+through `[project.entry-points."openstategraph.tools"]`, so a document can hold
+`"type": "tool.acme-ping"` for a type that lives in somebody's virtualenv. It
+does not travel with the package, and no field in `workflow.json` names the
+wheel it needs.
+
+Measured before it was ruled on, which changed the ruling: **"travels with the
+package" is the wrong test, and it always was.** A built-in type does not
+travel with the package either — it travels with the runtime, and nothing
+thought that unsafe. What actually does the work in both cases is that the id
+is **data that is resolved against a known set, and named when it resolves to
+nothing**. So all four channels are safe on two properties, and the second one
+is restated:
+
+| Channel | Type id | Where the implementation lives |
+| --- | --- | --- |
+| built-in | data | the runtime |
+| `code → canvas`, package `tools/` | data | beside `workflow.json` |
+| `code → canvas`, entry-point plugin | data | an installed distribution |
+| *(none)* | — | never a host-language object in the document |
+
+- **The type id is data**, in every one of them.
+- **An id nothing resolves is reported by name, and an id two sources both
+  claim is reported with both names.** The first was already true — a document
+  naming `tool.acme-ping` with no such distribution runs, is not refused, and
+  says `No implementation for tool "tool.acme-ping"` on the developer channel.
+  The second was true of two of the three places a tool type can be claimed
+  twice and silent in the third; making it true was this ticket's work.
+  `backend/tests/test_a_plugin_node_type_says_which_one_ran.py` is the
+  instrument, one class per case.
+
+The plugin channel therefore carries **one cost the other three do not**, and
+it is recorded rather than fixed: a package cannot declare the distributions
+its document depends on. `workflow.json` is the vendor-neutral layer (rule 4)
+and a Python wheel is not vendor-neutral, so the field would be a portability
+claim the format cannot keep — but omitting it does not make the document more
+portable, only quieter about it. `OPENSTATEGRAPH_DISABLE_PLUGINS=1` is the
+reproducibility answer that exists today and is documented in
+`docs/building-an-atom.md`.
+
 Adding a second runtime later is roughly an engineer-quarter, and permanently multiplies the cost of every new node type. Do not pay it speculatively.
 
 ### We are a compiler, not a runtime

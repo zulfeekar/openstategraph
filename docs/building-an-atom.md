@@ -695,6 +695,7 @@ a tool.
 | | |
 | --- | --- |
 | **Order** | built-in < your plugin < the workflow's own `tools/`. You may replace a bundled default — that is what installing a plugin is *for* — but a package's own tool always wins over whatever is in the venv. |
+| **Collisions** | Every one of them is reported. Two distributions claiming one `node_type` names both; your plugin replacing a bundled tool is a warning and a `replaces_builtin` flag on its palette card; a package's own `tools/` taking your `node_type` is a warning naming your distribution, because the editor draws the two as separate cards and a user could otherwise place yours and run theirs. Give a tool its own namespaced `node_type` and none of this applies to you. |
 | **Failure** | Your entry point loads in its own jail. If it raises, one WARNING naming **your distribution** is logged, the failure lands on `CompiledWorkflow.warnings`, and every other plugin still registers. One half-installed package never takes the registry down. |
 | **Silence** | A tool with no `node_type` is reported, not dropped — there would be nothing for a document to bind. |
 | **Opt-out** | `OPENSTATEGRAPH_DISABLE_PLUGINS=1` excludes every entry point, so a reproducible run never depends on a colleague's `pip install`. |

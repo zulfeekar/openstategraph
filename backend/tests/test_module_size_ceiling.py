@@ -437,7 +437,7 @@ narrower than the API it adapts."* This is the server end of that same surface
 — `WorkflowFileClient`'s eighteen members are these routes seen from the
 browser — so the two numbers move together and neither is free to shrink alone.
 
-At 551 code lines it is the smallest entry in this table and the one closest to
+At 559 code lines it is the smallest entry in this table and the one closest to
 the ceiling, which makes it the useful canary: if the catalogue grows a second
 concern, this is where it shows up first and this number is what says so.
 
@@ -453,6 +453,19 @@ that would have removed the argument from all four call sites at once; it costs
 one line per door and hides *which* doors take a credential behind a type
 alias, which is the thing a reader of this ticket most needs to be able to
 grep for.
+
+**551 → 559** (`rules-that-can-fail/02`): `get_capabilities` now also reports a
+plugin whose `node_type` the open package's own `tools/` takes over — the third
+of the tool registry's three claimant pairs, and the only one that was silent.
+Eight lines, and the canary is still not firing: `warnings` is a field this
+endpoint already assembles from three sources, and this is a fourth entry in
+that same list rather than a new concern arriving in the catalogue. The
+sentence itself lives in `plugin_capabilities.shadowed_plugin_warnings`, which
+is also what `build_tool_registry` calls, so the route holds the call and not
+the knowledge. What was rejected here was moving the whole `warnings` assembly
+into `plugin_capabilities`: two of its four sources are workflow-local
+discovery, which that module deliberately knows nothing about, and pulling
+them across would have cost the module its one-sentence description.
 """
 
 RUN_SINKS = """
@@ -535,7 +548,7 @@ RECORDED: dict[str, Recorded] = {
     "api/streaming.py": Recorded(1026, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(698, MCP_SERVER),
-    "api/routes/workflows.py": Recorded(551, ROUTES_WORKFLOWS),
+    "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(600, RUN_SINKS),
 }
 
