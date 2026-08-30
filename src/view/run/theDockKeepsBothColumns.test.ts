@@ -90,3 +90,19 @@ describe('the rows carry the design’s own numbers', () => {
     expect(declaration('.rtl__bar', 'border')).toContain('--border-width-hairline');
   });
 });
+
+describe('a divider gets the same air on both of its sides', () => {
+  // `memory-and-replay` 69: the second KPI cell's leading edge sat flush on
+  // the line the first cell drew, while that same line kept 8px on its other
+  // side. The owner's rule, in their own words: the first cell is right as it
+  // is — its leading edge is the panel's own inset, not a divider — and every
+  // cell that follows one needs a leading inset to match the trailing inset
+  // already on the other side of it.
+  it('gives every KPI cell equal padding on both inline sides', () => {
+    expect(declaration('.rtl__kpi', 'padding')).toBe('var(--space-1) var(--space-2)');
+  });
+
+  it('only the first cell is flush, because only it has no divider before it', () => {
+    expect(declaration('.rtl__kpi:first-child', 'padding-inline-start')).toBe('0');
+  });
+});

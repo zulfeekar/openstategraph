@@ -299,9 +299,18 @@
   border-block: var(--border-width-hairline) solid var(--color-border);
 }
 
+/* The first cell's leading edge is the panel's own inset, not a divider, so
+   it alone stays flush. Every cell after it opens *past* a line the previous
+   cell drew, so it needs the same inset that line already has on its
+   trailing side — otherwise the text sits on the line rather than beside it.
+   One rule, so a seventh KPI inherits it rather than needing its own index. */
 .rtl__kpi {
-  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  padding: var(--space-1) var(--space-2);
   border-inline-end: var(--border-width-hairline) solid var(--color-border);
+}
+
+.rtl__kpi:first-child {
+  padding-inline-start: 0;
 }
 
 .rtl__kpi:last-child {
