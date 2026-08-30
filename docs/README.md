@@ -15,6 +15,7 @@ Start with what you came here to do.
 | **try it in fifteen minutes** | [Getting started](getting-started.md) — `./start dev`, run the Chinook Assistant, ask it something in `/chat`. Or skip the clone: `openstategraph examples copy sql-qa` then `openstategraph run workflows/sql-qa "…"` — the gallery ships **inside the wheel**, and `workflows/` does not | [Patterns](patterns.md) |
 | **use it in a project of my own** | [Using it in your project](adoption.md) — the three consumption modes (fork/checkout, artifact, MCP), the CLI, `load_workflow`, `RunResult`, `as_tool()`, and the draft → Publish → `/chat` lifecycle | [The stability contract](stability.md) |
 | **add it to a service I already have** | [Adding it to a project you already have](adding-openstategraph-to-your-project.md) — the ordered walk a stranger follows: the install line that works today, `init` into a directory that is already yours, the smallest `workflow.json` that answers with no model call, and an existing `POST /chat` rewired through `Workflows().load(...).ask(...)` | [Wiring a workflow into your app](wiring-it-in.md) |
+| **add it to a codebase that already uses LangGraph** | [OpenStateGraph in a LangGraph codebase](openstategraph-in-a-langgraph-codebase.md) — for a reader who already has `StateGraph`s: what `.graph` is exactly, composition in both directions (your graph calling a workflow three ways; a workflow calling your code through `functions/`, `tools/` and an installed distribution), what crosses the state boundary and what structurally cannot, an honest list of what stays easier hand-written, and how to reach checkpointing, `interrupt()`, streaming and the step budget from a compiled workflow. Plus how to report a defect this repository can act on | [Export and portability](export-and-portability.md) |
 | **wire it into an app I already own** | [Wiring a workflow into your app](wiring-it-in.md) — the two integration shapes and how to tell which you are in, a runnable `.astream_events()` → SSE loop for the embedded one, the four `configurable` identity keys in one table for both, and the consumer's half of the memory model | [The HTTP API](api.md) |
 | **know what I can build, and how to arrange it** | [Patterns](patterns.md) — the seven arrangements mapped to our node vocabulary, with the criteria for choosing between them | [Ports and edges](ports-and-edges.md) |
 | **measure whether my workflow is any good** | [Evaluation](evaluation.md) — `openstategraph eval`, execution accuracy (the metric Spider and BIRD report) and why it is not string comparison, how to add a case to a golden dataset, and how to read a regression | [Testing a second brain](second-brain.md) |
@@ -46,7 +47,10 @@ place a promise is made about them; [the HTTP API](api.md) is the only place
 the SSE event vocabulary is written down; [deploying](deploying.md) is the only
 place authentication, the worker ceiling and the reverse proxy are explained;
 [wiring it in](wiring-it-in.md) is the only place the identity keys are
-collected for both integration shapes at once.
+collected for both integration shapes at once;
+[OpenStateGraph in a LangGraph codebase](openstategraph-in-a-langgraph-codebase.md)
+is the only place composition is described in both directions at once, and the
+only place a defect report's shape and destination are written down.
 
 ## The one idea underneath all of it
 

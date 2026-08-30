@@ -470,3 +470,4 @@ development; gate on `.failures`.
 | Understand what you are drawing | [On the canvas](on-the-canvas.md) |
 | Know what we may take away | [The stability contract](stability.md) |
 | Know how far a package travels without us | [Export and portability](export-and-portability.md) |
+| Put it in a codebase that *already* has `StateGraph`s in it | [OpenStateGraph in a LangGraph codebase](openstategraph-in-a-langgraph-codebase.md) — the same install, a different reader: composition in both directions, the state boundary, and what stays easier hand-written |
