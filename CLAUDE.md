@@ -105,6 +105,47 @@ argument with no way to fail is a story. A forty-fourth member is a red
 test, which is exactly what "do not add new behavior onto `WorkflowModel`"
 was always asking for.
 
+### The sentence above has two clauses, and only one of them counts members
+
+**Ceiling: ~10 public members, one reason to change.** The censuses named above
+measure the first clause. Until 2026-08-30 nothing measured the second, and the
+bill is on the record: `NodeRuntime` held **twenty node families as private
+methods across 5,331 lines** while presenting **nine public members**, so every
+session that added a family ran the census, saw green, and added one more
+reason for the class to change. Nobody disobeyed. Each commit was small,
+justified and correct on its own, and the only thing that could have said "this
+class now has twenty reasons to change" did not exist.
+
+The second clause now has an instrument, and it is deliberately narrow:
+`backend/tests/test_a_dispatch_table_does_not_hold_its_targets.py` counts the
+**distinct implementations a module registers into its own registry**, ceiling
+zero, exceptions recorded with their argument in the same file. That is
+`CLAUDE.md`'s own **O** turned into a test — *extend by registering, never by
+editing the engine* — because twenty families behind one `builder_for` is that
+pattern with every body left in the engine. The historical `node_runtime.py`
+scores sixteen on it; today's scores zero.
+
+**Module length does not cover this, and the number that settles it is 465.**
+`src/view/topbar/TopBar.tsx` is the other instance the ticket named — 777
+physical lines of hardcoded JSX in a codebase carrying twelve `Registry<T>`
+sites — and it measures 465 code lines, under the module ceiling of 500. Length
+and reasons-to-change are correlated, not the same thing.
+
+**And here is the part nothing measures.** The dispatch census sees a registry
+whose bodies were left beside it. It cannot see the *absence* of a registry —
+`TopBar.tsx`'s real defect — because an absence has no signature: a hardcoded
+row of five buttons that should be an extension point and a hardcoded row of
+five buttons that is genuinely five buttons are the same text. There is no
+TypeScript mirror of the census either, and that is stated rather than implied:
+the TypeScript registration idiom takes a single object argument
+(`register(new AnthropicProvider())`, `register({ id, body })`), so there is no
+key-and-target pair to compare, and a literal wrapping an imported value reads
+exactly like one inlining an implementation. Three broader proxies were priced
+and rejected for producing false failures — the reasoning is in the test's
+docstring, since a proxy that fails wrongly gets suppressed and then measures
+nothing. Recorded here the way the canvas-features gap two sections down is:
+as a gap, not as a list.
+
 ### And a module has one, measured in code lines
 
 A class had a ceiling and a module had none, which is an asymmetry a reader
