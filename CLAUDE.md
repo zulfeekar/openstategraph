@@ -330,6 +330,8 @@ reads, so the user-facing words are fixed:
 | **Package** | the reusable definition — `workflows/<slug>/`, the thing a mount points at | a PyPI distribution, in user-facing copy |
 | **Instance** | one mount of a package, carrying its own `data.overrides` | a copy of the package |
 | **Slug** | a package's folder name — `workflows/<slug>/`, `?w=<slug>`, and what a mount field asks for. **Minted by the backend at first save and frozen**, because a slug that moves renames a directory | a title, a display name, or anything a user chooses or edits |
+| **Replay** | reading a recording back — a **profiler**, not a re-execution. Offsets are the server's own `elapsedMs` from stream open; the playhead spends nothing and produces no new run | a re-run; LangGraph's own *replay*, which **re-executes nodes** and fires the model calls again (`/oss/python/langgraph/use-time-travel`, confirmed 2026-08-29). The two words collide exactly where a reader following those docs lands |
+| **Re-run** | forking a run from a checkpoint and executing it again — costs model calls, and produces a *different* run. Not built here; if it is ever offered it is a different button, in a different place, with a cost-and-consequences confirmation | a second mode of the play button, or anything the transport does |
 | **Eval** | grading a workflow **offline** against a committed dataset of questions whose answers are known — `openstategraph eval`, `<package>/evals/*.eval.json` | the grader node's in-run judgement, which routes rather than scores |
 | *(internal only)* the loop | `create_agent` / ReAct | anything in UI copy |
 

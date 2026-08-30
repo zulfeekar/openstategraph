@@ -1,6 +1,7 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Activity, exportTrace } from '../ask/traceTree';
-import { RunTimeline } from '../ask/RunTimeline';
+import { RunTimeline, SelectedBar } from '../ask/RunTimeline';
+import { buildLanes } from '../ask/timeline';
 import type { RunView } from './runView';
 import { DOCK_MIN_HEIGHT } from '../layout/dockFit';
 // The bars and the trace rows keep their styles where they were written. They
@@ -38,11 +39,42 @@ import './RunDock.css';
  * `PastRuns` stays in the chat panel on purpose — it is a list *of runs*,
  * which is a different job from drawing one.
  *
- * **There is no transport, and that is the decision rather than the backlog.**
- * The owner's words: *"a live run has no end yet; a slider that cannot reach
- * its right-hand edge is lying about what it can do."* A control that appears
- * once a run has an end is `memory-and-replay` 52's, and it is separately
- * owned; nothing here pretends to be waiting for it.
+ * **The transport appears when the run has an end, and not before**
+ * (`memory-and-replay` 52). The owner's words: *"a live run has no end yet; a
+ * slider that cannot reach its right-hand edge is lying about what it can
+ * do."* So a live run gets a playhead pinned to the head and no scrubber at
+ * all, and the same panel gains the transport when the frames stop.
+ *
+ * # What earns 260 px, and what needs a drag
+ *
+ * The prototype was a full page arguing a design and the dock is 260 px by
+ * default, so this is a decision rather than a port:
+ *
+ * | | at 260 px | why |
+ * | --- | --- | --- |
+ * | the lanes and their bars | **yes** | it is what the panel is |
+ * | the transport row | **yes** | a control you have to make room for is a control nobody finds |
+ * | the caveat line | **yes** | it has to be true of every bar above it, at every height |
+ * | the selected bar's facts | **yes** | it is the answer to the click that was just made |
+ * | the time axis with ticks | dragged taller | the bars are already in scale with each other; the ticks put numbers on it |
+ * | the profile strip | dragged taller | six numbers about the whole run, none of which is why the panel was opened |
+ * | the legend | dragged taller | the vocabulary is meant to read without one — it is a reference, not a key |
+ *
+ * # What was left out of the port, and why
+ *
+ * - **The answer re-typing at its recorded cadence.** It needs `47`'s bursts,
+ *   and `47` is `partially`: the store keeps the cadence and the reader is
+ *   Python-level — no HTTP route, and `burst` appears nowhere in
+ *   `docs/openapi.json`. A paragraph re-typed at a uniform tick is exactly the
+ *   fabricated measurement `52` exists to forbid, so it is absent rather than
+ *   faked. `memory-and-replay` 60.
+ * - **The payload pane** — what the selected step *asked* and *produced*.
+ *   `ActivityRow.output` is one opaque string and the fold does not keep it, so
+ *   the per-family readings the prototype showed would be invented here.
+ *   `memory-and-replay` 59.
+ * - **The identity masthead and the token total.** Thread, sitting and
+ *   timestamp are `44`'s run record and tokens ride `56`'s terminal frames;
+ *   `RunView` carries rows and nothing else. `memory-and-replay` 61.
  */
 export function RunDock({
   view,
@@ -100,6 +132,15 @@ export function RunDock({
   );
 
   const empty = view.rows.length === 0 && !view.running;
+  // One fold, read twice: the chart draws it and the detail pane answers for
+  // whichever bar of it the reader picked. Two folds would be two records.
+  const { lanes, totalMs } = useMemo(() => buildLanes(view.rows), [view.rows]);
+  const [selected, setSelected] = useState<string | null>(null);
+  // Tall enough to earn the axis, the profile strip and the legend. A number
+  // rather than a container query because the dock's height is state this
+  // component already holds, and a query would ask the browser a question the
+  // shell has already answered.
+  const tall = height >= DOCK_TALL;
 
   return (
     <section className="run-dock" style={{ height: `${height}px` }} aria-label="Run timeline">
@@ -162,9 +203,22 @@ export function RunDock({
               which is the width a bottom dock buys and a 300px chat panel
               never had. */}
           <div className="run-dock__bars">
-            <RunTimeline rows={view.rows} running={view.running} />
+            <RunTimeline
+              lanes={lanes}
+              totalMs={totalMs}
+              running={view.running}
+              tall={tall}
+              selected={selected}
+              onSelect={setSelected}
+            />
           </div>
+          {/* Not a third pane. `58` asked whether the payload view and the
+              trace tree are the same role, and they are: one pane answering
+              one question in two grains — *this bar*, then *everything that
+              ran*. The bar's facts sit above the trace because a reader who
+              just clicked a bar has said which grain they want first. */}
           <div className="run-dock__detail">
+            <SelectedBar lanes={lanes} selected={selected} />
             <Activity rows={view.rows} />
           </div>
         </div>
@@ -175,3 +229,12 @@ export function RunDock({
 
 /** How much one arrow press moves the edge. */
 const KEYBOARD_STEP = 24;
+
+/**
+ * The height at which the chart gains its axis, profile strip and legend.
+ *
+ * Picked against the default: 260 px leaves the lanes about 150 px, and the
+ * three together cost roughly 70 of it. At 360 the lanes keep what they had
+ * and the extras are additions rather than a trade.
+ */
+export const DOCK_TALL = 360;
