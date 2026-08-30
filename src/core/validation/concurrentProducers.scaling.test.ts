@@ -38,13 +38,38 @@ import { concurrentProducerCount, concurrentProducerCountOn } from './concurrent
  *
  * Replacing the clock changed what the file claims, which is the part worth
  * reading twice. The old block was titled *"grows with the document, not with
- * its square"* and the counter says that is **false**: the walks are linear in
- * the document and the node visits inside them are not — ×3.98 per doubling,
- * ×15.5 across the 132 → 516 gap the block measures. So the ceiling of 10 was
- * not merely loose, it was asserting the opposite of what the code does, and
- * the flakiness was the measurement brushing against a curve it was written to
- * forbid. Filed as `the-cost-of-one-more/21`; recorded exactly here so the day
- * it is fixed this file goes red and somebody re-records it.
+ * its square"* and the counter said that was **false**: the walks were linear
+ * in the document and the node visits inside them were not — ×3.98 per
+ * doubling, ×15.76 across the 132 → 516 gap the block measures. So the ceiling
+ * of 10 was not merely loose, it was asserting the opposite of what the code
+ * did, and the flakiness was the measurement brushing against a curve it was
+ * written to forbid.
+ *
+ * `19` therefore left two assertions pointing in **opposite directions on
+ * purpose** — walks within 1.1× of the document growth, visits *above* three
+ * times it — so that the day somebody fixed the quadratic this file would go
+ * red and have to be re-recorded with an argument. That day is
+ * `the-cost-of-one-more/21`, and this is the re-recording:
+ *
+ * ```
+ *   nodes    walks    visits        walks    visits     (21)
+ *     132      192     6,272            4       196
+ *     516      768    98,816            4       772
+ *              x4.0    x15.76         x1.0     x3.94
+ * ```
+ *
+ * The visits ratio is now **below** the document's own ×3.91 growth plus a
+ * tenth, which is the same bound the walks have always been held to, and the
+ * block title is true of the code under it for the first time. Nothing was
+ * deleted to get there: the ratio assertion that used to read
+ * `toBeGreaterThan(documentGrowth * 3)` reads `toBeLessThan(documentGrowth *
+ * 1.1)`, in the same place, about the same number.
+ *
+ * What bought it is one dominator pass over the successor index, shared by
+ * every branching node — `dominators.ts`, and the invariant it rests on is
+ * written at `constraintsByDominance`. The walks did not go away; they are the
+ * exact answer for a document with a control-flow cycle, and
+ * `dominanceAgreesWithWalking.test.ts` runs the two against each other.
  */
 
 /**
@@ -128,6 +153,11 @@ function countingGraph(graph: IControlFlowGraph): {
 } {
   let walks = 0;
   let visits = 0;
+  const counted = <T extends ReadonlySet<NodeId> | null>(answer: T): T => {
+    walks += 1;
+    visits += answer?.size ?? 0;
+    return answer;
+  };
   return {
     walks: () => walks,
     visits: () => visits,
@@ -135,18 +165,9 @@ function countingGraph(graph: IControlFlowGraph): {
       roots: graph.roots,
       branchingNodes: graph.branchingNodes,
       targetsFrom: (branch: BranchPort) => graph.targetsFrom(branch),
-      reachable: (from, options) => {
-        walks += 1;
-        const reached = graph.reachable(from, options);
-        visits += reached.size;
-        return reached;
-      },
-      // Deliberately not counted. `ancestorsOf` runs once per *distinct
-      // producer* — the filter `03` added — so it is bounded by the links on
-      // the port and not by the branching nodes, which is the other claim
-      // entirely. Counting it here would put the edge count into a number the
-      // test below asserts is independent of it.
-      ancestorsOf: (node) => graph.ancestorsOf(node),
+      reachable: (from, options) => counted(graph.reachable(from, options)),
+      ancestorsOf: (node) => counted(graph.ancestorsOf(node)),
+      dominatorsOf: (node) => counted(graph.dominatorsOf(node)),
     },
   };
 }
@@ -168,29 +189,31 @@ describe('reachability is resolved once per branching node, not once per edge', 
     expect(growth, `${watchedFew.asked()} → ${watchedMany.asked()} calls`).toBeLessThan(1.5);
   });
 
-  it('walks once per branching node plus once per branch, whatever the edge count', () => {
-    const branchesPerRouter = 2;
-    const routers = 16;
-    const counted = (producers: number): number => {
+  it('walks once per link on the port, and never once per branching node', () => {
+    const counted = (routers: number, producers: number): number => {
       const { workbench, edges } = chainFeedingOnePrompt(routers, producers);
       const watched = countingGraph(new ControlFlowGraph(workbench.model));
       concurrentProducerCountOn(watched.graph, edges);
       return watched.walks();
     };
 
-    // Every router in the chain gates every producer, so every one of them is
-    // a gate that has to be resolved: one walk for "what still runs without
-    // this router", and one per branch it opens. Branches it does not open
-    // reach nothing, and are walked just as cheaply.
-    const perRouter = 1 + 5;
-    expect(counted(2)).toBe(routers * perRouter);
-    expect(counted(8)).toBe(routers * perRouter);
-    expect(branchesPerRouter).toBeLessThan(perRouter);
+    // Two questions per **distinct producer** and nothing else: where it can
+    // be reached from, and what lies on every path to it. Both are properties
+    // of the producer; the branching nodes read the answers.
+    //
+    // `03` bought the second half of this — a walk per branching node rather
+    // than per branching node per edge — and `21` bought the first: the
+    // routers are no longer in the number at all, which is why the same count
+    // survives quadrupling them.
+    expect(counted(16, 2)).toBe(2 * 2);
+    expect(counted(64, 2)).toBe(2 * 2);
+    expect(counted(16, 8)).toBe(8 * 2);
+    expect(counted(64, 8)).toBe(8 * 2);
   });
 });
 
 describe('one pointer-move onto a full port is counted, never timed', () => {
-  it('starts a walk per branching node whatever the document size, and reads the whole document in each', () => {
+  it('reads the document once per link on the port, whatever the document size', () => {
     // The sweep's own fixture: a full single-slot `prompt` and one more link
     // dropped on it. 132 nodes → 516 nodes is four times the document.
     const gesture = (routers: number): { walks: number; visits: number; nodes: number } => {
@@ -210,15 +233,21 @@ describe('one pointer-move onto a full port is counted, never timed', () => {
     const large = gesture(128);
 
     // Exact, because the fixture is deterministic and nothing here is timed.
-    expect(small).toEqual({ nodes: 132, walks: 192, visits: 6272 });
-    expect(large).toEqual({ nodes: 516, walks: 768, visits: 98816 });
+    expect(small).toEqual({ nodes: 132, walks: 4, visits: 196 });
+    expect(large).toEqual({ nodes: 516, walks: 4, visits: 772 });
 
-    // What `03` fixed, and what it did not, stated as the ratio the deleted
-    // clock was reaching for. Walks track the document — ×4.00 against a ×3.91
-    // document. Visits track its square — ×15.76, which is ×3.98 per doubling,
-    // and is `the-cost-of-one-more/21`.
+    // The block's own title, finally true of the code under it. Walks no
+    // longer track the document at all — four, at both sizes, two per link on
+    // the port — and the visits inside them track the document rather than its
+    // square.
+    //
+    // **This is the assertion `19` pointed the other way on purpose**, and it
+    // is turned around rather than deleted: it used to read
+    // `toBeGreaterThan(documentGrowth * 3)`, recording ×15.76 as the measured
+    // truth so that the day somebody fixed it this file would go red. That day
+    // is `the-cost-of-one-more/21`, and the number it re-records is below.
     const documentGrowth = large.nodes / small.nodes;
-    expect(large.walks / small.walks).toBeLessThan(documentGrowth * 1.1);
-    expect(large.visits / small.visits).toBeGreaterThan(documentGrowth * 3);
+    expect(large.walks / small.walks).toBeLessThanOrEqual(documentGrowth);
+    expect(large.visits / small.visits).toBeLessThan(documentGrowth * 1.1);
   });
 });

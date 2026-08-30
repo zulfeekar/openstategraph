@@ -26,60 +26,150 @@ import { ControlFlowGraph, type BranchPort, type IControlFlowGraph } from './con
  * smaller than the truth and the cap is never relaxed on a guess.
  */
 
-/** One branching node's reachability, resolved once and read per edge. */
-interface Gate {
-  readonly owner: NodeId;
-  /** What still runs when the branching node is deleted. */
-  readonly ungated: ReadonlySet<NodeId>;
-  readonly branches: readonly { readonly key: string; readonly reached: ReadonlySet<NodeId> }[];
+/**
+ * Which of a branching node's branches have to have been taken for `edge` to
+ * carry a value, or `null` when this branching node does not decide that at
+ * all — one row per branching node, one entry per edge.
+ *
+ * Two facts are needed per (branching node, edge) pair, and the whole of
+ * `the-cost-of-one-more/21` is where they come from:
+ *
+ *  - **is the producer gated by this branching node at all** — it must be
+ *    unreachable when the branching node is deleted. Without this, a node that
+ *    can also be reached by a path going nowhere near the router would be
+ *    treated as if the router gated it, and two genuinely concurrent producers
+ *    would be called exclusive on the strength of a branch neither of them
+ *    needs.
+ *  - **which branches reach it**, which is what the constraint set names.
+ *
+ * Neither depends on the edge beyond its source, which is what `03` fixed.
+ * Both were still answered by walking the whole document once per branching
+ * node, which is what this pair of implementations fixes.
+ */
+type ConstraintRows = (Set<string> | null)[][];
+
+/** The edge leaves the branching node itself: it carries exactly that branch. */
+function branchLeavingOwner(branching: readonly BranchPort[], portId: string): Set<string> | null {
+  const owner = branching[0]?.nodeId;
+  if (owner === undefined) return null;
+  const key = `${owner}#${portId}`;
+  return branching.some((branch) => `${branch.nodeId}#${branch.portId}` === key)
+    ? new Set([key])
+    : null;
 }
 
 /**
- * Which of the gate's branches have to have been taken for `edge` to carry a
- * value, or `null` when this branching node does not decide that at all.
+ * The fast answer: one dominator pass, then set lookups.
  *
- * Two conditions, and the second is the one that is easy to forget: the source
- * must be reachable from at least one branch, **and** it must be unreachable
- * when the branching node is deleted. Without the second, a node that can also
- * be reached by a path going nowhere near the router would be treated as if
- * the router gated it, and two genuinely concurrent producers would be called
- * exclusive on the strength of a branch neither of them needs.
+ * `null` when the index declines to answer for any producer — a control-flow
+ * cycle, or a producer the roots cannot reach — in which case the caller falls
+ * back to the walks, which are exact for those shapes too.
  *
- * Both reachability sets are the gate's, not this edge's — which is the whole
- * of ticket `the-cost-of-one-more/03`. They were recomputed here, with
- * identical arguments, once per edge on the port.
+ * **The invariant this rests on, named because `03` left it unnamed.** The
+ * gating question is *"is the producer still reachable from the roots with the
+ * owner deleted"*, and that is dominance: `owner` gates `producer` exactly when
+ * it lies on every path to it. Dominance is a property of the **document**, not
+ * of the branching node asking — so it is resolved once and read by every gate.
+ *
+ * The branch question keeps one thing from the walks and drops the rest. It
+ * asks whether a branch target reaches the producer, and the walks ask that
+ * *with the owner deleted*. The deletion is what stops a walk leaving by one
+ * branch, looping back through the owner and arriving down another. It cannot
+ * happen here: the index is `null` unless the graph the roots reach is
+ * **acyclic**, and in an acyclic graph a successor of the owner has no path
+ * back to it. So "reaches the producer" and "reaches the producer without the
+ * owner" are the same set, and the producer's own ancestors — one walk per
+ * *link on the port*, which `03` already paid for as its upstream filter —
+ * answer it for every branching node at once.
  */
-function constraintsOf(
-  gate: Gate,
-  edge: { readonly source: { readonly nodeId: NodeId; readonly portId: string } },
-): Set<string> | null {
-  // The edge leaves the branching node itself: it carries exactly that branch,
-  // and no reachability question arises.
-  if (edge.source.nodeId === gate.owner) {
-    const key = `${gate.owner}#${edge.source.portId}`;
-    return gate.branches.some((branch) => branch.key === key) ? new Set([key]) : null;
+function constraintsByDominance(
+  graph: IControlFlowGraph,
+  edges: readonly { readonly source: { readonly nodeId: NodeId; readonly portId: string } }[],
+): ConstraintRows | null {
+  const gatedBy = new Map<NodeId, ReadonlySet<NodeId>>();
+  const reaching = new Map<NodeId, ReadonlySet<NodeId>>();
+  for (const producer of new Set(edges.map((edge) => edge.source.nodeId))) {
+    const dominators = graph.dominatorsOf(producer);
+    if (dominators === null) return null;
+    gatedBy.set(producer, dominators);
+    reaching.set(producer, graph.ancestorsOf(producer));
   }
-  const nodeId = edge.source.nodeId;
-  if (gate.ungated.has(nodeId)) return null;
 
-  const taken = new Set<string>();
-  for (const branch of gate.branches) {
-    if (branch.reached.has(nodeId)) taken.add(branch.key);
+  const rows: ConstraintRows = [];
+  for (const branching of graph.branchingNodes) {
+    const owner = branching[0]?.nodeId;
+    if (owner === undefined) continue;
+    // Resolved once per branching node rather than once per edge, which is
+    // `03`'s rule applied to the two cheap questions this path has left.
+    const branches = branching.map((branch) => ({
+      key: `${branch.nodeId}#${branch.portId}`,
+      targets: graph.targetsFrom(branch),
+    }));
+    const row = edges.map((edge) => {
+      const producer = edge.source.nodeId;
+      if (producer === owner) return branchLeavingOwner(branching, edge.source.portId);
+      if (!(gatedBy.get(producer)?.has(owner) ?? false)) return null;
+      const reaches = reaching.get(producer);
+      const taken = new Set<string>();
+      for (const branch of branches) {
+        if (branch.targets.some((target) => reaches?.has(target) ?? false)) taken.add(branch.key);
+      }
+      return taken.size > 0 ? taken : null;
+    });
+    if (row.some((entry) => entry !== null)) rows.push(row);
   }
-  return taken.size > 0 ? taken : null;
+  return rows;
 }
 
-function gateFor(graph: IControlFlowGraph, branching: readonly BranchPort[]): Gate | null {
-  const owner = branching[0]?.nodeId;
-  if (owner === undefined) return null;
-  return {
-    owner,
-    ungated: graph.reachable(graph.roots, { without: owner }),
-    branches: branching.map((branch) => ({
+/**
+ * The exact answer for a document the index declines: a walk of the whole
+ * graph per branching node, plus one per branch it opens.
+ *
+ * This is `03`'s implementation, kept rather than replaced. It is quadratic in
+ * the document and it is *correct on every shape*, including the cyclic ones
+ * where reachability-with-a-node-deleted genuinely differs from reachability.
+ * A control-flow cycle is drawable — `acyclicGraphRule` calls an escapable
+ * loop a correct graph — so this path is reachable, and
+ * `dominanceAgreesWithWalking.test.ts` runs the two against each other rather
+ * than trusting the argument above.
+ */
+function constraintsByWalking(
+  graph: IControlFlowGraph,
+  edges: readonly { readonly source: { readonly nodeId: NodeId; readonly portId: string } }[],
+): ConstraintRows {
+  // A branching node can only gate a producer it can *reach*: a branch target
+  // is downstream of its owner by construction, so the branching nodes
+  // upstream of no producer answer `null` for every edge, and asking them
+  // costs a walk of the whole document for a foregone conclusion. On the swap
+  // gesture that is every router in the document.
+  const upstream = new Set<NodeId>();
+  for (const nodeId of new Set(edges.map((edge) => edge.source.nodeId))) {
+    for (const ancestor of graph.ancestorsOf(nodeId)) upstream.add(ancestor);
+  }
+
+  const rows: ConstraintRows = [];
+  for (const branching of graph.branchingNodes) {
+    const owner = branching[0]?.nodeId;
+    if (owner === undefined || !upstream.has(owner)) continue;
+    const ungated = graph.reachable(graph.roots, { without: owner });
+    const branches = branching.map((branch) => ({
       key: `${branch.nodeId}#${branch.portId}`,
       reached: graph.reachable(graph.targetsFrom(branch), { without: owner }),
-    })),
-  };
+    }));
+    rows.push(
+      edges.map((edge) => {
+        const producer = edge.source.nodeId;
+        if (producer === owner) return branchLeavingOwner(branching, edge.source.portId);
+        if (ungated.has(producer)) return null;
+        const taken = new Set<string>();
+        for (const branch of branches) {
+          if (branch.reached.has(producer)) taken.add(branch.key);
+        }
+        return taken.size > 0 ? taken : null;
+      }),
+    );
+  }
+  return rows;
 }
 
 /**
@@ -100,27 +190,8 @@ export function concurrentProducerCountOn(
   if (edges.length < 2) return edges.length;
   if (graph.branchingNodes.length === 0) return edges.length;
 
-  // A branching node can only gate a producer it can *reach*: `constraintsOf`
-  // returns non-null only when some branch of it reaches the edge's source, and
-  // a branch target is downstream of its owner by construction. So the
-  // branching nodes upstream of no producer answer `null` for every edge, and
-  // asking them costs a walk of the whole document for a foregone conclusion.
-  // On the swap gesture that is every router in the document.
-  const upstream = new Set<NodeId>();
-  for (const nodeId of new Set(edges.map((edge) => edge.source.nodeId))) {
-    for (const ancestor of graph.ancestorsOf(nodeId)) upstream.add(ancestor);
-  }
-
-  const gates: Gate[] = [];
-  for (const branching of graph.branchingNodes) {
-    const owner = branching[0]?.nodeId;
-    if (owner === undefined || !upstream.has(owner)) continue;
-    const gate = gateFor(graph, branching);
-    if (gate) gates.push(gate);
-  }
-  if (gates.length === 0) return edges.length;
-
-  const constraints = gates.map((gate) => edges.map((edge) => constraintsOf(gate, edge)));
+  const constraints = constraintsByDominance(graph, edges) ?? constraintsByWalking(graph, edges);
+  if (constraints.length === 0) return edges.length;
 
   const exclusive = (a: number, b: number): boolean =>
     constraints.some((perEdge) => {
