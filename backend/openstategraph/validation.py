@@ -252,6 +252,36 @@ def unresolved_tool_bindings(document: dict[str, Any], package_dir: Path) -> lis
     slug = package_dir.name
     registry = build_tool_registry(WorkflowStore(root=package_dir.parent), slug)
 
+    # **Which remedy is right depends on the filesystem, not on the type**
+    # (`launch-readiness/195`). "Copy the package's tools/ folder next to
+    # workflow.json" was printed unconditionally, including for a package
+    # whose `tools/` folder is right there and whose module raised
+    # `ModuleNotFoundError: No module named 'myapp'` on the line above. A
+    # reader who follows that literally moves a directory to where it already
+    # is, sees no change, and concludes the tool system is broken.
+    #
+    # So the question is asked of the disk, which is the only thing that knows:
+    # a folder that is not here is a folder to copy, and a folder that is here
+    # has a different problem — and the sentence that names it is already in
+    # this same report, because `build_tool_registry` surfaced it above.
+    ships_tools = any(
+        candidate.stem[:1] != "_" for candidate in (package_dir / "tools").glob("*.py")
+    )
+
+
+    def remedy_for(tool_type: str) -> str:
+        if not ships_tools:
+            return (
+                "Copy the package's tools/ folder next to workflow.json, or install "
+                "the plugin that provides it."
+            )
+        return (
+            "The package's tools/ folder is already beside workflow.json, so this is "
+            "not a file-placement problem: either a module in it would not import — "
+            "the reason is reported by name in this same list — or no class in it "
+            f'declares node_type = "{tool_type}".'
+        )
+
     findings: list[str] = []
     seen: set[str] = set()
     for node_id in bound:
@@ -262,9 +292,7 @@ def unresolved_tool_bindings(document: dict[str, Any], package_dir: Path) -> lis
         findings.append(
             f'Tool "{node_id}" has type "{tool_type}", which nothing in this '
             "installation implements — the agent it is wired to will run without it, "
-            "so its answer will not be grounded in that data source. Copy the "
-            "package's tools/ folder next to workflow.json, or install the plugin "
-            "that provides it."
+            f"so its answer will not be grounded in that data source. {remedy_for(tool_type)}"
         )
     # One absent implementation is one thing to fix however many cards name it.
     return list(dict.fromkeys(findings))

@@ -921,6 +921,21 @@ so the shape is the only thing you are reading.
 
 ### The Python half — `workflows/<slug>/tools/dice.py`
 
+> **A `tools/` module is imported with the interpreter's own `sys.path`, and
+> nothing is added to it.** The file itself is found by path, so it always
+> loads; what it *imports* is resolved the way any other import is. A tool
+> that reaches your project's own code — `from myapp.inventory import
+> stock_level`, which is the usual reason to put a tool in a package rather
+> than in the palette — therefore resolves from `python script.py` and from
+> pytest, which put the invocation directory on the path, and not from the
+> installed `openstategraph` command, which does not. Make the project a
+> distribution (`pip install -e .` from its root) and it resolves everywhere;
+> or declare the directory under `prepend_sys_path:` in `openstategraph.yaml`,
+> which `openstategraph init` writes for you. The argument for that shape, and
+> for what was rejected, is
+> [`decisions/importing-the-projects-own-code.md`](decisions/importing-the-projects-own-code.md).
+
+
 ```python
 """Dice tool — the smallest complete atom."""
 

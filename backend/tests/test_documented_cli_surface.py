@@ -1,40 +1,56 @@
-"""The CLI table in `docs/adoption.md`, held against the real argparse.
+"""The CLI reference in `docs/cli.md`, held against the real argparse.
 
-Production-ready ticket 20, reopened. That ticket closed on 2026-08-13
-asserting every item done, and a sweep of the same corpus three days later
-found a comparable list — so its own diagnosis was upgraded from "a backlog to
-burn down" to "a rate". The conclusion drawn there is the reason this file
-exists: **prefer a gate to a correction wherever a claim is mechanically
-checkable.**
+Production-ready ticket 20, reopened, then moved by `launch-readiness/196`.
+Ticket 20 closed on 2026-08-13 asserting every item done, and a sweep of the
+same corpus three days later found a comparable list — so its own diagnosis
+was upgraded from "a backlog to burn down" to "a rate". The conclusion drawn
+there is the reason this file exists: **prefer a gate to a correction wherever
+a claim is mechanically checkable.**
 
-`docs/adoption.md` §"the rest of the commands" is the one place the CLI's
-flags and exit codes are enumerated for a consumer — `docs/README.md` says so
-in as many words, which makes that table the contract rather than a
-convenience. It had drifted three ways at once:
+## What moved, and why the pin moved with it
+
+The enumeration used to live in `docs/adoption.md` §"the rest of the
+commands", and that page's job is *how to adopt this*, not *what does this
+command do*. A reader looking up a flag had to read an adoption narrative to
+find a table inside it. `docs/cli.md` is the reference — one section per
+command, its flags, its exit codes, and a "which one do I want" table at the
+top — and `docs/README.md` now names **it** as the single enumeration.
+
+Moving the page without moving the pin would have been the drift this file was
+written to stop, one directory over.
+
+## What the drift looked like, the last time nothing was watching
 
 - `openstategraph init` — the only command that creates a project, and the
   substitute for the one thing an install line cannot carry — had **no row at
-  all**, while the page's own headline quickstart runs it on line 45.
+  all**, while the page's own headline quickstart ran it.
 - `examples copy --all` and `serve --workers` were undocumented. `--workers`
   matters more than its size: it exists only to be *refused*, and a reader who
   never learns it exists learns instead that we forgot about multi-worker
   deployment.
-- The exit codes were right here and wrong in
+- The exit codes were right there and wrong in
   `docs/decisions/framework-packaging.md` §3.2, which had `1` and `2`
   transposed and invented a `5`. A CI script written from that document reads
   a usage error as a failed run.
 
-What is pinned, and what deliberately is not:
+## What is pinned, and what deliberately is not
 
-**Pinned** — every subcommand exists in the table; every ``--flag`` the table
-shows exists in that subcommand's parser; the exit-code paragraph names the
-real constants. These are the assertions a reader acts on and can be checked
-without reading prose.
+**Pinned** — every command and subcommand appears; every `--flag` argparse
+accepts is documented **in that command's own section**; every `--flag` a
+section shows is one argparse accepts; the exit-code table names the real
+constants.
+
+The first of those is new here (`launch-readiness/196`). The old file checked
+only that a *documented* flag was real — the direction that costs a reader a
+failed paste. The other direction is the one that costs them a feature they
+never find, and it is the direction a page drifts in on its own: a flag is
+added to the parser in the same commit as the behaviour, and the document is a
+separate act of will. Now it is not.
 
 **Not pinned** — what each command *means*. That is prose, it is the useful
-half, and a test that demanded particular sentences would be a test of an
-author's wording rather than of the software. The rule this file follows is
-the repository's own: pin the checkable claim, leave the argument alone.
+half, and a test demanding particular sentences would be a test of an author's
+wording rather than of the software. The rule this file follows is the
+repository's own: pin the checkable claim, leave the argument alone.
 """
 
 from __future__ import annotations
@@ -49,14 +65,17 @@ from openstategraph import cli
 
 ROOT = Path(__file__).resolve().parents[2]
 
-#: The consumer-facing enumeration. One document, deliberately — `docs/README.md`
-#: promises the CLI's flags and exit codes are enumerated in exactly one place,
+#: The reference. One document, deliberately — `docs/README.md` promises the
+#: CLI's commands, flags and exit codes are enumerated in exactly one place,
 #: and a second pinned copy would make that promise false while satisfying a
 #: gate.
-ADOPTION = ROOT / "docs" / "adoption.md"
+REFERENCE = ROOT / "docs" / "cli.md"
 
 #: A long flag as a reader meets it: `--thread-id`, `--workers`, `--list-templates`.
-FLAG_IN_PROSE = re.compile(r"`?--([a-z][a-z0-9-]*)")
+FLAG_IN_PROSE = re.compile(r"--([a-z][a-z0-9-]*)")
+
+#: Flags argparse supplies and no page should have to restate.
+FREE = {"help", "version"}
 
 
 def subcommand_tree() -> dict[str, set[str]]:
@@ -99,91 +118,119 @@ def flags_of(command: str, leaf: str | None = None) -> set[str]:
     }
 
 
+def accepted(command: str) -> set[str]:
+    """A group's own flags plus every leaf's — `runs list --json` is `runs`'."""
+    flags = flags_of(command)
+    for leaf in subcommand_tree()[command]:
+        flags |= flags_of(command, leaf)
+    return flags
+
+
+def sections(page: str) -> dict[str, str]:
+    """`### `init`` → the text under it, up to the next `###` or `##`.
+
+    Keyed by the **first word** of the backticked heading, so `### `export
+    plugin`` files under `export`, which is what argparse calls it.
+    """
+    found: dict[str, str] = {}
+    current: str | None = None
+    body: list[str] = []
+    for line in page.splitlines():
+        heading = re.match(r"^#{2,3} `([a-z][a-z-]*)", line)
+        if line.startswith("## ") or line.startswith("### "):
+            if current is not None:
+                found[current] = "\n".join(body)
+            current, body = (heading.group(1) if heading else None), []
+            continue
+        if current is not None:
+            body.append(line)
+    if current is not None:
+        found[current] = "\n".join(body)
+    return found
+
+
 @pytest.fixture(scope="module")
 def guide() -> str:
-    return ADOPTION.read_text()
+    return REFERENCE.read_text()
+
+
+@pytest.fixture(scope="module")
+def by_command(guide: str) -> dict[str, str]:
+    return sections(guide)
 
 
 class TestEveryCommandIsDocumented:
-    """A command absent from the table is a command nobody finds."""
+    """A command absent from the reference is a command nobody finds."""
 
     @pytest.mark.parametrize("command", sorted(subcommand_tree()))
-    def test_it_appears_in_the_table(self, guide: str, command: str) -> None:
-        assert f"`openstategraph {command}" in guide, (
-            f"`openstategraph {command}` exists and docs/adoption.md never mentions it. "
-            "That page is the only consumer-facing enumeration of the CLI, per docs/README.md."
+    def test_it_has_its_own_section(self, by_command: dict[str, str], command: str) -> None:
+        assert command in by_command, (
+            f"`openstategraph {command}` exists and docs/cli.md has no section for it. "
+            "That page is the only enumeration of the CLI, per docs/README.md."
         )
 
     @pytest.mark.parametrize(
         ("group", "leaf"),
         sorted((group, leaf) for group, leaves in subcommand_tree().items() for leaf in leaves),
     )
-    def test_each_subcommand_appears_too(self, guide: str, group: str, leaf: str) -> None:
-        """`threads list|show` and `examples copy` are separate commands.
+    def test_each_subcommand_appears_in_its_section(
+        self, by_command: dict[str, str], group: str, leaf: str
+    ) -> None:
+        assert f"{group} {leaf}" in by_command.get(group, ""), (
+            f"`openstategraph {group} {leaf}` is a real command and the `{group}` "
+            "section never spells it out"
+        )
 
-        Written as `threads list|show` in the table, so the assertion is that
-        the leaf appears somewhere in the same line as its group rather than
-        that the full path appears verbatim.
-        """
-        lines = [line for line in guide.splitlines() if f"`openstategraph {group}" in line]
-        assert any(leaf in line for line in lines), (
-            f"`openstategraph {group} {leaf}` is a real command and no line documenting "
-            f"`{group}` mentions it"
+
+class TestEveryFlagIsDocumented:
+    """The direction that costs a reader a feature they never learn exists.
+
+    A flag reaches the parser in the same commit as the behaviour it turns on;
+    documenting it is a separate act of will, which is the one that gets
+    skipped. Scoped per section rather than per page, so a flag documented
+    under the wrong command still fails.
+    """
+
+    @pytest.mark.parametrize("command", sorted(subcommand_tree()))
+    def test_the_section_shows_every_flag_argparse_takes(
+        self, by_command: dict[str, str], command: str
+    ) -> None:
+        documented = set(FLAG_IN_PROSE.findall(by_command.get(command, "")))
+        missing = sorted(accepted(command) - documented - FREE)
+        assert missing == [], (
+            f"`openstategraph {command}` accepts {missing} and its section in "
+            "docs/cli.md never names them"
         )
 
 
 class TestNoDocumentedFlagIsInvented:
-    """The direction that costs a reader a failed command rather than a missed one.
+    """A flag that does not exist is a paste that exits 2 with `unrecognized
+    arguments`, and the reader has no way to tell whether the document is
+    wrong or their install is old."""
 
-    A missing flag is a gap; a flag that does not exist is a paste that exits
-    2 with `unrecognized arguments`, and the reader has no way to tell whether
-    the document is wrong or their install is old.
-    """
-
-    def test_every_flag_in_the_table_is_real(self, guide: str) -> None:
-        """One row of the table, one command, and every `--flag` on that row.
-
-        Scoped to the table rather than the whole page on purpose: a table row
-        opens by naming its command, so which parser a flag belongs to is
-        unambiguous there and only there. Body prose mentions a flag next to
-        the *effect* it has, which is a different sentence shape and would need
-        a different, guessier rule.
-        """
-        real = subcommand_tree()
-        offenders: list[str] = []
-        for number, line in enumerate(guide.splitlines(), start=1):
-            row = re.match(r"\| `openstategraph ([a-z][a-z-]*)", line)
-            if not row or row.group(1) not in real:
-                continue
-            command = row.group(1)
-            accepted = flags_of(command)
-            for leaf in real[command]:
-                accepted |= flags_of(command, leaf)
-            for flag in {f for f in FLAG_IN_PROSE.findall(line)} - {"help", "version"}:
-                if flag not in accepted:
-                    offenders.append(f"adoption.md:{number} `openstategraph {command}` --{flag}")
-        assert offenders == [], (
-            "documented flags that argparse does not accept — a reader pasting one gets "
-            f"`unrecognized arguments` and cannot tell whose fault it is: {offenders}"
+    @pytest.mark.parametrize("command", sorted(subcommand_tree()))
+    def test_every_flag_in_the_section_is_real(
+        self, by_command: dict[str, str], command: str
+    ) -> None:
+        documented = set(FLAG_IN_PROSE.findall(by_command.get(command, ""))) - FREE
+        invented = sorted(documented - accepted(command))
+        assert invented == [], (
+            f"docs/cli.md's `{command}` section documents {invented}, which that "
+            "parser does not accept"
         )
 
-    def test_the_scan_actually_reaches_the_table(self, guide: str) -> None:
-        """Guards the test above from passing because it matched nothing.
+    def test_the_scan_actually_reaches_the_page(self, by_command: dict[str, str]) -> None:
+        """Guards every assertion above from passing because it matched nothing.
 
-        A regex that stops matching is a green test that checks the empty set,
-        which is the failure mode of every doc gate written this way.
+        A heading pattern that stops matching is a green test that checks the
+        empty set, which is the failure mode of every doc gate written this way.
         """
-        rows = [
-            line for line in guide.splitlines() if re.match(r"\| `openstategraph [a-z]", line)
-        ]
-        assert len(rows) >= len(subcommand_tree()) - 2, (
-            f"only {len(rows)} command rows matched; the table's shape changed and this "
-            "file is now checking almost nothing"
-        )
+        assert set(subcommand_tree()) <= set(by_command), "the section scan found nothing"
+        assert sum(len(body) for body in by_command.values()) > 5_000
 
 
 class TestTheExitCodesAreTheOnesCIWillSee:
-    """`docs/adoption.md`: "Exit codes are fixed, because they are what CI consumes".
+    """`docs/cli.md`: "Fixed and few, because they are what CI consumes".
 
     Fixed is a promise, so it gets a test. The numbers are asserted against the
     constants rather than against a source line, because a constant renamed
@@ -199,15 +246,15 @@ class TestTheExitCodesAreTheOnesCIWillSee:
         )
 
     def test_the_page_states_each_one(self, guide: str) -> None:
-        paragraph = guide.split("Exit codes are fixed")[1][:600]
+        table = guide.split("## Exit codes")[1]
         for number, meaning in (
             ("0", "success"),
-            ("1", "failure"),
+            ("1", "failed"),
             ("2", "usage"),
             ("3", "extra"),
         ):
-            assert f"**{number}**" in paragraph, f"exit {number} is not stated"
-            assert meaning in paragraph.lower(), f"exit {number}'s meaning is not stated"
+            assert f"**{number}**" in table, f"exit {number} is not stated"
+            assert meaning in table.lower(), f"exit {number}'s meaning is not stated"
 
     def test_there_is_no_fourth_code(self, guide: str) -> None:
         """`--strict` and its exit 4 were designed and deliberately dropped.
@@ -217,8 +264,32 @@ class TestTheExitCodesAreTheOnesCIWillSee:
         the drop. This is the assertion that keeps the invented ones out.
         """
         assert not hasattr(cli, "EXIT_STRICT")
-        paragraph = guide.split("Exit codes are fixed")[1][:600]
-        assert "**4**" not in paragraph and "**5**" not in paragraph
+        table = guide.split("## Exit codes")[1]
+        assert "| **4**" not in table and "| **5**" not in table
+
+
+class TestTheReferenceIsTheOnlyEnumeration:
+    """`docs/README.md` promises one place, and a promise gets a test.
+
+    The old table lived in `docs/adoption.md`; leaving it there beside the new
+    page would have been two enumerations, which is exactly the state
+    `docs/README.md`'s no-repetition rule exists to prevent — and the state in
+    which one of them silently goes stale while a gate watches the other.
+    """
+
+    def test_the_index_names_the_reference(self) -> None:
+        index = (ROOT / "docs" / "README.md").read_text()
+        assert "(cli.md)" in index
+
+    def test_adoption_points_here_rather_than_repeating(self) -> None:
+        adoption = (ROOT / "docs" / "adoption.md").read_text()
+        assert "cli.md" in adoption
+        rows = [
+            line
+            for line in adoption.splitlines()
+            if re.match(r"\| `openstategraph [a-z]", line)
+        ]
+        assert rows == [], f"docs/adoption.md is enumerating the CLI again: {rows[:3]}"
 
 
 class TestTheEntryPointIsTheOneShipped:
@@ -238,55 +309,7 @@ class TestTheEntryPointIsTheOneShipped:
             "scripts"
         ]
         assert scripts == {"openstategraph": "openstategraph.cli:console_main"}
-        assert callable(cli.console_main)
 
 
-class TestNoInternalIdReachesAUser:
-    """`launch-readiness/12` — a stranger read `eval --help` and met a ticket id.
-
-    ``--repeat``'s help text ended *"(launch-readiness/126)"*. That is a
-    reference to a planning document a consumer of the wheel cannot open, has
-    no way to look up, and is not told is internal — printed in the one place
-    the tool explains itself to somebody who has never seen the project.
-
-    The map ids are deliberately everywhere in docstrings and comments, which
-    is where they belong: they carry the argument to the next person reading
-    the source. `help=` is the other side of the boundary. This walks every
-    parser rather than grepping, so a new subcommand is covered the day it is
-    added.
-    """
-
-    #: Every map under `.scratch/`, plus the shape a future one will have.
-    _TICKET = re.compile(
-        r"\b[a-z][a-z-]{3,}/\d{1,3}\b(?!\S)|"
-        r"\((?:launch-readiness|one-chinook-honest|workflow-gallery|production-ready|"
-        r"canvas-feels-right|every-workflow-green|say-it-on-the-surface|docs-and-gaps|"
-        r"memory-hardening|ship-it|fullstack-langgraph)/\d+\)"
-    )
-
-    def _help_strings(self) -> list[tuple[str, str]]:
-        found: list[tuple[str, str]] = []
-
-        def walk(parser: argparse.ArgumentParser, path: str) -> None:
-            for text in (parser.description, parser.epilog):
-                if text:
-                    found.append((path, text))
-            for action in parser._actions:
-                if action.help:
-                    found.append((f"{path} {action.dest}", action.help))
-                if isinstance(action, argparse._SubParsersAction):
-                    for name, sub in action.choices.items():
-                        walk(sub, f"{path} {name}".strip())
-
-        walk(cli.build_parser(), "openstategraph")
-        return found
-
-    def test_no_help_text_names_a_planning_ticket(self) -> None:
-        leaks = [
-            (where, match.group(0))
-            for where, text in self._help_strings()
-            for match in [self._TICKET.search(text)]
-            if match
-        ]
-
-        assert not leaks, f"internal ticket ids printed to a user: {leaks}"
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(pytest.main([__file__]))

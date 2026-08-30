@@ -137,6 +137,52 @@ def _import_module(path: Path, qualified_name: str) -> Any:
     return module
 
 
+def import_failure(path: Path, exc: BaseException, *, consequence: str) -> str:
+    """Why a capability module would not import, in the reader's own terms.
+
+    `launch-readiness/195`. The sentence this replaces was
+    *"Tool module stock.py could not be imported (ModuleNotFoundError: No
+    module named 'myapp') — every tool it defines is missing from this run."*
+    Accurate, and it left the reader with nothing to do: the exception names a
+    module, the remedy printed one line later named a **folder**, and the
+    folder was already where it said to put it.
+
+    The distinction that matters is one attribute. `ModuleNotFoundError.name`
+    is the module the *interpreter* could not find, and here it is never this
+    file — a `tools/` module is loaded from its path by `_import_module`, so
+    it is always found and always executed. A `name` is therefore always some
+    **other** module: the host project's own package, or a third-party
+    distribution. Either way the answer is a `sys.path` question, and neither
+    answer is "move the file".
+
+    Two remedies, in the order the packaging ecosystem itself puts them:
+
+    - **Install it.** `pip install -e .` from the project root is the Python
+      Packaging Authority's *Development Mode* — the project appears installed
+      while staying editable from the source tree — and it makes the module
+      importable from every tool, forever, not just from this one.
+    - **Declare the directory.** `prepend_sys_path:` in `openstategraph.yaml`,
+      for code that is not a distribution and is not going to become one. See
+      `docs/decisions/importing-the-projects-own-code.md`.
+
+    Anything that is not a `ModuleNotFoundError` for another module keeps the
+    original sentence: a `SyntaxError` or a raising module-level statement is
+    a defect in the file, and pointing that reader at `pip` would be the same
+    misdirection in the opposite direction.
+    """
+    missing = getattr(exc, "name", None) if isinstance(exc, ModuleNotFoundError) else None
+    if not missing or missing == path.stem:
+        return f"{path.name} could not be imported ({type(exc).__name__}: {exc}) — {consequence}"
+    return (
+        f"{path.name} needs the module \"{missing}\", which this interpreter cannot "
+        f"import ({type(exc).__name__}: {exc}) — {consequence} The file itself was "
+        "found and read, so this is a Python path question, not a file-placement one: "
+        f"install whatever provides \"{missing}\" (if it is this project's own code, "
+        "`pip install -e .` from the project root makes it importable everywhere), or "
+        "name its directory under `prepend_sys_path:` in openstategraph.yaml."
+    )
+
+
 def _note(warnings: list[str] | None, message: str, *, exc_info: bool = False) -> None:
     """One finding: logged **and** surfaced.
 
@@ -216,9 +262,10 @@ def discover_tool_instances(
         except Exception as exc:
             _note(
                 warnings,
-                f"Tool module {path.name} could not be imported "
-                f"({type(exc).__name__}: {exc}) — every tool it defines is missing from "
-                "this run.",
+                "Tool module "
+                + import_failure(
+                    path, exc, consequence="every tool it defines is missing from this run."
+                ),
                 exc_info=True,
             )
             continue
@@ -456,8 +503,14 @@ def discover_functions(workflow_dir: Path, slug: str) -> list[FunctionCapability
         qualified_module = f"{slug}.functions.{path.stem}"
         try:
             module = _import_module(path, qualified_module)
-        except Exception:
-            logger.warning("Skipping unimportable function module %s", path, exc_info=True)
+        except Exception as exc:
+            logger.warning(
+                "Function module %s",
+                import_failure(
+                    path, exc, consequence="every function it defines is missing."
+                ),
+                exc_info=True,
+            )
             continue
 
         for name, obj in inspect.getmembers(module, inspect.isfunction):
@@ -499,8 +552,14 @@ def discover_function_callables(workflow_dir: Path, slug: str) -> dict[str, Any]
         qualified_module = f"{slug}.functions.{path.stem}"
         try:
             module = _import_module(path, qualified_module)
-        except Exception:
-            logger.warning("Skipping unimportable function module %s", path, exc_info=True)
+        except Exception as exc:
+            logger.warning(
+                "Function module %s",
+                import_failure(
+                    path, exc, consequence="every function it defines is missing."
+                ),
+                exc_info=True,
+            )
             continue
         for name, obj in inspect.getmembers(module, inspect.isfunction):
             if name.startswith("_") or obj.__module__ != qualified_module:
@@ -581,8 +640,14 @@ def discover_middlewares(workflow_dir: Path, slug: str) -> dict[str, Any]:
             continue
         try:
             module = _import_module(path, f"{slug}.middlewares.{path.stem}")
-        except Exception:
-            logger.warning("Skipping unimportable middleware module %s", path, exc_info=True)
+        except Exception as exc:
+            logger.warning(
+                "Middleware module %s",
+                import_failure(
+                    path, exc, consequence="every middleware it defines is missing."
+                ),
+                exc_info=True,
+            )
             continue
         middleware = getattr(module, "MIDDLEWARE", None)
         if middleware is None:
