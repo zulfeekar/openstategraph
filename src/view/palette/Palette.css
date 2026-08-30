@@ -10,7 +10,7 @@
   padding: var(--space-2) var(--space-2-5);
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface);
-  box-shadow: inset 0 0 0 1px var(--color-border-default);
+  box-shadow: inset 0 0 0 1px var(--color-border);
   text-align: left;
   cursor: grab;
   transition:
@@ -66,7 +66,7 @@
 }
 
 .palette-item--scoped {
-  border-left: var(--border-width-marker) solid var(--color-border-emphasis);
+  border-left: var(--border-width-marker) solid var(--color-border);
   border-top-left-radius: var(--radius-sm);
   border-bottom-left-radius: var(--radius-sm);
 }

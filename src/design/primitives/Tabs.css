@@ -1,6 +1,6 @@
 .tabs {
   display: flex;
-  border-bottom: var(--border-width-hairline) solid var(--color-border-default);
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
 }
 
 .tabs__tab {

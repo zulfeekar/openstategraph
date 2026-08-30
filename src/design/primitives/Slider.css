@@ -28,7 +28,7 @@
   background: linear-gradient(
     to right,
     var(--accent-solid, var(--color-text-secondary)) 0 var(--slider-fill),
-    var(--color-border-strong) var(--slider-fill) 100%
+    var(--color-border) var(--slider-fill) 100%
   );
 }
 

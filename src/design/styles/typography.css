@@ -160,7 +160,7 @@
   padding: var(--space-2-5);
   border-radius: var(--radius-sm);
   background: var(--color-bg-surface-sunken);
-  border: var(--border-width-hairline) solid var(--color-border-subtle);
+  border: var(--border-width-hairline) solid var(--color-border);
   overflow-x: auto;
 }
 
@@ -171,13 +171,13 @@
 
 .prose blockquote {
   padding-left: var(--space-3);
-  border-left: var(--border-width-marker) solid var(--color-border-strong);
+  border-left: var(--border-width-marker) solid var(--color-border);
   color: var(--color-text-tertiary);
 }
 
 .prose hr {
   border: none;
-  border-top: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-top: var(--border-width-hairline) solid var(--color-border);
 }
 
 /* Tables are the point of the output node, so they get real attention:
@@ -186,7 +186,7 @@
 .prose table {
   width: 100%;
   font-size: var(--font-size-13);
-  border: var(--border-width-hairline) solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-md);
   overflow: hidden;
   display: table;
@@ -203,13 +203,13 @@
   color: var(--color-text-tertiary);
   text-align: left;
   padding: var(--space-2) var(--space-3);
-  border-bottom: var(--border-width-hairline) solid var(--color-border-default);
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
   white-space: nowrap;
 }
 
 .prose td {
   padding: var(--space-2) var(--space-3);
-  border-bottom: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
   color: var(--color-text-primary);
   vertical-align: top;
 }
