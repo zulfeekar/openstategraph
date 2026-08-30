@@ -1281,9 +1281,42 @@ class ThreadListResponse(BaseModel):
     threads: list[ThreadSummary]
 
 
+class ThreadTruncation(BaseModel):
+    """The part of a run a history did **not** read.
+
+    `GET /api/threads/{id}` has always kept the newest `limit` checkpoints and
+    has never said so, which made a whole run and the last fifth of a long one
+    the same response (`the-cost-of-one-more/06`). It is not a harmless
+    silence: the older end of a thread carries the `AIMessage` requests that
+    the newer end's `ToolMessage` answers belong to, so a truncated read
+    produces tool calls with no arguments, and `run_findings.py` drops those on
+    purpose — a long conversation quietly yielded no findings at all.
+
+    Present only when something was left behind. A truncation of nothing is not
+    a truncation, so this field is `null` on a complete read rather than a row
+    of zeroes claiming one happened.
+    """
+
+    #: How many checkpoints this response holds.
+    kept: int
+    #: Which end of the run is missing. `"oldest"` — the newest are kept,
+    #: because that is the end the store yields first and the end a person
+    #: looking at a run came for.
+    end: str = "oldest"
+    #: The bound that decided it, so a caller knows what to raise.
+    limit: int
+    #: The same fact as a sentence, for a surface that shows one.
+    message: str
+
+
 class ThreadHistoryResponse(BaseModel):
     """`GET /api/threads/{thread_id}` — one past run, checkpoint by checkpoint."""
 
     thread: ThreadSummary
     #: Oldest first, so reading top to bottom is watching the run happen.
     steps: list[ThreadStep]
+    #: What the read left behind, or `null` when it left nothing behind. Not
+    #: audience-filtered: *some of this run is missing* is a fact about the
+    #: answer, not machinery that produced it, and a customer reading a
+    #: partial history needs it exactly as much as a developer does.
+    truncation: ThreadTruncation | None = None

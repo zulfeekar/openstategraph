@@ -543,7 +543,7 @@ writing half.
 #: worried about.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(570, NODE_RUNTIME),
-    "cli.py": Recorded(1123, CLI),
+    "cli.py": Recorded(1125, CLI),
     "compile/workflow_compiler.py": Recorded(964, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1026, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

@@ -63,6 +63,7 @@ def read_thread_endpoint(
     thread_id: str,
     workflow_slug: str | None = None,
     audience: Audience = Audience.CUSTOMER,
+    limit: int | None = None,
 ) -> ThreadHistoryResponse:
     """A recorded run played back as text. **Nothing is re-executed.**
 
@@ -78,6 +79,14 @@ def read_thread_endpoint(
     (`the-boundary-nobody-checked/02`). It defaults to `customer`, so a client
     written before this parameter existed reads a customer's history rather
     than a developer's; a developer surface asks for what it needs.
+
+    `limit` is how many checkpoints to read, newest first, up to
+    `MAX_READ_LIMIT`; omitted, it is `DEFAULT_READ_LIMIT` — the module owns
+    both numbers, so this route restates neither. It existed on `read_thread` from the beginning and this
+    route never passed it, so 200 was a fixed truncation no caller could raise
+    and no response mentioned (`the-cost-of-one-more/06`). A read that left
+    something behind now says so in `truncation`, and a caller who wants the
+    rest asks for more.
     """
     from openstategraph.api import threads as thread_queries
 
@@ -85,6 +94,7 @@ def read_thread_endpoint(
         thread_queries.savers_for(services, workflow_slug),
         thread_id,
         audience=resolve(audience),
+        limit=limit if limit is not None else thread_queries.DEFAULT_READ_LIMIT,
     )
     if history is None:
         raise HTTPException(
