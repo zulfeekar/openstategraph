@@ -1693,6 +1693,76 @@ belongs to some other document — a mounted package's node — and should be
 shown as stored. The editor does exactly this in
 `src/core/runtime/graphName.ts`.
 
+### Optional — recordings: `GET /api/runs/recorded` and `/api/runs/recorded/{thread_id}`
+
+**A different store from the two endpoints above, answering a different
+question.** `GET /api/threads` reads the *checkpointer* and says which
+supersteps ran. These read the local **run store** (`runs.sqlite`, beside the
+checkpoints) and say **how a run's output arrived** — burst by burst, on the
+server's own `elapsedMs` clock, which is the only clock a playhead can honestly
+move over. A deployment may have one and not the other: a run whose checkpoints
+were swept still has a row here, and a run recorded before the cadence was
+stored has a row with no bursts.
+
+`GET /api/runs/recorded` lists runs **newest first**, filterable by
+`workflow_slug`, `session_id` and `thread_id`, capped at 200. Rows carry no
+cadence: a burst list is several kilobytes per run, and a listing should cost
+what a listing costs.
+
+```json
+{
+  "runs": [
+    {
+      "at": "2026-08-30T19:29:20+0200", "workflowSlug": "chinook-assistant",
+      "threadId": "th-chinook-1", "sessionId": "sit-alpha",
+      "question": "Which music genre earned the most revenue, and how much?",
+      "answer": "The Rock genre generated the highest revenue, totaling $826.65.",
+      "seconds": 11.6, "attempts": 0, "failed": false,
+      "usage": [{"model": "gpt-oss:120b-cloud", "inputTokens": 24010,
+                 "outputTokens": 1672, "totalTokens": 25682}],
+      "bursts": []
+    }
+  ]
+}
+```
+
+`GET /api/runs/recorded/{thread_id}` opens one conversation, **oldest first**,
+each turn with its recording. A turn has no id of its own and none is minted —
+it is *the thread it is in and its position in that thread*, which is what a
+conversation is. A burst is one node's output of one block kind, uninterrupted:
+
+```json
+{"node": "model", "activeNode": "agent-sql", "namespace": ["agent_sql:b65e7270"],
+ "block": "text", "kind": "ai", "withheld": false,
+ "firstMs": 10448, "lastMs": 11596, "chunks": 80, "chars": 412,
+ "text": "The Rock genre generated…", "capped": false}
+```
+
+- `node` is the **graph** node — inside an agent, LangGraph's own `model` or
+  `tools`. `activeNode` is the **canvas** node the run said was working, which
+  is the one a reader recognises; `""` means a recording made before the field
+  was stored.
+- `firstMs`/`lastMs` are the same `elapsedMs` the live frame carried —
+  milliseconds since the stream opened, monotonic, saying nothing about *when*
+  the run happened. The wall anchor is the run's `at`.
+- `withheld` is the customer channel having refused the text. The burst is kept
+  anyway, because it still says a node was working.
+- `capped` means **the recording** ended there, not the run.
+- The per-chunk cadence is stored and **not published**: nothing reads it yet.
+
+Both are **reads**, structurally — the only thing they can reach is a store,
+and no verb here can execute anything. `audience` works exactly as it does on
+`GET /api/threads/{id}`: it defaults to `customer`, it is capped by
+`OPENSTATEGRAPH_AUDIENCE`, and it decides whether the **recordings** come back,
+never whether the turns do. A refused recording is a turn with `bursts: []` —
+the same absence a fresh install and a workflow with no model in it answer
+with. `usage` is `null` for a customer, `[]` for a run that called no model,
+and a row per model otherwise.
+
+The editor's **Stored runs** popover is the surface built on these, grouping
+them by sitting, then conversation, then turn, and putting a chosen turn on the
+run timeline.
+
 ---
 
 ## 4. A whole client, in one file

@@ -170,6 +170,27 @@ describe('the toolbar', () => {
     expect(shell).not.toMatch(/run: \(\) => showDock\(/);
   });
 
+  it('carries the stored runs’ control, hung off itself like the workflow list', () => {
+    // `memory-and-replay` 73. The owner asked for "a panel — similar to the
+    // Workflows popover UX in the top bar" — so it is the same pattern, not a
+    // second one: a control in the toolbar, a `Popover` anchored to that
+    // control, bounded by the stage and told when the stage moves.
+    //
+    // Beside the timeline's own control on purpose: the picker replaces what
+    // the dock is drawing, so the thing that opens it belongs next to the
+    // thing that shows it.
+    expect(topbar).toContain('ref={storedRunsAnchorRef}');
+    expect(topbar).toMatch(/label="Stored runs"/);
+    expect(shell).toMatch(/<Popover[\s\S]{0,300}anchorRef=\{storedRunsAnchorRef\}/);
+    expect(shell).toMatch(/<Popover[\s\S]{0,500}<StoredRuns/);
+    // The same two properties `189` bought for the workflow list, on the
+    // popover that sits directly above the surface it drives.
+    expect(shell).toMatch(/anchorRef=\{storedRunsAnchorRef\}[\s\S]{0,400}bounds=\{stageBounds\}/);
+    expect(shell).toMatch(
+      /anchorRef=\{storedRunsAnchorRef\}[\s\S]{0,400}subscribe=\{stageResized\}/,
+    );
+  });
+
   it('keeps Ask in the toolbar rather than beside it', () => {
     expect(topbar).toContain('onAskToggle');
     expect(shell).not.toContain('Ask the workflow');

@@ -23,6 +23,7 @@ import {
   Upload,
   GitBranch,
   ChartGantt,
+  History,
   Crosshair,
   Globe,
   GlobeLock,
@@ -124,6 +125,18 @@ interface TopBarProps {
   /** The run timeline, docked below everything (`memory-and-replay` 51). */
   onTimelineToggle: () => void;
   timelineOpen: boolean;
+  /**
+   * The stored-runs picker (`memory-and-replay` 73) — every run this
+   * deployment's run store kept, and a way to put one on the timeline.
+   *
+   * Beside the timeline's own control, because what it opens is a *source* for
+   * that timeline rather than a surface of its own. Same shape as the
+   * Workflows pair above and for the same reason: the shell owns the popover,
+   * the toolbar owns the rectangle it is centred on.
+   */
+  onStoredRunsToggle: () => void;
+  storedRunsOpen: boolean;
+  storedRunsAnchorRef: Ref<HTMLButtonElement>;
   /** The chat panel, which is where a run is watched. */
   onAskToggle: () => void;
   askOpen: boolean;
@@ -173,6 +186,9 @@ export function TopBar({
   workflowsAnchorRef,
   onTimelineToggle,
   timelineOpen,
+  onStoredRunsToggle,
+  storedRunsOpen,
+  storedRunsAnchorRef,
   onAskToggle,
   askOpen,
   onRun,
@@ -565,6 +581,18 @@ export function TopBar({
               active={timelineOpen}
               icon={<Icon glyph={ChartGantt} size="md" />}
               onClick={onTimelineToggle}
+            />
+          </Tooltip>
+          {/* Beside the timeline's control, because what it opens replaces
+              what that timeline is drawing. Reading a recording spends
+              nothing — `memory-and-replay` 73. */}
+          <Tooltip content="Stored runs — replay a recorded run on the timeline">
+            <IconButton
+              ref={storedRunsAnchorRef}
+              label="Stored runs"
+              active={storedRunsOpen}
+              icon={<Icon glyph={History} size="md" />}
+              onClick={onStoredRunsToggle}
             />
           </Tooltip>
 

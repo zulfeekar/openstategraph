@@ -224,3 +224,19 @@ The **reader is Python-level only** — `read_run_bursts` beside `read_runs`.
 There is no HTTP route and no viewer: that is 50 (a fan-out has no single
 timeline), 51 (where a timeline lives) and 52 (the play button). This ticket
 built the capture and the store, which is what those three were blocked on.
+
+> **Superseded on 2026-08-30, in the part that is a state and not a decision**
+> (`memory-and-replay` 72 and 73). There is an HTTP route —
+> `GET /api/runs/recorded` and `GET /api/runs/recorded/{thread_id}` — and there
+> is a viewer: the **Stored runs** popover in the top bar, which puts a stored
+> recording on the run dock's own timeline. The sentence is left standing
+> rather than edited because everything above it is the argument for the
+> grain, and that argument is unchanged; what has moved is only who can read
+> the rows. The cadence **blob** is still not published, and `60` — the answer
+> re-typed at the rate it arrived — is still open.
+>
+> One thing the record above did not anticipate: a burst did not carry
+> `activeNode`, so the store knew *when* every chunk arrived and not *whose
+> work it was*. `74` added the column. Inside `create_agent` the recorded
+> `node` is LangGraph's own `model` and `tools`, so eight of a real nine-burst
+> `chinook-assistant` recording named no canvas node at all.

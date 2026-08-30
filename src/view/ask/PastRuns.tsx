@@ -33,6 +33,15 @@ import './PastRuns.css';
  * different question with different privacy weight; the editor asks the
  * narrow one, and the backend's filters (`workflow_slug`, `user_email`,
  * `session_id`) are what a wider surface would use.
+ *
+ * **`view/run/StoredRuns` is not this panel moved, and the difference is the
+ * store** (`memory-and-replay` 73). This reads `GET /api/threads` — the
+ * checkpointer — and answers *what supersteps ran*. That reads
+ * `GET /api/runs/recorded` — `runs.sqlite` — and answers *how the output
+ * arrived*, which is the only one of the two that carries the offsets a
+ * playhead can honestly move between. They read different files and can
+ * legitimately disagree: a run whose checkpoints were swept still has a row
+ * there, and a run recorded before `47` has a row with no cadence.
  */
 type Listing =
   | { status: 'loading' }

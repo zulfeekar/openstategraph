@@ -1038,6 +1038,210 @@
         "title": "PublishWorkflowResponse",
         "type": "object"
       },
+      "RecordedBurst": {
+        "description": "One contiguous burst of a stored run's output \u2014 `RunBurst`, on the wire.\n\n`memory-and-replay` 72. A burst is **one node's output of one block kind,\nuninterrupted**, and it is the only thing in this store that carries a\n*measured* start and end: `firstMs` and `lastMs` are the server's own\n`elapsedMs` (`46`), minted where the frame was built, and stored by `47`.\n\n**The per-chunk cadence is deliberately not here.** `RunBurst.cadence`\ncarries every chunk's own offset, and it exists so an answer can be\nre-typed at the rate it arrived \u2014 which is `60`, and `60` is open. A field\nwith no reader is a field that drifts, so this publishes the two ends a\nbar is drawn between and the counts a person asks in SQL, and the day `60`\nships is the day the blob earns a place beside them.",
+        "properties": {
+          "activeNode": {
+            "default": "",
+            "title": "Activenode",
+            "type": "string"
+          },
+          "block": {
+            "default": "text",
+            "title": "Block",
+            "type": "string"
+          },
+          "capped": {
+            "default": false,
+            "title": "Capped",
+            "type": "boolean"
+          },
+          "chars": {
+            "default": 0,
+            "title": "Chars",
+            "type": "integer"
+          },
+          "chunks": {
+            "default": 0,
+            "title": "Chunks",
+            "type": "integer"
+          },
+          "firstMs": {
+            "default": 0,
+            "title": "Firstms",
+            "type": "integer"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "lastMs": {
+            "default": 0,
+            "title": "Lastms",
+            "type": "integer"
+          },
+          "namespace": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Namespace",
+            "type": "array"
+          },
+          "node": {
+            "default": "",
+            "title": "Node",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          },
+          "withheld": {
+            "default": false,
+            "title": "Withheld",
+            "type": "boolean"
+          }
+        },
+        "title": "RecordedBurst",
+        "type": "object"
+      },
+      "RecordedRun": {
+        "description": "One turn out of the local run store \u2014 `RunRecord`, on the wire.\n\nNot `ThreadSummary`'s replacement and not its rival: that shape is read out\nof the **checkpointer** and answers *what supersteps ran*; this is read out\nof `runs.sqlite` and answers *how the output arrived*. Only one of them can\ndrive a playhead, which is why this door exists.",
+        "properties": {
+          "answer": {
+            "default": "",
+            "title": "Answer",
+            "type": "string"
+          },
+          "at": {
+            "default": "",
+            "title": "At",
+            "type": "string"
+          },
+          "attempts": {
+            "default": 0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "bursts": {
+            "items": {
+              "$ref": "#/components/schemas/RecordedBurst"
+            },
+            "title": "Bursts",
+            "type": "array"
+          },
+          "failed": {
+            "default": false,
+            "title": "Failed",
+            "type": "boolean"
+          },
+          "question": {
+            "default": "",
+            "title": "Question",
+            "type": "string"
+          },
+          "seconds": {
+            "default": 0.0,
+            "title": "Seconds",
+            "type": "number"
+          },
+          "sessionId": {
+            "default": "",
+            "title": "Sessionid",
+            "type": "string"
+          },
+          "threadId": {
+            "default": "",
+            "title": "Threadid",
+            "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RecordedUsage"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          },
+          "workflowSlug": {
+            "default": "",
+            "title": "Workflowslug",
+            "type": "string"
+          }
+        },
+        "title": "RecordedRun",
+        "type": "object"
+      },
+      "RecordedRunsResponse": {
+        "description": "`GET /api/runs/recorded` \u2014 every recorded run, newest first.",
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RecordedRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "title": "RecordedRunsResponse",
+        "type": "object"
+      },
+      "RecordedThreadResponse": {
+        "description": "`GET /api/runs/recorded/{thread_id}` \u2014 one conversation's recordings.",
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RecordedRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "threadId": {
+            "title": "Threadid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId"
+        ],
+        "title": "RecordedThreadResponse",
+        "type": "object"
+      },
+      "RecordedUsage": {
+        "description": "What one model cost this run \u2014 `audience.run_usage`'s row, typed.\n\n**Keyed by model, never summed into one integer.** *Which node cost what*\nis only answerable while they are apart, and a single number cannot say\nthat a grader on one provider and an agent on another have two prices.",
+        "properties": {
+          "inputTokens": {
+            "default": 0,
+            "title": "Inputtokens",
+            "type": "integer"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "outputTokens": {
+            "default": 0,
+            "title": "Outputtokens",
+            "type": "integer"
+          },
+          "totalTokens": {
+            "default": 0,
+            "title": "Totaltokens",
+            "type": "integer"
+          }
+        },
+        "title": "RecordedUsage",
+        "type": "object"
+      },
       "ResumeRequest": {
         "additionalProperties": false,
         "description": "Continues a run a `human.approval` node paused.\n\nCarries the whole workflow again (not just the thread id) for the same\nreason `RunRequest` does \u2014 the compile seam is one-directional and\nstateless per call; nothing server-side remembers *which* document a\nthread belongs to between requests, only the checkpointed graph state\nLangGraph itself owns.",
@@ -2553,6 +2757,159 @@
           }
         },
         "summary": "Run a workflow and wait for the whole answer",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/runs/recorded": {
+      "get": {
+        "description": "Every recorded run, newest first, with no cadence attached.\n\nThe listing is rows and a **thread** is what opens, because a burst list is\n5-8 KiB per run and paying for it to render a table would make the cheap\nquestion expensive \u2014 `read_runs`' own argument, applied to a door.\n\nNewest first is the store's indexed order and is not re-sorted here.\n`the-cost-of-one-more/11` made that ordering a derived sort key precisely\nbecause `at` is local wall clock with an offset and sorting it as text\nsorts the same instant a day apart; a route that re-ordered the rows it was\nhanded would put the wrong order back.\n\n**A store that was never written is not an error.** A fresh install has no\nruns, and *no runs* is an answer.",
+        "operationId": "list_recorded_runs_endpoint_api_runs_recorded_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "workflow_slug",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow Slug"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Audience",
+              "default": "customer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordedRunsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recorded runs \u2014 every run this deployment's run store kept",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/runs/recorded/{thread_id}": {
+      "get": {
+        "description": "A conversation's turns, each with the cadence its output arrived at.\n\n**Nothing is re-executed.** Every offset here was measured while the run\nhappened; reading them calls no model and no tool.\n\nA turn has no id of its own and none is minted. The store's own name for a\nrow is a sqlite `rowid` \u2014 storage, not a fact about the run, and meaningless\nto the other sink writing the same record \u2014 and `at` is second precision, so\ntwo turns can share it. A turn is *the thread it is in and its position in\nthat thread*, which is what a conversation is, and this response is that\nposition: oldest first, so reading top to bottom is the conversation\nhappening.\n\n`audience` decides whether the recordings come back at all, never whether\nthe turns do. A refused recording leaves the turn listed with no bursts \u2014\nthe same absence a run recorded before `47`, a workflow with no model in it,\nand a fresh install all answer with.",
+        "operationId": "read_recorded_thread_endpoint_api_runs_recorded__thread_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Audience",
+              "default": "customer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordedThreadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One conversation's recordings, turn by turn",
         "tags": [
           "Runs"
         ]

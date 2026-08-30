@@ -1,0 +1,149 @@
+/* Stored runs — the run store's own listing, in a top-bar popover.
+ *
+ * Same token scale as the panels it sits beside (`--space-2` inside a block,
+ * `--space-3` between blocks) so the popover reads as one surface with the
+ * Workflows popover it was asked to match. Quieter than a conversation on
+ * purpose: this is a picker, and the thing worth looking at is the timeline it
+ * puts on the dock. */
+
+.stored-runs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 22rem;
+  max-width: 30rem;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.stored-runs__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.stored-runs__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--type-label);
+  color: var(--color-text-secondary);
+}
+
+.stored-runs__bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.stored-runs__back {
+  align-self: flex-start;
+  gap: var(--space-2);
+}
+
+.stored-runs__note {
+  margin: 0;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.stored-runs__sitting {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.stored-runs__sitting-title {
+  margin: 0;
+  font: var(--type-label);
+  color: var(--color-text-tertiary);
+  text-transform: none;
+}
+
+.stored-runs__thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border-left: var(--border-width-hairline) solid var(--color-border);
+  padding-left: var(--space-2);
+}
+
+.stored-runs__thread-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: var(--type-body-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.stored-runs__thread-head:hover {
+  background: var(--color-bg-hover);
+}
+
+.stored-runs__thread-slug {
+  font-weight: 600;
+}
+
+.stored-runs__thread-id,
+.stored-runs__count {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.stored-runs__count {
+  margin-left: auto;
+}
+
+.stored-runs__turn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-2);
+  margin-left: var(--space-3);
+  border: var(--border-width-hairline) solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: var(--type-body-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.stored-runs__turn:hover {
+  background: var(--color-bg-hover);
+}
+
+/* The recording currently on the dock. The dock's own header says the same
+ * thing in words — this is the echo in the list somebody picked it from.
+ * Fill and not a darker edge: `--color-border-emphasis` is interaction state
+ * at recorded sites only, and a resting selected row is not one. */
+.stored-runs__turn[data-showing] {
+  background: var(--color-bg-selected);
+}
+
+.stored-runs__turn-question {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stored-runs__turn-facts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.stored-runs__failed {
+  color: var(--color-danger);
+}

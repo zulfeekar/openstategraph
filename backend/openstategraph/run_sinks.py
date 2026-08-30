@@ -255,9 +255,28 @@ class RunBurst(BaseModel):
     an answer; it is never a run that took zero milliseconds.
     """
 
-    #: The canvas node id whose output this is, and its subgraph namespace.
+    #: The graph node whose output this is, and its subgraph namespace.
+    #:
+    #: **Inside an agent this is LangGraph's own loop node** — `model`,
+    #: `tools` — and not the canvas node a reader drew. `active_node` below is
+    #: the one that answers that.
     node: str = ""
     namespace: list[str] = Field(default_factory=list)
+
+    #: The canvas node the run said was working — the `token` frame's own
+    #: `activeNode` (`memory-and-replay` 74).
+    #:
+    #: The frame has carried it since the ticket that put it there, for a
+    #: reason that applies here word for word: a `token` frame is the only one
+    #: that arrives while a node is **still working**, and `updates` fires on
+    #: completion, so anything built from completions alone can only ever say
+    #: who last finished. `47` read every other field of that frame and dropped
+    #: this one, which left eight of a real nine-burst recording unable to say
+    #: whose work they were.
+    #:
+    #: `""` is *this recording did not say* — an old row, or a frame that named
+    #: nobody — and never a node inferred after the fact.
+    active_node: str = ""
 
     #: `text` | `reasoning` — which kind of text, exactly as the `token` frame's
     #: `block` says it. Two blocks are never one burst: a reasoning model's
@@ -699,6 +718,7 @@ _BURST_COLUMNS: tuple[str, ...] = (
     "run_rowid",
     "ord",
     "node",
+    "active_node",
     "namespace",
     "block",
     "kind",
@@ -1332,6 +1352,7 @@ def read_runs(
     kind: str | None = None,
     limit: int = 100,
     with_bursts: bool = False,
+    audience: str | None = None,
 ) -> list[RunRecord]:
     """Rows back out of the local store, newest first. The same rows, as objects.
 
@@ -1347,10 +1368,35 @@ def read_runs(
     an export that dropped the cadence would leave a person truncating a store
     on the strength of a file that had not carried everything.
 
+    **And asking for it costs an `audience`** (`memory-and-replay` 71).
+    `read_run_bursts` has required that keyword since
+    `the-boundary-nobody-checked/02`, for a reason that is a property of the
+    *table* and not of that function: `RunBurst.audience` is stored so a reader
+    can refuse, and a developer run's bursts carry developer content. This
+    reader reaches the same table through `_attach_bursts` and had no such
+    parameter, so the two readers of one column disagreed about whether it was
+    a gate — and the first HTTP door built on either would have inherited a
+    refusal nothing told it about. Nothing leaked: the only caller was
+    `openstategraph runs export`, an operator reading their own machine. The
+    next caller was a route.
+
+    A raise rather than a default, and the same rule spelled the only way a
+    boolean flag allows: `read_run_bursts` makes the question impossible to
+    skip because a keyword with no default does not compile, and here it is
+    impossible to skip because asking for the cadence without it does not run.
+    The listing itself needs no audience — a run's own columns are the run, and
+    only the recording quotes what a stream said.
+
     **A store that was never written is not an error.** A fresh install has no
     runs, and *no runs* is an answer; so is a file this build cannot read, which
     warns and returns nothing rather than taking down the command that asked.
     """
+    if with_bursts and audience is None:
+        raise ValueError(
+            "read_runs(with_bursts=True) needs an audience: a run's cadence is "
+            "recorded per stream, and whose stream it was is what decides "
+            "whether this reader may have it."
+        )
     target = Path(path) if path is not None else run_store_path()
     if target is None or not target.exists():
         return []
@@ -1397,7 +1443,13 @@ def read_runs(
             # Keyed by `runs.rowid`, never by `thread_id`: a thread is a
             # conversation and holds many turns, so filtering by it would give
             # every turn the whole conversation's cadence.
-            _attach_bursts(connection, [row[0] for row in rows], records, target)
+            _attach_bursts(
+                connection,
+                [row[0] for row in rows],
+                records,
+                target,
+                audience=audience or "",
+            )
     except sqlite3.Error as exc:
         logger.warning("Could not read the run store at %s: %s", target, exc)
         return []
@@ -1411,6 +1463,8 @@ def _attach_bursts(
     rowids: list[Any],
     records: list[RunRecord],
     target: Path,
+    *,
+    audience: str,
 ) -> None:
     """Each row's cadence onto the record that produced it, a batch at a time.
 
@@ -1432,6 +1486,13 @@ def _attach_bursts(
     **A refused read raises.** It is not *no cadence*; it is cadence this read
     did not get, and the caller that asked for it is the export somebody runs
     before truncating.
+
+    `audience` is read exactly as `read_run_bursts` reads it and the clause is
+    the same one: `"developer"` takes everything, anything else takes only what
+    a **customer's own stream** produced — never a developer run's, and never a
+    row whose provenance was not recorded, because unknown is not a customer's.
+    A run whose recording is refused keeps its row and loses its cadence, which
+    is the absence an old store already answers with.
     """
     if not rowids:
         return
@@ -1439,6 +1500,8 @@ def _attach_bursts(
         known = _known_burst_columns(connection)
         if not known:
             return
+        refusal = "" if audience == "developer" else " AND audience = ?"
+        refused: list[Any] = [] if audience == "developer" else ["customer"]
         rows: list[Any] = []
         for start in range(0, len(rowids), CADENCE_BATCH):
             batch = rowids[start : start + CADENCE_BATCH]
@@ -1446,8 +1509,9 @@ def _attach_bursts(
             rows.extend(
                 connection.execute(
                     f"SELECT run_rowid,{','.join(known)} FROM run_bursts "
-                    f"WHERE run_rowid IN ({placeholders}) ORDER BY run_rowid, ord",
-                    batch,
+                    f"WHERE run_rowid IN ({placeholders}){refusal} "
+                    "ORDER BY run_rowid, ord",
+                    [*batch, *refused],
                 ).fetchall()
             )
     except sqlite3.Error as exc:
@@ -1490,6 +1554,7 @@ def _burst_row(run_rowid: int | None, order: int, burst: RunBurst) -> tuple[Any,
         run_rowid,
         order,
         burst.node,
+        burst.active_node,
         json.dumps(burst.namespace),
         burst.block,
         burst.kind,

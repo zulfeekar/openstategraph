@@ -762,3 +762,22 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* The way back out of a recording — `memory-and-replay` 73. Styled as the
+ * export control beside it rather than as a primary action: leaving a
+ * recording is a navigation, not a commitment, and nothing is spent either
+ * way. */
+.run-dock__back {
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font: var(--type-caption);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+}
+
+.run-dock__back:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}

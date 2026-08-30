@@ -155,7 +155,7 @@ def test_every_indexed_column_can_be_the_missing_one(
     sink.close()
 
     assert "after" in _threads(path)
-    read_back = run_sinks.read_runs(path=path, with_bursts=True)
+    read_back = run_sinks.read_runs(path=path, with_bursts=True, audience="developer")
     assert [burst.text for burst in read_back[0].bursts] == ["hi"]
 
 

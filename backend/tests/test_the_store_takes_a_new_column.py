@@ -89,7 +89,7 @@ def test_the_burst_table_is_reconciled_on_the_same_open(
     sink.close()
 
     assert "capped" in _columns(path, "run_bursts")
-    read_back = run_sinks.read_runs(path=path, with_bursts=True)
+    read_back = run_sinks.read_runs(path=path, with_bursts=True, audience="developer")
     assert [b.capped for b in read_back[0].bursts] == [True]
 
 

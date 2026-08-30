@@ -90,12 +90,53 @@ const NOTHING: RunView = {
 };
 
 export class RunViewStore {
-  #held: RunView = NOTHING;
+  #live: RunView = NOTHING;
+  /**
+   * The recording on show, or `null` when the dock is on the live run.
+   *
+   * `memory-and-replay` 73. Two fields rather than one, because the live run
+   * **keeps arriving** while a recording is up: `AskPanel`'s writer is an
+   * effect keyed on the turn list, and a run streaming in the background must
+   * not be lost because somebody opened a recording, nor allowed to shove the
+   * recording off the surface frame by frame. So a publish always lands, and
+   * what is *shown* is decided here.
+   */
+  #recording: RunView | null = null;
   readonly #listeners = new Set<() => void>();
 
   /** The same object until something actually changes, so React can compare by identity. */
   read(): RunView {
-    return this.#held;
+    return this.#recording ?? this.#live;
+  }
+
+  /** Whether a recording is on the surface — what the way back is offered on. */
+  held(): boolean {
+    return this.#recording !== null;
+  }
+
+  /**
+   * Show a stored recording instead of the live run.
+   *
+   * Replaces a recording already up, so a reader picking a second row out of
+   * the list does not have to come home between the two.
+   */
+  hold(recording: RunView): void {
+    if (this.#recording !== null && same(this.#recording, recording)) return;
+    this.#recording = recording;
+    this.#notify();
+  }
+
+  /**
+   * Back to the live run — the way back, and the owner asked for it by name.
+   *
+   * Puts back **whatever the live side has reached in the meantime**, not what
+   * was on screen when the recording was opened: a run that finished behind a
+   * held recording is the run a reader is coming back to see.
+   */
+  release(): void {
+    if (this.#recording === null) return;
+    this.#recording = null;
+    this.#notify();
   }
 
   /**
@@ -107,23 +148,23 @@ export class RunViewStore {
    * every keystroke in the composer as well.
    */
   publish(view: RunView): void {
-    const held = this.#held;
-    if (
-      held.source === view.source &&
-      held.question === view.question &&
-      held.running === view.running &&
-      held.rows === view.rows &&
-      held.threadId === view.threadId &&
-      held.usage === view.usage
-    ) {
-      return;
-    }
-    this.#held = view;
-    for (const listener of [...this.#listeners]) listener();
+    // A run that has *started* takes the surface back, and that is a decision
+    // rather than an oversight: a reader who pressed Run wants to watch it,
+    // and losing a live run behind a recording nobody closed is the worse of
+    // the two failures because it is the silent one. A finished run publishing
+    // behind a recording is not that — it is a run arriving, and it waits.
+    // Two questions, and they are two: whether the *live* view changed, and
+    // whether what is *on screen* did. A publish behind a held recording
+    // changes the first and not the second.
+    const wasShowing = this.read();
+    if (view.running) this.#recording = null;
+    if (!same(this.#live, view)) this.#live = view;
+    if (this.read() !== wasShowing) this.#notify();
   }
 
   /** Back to having nothing to draw — a fresh canvas, a closed conversation. */
   clear(): void {
+    this.#recording = null;
     this.publish(NOTHING);
   }
 
@@ -133,6 +174,22 @@ export class RunViewStore {
       this.#listeners.delete(listener);
     };
   }
+
+  #notify(): void {
+    for (const listener of [...this.#listeners]) listener();
+  }
+}
+
+/** Whether two snapshots say the same thing about the same run. */
+function same(a: RunView, b: RunView): boolean {
+  return (
+    a.source === b.source &&
+    a.question === b.question &&
+    a.running === b.running &&
+    a.rows === b.rows &&
+    a.threadId === b.threadId &&
+    a.usage === b.usage
+  );
 }
 
 /**

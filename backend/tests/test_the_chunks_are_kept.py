@@ -297,7 +297,7 @@ class TestTheExportCarriesIt:
         sink.close()
         from openstategraph.run_sinks import read_runs
 
-        rows = read_runs(tmp_path / "runs.sqlite", thread_id="t", with_bursts=True)
+        rows = read_runs(tmp_path / "runs.sqlite", thread_id="t", with_bursts=True, audience="developer")
         assert [[b.text for b in row.bursts] for row in rows] == [["second"], ["first"]]
 
     def test_a_listing_that_did_not_ask_does_not_pay_for_it(self, tmp_path: Path):
@@ -312,7 +312,7 @@ class TestTheExportCarriesIt:
         from openstategraph.run_sinks import read_runs
 
         assert read_runs(tmp_path / "runs.sqlite", thread_id="t")[0].bursts == []
-        assert read_runs(tmp_path / "runs.sqlite", thread_id="t", with_bursts=True)[
+        assert read_runs(tmp_path / "runs.sqlite", thread_id="t", with_bursts=True, audience="developer")[
             0
         ].bursts
 

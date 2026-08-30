@@ -29,6 +29,7 @@ import { observeResize } from './layout/observeResize';
 import { clampDockHeight } from './layout/dockFit';
 import { RunDock } from './run/RunDock';
 import { runView } from './run/runView';
+import { StoredRuns } from './run/StoredRuns';
 import { readDockHeight, rememberDockHeight } from './run/dockHeightMemory';
 import { interruptedRunNotice, takeInterruptedRun } from './ask/interruptedRun';
 import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
@@ -166,6 +167,8 @@ export function AppShell() {
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [mcpServersOpen, setMcpServersOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
+  /** The stored-runs picker (`memory-and-replay` 73), hung off its own control. */
+  const [storedRunsOpen, setStoredRunsOpen] = useState(false);
 
   /* ---------------- the two things the run dock adds ----------------
    *
@@ -184,6 +187,7 @@ export function AppShell() {
   const shellRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const workflowsAnchorRef = useRef<HTMLButtonElement>(null);
+  const storedRunsAnchorRef = useRef<HTMLButtonElement>(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
   /**
    * Whether the user has said anything about the dock yet.
@@ -217,6 +221,18 @@ export function AppShell() {
   const closeDock = useCallback(() => {
     dockDecided.current = true;
     setTimelineOpen(false);
+  }, []);
+  /**
+   * Bring the dock up because a recording was chosen (`memory-and-replay` 73).
+   *
+   * One-way, like the first run of a tab: choosing a recording is an
+   * unambiguous request to look at one, and a picker whose effect lands on a
+   * closed surface does nothing a reader can see. It marks the dock decided,
+   * so the reader's own answer stands from here on.
+   */
+  const showTheDock = useCallback(() => {
+    dockDecided.current = true;
+    setTimelineOpen(true);
   }, []);
   const [dockHeight, setDockHeight] = useState(readDockHeight);
 
@@ -585,6 +601,9 @@ export function AppShell() {
         // anything else into it; an anchor is the one thing that genuinely
         // cannot live anywhere but on the control.
         workflowsAnchorRef={workflowsAnchorRef}
+        onStoredRunsToggle={() => setStoredRunsOpen((value) => !value)}
+        storedRunsOpen={storedRunsOpen}
+        storedRunsAnchorRef={storedRunsAnchorRef}
         timelineOpen={timelineOpen}
         onTimelineToggle={toggleDock}
         askOpen={askOpen}
@@ -735,6 +754,23 @@ export function AppShell() {
             onClose={() => setWorkflowManagerOpen(false)}
             onNotify={onNotify}
           />
+        </Popover>
+
+        {/* The stored runs, on the same pattern and for the same reasons —
+            centred on the control that opened it, bounded by the stage, and
+            told when the dock's edge moves. It sits above the surface it
+            drives, which is the placement `63` argued for the dock itself:
+            a control whose effect happens where the user is not looking is a
+            control in the wrong place. */}
+        <Popover
+          open={storedRunsOpen}
+          anchorRef={storedRunsAnchorRef}
+          onClose={() => setStoredRunsOpen(false)}
+          label="Stored runs"
+          bounds={stageBounds}
+          subscribe={stageResized}
+        >
+          <StoredRuns onClose={() => setStoredRunsOpen(false)} onShowTimeline={showTheDock} />
         </Popover>
       </div>
 
