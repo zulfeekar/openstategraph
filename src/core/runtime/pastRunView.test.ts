@@ -7,6 +7,7 @@ import {
   relativeTime,
   stepLines,
   stepCost,
+  truncationLine,
   stepTitle,
   toolCallLine,
 } from './pastRunView';
@@ -428,5 +429,42 @@ describe('stepCost', () => {
         tokens: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
       }),
     ).toBe('12 tokens (10 in · 2 out)');
+  });
+});
+
+describe('truncationLine', () => {
+  const cut = { kept: 200, end: 'oldest', limit: 200, message: 'server sentence' };
+
+  it('says nothing when the whole thread came back', () => {
+    expect(truncationLine(null)).toBe('');
+  });
+
+  it('says which end is missing and how much came back', () => {
+    const line = truncationLine(cut);
+    expect(line).toContain('Older');
+    expect(line).toContain('200');
+  });
+
+  it('names the cost of the missing end, which is the orphaned tool call', () => {
+    // `docs/api.md`: a tool *result* whose request fell outside the window is
+    // listed with an empty `arguments`. A reader who is not told that reads a
+    // blank argument list as a tool called with nothing.
+    expect(truncationLine(cut)).toContain('arguments');
+  });
+
+  it('does not offer a control this editor does not have', () => {
+    // The server's own message ends "ask again with a higher limit (up to
+    // 2000)". The CLI and a direct API caller can; the History lane has no
+    // limit control, so repeating that sentence would describe something
+    // unbuilt.
+    const line = truncationLine(cut);
+    expect(line).not.toContain('limit');
+    expect(line).not.toContain('server sentence');
+  });
+
+  it('reads a truncation of some other end without inventing a direction', () => {
+    // `end` is a string on the wire, not an enum. Tolerant in reading: an end
+    // this client has never seen still produces a true sentence.
+    expect(truncationLine({ ...cut, end: 'newest' })).toContain('Some');
   });
 });

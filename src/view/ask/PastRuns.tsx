@@ -11,6 +11,7 @@ import {
   stepLines,
   stepTitle,
   toolCallLine,
+  truncationLine,
 } from '@core/runtime/pastRunView';
 import './PastRuns.css';
 
@@ -229,6 +230,15 @@ function RunHistory({ run, names }: { run: PastRun; names?: ReadonlyMap<string, 
           This run is parked at an approval. Ask again in the chat above to continue it — history
           only reads.
         </p>
+      ) : null}
+      {/*
+        Where the missing supersteps would have been (`the-cost-of-one-more/13`).
+        The lanes below are oldest first, and the end this read dropped is the
+        oldest one, so the disclosure sits above them rather than under the
+        rows — a banner after the list would be true and in the wrong place.
+      */}
+      {state.history.truncation ? (
+        <p className="past-runs__note">{truncationLine(state.history.truncation)}</p>
       ) : null}
       {/*
         One lane per graph, never one flat list. A run of this workflow

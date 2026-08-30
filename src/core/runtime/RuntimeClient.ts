@@ -1016,10 +1016,45 @@ export interface PastRunStep {
   readonly tokens: PastRunTokens | null;
 }
 
+/**
+ * The part of a run this history did **not** read.
+ *
+ * `GET /api/threads/{id}` keeps the newest `limit` checkpoints and, since
+ * `the-cost-of-one-more/06`, says so. Until `13` this client read the response's
+ * first two keys and no third, so a five-thousand-superstep run and the last
+ * two hundred of one were the same thing on screen — which is precisely the
+ * state 06 was filed to end, surviving on the surface most people read the API
+ * through.
+ *
+ * `null` when the whole thread came back. Never a zeroed row: a truncation of
+ * nothing is not a truncation, and testing the field for truth is the reading
+ * everybody will write.
+ */
+export interface PastRunTruncation {
+  /** How many checkpoints this history holds. */
+  readonly kept: number;
+  /** Which end is missing — `oldest`, because the newest are the ones kept. */
+  readonly end: string;
+  /** The bound that decided it. */
+  readonly limit: number;
+  /**
+   * The server's own sentence.
+   *
+   * Carried, and deliberately **not** what the History lane prints: it ends
+   * *"ask again with a higher limit"*, which is a control the CLI and a direct
+   * API caller have and this editor does not. A surface that repeats it would
+   * be describing something unbuilt. `truncationLine` in `pastRunView` says
+   * the same fact in the words of a reader who can only look.
+   */
+  readonly message: string;
+}
+
 export interface PastRunHistory {
   readonly run: PastRun;
   /** Oldest first, so reading top to bottom is watching the run happen. */
   readonly steps: readonly PastRunStep[];
+  /** What the read left behind, or `null` when it left nothing behind. */
+  readonly truncation: PastRunTruncation | null;
 }
 
 export interface PastRunQuery {
@@ -1611,6 +1646,7 @@ export class RuntimeClient implements IRuntimeClient {
       const steps = Array.isArray(payload['steps']) ? payload['steps'] : [];
       return Ok({
         run: asPastRun(asRecordOfUnknown(payload['thread'])),
+        truncation: asTruncation(payload['truncation']),
         steps: steps.map((step) => {
           const row = asRecordOfUnknown(step);
           return {
@@ -1785,6 +1821,32 @@ function asTokens(value: unknown): PastRunTokens | null {
     inputTokens: count('input_tokens'),
     outputTokens: count('output_tokens'),
     totalTokens: count('total_tokens'),
+  };
+}
+
+/**
+ * A truncation block, or `null`.
+ *
+ * Same shape of decision as `asTokens`: absent means *nothing was left
+ * behind*, and a missing block never becomes a zeroed one — a `kept: 0`
+ * truncation would claim a read that returned nothing.
+ *
+ * A block that arrives without a usable `kept` is dropped rather than
+ * defaulted, because every word the lane says about it is built from that
+ * number, and a sentence built on a zero would be worse than silence.
+ */
+function asTruncation(value: unknown): PastRunTruncation | null {
+  if (value === null || value === undefined) return null;
+  const row = asRecordOfUnknown(value);
+  if (typeof row['kept'] !== 'number') return null;
+  return {
+    kept: row['kept'],
+    // Defaulted, unlike `kept`: the schema defaults it server-side too, and
+    // *which* end is missing is the one part of this a client can assume,
+    // because the store yields newest first and always has.
+    end: asString(row['end']) || 'oldest',
+    limit: typeof row['limit'] === 'number' ? row['limit'] : row['kept'],
+    message: asString(row['message']),
   };
 }
 

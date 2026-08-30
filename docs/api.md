@@ -1557,6 +1557,10 @@ long history:
   (`the-cost-of-one-more/06`).
 
 `openstategraph threads show` prints the same sentence as a `truncated:` line.
+The editor's History lane says the same fact in its own words, above the rows,
+where the missing supersteps would have been — it does not repeat this
+`message`, because the message ends by telling you to raise `limit` and that
+lane has no control that could (`the-cost-of-one-more/13`).
 
 #### A stored run has an audience too
 

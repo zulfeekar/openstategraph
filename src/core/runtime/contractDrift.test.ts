@@ -413,6 +413,147 @@ describe('the client and the published contract', () => {
     }
   });
 
+  /**
+   * The response half again, and this time as a **census** rather than a list.
+   *
+   * The assertion above names five fields of one schema, and that is exactly
+   * as much drift as it can see. `the-cost-of-one-more/06` added
+   * `ThreadHistoryResponse.truncation` — the field that says a run came back
+   * cut off at its oldest end — regenerated `docs/openapi.json`, documented it
+   * in `docs/api.md`, and this whole file stayed green while the editor's
+   * History lane went on drawing a 5,000-superstep run as a 200-superstep one
+   * (`the-cost-of-one-more/13`). A drift test that passes on an unmirrored
+   * field pins the fields somebody already thought of.
+   *
+   * So the roll is taken the way the stream consumers above are: **derived**.
+   * Every property reachable from the 200 response of every endpoint the
+   * client calls, resolved through `$ref`, must appear in the client as a
+   * property — a quoted key (`payload['truncation']`), a dot access
+   * (`payload.sources`), or a declared one (`truncation?: unknown`). Those are
+   * the three spellings this client actually reads a wire field with, and
+   * asking for the name as a bare word instead would pass on any field whose
+   * name happens to be an ordinary identifier somewhere in seven hundred
+   * lines.
+   *
+   * This is the census the comment above declined as too broad — "a census
+   * over every response schema would fail on fields the editor has good reason
+   * never to read". It was measured before it was written: **114 fields, four
+   * unread**, which is a table of exceptions a person can read rather than a
+   * suppression. The narrow pin above is kept, not replaced: it also asserts
+   * the *schema* still declares those five, which a client-side census cannot.
+   */
+  const UNREAD_BY_DESIGN: Readonly<Record<string, string>> = {
+    // Four fields published and read by nothing — the same shape as the
+    // finding this census is named for, one severity down, because none of
+    // them contradicts what the editor draws the way `truncation` did. Filed
+    // as `the-cost-of-one-more/14` rather than folded in here, and named
+    // rather than left to silence. An exemption pointing at a ticket is a
+    // debt; the four below say which.
+    editor_stale: 'the-cost-of-one-more/14 — nothing warns that this editor bundle is stale',
+    default_model: 'the-cost-of-one-more/14 — the picker never says which model is the default',
+    pause: 'the-cost-of-one-more/14 — the History lane says a run is parked, not what it asks',
+    note: 'the-cost-of-one-more/14 — publish drops the backend sentence about routing knowledge',
+    // The one genuine by-design entry. `MountDocumentResponse` echoes the
+    // address the client just asked with; `WorkflowFileClient` built that URL
+    // out of an address it already holds, so reading the echo back would be
+    // the client learning its own argument.
+    mount_path: 'the address the client sent — reading the echo teaches it nothing',
+    // One name for two things, and only one half is by design.
+    // `ValidateResponse.findings` is the document's own validation, which the
+    // editor derives continuously from the same rules in `core/model` and
+    // renders itself — a client with a narrower job, the distinction the
+    // frame-field pin above draws. `WorkflowSummaryResponse.findings` is the
+    // catalogue row's *package-contract* lines, which only the backend can
+    // know because only it can read the folder, and no surface shows them.
+    // Named as the second half rather than covered by the first.
+    findings:
+      'the editor renders its own document validation; the catalogue half is the-cost-of-one-more/14',
+  };
+
+  /** Every property name reachable from a schema, `$ref`s resolved. */
+  function fieldsOf(schema: unknown, seen: Set<string>, found: Set<string>): void {
+    if (schema === null || typeof schema !== 'object') return;
+    const node = schema as Record<string, unknown>;
+    const ref = node['$ref'];
+    if (typeof ref === 'string') {
+      const name = ref.split('/').pop() as string;
+      if (seen.has(name)) return;
+      seen.add(name);
+      fieldsOf(openapi.components.schemas[name], seen, found);
+      return;
+    }
+    const properties = node['properties'];
+    if (properties && typeof properties === 'object') {
+      for (const [key, value] of Object.entries(properties as Record<string, unknown>)) {
+        found.add(key);
+        fieldsOf(value, seen, found);
+      }
+    }
+    for (const key of ['items', 'anyOf', 'allOf', 'oneOf', 'additionalProperties']) {
+      const branch = node[key];
+      if (Array.isArray(branch)) branch.forEach((entry) => fieldsOf(entry, seen, found));
+      else if (branch) fieldsOf(branch, seen, found);
+    }
+  }
+
+  /** Every field the endpoints this client calls can send back to it. */
+  function fieldsThePublishedContractSends(): Map<string, string> {
+    const called = new Set(pathsCalledByTheClient());
+    const where = new Map<string, string>();
+    const seen = new Set<string>();
+    for (const [path, operations] of Object.entries(openapi.paths)) {
+      if (!called.has(normalise(path))) continue;
+      for (const [method, operation] of Object.entries(operations as Record<string, unknown>)) {
+        const schema = (operation as { responses?: Record<string, Record<string, never>> })
+          ?.responses?.['200']?.['content']?.['application/json']?.['schema'];
+        if (!schema) continue;
+        const found = new Set<string>();
+        fieldsOf(schema, seen, found);
+        for (const field of found) if (!where.has(field)) where.set(field, `${method} ${path}`);
+      }
+    }
+    return where;
+  }
+
+  /**
+   * The three spellings this client reads a wire field with — and no fourth.
+   * A bare-word match would make `end`, `kept` and `pause` pass on the strength
+   * of an unrelated local variable, which is a pin that cannot fail.
+   */
+  const clientReads = (field: string): boolean =>
+    new RegExp(`(['"]${field}['"]|\\.${field}(?![\\w$])|(?<![\\w$.])${field}\\??\\s*:)`).test(
+      client,
+    );
+
+  it('reads every field the endpoints it calls can send back', () => {
+    const published = fieldsThePublishedContractSends();
+
+    // Anti-vacuity, both halves: a walker that resolved no `$ref` would make
+    // the loop below a statement about nothing, and the finding this test is
+    // named for is a field two levels down a `$ref`.
+    expect(published.size).toBeGreaterThan(80);
+    expect([...published.keys()]).toContain('truncation');
+
+    const unread = [...published.keys()].filter((field) => !clientReads(field));
+
+    expect(
+      unread.filter((field) => !(field in UNREAD_BY_DESIGN)),
+      `published and unread: ${unread
+        .map((field) => `${field} (${published.get(field)})`)
+        .join(', ')} — the server sends it, the contract documents it, and no ` +
+        `consumer of this client can see it. Mirror it, or record it in ` +
+        `UNREAD_BY_DESIGN with the reason.`,
+    ).toEqual([]);
+
+    // Equality in the other direction too, the same way IGNORED_BY_DESIGN is
+    // asserted: a field that got mirrored after all cannot linger here as a
+    // recorded exception nobody re-reads.
+    expect(
+      Object.keys(UNREAD_BY_DESIGN).filter((field) => clientReads(field)),
+      'recorded as unread but the client reads it — delete the entry',
+    ).toEqual([]);
+  });
+
   it('sends run fields the contract declares', () => {
     // The keys `runBody` writes must be ones `RunRequest` accepts, or the
     // server ignores them and the editor loses a feature silently — which is

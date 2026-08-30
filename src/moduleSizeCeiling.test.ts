@@ -139,7 +139,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       and it is now the only structural one left.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 700,
+    lines: 715,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -179,7 +179,15 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       the paragraph above says this measure charges for. The behaviour added is
       two \`else if\` branches in \`consumeFrame\` and one \`asRunUsage\` reader,
       and the physical count moved by more than the code count, which is the
-      shape this number exists to distinguish from behaviour arriving.`,
+      shape this number exists to distinguish from behaviour arriving.
+
+      **700 -> 715** (\`the-cost-of-one-more/13\`). \`PastRunTruncation\` and its
+      four documented members, plus an \`asTruncation\` reader of the same shape
+      as \`asTokens\` beside it and one line in \`pastRun\`. The same bill again,
+      and this time the entry's argument is load-bearing in the other direction
+      too: the field existed on the wire, was documented, was published, and
+      was mirrored by nobody for a day — so these fifteen lines are the
+      practice working rather than the file drifting.`,
   },
 };
 
