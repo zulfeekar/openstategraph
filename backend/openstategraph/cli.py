@@ -875,12 +875,12 @@ def cmd_init(args: argparse.Namespace) -> int:
         # The same review the refusal prints, printed again as a report — this
         # is now what the project reads, and a reader should see the list they
         # consented to rather than take the word `--adopt` on trust.
-        from openstategraph.scaffold import _review_lines
+        from openstategraph.scaffold import review_lines
 
         count = len(result.adopted)
         noun = "package" if count == 1 else "packages"
         print(f"adopted {args.workflows_dir}/ — {count} {noun} already in it:")
-        for line in _review_lines(result.adopted):
+        for line in review_lines(result.adopted):
             print(line)
         print("  no starter was written into it — those packages are yours")
 
@@ -941,7 +941,9 @@ def cmd_init(args: argparse.Namespace) -> int:
     print("next:")
     if label != ".":
         print(f"  cd {label}")
-    print("  openstategraph serve --open")
+    # The one verb, not `serve --open`: `init`'s last line is where a reader
+    # learns which command they will type every day (install-experience/26).
+    print("  openstategraph .")
     if result.starter is not None:
         print(f'  openstategraph run {args.workflows_dir}/{result.starter.name} "hello"')
     return EXIT_OK
@@ -1569,12 +1571,19 @@ def startup_facts() -> list[str]:
     said the rest.
     """
     from openstategraph.providers import provider_catalogue
-    from openstategraph.workflows_root import workflows_root
+    from openstategraph.workflows_root import resolve_workflows_root
 
     default = provider_catalogue().elected_default()
+    # Three lines, not two: *where* was already answered and *what chose it*
+    # was not, and four sources decide it (install-experience/26). A reader
+    # surprised by the directory could previously only find out by reading
+    # source. This is the one place it is printed, which is why `open` does
+    # not print it a second time.
+    root = resolve_workflows_root()
     return [
         f"default model  {default.model or '(none)'}",
-        f"workflows      {workflows_root()}",
+        f"workflows      {root.path}",
+        f"               {root.why}",
     ]
 
 
@@ -1708,6 +1717,62 @@ def cmd_serve(args: argparse.Namespace) -> int:
         sockets=[listener]
     )
     return EXIT_OK
+
+
+def cmd_open(args: argparse.Namespace) -> int:
+    """`openstategraph open [dir]` — the developer's one verb.
+
+    install-experience/26. Everything it decides is
+    `openstategraph.opening.plan`, and everything it serves is `cmd_serve`;
+    what lives here is the three things a decision cannot do for itself —
+    stand in the directory, ask the question, make the folder.
+
+    **`chdir` is the whole of what the argument does, and that is deliberate.**
+    The path could have been threaded into `workflows_root()` as a sixth
+    source, and that would have been a second precedence chain answering a
+    question one already answers. Standing in the directory instead means the
+    existing chain — environment, config file, checkout, convention — runs
+    unchanged and merely *reports* which of the four won. So a project's own
+    committed `workflows_dir:` still beats the folder you pointed at, and you
+    are told that it did, which is the failure this verb was filed over rather
+    than a new one.
+
+    **Not `serve` with an argument.** `serve` is what a deployment runs: no
+    browser, no questions, no directory. This one opens a browser by default
+    and can ask to create a folder, and a container must not be able to reach
+    either by accident.
+    """
+    from openstategraph import opening
+    from openstategraph.config_file import reset_active_config
+
+    target = Path(args.directory or ".").expanduser()
+    if not target.is_dir():
+        return _usage(f"{target} is not a directory.")
+    os.chdir(target)
+    # The config file that was active belonged to wherever this process
+    # started; the project it was just pointed at is the one to describe.
+    reset_active_config()
+
+    can_ask = not args.no_input and sys.stdin.isatty()
+    plan = opening.plan(Path.cwd(), create=args.create, can_ask=can_ask)
+    if plan.refusal is not None:
+        return _usage(plan.refusal)
+    for line in plan.lines:
+        print(line)
+    print()
+
+    if plan.consent_needed:
+        try:
+            answer = input(opening.prompt_line(plan.workflows_root))
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in {"y", "yes"}:
+            return _usage(f"Nothing was written. {plan.workflows_root} does not exist.")
+    if plan.consent_needed or plan.will_create:
+        plan.workflows_root.mkdir(parents=True, exist_ok=True)
+        print(f"created {plan.workflows_root}{os.sep}")
+
+    return cmd_serve(args)
 
 
 def cmd_mcp(args: argparse.Namespace) -> int:
@@ -2033,6 +2098,52 @@ def build_parser() -> argparse.ArgumentParser:
     listing.add_argument("--knowledge-dir", dest="knowledge_dir")
     listing.set_defaults(handler=cmd_knowledge_list)
 
+    # The verb the owner asked for, and it is a verb rather than an argument
+    # on `serve` for the reason `cmd_open` gives. `openstategraph .` reaches
+    # it through `expand_bare_path`.
+    open_parser = subparsers.add_parser(
+        "open",
+        help="open the editor on a project directory (default: this one)",
+    )
+    open_parser.add_argument(
+        "directory",
+        nargs="?",
+        help="the project directory (default: the current one)",
+    )
+    open_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="bind address (default: 127.0.0.1, this machine only) — see `serve`",
+    )
+    open_parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="exactly this port, failing if it is taken. Omit for the first free one.",
+    )
+    # `serve` defaults to off and opts in; this one defaults to on and opts
+    # out, because a tool that steals focus in CI is a bug and a developer verb
+    # that does not open what you asked it to open is a chore.
+    open_parser.add_argument(
+        "--no-open",
+        dest="open",
+        action="store_false",
+        default=True,
+        help="do not launch a browser (default: it does)",
+    )
+    open_parser.add_argument(
+        "--create",
+        action="store_true",
+        help="create the workflows directory if it is missing, without asking",
+    )
+    open_parser.add_argument(
+        "--no-input",
+        dest="no_input",
+        action="store_true",
+        help="never ask — refuse and name the flag instead (automatic when not a terminal)",
+    )
+    open_parser.set_defaults(handler=cmd_open, workers=None)
+
     serve = subparsers.add_parser(
         "serve",
         help="run the editor, the chat surface and the API (needs [server] plus a provider extra)",
@@ -2267,11 +2378,39 @@ def cmd_env_example(_args: argparse.Namespace) -> int:
 from openstategraph.dotenv import load_env_file
 
 
+def expand_bare_path(argv: Sequence[str]) -> list[str]:
+    """`openstategraph .` → `openstategraph open .`, and nothing else.
+
+    The shape the owner asked for, and the one place this CLI reads an
+    argument tolerantly. So it is strict about what it trusts, per the rule in
+    `CLAUDE.md`: the first token is resolved against the parser's **own set of
+    verbs** first, so a real command is never a path even when a directory of
+    that name exists beside you, and a token that is neither a verb nor an
+    existing directory is handed back for argparse to report as the typo it
+    probably is.
+
+    `.` and `..` are taken without asking the filesystem, because they are the
+    two spellings a person types when they mean *here*.
+    """
+    if not argv:
+        return list(argv)
+    first = argv[0]
+    if first.startswith("-"):
+        return list(argv)
+    for action in build_parser()._actions:
+        if isinstance(action, argparse._SubParsersAction) and first in action.choices:
+            return list(argv)
+    if first in {".", ".."} or Path(first).expanduser().is_dir():
+        return ["open", *argv]
+    return list(argv)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """The entry point. Returns the exit code rather than calling `sys.exit`,
     so a test can invoke it directly instead of shelling out to a subprocess
     — which is how a CLI ends up with untested commands."""
-    args = build_parser().parse_args(list(argv) if argv is not None else None)
+    raw = list(argv) if argv is not None else sys.argv[1:]
+    args = build_parser().parse_args(expand_bare_path(raw))
     try:
         return int(args.handler(args))
     except ImportError as exc:

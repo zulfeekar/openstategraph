@@ -329,10 +329,16 @@ class TestWhatItPrints:
         assert not (tmp_path / "my_demo" / ".env").exists()
 
     def test_it_prints_the_next_two_commands(self, tmp_path: Path, capsys) -> None:
+        """The first of the two is the one verb, not `serve --open`.
+
+        `init`'s last lines are where a reader learns the command they will
+        type every day (install-experience/26), and `serve` is the deployment
+        verb — no browser, no directory, no questions."""
         cli.main(["init", str(tmp_path / "my_demo")])
         printed = capsys.readouterr().out
 
-        assert "openstategraph serve" in printed
+        assert "openstategraph ." in printed
+        assert "openstategraph serve" not in printed
         assert "openstategraph run" in printed
 
     def test_no_argument_means_the_current_directory(

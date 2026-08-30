@@ -43,6 +43,7 @@ the directory you are standing in.
 | read back what a past run *said* | [`threads`](#threads) |
 | read back what my runs *cost* | [`runs`](#runs) |
 | build or read a package's second brain | [`knowledge`](#knowledge) |
+| open the editor on the project I am standing in | [`open`](#open) |
 | open the editor, the chat and the API on one port | [`serve`](#serve) |
 | let my own LLM compose workflows | [`mcp`](#mcp) |
 | hand the package to a different client | [`export plugin`](#export-plugin) |
@@ -367,6 +368,57 @@ first line says how to regenerate it, because a hand-edited copy is one that
 goes stale the next time a provider is added.
 
 ## Serving things
+
+### `open`
+
+```
+openstategraph open [directory] [--host HOST] [--port N] [--no-open] [--create] [--no-input]
+openstategraph .
+```
+
+One verb, pointed at a folder. Reviews the project, picks a free port, prints
+the URL and opens your browser on it. The second form is the same command —
+a first argument that is not a known verb and *is* a directory is read as
+`open <directory>`, so `openstategraph .` and `openstategraph ~/svc` both
+work.
+
+**It says which directory it chose and why**, which is the point of it. The
+workflows root is resolved by the ordinary chain — `OPENSTATEGRAPH_WORKFLOWS_ROOT`,
+then `workflows_dir:` in your config file, then a checkout, then `./workflows`
+— and the report names the winner:
+
+```
+project      /Users/me/svc
+workflows    /Users/me/svc/workflows
+             workflows_dir: in /Users/me/svc/openstategraph.yaml
+
+  half-built    will not parse — workflow.json is unreadable: Expecting property name …
+  their-flow    Lens QA — 7 nodes
+```
+
+The directory argument decides **where the command stands**, not a new place
+in that chain. So a committed `workflows_dir:` still wins over the folder you
+named, and when the root it resolved is not inside that folder the report says
+so on its own line — which is the failure this verb exists to end: standing in
+the wrong place and silently editing another project's workflows.
+
+**It creates nothing without being asked.** `init` is the scaffolding verb; a
+verb that quietly scaffolds is a verb you stop trusting to be read-only. When
+the workflows directory is missing it offers, in a terminal, to create that
+one empty folder, and names [`init`](#init) for everything else. When there is
+no terminal — CI, a pipe — it refuses instead, exit **2**, naming `--create`
+as the consent flag, because a prompt in CI is a hang. `--no-input` forces
+that non-interactive behaviour in a terminal.
+
+A directory that is itself a workflow package (it holds a `workflow.json`) is
+refused rather than opened: a project root inside a package would nest
+`workflows/` inside it. The refusal names the project directory it thinks you
+meant, and does not go there on its own.
+
+`--port` and `--host` behave exactly as they do for [`serve`](#serve), which
+is what actually serves: omit `--port` for 8000 or the next free port.
+`--no-open` suppresses the browser, which is the flag to reach for in a
+script. Needs the server extra.
 
 ### `serve`
 
