@@ -40,17 +40,18 @@
   color: var(--color-text-primary);
 }
 
-/* The fact that makes an edit here consequential — muted, but present, and
- * carrying the full explanation in its tooltip. */
+/* The fact that makes an edit here consequential — muted, but its own
+ * visible text now (`say-it-on-the-surface/08`), not a tooltip a keyboard
+ * or touch user would never see. Wraps, like the strip around it. */
 .drill-banner__shared {
   flex: none;
-  padding: 0 var(--space-1-5);
+  max-width: 100%;
+  padding: var(--space-0-5) var(--space-1-5);
   border-radius: var(--radius-full);
   background: var(--color-bg-subtle);
   font: var(--type-caption);
   color: var(--color-text-tertiary);
-  white-space: nowrap;
-  cursor: help;
+  white-space: normal;
 }
 
 .drill-banner__back {

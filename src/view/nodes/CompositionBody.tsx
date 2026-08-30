@@ -116,7 +116,12 @@ function CompositionAnnotation({ node }: NodeBodyProps) {
             <OverriddenNote count={surface.overridden} />
           </span>
         )}
-        {surface.open ? <OpenMount slug={slug} mountId={node.id} /> : null}
+        {surface.open ? (
+          <div className="node__composition-open-group">
+            <OpenMount slug={slug} mountId={node.id} />
+            <span className="node__composition-scope">this mount only, others unaffected</span>
+          </div>
+        ) : null}
       </div>
       {expanded && surface.peekable ? <GraphPeek slug={slug} /> : null}
     </div>
@@ -186,16 +191,20 @@ function GraphPeek({ slug }: { slug: string }) {
 }
 
 /**
- * Edit the referenced package — the honest way in.
+ * Edit this instance — the honest way in.
  *
  * The label names the *thing*, not the mechanism. "Open" said nothing about
- * what opens, or that what opens is shared: a mount is a reference to one
- * definition, so editing it through this button changes every other mount of
- * it. "Edit team" / "Edit workflow" plus a tooltip that says *shared
- * definition* is the smallest wording that makes both facts visible before the
- * click rather than after it.
+ * what opens, or that an edit lands on this mount alone: it opens *this
+ * instance*, at `<parent>/<mountId>`, and a change becomes an override on
+ * this mount only.
  *
-
+ * Until `say-it-on-the-surface/08` that fact lived only in this button's
+ * `title` — invisible on a touch device and for a keyboard user tabbing to
+ * the control, and on a mouse only after a deliberate hover. The sibling
+ * `node__composition-scope` span beside the button (in `CompositionAnnotation`
+ * above) now says it in visible text; the title stays as the fuller sentence
+ * for a mouse.
+ *
  * Reaches the app through `useWorkbench()` — the context every card already
  * sits in — rather than a new prop on the body registry: the registry's
  * contract is deliberately just `{ node }`, and widening it for one body would
