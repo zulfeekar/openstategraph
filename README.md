@@ -280,7 +280,7 @@ what you want" surface. The same capability for a wheel install is
 [`docs/mcp.md`](docs/mcp.md) §2 — `openstategraph mcp` turns your own MCP
 client's model into the composer, talking to this server as the ground truth
 and the artifact factory. `openstategraph new <slug>
-[--template minimal|routed-qa|team]` (or `scripts/new_workflow.py` /
+[--template loop|minimal|routed-qa|team]` (or `scripts/new_workflow.py` /
 `scripts/new_team.py`, which call the same code) scaffolds your own packages
 from templates that ship inside the wheel.
 
@@ -336,13 +336,15 @@ python3 -m pytest -q                # backend + workflow tests — from the REPO
 [CONTRIBUTING.md](CONTRIBUTING.md#tests--the-gate-for-every-pr).
 
 **Run pytest from the repo root, not from `backend/`.** The root `pytest.ini`
-is what declares `testpaths = workflows backend` and puts the example
-workflow's `tools`/`functions` on `sys.path`; `cd backend && pytest` never
-reads it and quietly runs 49 fewer tests (3043 against 3092 on 2026-08-16,
-measured with `--collect-only`; it was 1637 against 1686 when this line was
-written, and the gap is the same 49 either way) — the whole
-`workflows/` half, which is exactly the code CI covers and you would then be
-red on. Live-API tests are opt-in either way: `pytest -m live`.
+is what declares `testpaths = backend workflows/chinook-assistant` and puts the
+example workflow's `tools`/`functions` on `sys.path`; `cd backend && pytest`
+never reads it and quietly runs 49 fewer tests — the curated example package's
+own half, which is exactly the code CI covers and you would then be red on. The
+gap is the number worth carrying and the totals are not: it was 49 measured on
+2026-08-16 and 49 again on 2026-08-30, with the suite more than doubled in
+between. Note that `workflows/` as a whole is **deliberately** not swept, for
+the collection-collision reason `pytest.ini` spends fifteen lines on and
+`backend/tests/test_collection_policy.py` pins. Live-API tests are opt-in either way: `pytest -m live`.
 
 Architecture is documented in depth in [`CLAUDE.md`](CLAUDE.md); this README
 covers running the app, not the design rules.

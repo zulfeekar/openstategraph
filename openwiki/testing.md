@@ -24,10 +24,11 @@ backend.
 > and `gh run list` against it shows real, repeated `CI` workflow runs,
 > including successes (`CLAUDE.md` records the count as of its last check;
 > re-run `gh run list` for the current one rather than trusting a number
-> here). Two named exceptions: `openwiki-update.yml` (this page's own
+> here). One named exception: `openwiki-update.yml` (this page's own
 > generator) has run on schedule and failed for a missing `OPENAI_API_KEY`
-> secret, and `docs-freshness` is PR-only in a repo that pushes straight to
-> `main`, so it has run just once. See `CLAUDE.md`'s OpenWiki correction
+> secret. (`docs-freshness` was the second, "PR-only in a repo that pushes
+> straight to `main`"; `df8ce54` made it run on push as well.) See
+> `CLAUDE.md`'s OpenWiki correction
 > block for the full, sourced account — it is hand-owned and does not get
 > overwritten by this generator.
 

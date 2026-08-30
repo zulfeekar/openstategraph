@@ -39,7 +39,7 @@ matters too — the handoff is `.scratch/HANDOFF-<YYYY-MM-DD>.md` for *today*, s
 when the date has rolled over you write a new file and carry the live parts
 forward rather than editing yesterday's.
 
-**Before reading source, query the code graph.** `graphify explain "X"`, `graphify path "A" "B"`. Rebuild with `graphify update .` after structural changes. The codebase is large enough that reading files to orient is a waste of context — `compile/node_runtime.py` alone is over 2,000 lines.
+**Before reading source, query the code graph.** `graphify explain "X"`, `graphify path "A" "B"`. Rebuild with `graphify update .` after structural changes. The codebase is large enough that reading files to orient is a waste of context — several modules run past a thousand lines each, and `backend/tests/test_module_size_ceiling.py` records which and how big. (This sentence used to size `compile/node_runtime.py` at "over 2,000 lines"; the families were extracted and it is a third of that, so the *reason* given for a standing instruction had become false while the instruction stayed right — `docs-and-gaps/25`.)
 
 **Before building a new module — a tool atom, a node family, a guard, a memory
 construct, a function, or infrastructure such as a connector — run
@@ -99,11 +99,17 @@ add new *behavior* directly onto `WorkflowModel` either way — a new query
 belongs on `GraphQueries`, a new index on `AdjacencyIndex`, surfaced
 through a thin pass-through only if genuinely needed.
 
-The exception is **43**, and that number is now pinned too. It was the
-most carefully argued exception in this file and the least defended — an
-argument with no way to fail is a story. A forty-fourth member is a red
-test, which is exactly what "do not add new behavior onto `WorkflowModel`"
-was always asking for.
+The exception is **recorded in `src/publicSurfaceCeiling.test.ts`**, which
+holds the count and this argument beside it. It was the most carefully
+argued exception in this file and the least defended — an argument with no
+way to fail is a story. One more member is a red test, which is exactly
+what "do not add new behavior onto `WorkflowModel`" was always asking for.
+
+The number itself is deliberately **not** restated here. It was 43 when this
+paragraph was written, the pin retired two members that had no caller at all
+(`install-experience` 21) and reads 41, and the sentence went on claiming 43
+— a second copy of a pinned fact, which is the defect this whole section is
+about, committed by the section stating it (`docs-and-gaps/25`).
 
 ### The sentence above has two clauses, and only one of them counts members
 
@@ -150,10 +156,11 @@ as a gap, not as a list.
 
 A class had a ceiling and a module had none, which is an asymmetry a reader
 trips on: an eleven-member class needs a recorded exception, and
-`compile/node_runtime.py` at **5,331 physical lines** needed nothing. It passes
-every rule stated in words above — one-sentence description, one reason to
-change (it is the node builders), and `NodeRuntime` the class is under the class
-ceiling at 8 members. Passing all of that at that size is evidence the rules
+`compile/node_runtime.py` — **5,331 physical lines** when this ceiling was
+written — needed nothing. It passed every rule stated in words above:
+one-sentence description, one reason to change (it is the node builders), and
+`NodeRuntime` the class under the class ceiling at nine members, the count
+`backend/tests/test_public_surface_ceiling.py` asserts today. Passing all of that at that size is evidence the rules
 were incomplete, not evidence that length is fine.
 
 **Ceiling: 500 code lines.** A *code line* is a physical line carrying at least
@@ -161,16 +168,19 @@ one token that is not a comment and not a docstring. Physical lines are the
 wrong measure **here specifically**: this repository writes long argued
 docstrings on purpose — this file is one — and a physical-line ceiling would tax
 the practice the rules most want and reward deleting the reasoning. Sixty-two
-percent of `node_runtime.py` is prose and blank space and none of it is charged
-for; it is **2,039 code lines**. A multi-line string that is *not* a docstring
+percent of the `node_runtime.py` this ceiling was written against was prose and
+blank space and none of it was charged for: 5,331 physical lines, **2,039 code
+lines**. Both figures are historical — the census in
+`backend/tests/test_module_size_ceiling.py` carries today's, and the whole
+descent, which is where to read it rather than here. A multi-line string that is *not* a docstring
 does count, because a prompt is content somebody has to read.
 
 **The recorded number is exact, which makes it a ratchet as well as a ceiling,
 and the two are one mechanism.** The ceiling decides which modules must be
 argued for; the exact number fires when one grows. No file is asked to shrink to
 500. A bare ceiling would be red on day one for ten files, which is how a pin
-acquires a suppression and dies; a bare ratchet would put a number on all 434
-modules, which is a config file nobody reads. The escape hatch — bump the
+acquires a suppression and dies; a bare ratchet would put a number on every
+module in the repository, which is a config file nobody reads. The escape hatch — bump the
 recorded number — is one keystroke, and that is stated rather than dressed up:
 what stops it being a formality is that the number sits in the same table as the
 argument, so raising it lands in review beside a paragraph that has to still be
@@ -717,8 +727,16 @@ A git worktree of this repo must NOT install its own dependencies — each
 copy costs ~420M (`node_modules` 183M + a venv 235M) for nothing. Instead:
 
 ```bash
-ln -s /Users/zulfeekar.cheriyampu/openstategraph/node_modules node_modules
+ln -s "$(dirname "$(git rev-parse --git-common-dir)")/node_modules" node_modules
 ```
+
+**Derived rather than typed**, because the absolute path written here was a
+directory that did not exist — the checkout moved and this line did not, so
+copy-pasting it made a dangling symlink, the build failed obscurely, and the
+obvious recovery was the `npm install` this section exists to prevent
+(`docs-and-gaps/25`). `git rev-parse --git-common-dir` answers with the *main*
+checkout's `.git` from inside any worktree, so its parent is the main checkout
+wherever it lives.
 
 and use the system `python3` (the backend's deps are installed user-level;
 `python3 -m pytest` works with no venv). Never run `npm install` or create
@@ -764,8 +782,18 @@ describes intent, not observed behaviour:
 > rather than deleted, because a rule document asserting the gates are theatre
 > is more dangerous than one asserting they are real.
 >
-> Two exceptions survive and are worth knowing by name: `openwiki-update.yml`
-> has **never** run, and `docs-freshness` is PR-only (`ci.yml`) while this
-> repository pushes straight to `main`, so it has executed once, ever. And
-> `pages.yml` has run four times and **failed four times** — see
+> One exception survives and is worth knowing by name: `pages.yml` has run
+> four times and **failed four times** — see
 > `.scratch/production-ready/tickets/28-the-gallery-nobody-could-see.md`.
+> `openwiki-update.yml` is the paragraph above: it *has* run, once, and
+> failed — this line said "never" beside that dated account for as long as
+> both stood, and the dated one carries a run id (`docs-and-gaps/25`).
+>
+> **`docs-freshness` is no longer PR-only**, and this line said it was for
+> four hours short of a day after `df8ce54` removed the `if:`. It runs on a
+> push to `main` too, comparing `github.event.before` to `github.sha`; it
+> exits 0 rather than skipping when there is no range to compare. Four
+> documents carried the old sentence and one commit changed the yaml, which
+> is why the claim is now derived from `ci.yml` by
+> `backend/tests/test_no_document_repeats_a_retracted_claim.py` instead of
+> being repeated in prose (`docs-and-gaps/28`).

@@ -279,20 +279,27 @@ While a run streams, the activity trace beside the conversation shows more
 than node names. When a run creates children — an orchestrator's `Send`
 fan-out, a deep agent's `task` call, or a mounted workflow starting —
 a row appears reading **`⤷ spawned <label>`** with the first ~120 characters
-of the instruction it was given. A spawn is an *announcement*, not a step: it
-takes no time of its own and occupies no lane in the timeline, it just names
-the child before the child produces anything. That is deliberate — the failure
-mode it exists to prevent is a run that looks stalled while five workers are
-busy. Spawns appear in the chat trace only; there is no canvas animation for
+of the instruction it was given. A spawn *announces* a child before the child has
+produced anything — the failure mode it exists to prevent is a run that looks
+stalled while five workers are busy. It is not only an announcement: a
+dispatched child gets a **lane of its own** in the timeline, and its bar is a
+measured start and end, because every `spawn` frame is dated and closed by a
+`settled` (`src/view/ask/timeline.ts`, `buildLanes`). This page said a spawn
+occupies no lane until `docs-and-gaps/28`; the dock had drawn one since
+`memory-and-replay` 50. Spawns appear in the chat trace only; there is no canvas animation for
 them.
 
 The **timeline** beside the trace draws one bar per step, on the **server's**
 clock: every run frame carries how many milliseconds into the run the backend
 produced it, so the bars add up to the run's own wall clock rather than to how
-long your browser waited. A bar is still a span *between frames* — the runtime
-reports a node only once it has finished, so nothing marks a beginning — and
-for workers running at once, one shared span is split between whichever frames
-arrived. A step whose run reported no clock at all reads `—`, never `0 ms`.
+long your browser waited. A bar in the run's **own** lane is a span *between frames* — the runtime
+reports one of its nodes only once that node has finished — and for workers
+running at once, one shared span is split between whichever frames arrived.
+Two things do mark a beginning: a mount and a dispatched child are each opened
+by a dated `spawn` and closed by a `settled`, so their bars are measured rather
+than inferred, and `TimelineStep.measured` says which of the two any given bar
+is. The run itself opens with a `started` frame at `seq: 0`, and a tool call
+with an `invoked`. A step whose run reported no clock at all reads `—`, never `0 ms`.
 
 The **Run** button becomes **Stop** while a run is streaming (so does the
 composer's Send). Stop is honest about where it can and cannot reach:

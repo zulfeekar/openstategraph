@@ -53,8 +53,10 @@ nothing of ours in the way.
 
 ## Install footprint
 
-The core is four packages — `langgraph`, `langchain`, `langchain-core`,
-`pydantic`. Everything else is an extra, because a consumer of `load_workflow`
+The core is four dependencies — `langgraph`, `langchain`, `langchain-core`,
+`pydantic`. Never "four packages": **package** is a settled word here for
+`workflows/<slug>/` (CLAUDE.md's lexicon), and `backend/pyproject.toml` names
+this line as the place the other sense kept being copied to. Everything else is an extra, because a consumer of `load_workflow`
 should not install a web server or three provider SDKs to run a graph in
 their own process.
 

@@ -220,34 +220,36 @@ skipped, so adding a job to its `needs:` list is how a new check becomes
 mandatory — no second place to update, and no re-listing when a job is renamed
 or gains a matrix.
 
-If you would rather see them individually, require these exact names instead,
-and remember to revisit the list whenever `ci.yml` changes:
+**If you would rather see them individually, read the names out of `ci.yml`
+rather than out of this page**: `ci-success`'s own `needs:` list is what
+actually decides whether the merge button unlocks, so it is the only list that
+cannot be short.
 
-```
-frontend
-generated-port-specs
-generated-openapi
-backend (3.11)
-backend (3.13)
-clean-install
-docs-freshness
-e2e
+```bash
+sed -n '/^  ci-success:/,/runs-on/p' .github/workflows/ci.yml | grep needs:
 ```
 
-**`backend` is a matrix job, and that changes the name you must type.** GitHub
-reports one check per leg, `backend (3.11)` and `backend (3.13)`, so requiring
-plain `backend` matches nothing and protects less than the page you are looking
-at claims to. This is the exact failure mode the paragraph above predicts, and
-it caught this document: the matrix was added and the list was not re-read.
-Which is the argument for requiring `ci-success` alone.
+Two warnings for anyone who does. **`backend` is a matrix job, and that changes
+the name you must type** — GitHub reports one check per leg, `backend (3.11)`
+and `backend (3.13)`, so requiring plain `backend` matches nothing and protects
+less than you think. And **a hand-copied list goes short in silence**: this
+page used to print one, and it was missing `gallery-diagrams-check` — a job in
+`ci-success`'s `needs:` — so a maintainer following it protected strictly less
+than `ci-success` does, which is the exact failure mode this section warns
+about two paragraphs earlier (`docs-and-gaps/28`). Which is the argument for
+requiring `ci-success` alone.
 
 Also switch on: *Require a pull request before merging* (1 approval),
 *Require review from Code Owners*, *Dismiss stale approvals*, and *Require
 branches to be up to date*. Do **not** allow force pushes — the release train
 tags commits on main and a rewritten history orphans a published tag.
 
-`docs-freshness` only runs on pull requests, so it will show as skipped on
-push-to-main runs; `ci-success` accounts for that.
+`docs-freshness` runs on pull requests **and** on pushes to `main` — it was
+`if: pull_request` until `df8ce54`, which in a repository that pushes straight
+to `main` meant a gate nobody had. On a push it compares `github.event.before`
+to `github.sha`, and where there is no range to compare (a first push, or a
+force-pushed parent this clone no longer has) it exits 0 with a message rather
+than failing.
 
 ### 4. `CODEOWNERS`
 
@@ -498,9 +500,11 @@ Four things still have not executed, and they are named rather than implied.
 | `openwiki-update.yml` | zero runs, ever |
 | `pages.yml` (*Deploy landing page*) | six runs, six failures — `HttpError: Not Found` from `actions/configure-pages`. See production-ready ticket 28 |
 
-`docs-freshness` is `if: github.event_name == 'pull_request'` and this
-repository pushes straight to `main`, so it skips on nearly every run by
-design — `ci-success` accounts for that, and a skip is not a gap.
+`docs-freshness` used to carry `if: github.event_name == 'pull_request'`,
+which in a repository that pushes straight to `main` meant it had fired once
+in its life. `df8ce54` removed the condition; it now runs on every push too,
+so a run of it that reports nothing is a change that touched no `src/` or
+`backend/` file, not a gate declining to look.
 
 ### The first half of the train is broken, and no workflow file can fix it
 
