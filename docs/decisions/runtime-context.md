@@ -405,12 +405,90 @@ filter, flipping the default to on, keying the agent cache on skill alone,
 rendering the context after the contract, and dropping the worker factory's
 call.
 
+**One of those five is no longer a mutation, and the correction is the section
+below.** "Keying the agent cache on skill alone" was checked red because, at
+the time, the rendered block was baked into the agent at construction — so the
+key was the only thing keeping two callers apart. It is not baked in any more,
+and the test that caught the mutation still passes, because it asks the
+question that actually matters: *did this run's model see this run's values and
+nobody else's?*
+
 **Not surfaced read-only, and that is a gap rather than a decision.**
 `/api/node-contracts` publishes `preamble`, `contract` and `default_rules` off
 the ladder *classes*, so it cannot publish anything generated from a document —
 `branch_context`, `held_tools_context` and the grader's rubric are equally
 invisible there today. `organisms-first-class/80` is that gap, filed rather
 than left as a footnote.
+
+### A per-run value is supported, including a case id — **[BUILT, `launch-readiness/182`]**
+
+The section above says a value reaches the model. This one says what it costs
+to send a **different** value every run, because for a while the answer was
+"one fully-assembled agent, kept until the process exits", and this document
+was where a reader would have gone looking.
+
+Ticket 72 put the rendered Context block into the compiler's agent memo key so
+that the second caller could not be handed the first caller's tenant. The memo
+outlives every run — its own comment says so — and a `caseId` is one value per
+run, so a workflow declaring one built and retained an agent per run and
+evicted none. Measured on a fake model, with no tools, rubric or summarization
+wired: 100 runs of one compiled graph built 99 agents, retained ~6 MiB and
+~1,050 live objects, and paid ~15 ms of rebuild per run. Correct answers the
+whole way; the symptom is an overnight OOM.
+
+**Where it was felt.** Not `POST /api/runs`, `/api/runs/stream`, the MCP
+`run_workflow` tool or `openstategraph run` — each compiles a graph per call
+and throws the memo away with it. `CompiledWorkflow.ask` holds `graph` as a
+frozen field and re-invokes it forever, and so does any mount under a
+long-lived parent. That is the library door this project advertises as the
+point of being a compiler rather than a runtime, which is what made it worth
+fixing rather than documenting as a footgun.
+
+**The fix is the lifetime of the value, not the key and not the cache.** The
+three candidates were priced. Capping the cache would have restored the tenant
+case and left the per-run case rebuilding at ~15 ms, and it raised a
+correctness question of its own — the memo also holds the narration middleware
+a *retry* looks up, so an eviction between an attempt and its retry would hand
+the retry an empty findings inventory. Making the memo per-run would have made
+the two shapes that already worked pay that rebuild too. So the block was taken
+out of the thing that is kept:
+
+- the compiler renders a fixed marker into the agent's context layer, once, at
+  the position the section has always occupied;
+- the node body renders **this run's** section, exactly where it always did,
+  and puts it on the invocation;
+- `RunContextMiddleware` substitutes one for the other when the model is
+  called — the shape deepagents' own `RubricMiddleware` already uses for the
+  other generated block that varies per run.
+
+Rendering it in place rather than appending it is the load-bearing half:
+appending would have put generated context *after* the locked output contract,
+which nothing may countermand.
+
+**It strengthens 72 rather than trading against it.** A cache key is a promise
+that two values land in two entries; there is now no per-caller entry at all.
+A workflow that declares no prompt-visible field carries no marker, no slot and
+no middleware, and composes the prompt it always did.
+
+Measured after, same probe, same machine: **0 agents built, ~305 KiB retained
+and ~7 objects per run — flat, and identical for a constant value, ten
+recurring tenants and a distinct value per run.** The three shapes that used to
+differ by twentyfold now cost the same.
+
+**So the module docstring's "a case id" stays true**, and this is the sentence a
+reader is owed: run context is for the values a run is started with, at
+whatever cardinality the caller has. A high-cardinality field costs the length
+of its rendered line and nothing else.
+
+**The other three prompted families were re-checked and have no such cache.**
+`router_for`, `grader_for` and `planner_for` construct per call — a router
+keeps one compile-time `prebuilt` for the case where nothing varies, and falls
+through to a fresh construction the moment a skill or a run-context block is in
+play. Nothing is retained, so there was nothing to fix; the measurement that
+said so (3.4 and 3.2 KiB/run against 2.8 and 2.4 with none declared, flat
+within noise) was measuring per-call construction, not accumulation. Each of
+the three now says so at its own factory, so the next sweep does not re-derive
+it.
 
 ### At a mount: inherit, then narrow — **[BUILT, ticket 76]**
 

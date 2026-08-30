@@ -47,6 +47,7 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from openstategraph.abc.middleware import MiddlewareSlotTable
 from openstategraph.async_tasks import ASYNC_TASKS_SLOT
+from openstategraph.abc.run_context_prompt import RUN_CONTEXT_SLOT
 from openstategraph.abc.narration import build_narration_middleware
 from openstategraph.abc.prompt import SystemPrompt
 
@@ -87,6 +88,19 @@ class AbstractAgentNode(ABC):
         # — the slot is only ever filled when a workflow asked for it and the
         # extra is installed (`openstategraph.injection`).
         "injection-screening",
+        # Immediately after screening, and both halves of that position are
+        # arguments (`launch-readiness/182`). It must sit *after*
+        # `injection-screening`, which is the one hard constraint in this list
+        # and is security-sensitive. It sits before everything else because
+        # `wrap_*` nests — the first middleware wraps all the others — so
+        # resolving the run-context marker outermost means every middleware
+        # below it reads the system prompt the model will actually receive,
+        # rather than one still carrying a placeholder.
+        #
+        # **Opt-in.** The compiler fills this slot only for a workflow that
+        # declares a prompt-visible run-context field; anything else carries no
+        # marker, so there would be nothing for it to do.
+        RUN_CONTEXT_SLOT,
         "skills",
         "filesystem",
         # After `filesystem`, and the position is an argument

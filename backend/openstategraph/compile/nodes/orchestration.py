@@ -84,6 +84,17 @@ def _orchestrator(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan:
     supervisor_model = self._resolve_model(data, node_id)
 
     def planner_for(skill: str, run_ctx: str = "") -> BaseOrchestrator:
+        """Built per call, and deliberately not memoised.
+
+        `run` below already says why — the wired skill varies per run and
+        `notes` is a per-run sink two concurrent runs must not share. Said
+        again here because it is also the answer to
+        `launch-readiness/182`'s fourth question: the agent family's memo
+        was keyed on the rendered run-context block and outlived every run,
+        and a reader checking whether the same defect lives in the other
+        three prompted families should find the answer at the factory
+        rather than have to re-derive it. Nothing here is kept.
+        """
         return orchestrator_for(
             max_subtasks=cap,
             # `"rules"`, not `"instruction"`. `instruction` is this node's
