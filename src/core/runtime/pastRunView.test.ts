@@ -5,6 +5,7 @@ import {
   laneTitle,
   lanes,
   relativeTime,
+  pauseLines,
   stepLines,
   stepCost,
   truncationLine,
@@ -39,6 +40,7 @@ const run = (patch: Partial<PastRun> = {}): PastRun => ({
   answer: 'Rock, $826.65.',
   status: 'finished',
   failed: false,
+  pause: null,
   ...patch,
 });
 
@@ -466,5 +468,77 @@ describe('truncationLine', () => {
     // `end` is a string on the wire, not an enum. Tolerant in reading: an end
     // this client has never seen still produces a true sentence.
     expect(truncationLine({ ...cut, end: 'newest' })).toContain('Some');
+  });
+});
+
+describe('pauseLines', () => {
+  /**
+   * The payload is `dict[str, str] | None` and nothing narrows it further: an
+   * `interrupt()` in a package this editor did not write puts whatever it
+   * likes on the wire. So these cases are the contract — not a schema.
+   */
+  it('says nothing about a run that is not parked', () => {
+    expect(pauseLines(null)).toEqual([]);
+  });
+
+  it('survives an empty payload without claiming a question was asked', () => {
+    expect(pauseLines({})).toEqual([]);
+  });
+
+  it('leads with the sentence the gate asks, then the text being stood behind', () => {
+    // The two keys `_human_approval` always writes, in the order a reviewer
+    // reads them: what am I being asked, and about what.
+    expect(pauseLines({ candidate: 'Rock, $826.65.', message: 'Approve this result?' })).toEqual([
+      { key: 'message', value: 'Approve this result?' },
+      { key: 'candidate', value: 'Rock, $826.65.' },
+    ]);
+  });
+
+  it('puts the grader opinion that reached the gate after the ask', () => {
+    expect(
+      pauseLines({
+        reason: 'no citation',
+        verdict: 'revise',
+        message: 'Approve this result?',
+        check: 'sourced',
+      }).map((line) => line.key),
+    ).toEqual(['message', 'verdict', 'reason', 'check']);
+  });
+
+  it('shows a key it has never seen rather than dropping it', () => {
+    // Tolerant in reading. A package's own gate names its own fields, and a
+    // lane that only printed the five keys this repository writes would hide
+    // the whole question from every workflow it did not ship.
+    expect(pauseLines({ severity: 'high', message: 'Sign off?' })).toEqual([
+      { key: 'message', value: 'Sign off?' },
+      { key: 'severity', value: 'high' },
+    ]);
+  });
+
+  it('orders the keys it does not know alphabetically, as the step lines do', () => {
+    expect(pauseLines({ zone: 'b', alpha: 'a' }).map((line) => line.key)).toEqual([
+      'alpha',
+      'zone',
+    ]);
+  });
+
+  it('drops a key whose value is blank or an untouched container', () => {
+    // `candidate` is `_upstream_text(...) or state["answer"]`, and both can be
+    // empty. A row reading `candidate` against nothing is a question with no
+    // subject.
+    expect(pauseLines({ message: 'Approve?', candidate: '   ', outputs: '{}' })).toEqual([
+      { key: 'message', value: 'Approve?' },
+    ]);
+  });
+
+  it('refuses a payload that is not a mapping of strings', () => {
+    // Strict in trusting. The wire type is `dict[str, str]`, but this lane is
+    // the last reader before a screen and a nested object rendered by
+    // `String()` would print `[object Object]` at a person.
+    const hostile = { message: 'Approve?', nested: { a: 1 }, count: 3 } as unknown as Record<
+      string,
+      string
+    >;
+    expect(pauseLines(hostile)).toEqual([{ key: 'message', value: 'Approve?' }]);
   });
 });

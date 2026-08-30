@@ -443,27 +443,24 @@ describe('the client and the published contract', () => {
    * the *schema* still declares those five, which a client-side census cannot.
    */
   const UNREAD_BY_DESIGN: Readonly<Record<string, string>> = {
-    // **One left, and the debt is nearly paid.** `14` asked whether its five
-    // were one session or five, and the answer measured out at two and three.
+    // **None left, and the debt is paid.** `14` asked whether its five were
+    // one session or five, and the answer measured out at two and three.
     // `default_model` and `findings` needed a line and a badge on rows that
     // already existed, so they were mirrored and shown together; the three
-    // that remained each needed an **affordance the editor does not have** —
-    // a staleness warning with nowhere to live, a disclosure of what a parked
+    // that remained each needed an **affordance the editor did not have** — a
+    // staleness warning with nowhere to live, a disclosure of what a parked
     // run is asking, a control that rebuilds routing knowledge. Three
-    // features on three surfaces with three design questions is not one
-    // ticket, and mirroring them into this client to clear a row here would
-    // be the exact defect the census exists to name, inverted: a field read
-    // by a client that no consumer of it can see.
+    // features on three surfaces with three design questions was never one
+    // ticket, and mirroring any of them here to clear a row would have been
+    // the exact defect this census exists to name, inverted: a field read by
+    // a client that no consumer of it can see.
     //
-    // `editor_stale` and `note` are gone from this list because they now have
-    // those surfaces (`16` and `18`): a toolbar chip that says the served
-    // bundle predates its source, and a publish toast whose routing clause is
-    // conditional on the backend still sending the note rather than hardcoded
-    // beside it. Both are asserted by name in the reader test below, which is
-    // the assertion that stops either one from being a line in a mapper.
+    // `editor_stale` and `note` went to `16` and `18`, `pause` to `17`. All
+    // three are asserted **by name** in the reader test below rather than by
+    // this row's absence, which is the assertion that stops any of them from
+    // decaying back into a line in a mapper.
     //
-    // An exemption pointing at a ticket is a debt; the one below says which.
-    pause: 'the-cost-of-one-more/17 — the History lane says a run is parked, not what it asks',
+    // An exemption pointing at a ticket is a debt. There are none left.
     // The one genuine by-design entry. `MountDocumentResponse` echoes the
     // address the client just asked with; `WorkflowFileClient` built that URL
     // out of an address it already holds, so reading the echo back would be
@@ -632,6 +629,13 @@ describe('the client and the published contract', () => {
       read('note'),
       'the publish note reaches no surface — the routing clause is hardcoded again',
     ).toContain('src/view/workflow/consequences.ts');
+    // `the-cost-of-one-more/17`. The comment above says a third field added
+    // later inherits nothing from this and should join it, so it does. The
+    // History lane is the only consumer: `pauseLines` lives in `core/` and
+    // would satisfy `clientReads` on its own while drawing nothing.
+    expect(read('pause'), 'what a parked run is asking reaches no surface').toContain(
+      'src/view/ask/PastRuns.tsx',
+    );
   });
 
   it('sends run fields the contract declares', () => {

@@ -108,6 +108,56 @@ const LEADING = ['question', 'answer', 'outputs', 'feedback', 'decisions'] as co
  */
 const BLANK = new Set(['', '{}', '[]']);
 
+/**
+ * The keys this repository's own gate writes, in the order a reviewer reads
+ * them. Everything else follows alphabetically — exactly as `LEADING` does for
+ * a checkpoint, and for the same reason.
+ *
+ * `message` and `candidate` are `_human_approval`'s whole payload: the
+ * sentence the gate asks, and the text a person is being asked to stand
+ * behind. `verdict`, `reason` and `check` arrive on top of them when a grader
+ * reached the gate, which is `_upstream_verdict`'s `{"verdict", "reason"}`
+ * plus `check` when the rubric named one.
+ */
+const PAUSE_LEADING = ['message', 'candidate', 'verdict', 'reason', 'check'] as const;
+
+/**
+ * What a parked run is waiting to be told, as rows.
+ *
+ * **The payload has no schema and this function does not invent one.** It is
+ * `dict[str, str] | None` on the wire, assembled by whatever called
+ * `interrupt()` — `_human_approval` for a `human.approval` node, and anything
+ * at all for a package's own graph node. So this renders a key/value list,
+ * the same shape `stepLines` gives a checkpoint, rather than picking a key out
+ * and setting it as prose.
+ *
+ * **The case that choice loses**, written down because it is a real one: for
+ * the payload this product actually produces, a reader gets a labelled row
+ * reading `message  Approve this result?` where a sentence would have read
+ * better. Prose was rejected because it buys that on one payload and pays for
+ * it on every other — a gate in somebody else's package that names its fields
+ * `prompt` or `ask` would render as a heading with no heading, and the reader
+ * would be back at the terminal. An ugly row that is always true beats a
+ * pretty one that silently empties.
+ *
+ * **Tolerant in reading, strict in trusting.** An unknown key is shown, since
+ * hiding it would hide the whole question from every workflow this repository
+ * did not ship. A value that is not a string is dropped, since the wire type
+ * says it cannot happen and `String({})` prints `[object Object]` at a person
+ * when it does. Nothing here routes, resumes or decides — the lane displays.
+ */
+export function pauseLines(pause: PastRun['pause']): readonly { key: string; value: string }[] {
+  if (!pause || typeof pause !== 'object') return [];
+  const rank = (key: string) => {
+    const index = PAUSE_LEADING.indexOf(key as (typeof PAUSE_LEADING)[number]);
+    return index === -1 ? PAUSE_LEADING.length : index;
+  };
+  return Object.entries(pause)
+    .filter(([, value]) => typeof value === 'string' && !BLANK.has(value.trim()))
+    .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+    .map(([key, value]) => ({ key, value }));
+}
+
 export function stepLines(step: PastRunStep): readonly { key: string; value: string }[] {
   const rank = (key: string) => {
     const index = LEADING.indexOf(key as (typeof LEADING)[number]);
