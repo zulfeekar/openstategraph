@@ -1567,11 +1567,40 @@ export function AskPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the nonce is the trigger; see above
   }, [runNonce]);
 
+  // The latest reporter, held where an effect can call it without taking its
+  // identity as a dependency. Declared **above** the two effects that read it
+  // so React's declaration-order flush refreshes the ref before either fires;
+  // moving it below is how a report reaches the previous render's closure.
+  const runningChangeRef = useRef(onRunningChange);
+  useEffect(() => {
+    runningChangeRef.current = onRunningChange;
+  }, [onRunningChange]);
+
   // The toolbar owns the Run button but not the run, so the one place that
   // knows a stream is open tells it.
+  //
+  // **`running` is the whole dependency, and that is the fix for
+  // `the-cost-of-one-more/15`** — a crash, not a slowdown. This effect used to
+  // depend on `onRunningChange` too, and the shell passes an inline arrow, so
+  // its identity changes on every `AppShell` render: the effect fired on every
+  // *render* rather than on every *change*, and each firing called
+  // `setBackendRunning` from inside the passive-effect commit. React counts
+  // that as a nested update. Ordinarily the same-value bail-out ends it in one
+  // extra lap and nobody notices; under a burst of `update` frames arriving
+  // with no yield between them the fiber always has pending work, so the
+  // bail-out never applies, `nestedUpdateCount` never resets, and at fifty
+  // React throws #185 and the editor is replaced by its error boundary. Seen,
+  // not reasoned about: 2,000 stubbed frames killed the app at
+  // `AppShell.tsx`'s `onRunningChange`.
+  //
+  // The unstable arrow was half of it, and deliberately not the half that was
+  // fixed. A parent re-rendering is not an event, and a `useCallback` in the
+  // shell would only mean this panel had stopped noticing — the next caller
+  // that passes a literal would bring the crash back. A panel reports a
+  // *change of state*, so it depends on the state.
   useEffect(() => {
-    onRunningChange?.(running);
-  }, [running, onRunningChange]);
+    runningChangeRef.current?.(running);
+  }, [running]);
 
   // A closed panel cannot report from its own state — `turns` goes with it —
   // so the last thing it says is read from the owner that outlives it.
@@ -1583,10 +1612,6 @@ export function AskPanel({
   // unmounts this panel with a stream still open it says so instead of
   // covering for it — the shell holds the handle, so a Stop the toolbar keeps
   // showing is one it can still deliver.
-  const runningChangeRef = useRef(onRunningChange);
-  useEffect(() => {
-    runningChangeRef.current = onRunningChange;
-  }, [onRunningChange]);
   useEffect(() => () => runningChangeRef.current?.(streams.hasOpenStream), [streams]);
 
   /**
