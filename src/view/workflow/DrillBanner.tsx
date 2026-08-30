@@ -43,6 +43,12 @@ import './DrillBanner.css';
  * document, and an edit here is this mount's own. Saying "shared" would send
  * someone to the Workflows panel to make a change they could have made here,
  * or worse, stop them making one at all.
+ *
+ * ## And the fact is said, not just hoverable — `say-it-on-the-surface/08`
+ *
+ * The sentence used to sit only in this pill's `title`, invisible on arrival
+ * for a keyboard user and on a touch device. It is now the pill's own text,
+ * read the moment the strip appears — no hover required.
  */
 export function DrillBanner() {
   const workbench = useWorkbench();
@@ -84,14 +90,8 @@ export function DrillBanner() {
       <span className="drill-banner__where">
         Editing <strong>{workbench.model.name}</strong>
       </span>
-      <span
-        className="drill-banner__shared"
-        title={
-          `This is ${mount} — its own overrides, not the shared package. ` +
-          `Field values can differ here; the workflow's shape cannot.`
-        }
-      >
-        {mount}
+      <span className="drill-banner__shared">
+        {mount} — its own overrides, not the shared package. Values can differ here; shape cannot.
       </span>
       {up ? (
         <button

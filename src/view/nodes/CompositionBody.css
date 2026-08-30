@@ -61,6 +61,29 @@
   line-height: 1;
 }
 
+/* The button plus the one sentence that makes it safe to press
+ * (`say-it-on-the-surface/08`) — stacked so the fact sits under the verb
+ * rather than crowding the row it shares with the disclosure toggle. */
+.node__composition-open-group {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-0-5);
+}
+
+/* Visible, not a tooltip: a title does not exist for a keyboard user
+ * tabbing to the button above, or on a touch device. Kept to the phrase
+ * that must survive when only one fits — this mount only, others
+ * unaffected — the full picture stays in the button's title for a mouse. */
+.node__composition-scope {
+  max-width: 7.5em;
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+  text-align: right;
+  line-height: var(--line-height-snug);
+}
+
 /* A real secondary action, not a hint.
  *
  * The earlier treatment — inherited caption type, a hairline border, no fill —
