@@ -548,6 +548,21 @@ over a store that never sweeps, and re-spelling `now()` would sort the same
 instant a day apart in two spellings. That reasoning is the module's, because
 the store's growth is what makes it expensive to get wrong, and this file is
 where a reader will look for it.
+
+**618 -> 640** (`the-cost-of-one-more/12`). Twenty-two lines that make the
+module *smaller in statements and larger in structure*. `_open` used to be one
+long sequence — create the tables, create the indexes, then reconcile the
+columns — and the order was wrong: `CREATE TABLE IF NOT EXISTS` is a no-op
+against an older table, so an index naming a column the file lacked failed the
+whole open, latched `_broken`, and dropped every run the process went on to
+record. The statements are now three loops over `_tables()` and `_INDEXES`,
+which is what makes the order hold: an index is added by naming it in a tuple,
+where it cannot be placed before the columns it names exist. The rest is the
+split `_broken` needed — `_holds_the_runs_table` asks the file which kind of
+failure this is rather than reading sqlite's message, and two named handlers
+say what each costs, because *"a column is missing"* at `warning` and *"no run
+will be recorded for the rest of this process"* are different facts and had one
+line between them.
 """
 
 #: Eight modules, derived and then argued for one at a time. Nothing in this
@@ -563,7 +578,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(698, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
-    "run_sinks.py": Recorded(618, RUN_SINKS),
+    "run_sinks.py": Recorded(640, RUN_SINKS),
 }
 
 
