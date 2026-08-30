@@ -119,7 +119,6 @@ function CompositionAnnotation({ node }: NodeBodyProps) {
         {surface.open ? (
           <div className="node__composition-open-group">
             <OpenMount slug={slug} mountId={node.id} />
-            <span className="node__composition-scope">this mount only, others unaffected</span>
           </div>
         ) : null}
       </div>
@@ -201,9 +200,18 @@ function GraphPeek({ slug }: { slug: string }) {
  * Until `say-it-on-the-surface/08` that fact lived only in this button's
  * `title` — invisible on a touch device and for a keyboard user tabbing to
  * the control, and on a mouse only after a deliberate hover. The sibling
- * `node__composition-scope` span beside the button (in `CompositionAnnotation`
- * above) now says it in visible text; the title stays as the fuller sentence
- * for a mouse.
+ * `node__composition-scope` span beside the button now says it in visible
+ * text; the title stays as the fuller sentence for a mouse.
+ *
+ * The same gap existed for the *other* direction, found from a screenshot
+ * (`the-look-has-an-author-now`): while the parent workflow is unsaved, the
+ * button goes `aria-disabled` and the reason lived only in the same
+ * `title` — reachable by hover, or, after a press, in the inline refusal
+ * below. Nothing said *why*, visibly, before a press. So this component
+ * owns both states of that one sibling span: "this mount only, others
+ * unaffected" when a press would work, a short "save this workflow to
+ * enable" when it would not — one span, whichever sentence is true, never
+ * both at once.
  *
  * Reaches the app through `useWorkbench()` — the context every card already
  * sits in — rather than a new prop on the body registry: the registry's
@@ -291,6 +299,11 @@ function OpenMount({ slug, mountId }: { slug: string; mountId: string }) {
         <Icon glyph={Pencil} size="xs" />
         {label}
       </button>
+      {unsaved ? (
+        <span className="node__composition-scope">save this workflow to enable</span>
+      ) : (
+        <span className="node__composition-scope">this mount only, others unaffected</span>
+      )}
       {error ? (
         <span className="node__composition--missing" role="alert">
           {error}
