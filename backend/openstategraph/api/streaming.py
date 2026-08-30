@@ -2792,7 +2792,12 @@ async def _run_frames(
     # reaches clients that grow a branch for it while `answer` is what every
     # customer surface already renders. `with_capability_notice` owns the
     # audience split; a developer gets the sentences themselves instead.
-    prose = with_capability_notice(prose, degraded, audience)
+    # It is handed the **runtime** rather than `degraded`, which is the whole
+    # developer channel: a report on it — advice about the drawing — is a
+    # static property of the shipped document, so the notice could never be
+    # off (`every-workflow-green` 47). `capability_loss_warnings` owns the
+    # question of which warnings the sentence is about.
+    prose = with_capability_notice(prose, runtime, audience)
     if not channel.payload(audience).get("developer"):
         outputs = redact_failure_markers(outputs)
         nested_outputs = redact_failure_markers(nested_outputs)
