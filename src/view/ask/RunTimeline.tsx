@@ -550,7 +550,7 @@ function Profile({ profile }: { readonly profile: ReturnType<typeof runProfile> 
 function Legend() {
   const keys: readonly (readonly [StepKind | 'settled', string])[] = [
     ['model', 'Model call'],
-    ['tool', 'No model time'],
+    ['tool', 'Not a model call'],
     ['mount', 'Mounted workflow'],
     ['refusal', 'Refused'],
     ['settled', 'Spawn settled'],
