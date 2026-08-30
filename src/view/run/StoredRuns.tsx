@@ -200,48 +200,54 @@ export function StoredRuns({
         />
       ) : null}
 
-      {state.status === 'ready'
-        ? state.sessions.map((sitting) => (
-            <section className="stored-runs__sitting" key={sitting.sessionId || '(none)'}>
-              <h3 className="stored-runs__sitting-title">{sittingLabel(sitting.sessionId)}</h3>
-              {sitting.threads.map((thread) => {
-                const expanded = open === thread.threadId;
-                return (
-                  <div className="stored-runs__thread" key={thread.threadId}>
-                    <button
-                      type="button"
-                      className="stored-runs__thread-head"
-                      aria-expanded={expanded}
-                      onClick={() => setOpen(expanded ? null : thread.threadId)}
-                    >
-                      <Icon glyph={expanded ? ChevronDown : ChevronRight} size="xs" />
-                      <span className="stored-runs__thread-slug">{thread.workflowSlug}</span>
-                      <span className="stored-runs__thread-id">{thread.threadId}</span>
-                      <span className="stored-runs__count">
-                        {thread.turns.length === 1 ? '1 turn' : `${thread.turns.length} turns`}
-                      </span>
-                    </button>
-                    {expanded
-                      ? thread.turns.map((turn, index) => (
-                          <Turn
-                            key={`${thread.threadId}#${index}`}
-                            turn={turn}
-                            showing={
-                              showing ===
-                              `${thread.threadId}#${turnOrdinal(thread.turns.length, index)}`
-                            }
-                            onPlay={() =>
-                              void play(thread.threadId, turnOrdinal(thread.turns.length, index))
-                            }
-                          />
-                        ))
-                      : null}
-                  </div>
-                );
-              })}
-            </section>
-          ))
-        : null}
+      {/* The only region that moves. The bar, the way back and the note stay
+          where they were put while a store with hundreds of runs scrolls
+          under them — the popover's measured maximum is the bound, and this
+          is what makes the overflow reachable rather than clipped. */}
+      <div className="stored-runs__list">
+        {state.status === 'ready'
+          ? state.sessions.map((sitting) => (
+              <section className="stored-runs__sitting" key={sitting.sessionId || '(none)'}>
+                <h3 className="stored-runs__sitting-title">{sittingLabel(sitting.sessionId)}</h3>
+                {sitting.threads.map((thread) => {
+                  const expanded = open === thread.threadId;
+                  return (
+                    <div className="stored-runs__thread" key={thread.threadId}>
+                      <button
+                        type="button"
+                        className="stored-runs__thread-head"
+                        aria-expanded={expanded}
+                        onClick={() => setOpen(expanded ? null : thread.threadId)}
+                      >
+                        <Icon glyph={expanded ? ChevronDown : ChevronRight} size="xs" />
+                        <span className="stored-runs__thread-slug">{thread.workflowSlug}</span>
+                        <span className="stored-runs__thread-id">{thread.threadId}</span>
+                        <span className="stored-runs__count">
+                          {thread.turns.length === 1 ? '1 turn' : `${thread.turns.length} turns`}
+                        </span>
+                      </button>
+                      {expanded
+                        ? thread.turns.map((turn, index) => (
+                            <Turn
+                              key={`${thread.threadId}#${index}`}
+                              turn={turn}
+                              showing={
+                                showing ===
+                                `${thread.threadId}#${turnOrdinal(thread.turns.length, index)}`
+                              }
+                              onPlay={() =>
+                                void play(thread.threadId, turnOrdinal(thread.turns.length, index))
+                              }
+                            />
+                          ))
+                        : null}
+                    </div>
+                  );
+                })}
+              </section>
+            ))
+          : null}
+      </div>
     </div>
   );
 }

@@ -294,6 +294,31 @@
   --space-10: 2.5rem; /* 40px */
   --space-12: var(--osg-space-12);
 
+  /* ---------- Box inset ----------
+   * The air between a box's edge and its content, and the answer to the
+   * owner's report on `20`: *"Rule of thumb: you must have design
+   * consistency. A box does not have a default spacing."* Said pointing at
+   * the Stored runs popover, whose title bar, back button and note all
+   * touched its own edge — because `.popover` set a `gap` and no padding,
+   * and nothing anywhere said what a box's padding should be.
+   *
+   * Two names, because a box's inset follows from what its content is for.
+   * `--box-inset` is the default and covers a box whose content is **read** —
+   * prose, a request, a form, a picker. `--box-inset-dense` covers a box
+   * whose content is **scanned** — a readout, a trace, a row in a list; the
+   * paragraph's air around three lines of monospace reads as a card, and a
+   * column of cards is not a list.
+   *
+   * A box that declares neither, and a box that spells `--space-3` here
+   * instead of the name, are both a red test —
+   * `src/design/styles/aBoxHasADefaultInset.test.ts` derives the population
+   * from every stylesheet rather than from a list, so the next box arrives
+   * inside the rule instead of beside it. Zero is the third answer and is
+   * recorded there too, by name and with its argument: a box whose children
+   * are regions that carry their own inset owns no edge to pad. */
+  --box-inset: var(--space-3);
+  --box-inset-dense: var(--space-2);
+
   /* ---------- Control geometry ----------
    * One height per size step, shared by *every* control class — button,
    * icon button, text input, select. shadcn's rule, at our density: a

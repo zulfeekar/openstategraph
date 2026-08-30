@@ -178,7 +178,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-2-5);
+  padding: var(--box-inset-dense);
   background: var(--color-bg-surface-sunken);
   border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-md);
@@ -455,7 +455,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-3);
+  padding: var(--box-inset);
   background: var(--amber-50);
   border: var(--border-width-hairline) solid var(--amber-100);
   border-radius: var(--radius-lg);
@@ -495,7 +495,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-3);
+  padding: var(--box-inset);
   background: var(--indigo-50);
   border: var(--border-width-hairline) solid var(--indigo-100);
   border-radius: var(--radius-lg);
