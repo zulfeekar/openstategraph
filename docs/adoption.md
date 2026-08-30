@@ -485,12 +485,12 @@ a public port. Put the mount behind a flag of your own for the same reason.
 **What reaches the running service, and when.** The editor writes
 `workflow.json`; your process decides when it reads it. `Workflows.list()`
 re-reads on every call, so the catalogue is live. A *compiled* workflow is
-not: `load_workflow` and `Workflows.load` build a graph, import the package's
-`tools/*.py` and construct a model, which is per-process work — so if you
-cache the compiled object (and you should), an edit reaches your service when
-you drop that cache, and otherwise on restart. `GET /api/events` is the
-change signal, and the same broadcaster is reachable in-process through
-`mounted.state.services` if you would rather invalidate than restart.
+per-process work — `load_workflow` and `Workflows.load` build a graph, import
+the package's `tools/*.py` and construct a model — so a service holds the
+result, and a held graph is the one thing an edit does not reach.
+
+`LiveWorkflows` is the holder that notices. See
+[Holding a workflow that edits reach](#holding-a-workflow-that-edits-reach).
 
 ### More than one workflow: the catalogue
 
@@ -519,6 +519,7 @@ Four members, and that is the whole class:
 | `.published()` | only the published, readable ones — mirrors the HTTP listing's `?surface=chat` |
 | `.load(slug, **overrides)` | the same `CompiledWorkflow` `load_workflow` returns, from the same function |
 
+
 **A fresh package is a draft**, so the loop above is empty until something is
 published — this is the first thing anyone hits after `openstategraph examples
 copy chained-summarizer`, since every shipped example carries `published:
@@ -541,6 +542,92 @@ overridden per call — `model`, `checkpointer`, `store`, `knowledge_dir`,
 `trace_file`, and the `tools`/`functions`/`middleware` mappings, which **merge**
 rather than replace so a catalogue-wide stub survives a per-call substitution.
 `load_workflow(path)` is unchanged and stays the right call for one package.
+
+### Holding a workflow that edits reach
+
+A service compiles a package once and serves many requests from it, because
+compiling imports the package's Python and builds a model. That is the right
+thing to do and it is also how `edit -> restart -> look` becomes the loop:
+nothing tells the held graph that its package moved.
+
+```python
+from openstategraph import LiveWorkflows
+
+live = LiveWorkflows("./workflows", model="anthropic:claude-sonnet-4-5")
+
+with live.use("billing") as billing:      # compiles, or hands back what it has
+    print(billing.ask("How much did we invoice in March?"))
+```
+
+Four members, and that is the whole class:
+
+| | |
+| --- | --- |
+| `.use(slug)` | a context manager yielding the `CompiledWorkflow`. Compiles when nothing is held, or when anything under the package — or under any package it mounts — has changed since the last compile. Otherwise the same object, and `is` says so |
+| `.invalidate(slug=None)` | retire what is held, for one slug or all of them. For a host with its own signal; it can only force the next `use()` to compile |
+| `.close()` | release everything, and the two sqlite handles it opened. Also `with LiveWorkflows(...) as live:` |
+| `.catalogue` | the `Workflows` underneath — `.list()`, `.published()`, `.root` |
+
+**Freshness is decided by the bytes on disk**, digested over every file under
+`<root>/<slug>/` and every package that one mounts, plus the root's own entry
+names so a mount that could not resolve is noticed when its package appears.
+Content, never mtime: an edit that keeps a file's length and lands in the same
+second as the last one is invisible to an mtime-and-size key, which is why
+`api/capability_discovery.py` bypasses the interpreter's own bytecode cache and
+why a stamp built on that key would put the staleness back one layer up.
+Measured at **1.7 ms** on the largest shipped package, against 27 ms to
+recompile.
+
+It over-includes on purpose — editing a package's `README.md` recompiles it.
+A subset would be a second copy of a set of globs the discovery code already
+owns, and a subset that goes stale by omission is the failure this exists to
+remove.
+
+**Both arrangements are covered by the same mechanism**, and that is why it is
+the disk rather than the in-process event. The editor mounted in your app and
+the editor in a *second process* writing the same directory are the same case
+to a stamp; they are not the same case to `GET /api/events`, which fires only
+for writes through the API in the process that made them — a hand edit or a
+`git pull` publishes nothing. If you do have the signal, `invalidate(slug)` is
+the plain callback: subscribe to `/api/events`, or reach the broadcaster
+in-process through `mounted.state.services`, and call it.
+
+**A run in flight is never disturbed.** The block is a lease: while you are
+inside it the object you were handed is never closed, never replaced and never
+mutated, however many edits land. An edit retires the entry so the *next* asker
+compiles a fresh one, and the retired graph is released when its last lease
+ends. Closing it sooner would close the sqlite handles a live run is
+checkpointing against.
+
+**Two requests during an invalidation compile once and see one graph.** One
+lock per slug, held across the compile; the second request blocks and then
+finds what the first installed. The stamp is taken *before* the compile, so a
+save that lands while one is running reads as not yet included and the next
+`use()` compiles again — taking it afterwards would bank the new bytes under a
+graph built from the old ones and lose that edit for the life of the process.
+`use()` is synchronous, exactly like the `Workflows.load()` it wraps; an async
+service calls it off the loop through `run_in_threadpool`, the same way it
+already calls `load()`.
+
+**Where "no restart" stops.** A package's own `tools/*.py` and `functions/*.py`
+are re-executed from their source bytes on every compile and never enter
+`sys.modules`, so editing them lands with everything else. A module those files
+*import* does not: the interpreter holds it for the life of the process, and
+reloading it would leave a fresh base class that the instances made from the
+old one no longer match. So:
+
+| Change | Reaches a held workflow |
+| --- | --- |
+| `workflow.json`, and the same for any package it mounts | yes, on the next `use()` |
+| the package's `tools/`, `functions/`, `middlewares/`, `skills/`, `knowledge/` | yes |
+| a module the package's code imports — your own application, a helper on `sys.path` | **no. Restart** |
+| a `pip install` that adds a plugin or a provider | **no. Restart** — entry points are discovered once per process |
+| a rebuilt `compile/port_specs.json` | **no. Restart** — it is a build artifact, imported at startup |
+| a rotated API key or a changed provider setting | **no**, the resolved model is inside the graph's closures. `invalidate()` |
+
+The first two rows are the document-and-package half, and they are the half a
+developer edits all day. The rest is code around the package, and code around
+the package has always needed a restart.
 
 ### Where it reads, and where it writes
 

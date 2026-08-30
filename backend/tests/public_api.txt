@@ -2,6 +2,7 @@ openstategraph.CompiledWorkflow = dataclass(object) fields(graph,warnings,slug,p
 openstategraph.DEFAULT_RECURSION_LIMIT = int
 openstategraph.DocumentError = class(OpenStateGraphError,ValueError)(...)
 openstategraph.InvalidPackageName = class(WorkflowPackageError,ValueError)(...)
+openstategraph.LiveWorkflows = class(object)(root: 'str | Path | None' = None, *, catalogue: "'Workflows | None'" = None, checkpointer: "'BaseCheckpointSaver[Any] | None'" = None, store: "'BaseStore | None'" = None, **defaults: 'Any') -> 'None'
 openstategraph.OpenStateGraphError = class(Exception)(...)
 openstategraph.PackageNotFound = class(WorkflowPackageError,FileNotFoundError)(...)
 openstategraph.RunProducedNothing = class(OpenStateGraphError)(message: 'str', result: 'Any' = None) -> 'None'
@@ -14,6 +15,7 @@ openstategraph.WorkflowPackageError = class(OpenStateGraphError)(...)
 openstategraph.Workflows = class(object)(root: 'str | Path | None' = None, *, model: 'Any' = None, checkpointer: 'BaseCheckpointSaver[Any] | None' = None, store: 'BaseStore | None' = None, tools: 'dict[str, Any] | None' = None, functions: 'dict[str, Any] | None' = None, middleware: 'dict[str, Any] | None' = None, knowledge_dir: 'str | Path | None' = None, trace_file: 'str | Path | None' = None) -> 'None'
 openstategraph.__version__ = str
 openstategraph.load_workflow = def(package_dir: 'str | Path', *, model: 'Any' = None, checkpointer: 'BaseCheckpointSaver[Any] | None' = None, store: 'BaseStore | None' = None, tools: 'dict[str, Any] | None' = None, functions: 'dict[str, Any] | None' = None, middleware: 'dict[str, Any] | None' = None, knowledge_dir: 'str | Path | None' = None, trace_file: 'str | Path | None' = None) -> 'CompiledWorkflow'
+openstategraph.package_stamp = def(directory: 'Path') -> 'str'
 openstategraph.run_context = def() -> 'dict[str, Any]'
 openstategraph.abc.AbstractAgentNode = class(ABC)(*, name: 'str', model: 'Any' = None, tools: 'Any' = (), middleware: 'dict[str, Any] | None' = None, narrate: 'bool' = True) -> 'None'
 openstategraph.abc.Archetype = class(BaseModel)(*, key: str, name: str, description: str = '') -> None

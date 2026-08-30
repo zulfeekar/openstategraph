@@ -51,6 +51,7 @@ asserted `"load_workflow" in dir(...)` would never have caught the private
 """
 
 from openstategraph.catalogue import WorkflowInfo, Workflows
+from openstategraph.live import LiveWorkflows, package_stamp
 from openstategraph.errors import (
     DocumentError,
     InvalidPackageName,
@@ -97,6 +98,7 @@ __all__ = [
     "DEFAULT_RECURSION_LIMIT",
     "DocumentError",
     "InvalidPackageName",
+    "LiveWorkflows",
     "OpenStateGraphError",
     "PackageNotFound",
     "RunProducedNothing",
@@ -109,5 +111,6 @@ __all__ = [
     "Workflows",
     "__version__",
     "load_workflow",
+    "package_stamp",
     "run_context",
 ]

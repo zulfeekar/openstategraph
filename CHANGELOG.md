@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### Added
+- **`LiveWorkflows` — a held workflow that notices its own package changing**
+  (`scale-and-adopt` 14). A service compiles a package once and serves many
+  requests from it, because compiling imports the package's Python and builds a
+  model; nothing told the held graph that a developer had edited it, so the loop
+  was `edit -> restart -> look`. `live.use(slug)` hands back the same
+  `CompiledWorkflow` `Workflows.load()` returns, and recompiles when anything
+  under the package directory — or under any package it mounts — has changed.
+  - **Freshness is the bytes on disk, digested by content**, so the editor
+    mounted in your app and the editor in a *second process* writing the same
+    directory are the same case. `GET /api/events` is not, and says so itself:
+    only writes through the API in the process that made them emit. `1.7 ms` on
+    the largest shipped package, against 27 ms to recompile.
+  - **A run in flight is never disturbed.** The block is a lease: the object it
+    yielded is never closed, replaced or mutated while you are inside it. An
+    edit retires the entry so the next asker compiles a fresh one.
+  - `invalidate(slug)` is the plain callback `scale-and-adopt` 12 recorded as
+    missing, for a host that has its own signal. It can only force a miss.
+  - **`package_stamp(directory)`** is public with it, because a stamp nobody can
+    print is a mechanism nobody can debug.
+  - This is **not** the cache `docs/decisions/per-request-compile-cost.md`
+    declined. That decision measured our own request path at 27 ms and refused
+    to buy it with a staleness class; it still compiles per request. A host was
+    never paying 27 ms — it was paying a restart.
+  - **Where "no restart" stops** is drawn in `docs/adoption.md` rather than left
+    to be found as a bug: a package's own `tools/` and `functions/` are
+    re-executed from source on every compile and land; a module they *import*,
+    a `pip install`, a rebuilt `port_specs.json` and a rotated credential do
+    not.
+
 ## 0.3.0rc8 — 2026-08-30
 
 Everything under *Unreleased* above this line at the time of the cut. The
