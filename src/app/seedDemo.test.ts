@@ -94,7 +94,10 @@ describe('seedDemoWorkflow', () => {
 
     // A silently dropped node is the failure mode this guards: the
     // serializer skips unknown types with a warning rather than an error.
-    expect(workbench.model.nodes()).toHaveLength(13);
+    // Thirteen until `every-workflow-green/44` added `guard-web`, which is
+    // also the first `guard.check` any shipped document has drawn — so this
+    // number moving is the assertion that the editor can read one.
+    expect(workbench.model.nodes()).toHaveLength(14);
     expect(workbench.model.name).toBe('Chinook Assistant');
   });
 

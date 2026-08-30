@@ -6,7 +6,7 @@ everything else on disk (`concierge`, `workflow-architect`) is `hidden: true`
 infrastructure. The default surface is `editor`, which lists hidden packages
 too — flagged, so a developer sees what is there.
 
-Thirteen nodes, left to right. The rule it was built to: every node must be
+Fourteen nodes, left to right. The rule it was built to: every node must be
 explainable in one line, and a diagram nobody can read has failed regardless
 of what it does.
 
@@ -21,6 +21,7 @@ of what it does.
 | `agent-chat` **Front Desk** | the only node that answers without a tool: greetings, honest refusals, general knowledge |
 | `agent-web` **Web Researcher** | the only node allowed to reach the live internet |
 | `t-search` / `t-fetch` | the two tools that let it: search for sources, then read one |
+| `guard-web` **Cited?** | the only thing standing between the open web and the answer: no figure leaves without the URL it was read from. A package function, no model |
 | `out1` **Answer** | renders whichever branch ran, as Markdown |
 
 ## Five intents, three destinations
@@ -32,7 +33,10 @@ data_query        ─────────────▶  Data Analyst ─�
 greeting          ──┐
 off_topic         ──┼──────────▶  Front Desk    (one agent, no tools)
 general_knowledge ──┘
-web_lookup        ─────────────▶  Web Researcher + web search/fetch
+web_lookup        ─────────────▶  Web Researcher ─▶ Cited?  ─pass─▶ Answer
+                                  + search/fetch      │
+                                       ▲              │
+                                       └──── revise ──┘
 ```
 
 Five intents, because those are the five things people actually send. Three
@@ -123,6 +127,7 @@ skill (`docs/decisions/skill-layer.md`). What this document chose:
 | `agent-sql` | `AbstractAgentNode.DEFAULT_RULES` — use a tool rather than memory, never state a figure you did not obtain | **empty** | `sql-analyst.md` |
 | `agent-chat` | same | its front-desk persona | — |
 | `agent-web` | same | its search-then-fetch-then-cite order | — |
+| `guard-web` | — | `check: web_answer_cites_its_source`, two attempts | — |
 | `grader-sql` | `BaseGrader.DEFAULT_CRITERIA` | the Chinook-specific criteria, `rulesMode: extend` | — |
 
 The bar this table is written against is the owner's: *"works out of the box
@@ -146,7 +151,10 @@ deliberately not in it: the Front Desk must not be taught SQL.
 
 - **Greeting / off-topic / general knowledge** — two model calls: the router,
   then one agent. No tools, no grader.
-- **Web lookup** — the router, then one agent loop with two tools.
+- **Web lookup** — the router, then one agent loop with two tools, then a
+  guard that costs nothing (a package function, no model) and one more agent
+  lap if the answer states a figure without the URL it came from (two
+  attempts max).
 - **Data question** — the router, then one agent loop over three SQL tools,
   then a grader, and one more agent lap per rejection (three attempts max).
   The retry is the expensive part and it is on the only branch where a wrong
@@ -154,6 +162,9 @@ deliberately not in it: the Front Desk must not be taught SQL.
 
 ## The package
 
+- `functions/cited_figures.py` — `web_answer_cites_its_source`, the check
+  `guard-web` runs. The only package function here, and the only shipped
+  demonstration of `guard.check` in this repository.
 - `tools/` — the Chinook tool family (`tool.chinook-get-all-tables`,
   `tool.chinook-get-schema`, `tool.chinook-execute-sql`), read-only by
   construction.
