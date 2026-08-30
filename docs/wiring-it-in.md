@@ -76,9 +76,20 @@ It is not repeated here.
 
 ## 3. The same thing, streamed
 
-`ask()` is blocking on purpose. To stream you drop to `.graph`, which is a
-plain compiled LangGraph object — `.astream_events()` is right there. The one
-thing no page showed is what to seed it with and what to do with the events.
+`ask()` is blocking on purpose. **If you want the run as it happens and not a
+fold of your own, `workflow.events(...)` is the shipped one** — an iterator of
+events that names no web framework, so it drops into a handler on ASGI or WSGI
+alike;
+[adding-openstategraph-to-your-project.md §8](adding-openstategraph-to-your-project.md#8-streaming-without-picking-your-web-framework)
+is the adapter for each, the stop rule and the backpressure contract, and this
+page does not repeat any of it.
+
+The rest of this section is the **escape hatch**, and it stays because it is a
+different thing rather than an older one: `.graph` is a plain compiled LangGraph
+object, `.astream_events()` is right there, and a reader who wants an event kind
+the shipped surface does not carry — or wants to fold the run into a vocabulary
+of their own — should have it. The one thing no page showed is what to seed it
+with and what to do with the events.
 
 <!-- executed verbatim by backend/tests/test_wiring_page_streams.py -->
 

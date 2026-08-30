@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from langgraph.store.base import BaseStore
 
     from openstategraph.run_sinks import RunSinkRegistry
+    from openstategraph.run_stream import RunStream
 
 logger = logging.getLogger(__name__)
 
@@ -379,6 +380,64 @@ class CompiledWorkflow:
             # most worth having in the store.
             turn.record(final, answer=str(result))
         return self._answered(result)
+
+    def events(
+        self,
+        question: str,
+        *,
+        thread_id: str | None = None,
+        user_email: str | None = None,
+        session_id: str | None = None,
+        recursion_limit: int | None = None,
+        context: Mapping[str, Any] | None = None,
+    ) -> "RunStream":
+        """The same run as `ask()`, watched instead of waited for.
+
+        Returns a `RunStream` — iterate it with `async for` in any async
+        framework, or with a plain `for` in one that has no event loop, and
+        call `.stop()` when the consumer goes away. Nothing about it is bound
+        to a web framework; `run_stream.py` carries the design and the
+        backpressure contract, and
+        `docs/adding-openstategraph-to-your-project.md` §8 carries an adapter
+        for FastAPI and one for Flask.
+
+        **A collaborator rather than eight more methods.** Streaming is a
+        second way to drive a run, not a second family of things this object
+        does, and `CLAUDE.md`'s ceiling is a ceiling on reasons to change as
+        much as on members: `stream`, `stream_sync`, `stop`, `thread_id` hung
+        off here would be four, and the second consumer of them would want a
+        fifth.
+
+        Identity, the step budget and the context are resolved here and not in
+        the stream, because they are this object's to resolve and `ask()`
+        already resolves them the same way — two spellings of a run's identity
+        is the defect `run_identity.py` exists to prevent. So a `context` this
+        document does not declare raises **here**, before a single event, where
+        a handler can still answer 422 rather than mid-body with its headers
+        already sent.
+        """
+        from openstategraph.run_stream import RunStream
+
+        thread = thread_id or f"load-workflow-{uuid.uuid4().hex}"
+        run_context = validate_run_context(self.document, context, slug=self.slug)
+        return RunStream(
+            self,
+            question,
+            thread_id=thread,
+            config={
+                "recursion_limit": resolve_step_budget(recursion_limit, self.document),
+                "configurable": {
+                    "thread_id": thread,
+                    "user_email": user_email or "",
+                    "session_id": session_id or "",
+                    "workflow_slug": self.slug or "",
+                },
+            },
+            # The two the journal needs, handed over rather than left for the
+            # stream to dig back out of `configurable` — see `RunStream`.
+            identity={"user_email": user_email or "", "session_id": session_id or ""},
+            run_context=run_context,
+        )
 
     def pause(self, thread_id: str) -> dict[str, Any] | None:
         """What a paused thread is waiting to be told — or `None` if it is not

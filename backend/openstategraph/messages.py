@@ -48,6 +48,8 @@ __all__ = [
     "REASONING_BLOCK_TYPES",
     "TokenUsage",
     "content_text",
+    "is_tool_message",
+    "is_transcript_record",
     "reasoning_text",
     "usage_of",
 ]
@@ -179,3 +181,57 @@ def usage_of(message: Any) -> TokenUsage | None:
     if not (counted.input_tokens or counted.output_tokens or counted.total_tokens):
         return None
     return counted
+
+
+def is_transcript_record(message: Any) -> bool:
+    """Whether this is a node **writing the conversation record**, not the model.
+
+    `_input` logs the user's turn and `_output` logs the answer where every path
+    converges, which is what gives a thread memory (ticket 73). Both are right
+    and stay. But `stream_mode=["updates", "messages", "custom"]` emits every
+    message on that channel — written or streamed — and nothing told them apart,
+    so the record re-entered the token stream and `AskPanel`, which concatenates
+    every token, held the answer twice before the answer block showed it a third
+    time (`every-workflow-green` 02).
+
+    **Measured on the wire**, not inferred, by tapping one real run of
+    `workflow-2026` in the editor:
+
+        AIMessageChunk  AIMessageChunk  model                     744 chars
+        AIMessage       ai              node_output_formatted_1   744 chars
+        HumanMessage    human           node_input_text_1          21 chars
+        ToolMessage     tool            tools                     478 chars
+
+    744 + 744 + 21 = 1509, against 1466 measured in the DOM. The model's own
+    text arrives **only** as chunks; the two settled non-tool messages are
+    exactly the two records.
+
+    So: a settled `ai` or `human` message is the record. A **tool** message is
+    not — a tool produces its output whole rather than token by token, and the
+    developer's per-call result cards are fed from it.
+
+    Duck-typed on `.type` like `is_tool_message`, for the reason recorded
+    there: this channel yields chunk classes and settled messages, and one test
+    covers the family without importing one of each. Verified against
+    langchain-core 1.5.3, where `AIMessageChunk.type` is the class name and
+    `AIMessage.type` is `"ai"`.
+
+    **The cost, stated rather than discovered.** A provider that does not stream
+    returns its reply as one settled `AIMessage`, which this drops from the
+    *live* stream. Nothing is lost — the answer still arrives on the `updates`
+    fold and the terminal frame — and a provider that does not stream had no
+    live text to offer anyway.
+    """
+    kind = str(getattr(message, "type", ""))
+    return kind in {"ai", "human"}
+
+
+def is_tool_message(message: Any) -> bool:
+    """Whether a streamed message is a tool's *result* rather than model text.
+
+    Duck-typed on LangChain's own `type` discriminator rather than
+    `isinstance(message, ToolMessage)`: the `messages` stream yields chunk
+    classes (`ToolMessageChunk`) as well as settled messages, and both answer
+    `"tool"` here, so one test covers the family without importing it.
+    """
+    return str(getattr(message, "type", "")) == "tool"

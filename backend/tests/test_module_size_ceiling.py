@@ -309,7 +309,7 @@ two callers and would separate the walk from the edge table it reads.
 STREAMING = """
 SSE framing and the stream fold — itself the product of a split
 (reviews-2026-08-14 ticket 72), which is why its docstring is one line while
-the file is 1042 code lines. It already has four collaborators beside it that
+the file is 1030 code lines. It already has four collaborators beside it that
 used to be inside it: `burst_recorder.py`, `frame_clock.py`, `audience.py` and
 `diagram.py`.
 
@@ -340,6 +340,18 @@ head naming *no* canvas node and had no way to rule out one naming a node that
 is not a mount, which is every agent in the product, because `create_agent`
 returns a compiled LangGraph and its loop is namespaced under the node that
 owns it.
+
+**1042 -> 1030 (`launch-readiness` 196), and every one of the twelve lines
+left because something else needed it too.** Three things moved out to core,
+where a second reader could reach them: the chunk decode (`stream_parts.py`),
+the two message predicates that tell a settled record from a streamed token
+(`messages.py`, beside `content_text` which they are always used with), and
+`_abandon` (`run_stream.py`, which is where the argument for cancelling
+*without* awaiting is now written once). Nothing was deleted and no behaviour
+moved — each is aliased back at the name this file's own docstrings and call
+sites use. The framework-free run surface needed the same three answers, and a
+second copy of *the record is not a token* is a defect this repository has
+already paid for once (`every-workflow-green/02`).
 
 **`ToolWatcher` is where a split was available and was taken.** It reads the
 same `messages` list `SpawnWatcher` does, and four more lines inside that class
@@ -585,7 +597,7 @@ RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(570, NODE_RUNTIME),
     "cli.py": Recorded(1125, CLI),
     "compile/workflow_compiler.py": Recorded(964, WORKFLOW_COMPILER),
-    "api/streaming.py": Recorded(1042, STREAMING),
+    "api/streaming.py": Recorded(1030, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(698, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
