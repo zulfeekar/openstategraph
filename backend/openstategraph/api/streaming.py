@@ -1828,6 +1828,9 @@ async def _run_frames(
     one failure.
     """
     from openstategraph.compile.node_runtime import RESET, keep_latest_nonempty
+    # The same function the `tool_use` channel declares, not a second
+    # spelling of it — see the fold below (`every-workflow-green` 51).
+    from openstategraph.compile.reducers import merge_rows
     from openstategraph.compile.state import published_answer
     from openstategraph.run_identity import run_identity
 
@@ -2150,8 +2153,23 @@ async def _run_frames(
                     unmet_tools.update(
                         {key(k): v for k, v in (update.get("unmet_tools") or {}).items()}
                     )
+                    # **`merge_rows`, not `update`** (`every-workflow-green`
+                    # 51). `tool_use` is the one channel in `RunState` that
+                    # declares `MERGE_ROWS`, and `dict.update` is `MERGE`: it
+                    # replaces a node's whole row, so a node re-entered by a
+                    # grader's revise loop had its second lap's
+                    # `{"bound": [...], "ran": []}` erase the first lap's
+                    # record of a tool that ran. That is `production-ready`
+                    # 106 at the one door its fix could not reach — this door
+                    # has no finished state to read, so it is a second
+                    # implementation of the reducer and has to be the same
+                    # one. Merged in place because `folded` above aliases
+                    # this dict by identity.
                     tool_use.update(
-                        {key(k): v for k, v in (update.get("tool_use") or {}).items()}
+                        merge_rows(
+                            tool_use,
+                            {key(k): v for k, v in (update.get("tool_use") or {}).items()},
+                        )
                     )
                     retries.update(
                         {key(k): v for k, v in (update.get("retries") or {}).items()}

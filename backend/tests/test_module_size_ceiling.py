@@ -336,6 +336,13 @@ It stays here rather than moving to a `graph_walks.py` because both of this
 file's walks are about **what a canvas edge means for the step budget**, which
 is the file's one reason to change; a shared walk module would be a home for
 two callers and would separate the walk from the edge table it reads.
+
+**964 -> 965** (`every-workflow-green` 51). One line: `DOOR_SHAPE_RULE`, the
+sentence the build door's shape route claims, published here because this is
+where the predicate that decides it lives. `src/view/ask/doorHeadline.ts` had
+been the only statement of the rule, in a different language, with nothing
+between the two — which is why a card offering to build a capability that had
+just been used could not be diagnosed from either side.
 """
 
 STREAMING = """
@@ -391,6 +398,15 @@ moved — each is aliased back at the name this file's own docstrings and call
 sites use. The framework-free run surface needed the same three answers, and a
 second copy of *the record is not a token* is a defect this repository has
 already paid for once (`every-workflow-green/02`).
+
+**1034 -> 1038** (`every-workflow-green` 51). Four lines, and they buy the
+fold back its channel's own reducer: `tool_use` declares `MERGE_ROWS` and this
+door folded it with `dict.update`, which is `MERGE`, so a node re-entered by a
+grader's revise loop had its second lap erase the first lap's record of a tool
+that ran. One import and a `merge_rows` call — the same function the channel
+declares, never a second spelling of it. This door folds frames by hand
+because it has no finished state to read, which is exactly why every channel
+it folds is a second implementation of a reducer and has to be the same one.
 
 **`ToolWatcher` is where a split was available and was taken.** It reads the
 same `messages` list `SpawnWatcher` does, and four more lines inside that class
@@ -652,8 +668,8 @@ and the reader read.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
     "cli.py": Recorded(1137, CLI),
-    "compile/workflow_compiler.py": Recorded(964, WORKFLOW_COMPILER),
-    "api/streaming.py": Recorded(1034, STREAMING),
+    "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
+    "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(698, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
