@@ -30,7 +30,7 @@
   gap: 1px;
   margin: var(--space-1) 0 0;
   padding: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-quaternary);
   font: var(--type-caption);
   line-height: var(--line-height-snug);
   /* Not a control: no pointer, no hover, nothing to press. */

@@ -508,7 +508,7 @@
   position: relative;
   height: 14px;
   cursor: ew-resize;
-  background: var(--color-bg-sunken, var(--color-bg-subtle));
+  background: var(--color-bg-surface-sunken);
   touch-action: none;
 }
 

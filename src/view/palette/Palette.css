@@ -232,7 +232,7 @@
   max-width: 100%;
   min-width: 0;
   margin: var(--space-2) 0 var(--space-1);
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font: var(--type-body-sm);
   line-height: var(--line-height-snug);
 }
