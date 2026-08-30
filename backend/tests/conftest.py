@@ -318,6 +318,37 @@ def _no_ambient_config_file(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _the_environment_a_test_inherits_is_the_one_it_leaves() -> Iterator[None]:
+    """Snapshot `os.environ` and put it back, for every test.
+
+    `monkeypatch` already restores what a *test* sets. It cannot restore what
+    the **code under test** sets, and one entry point does exactly that:
+    `cli.console_main` calls `load_env_file()`, which reads the developer's own
+    `.env` into `os.environ` — by design, because that is what the installed
+    command is for.
+
+    So a single test that exercises `console_main` in-process hands the whole
+    remainder of the suite whatever that file contains. It cost seven failures
+    in two unrelated modules the day `launch-readiness/195` landed: this
+    repository's `.env` sets `OLLAMA_HOST`, and
+    `test_unreachable_provider_endpoint` asserts on the path taken when it is
+    *unset*, while `test_skill_layer` resolves a model. Both passed alone and
+    failed after, which is the signature of exactly this and of nothing else.
+
+    Restoring the mapping rather than forbidding the call is deliberate. The
+    call is correct — `console_main` must load `.env` — and a fixture that
+    banned it would be testing a different function from the one that ships.
+    """
+    import os
+
+    before = dict(os.environ)
+    yield
+    if dict(os.environ) != before:
+        os.environ.clear()
+        os.environ.update(before)
+
+
+@pytest.fixture(autouse=True)
 def _release_services_this_test_opened() -> Iterator[None]:
     """Close every `WorkflowServices` a test built, at that test's teardown.
 
