@@ -226,8 +226,13 @@ gate. The same thing from Python is `load_workflow("./workflows/my-thing")` —
 see [Using OpenStateGraph in your project](docs/adoption.md).
 
 Opens on a **blank canvas**: an address that names no workflow opens no
-workflow, whoever last used this browser (`install-experience` 23). Open one
-from **Workflows**, start from a template, or copy an example — the shipped
+workflow, whoever last used this browser (`install-experience` 23). The one
+exception is the **first** visit in a browser that has never held any work,
+which is handed a starter — Input → Agent → Output, wired, with a note saying
+what it is (`install-experience` 24). It is unsaved and called `Untitled`,
+nobody else's document, and deleting it is permanent: it is offered once.
+Otherwise open one from **Workflows**, start from a template, or copy an
+example — the shipped
 `chinook-assistant` **runs with no credentials** on the canvas preview, where
 the default model is `Mock · Offline`, a deterministic simulator. The real backend, once running, defaults to **Ollama cloud**, which
 needs `OLLAMA_API_KEY` (or `OLLAMA_HOST` for a daemon you run);

@@ -94,7 +94,18 @@ checkout once `npm run build` has run at least once.
 The editor opens on a **blank canvas**, with the START FROM templates and the
 EXAMPLES shelf in the Workflows drawer. An address that names no workflow opens
 no workflow — not the last thing this browser was editing, and not a demo
-document (`install-experience` 23). Open `chinook-assistant` from **Workflows**
+document (`install-experience` 23).
+
+The **first** visit in a browser is the one exception, and a deliberate one
+(`install-experience` 24): a browser holding no draft at all has never opened
+this editor, and it is handed a starter rather than an empty grid — Input →
+Agent → Output, wired, under a note saying what the three nodes are, how to run
+them, and that the note can be deleted. It is nobody else's document; it is
+composed from the palette's own **Starter flow**, it is unsaved and called
+`Untitled`, and one undo or one delete is the end of it. It is offered **once
+per browser**, so getting rid of it is permanent.
+
+Open `chinook-assistant` from **Workflows**
 and it runs with **no credentials at all**: the canvas preview's default model
 is `Mock · Offline`, a deterministic simulator that exercises the real
 execution path (it requests a tool, then answers from the tool's result).
@@ -581,7 +592,10 @@ there is nothing to restore and nothing to fall back to, and the answer is a
 blank canvas — not the newest draft this browser happens to be holding, which
 is what it used to be (`install-experience` 23). A tab that reloads still gets
 its own document back, because a reload is the same tab; a *new* tab has never
-had one. What the drafts get instead of an implicit adoption is a list with a
+had one. The first-visit starter above is not a counterexample and is worth
+saying why: nothing is *restored* there, because there is nothing in that
+browser to restore — four nodes are composed on the spot, unsaved, and never a
+second time. What the drafts get instead of an implicit adoption is a list with a
 button: **Workflows ▸ Unsaved in this browser**.
 
 The other half of the same rule is what **New** does: a new workflow gets an
