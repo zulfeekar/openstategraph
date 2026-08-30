@@ -309,7 +309,7 @@ two callers and would separate the walk from the edge table it reads.
 STREAMING = """
 SSE framing and the stream fold — itself the product of a split
 (reviews-2026-08-14 ticket 72), which is why its docstring is one line while
-the file is 1026 code lines. It already has four collaborators beside it that
+the file is 1042 code lines. It already has four collaborators beside it that
 used to be inside it: `burst_recorder.py`, `frame_clock.py`, `audience.py` and
 `diagram.py`.
 
@@ -329,6 +329,17 @@ the first pull, so suspending earlier moved the turn's token meter into a
 different task from `graph.astream` and stopped the run's cost being counted at
 all. Caught live, and pinned twice in
 `test_a_run_says_when_it_starts.py`.
+
+**1026 -> 1042 (`memory-and-replay` 65), and sixteen lines is what it cost
+to stop the stream calling an agent a mounted workflow.** Two of them are
+executable — one `is_mount` term in the namespace guard, and `_mount_ids`
+asking the compiler what it recorded — and the rest is the argument for why
+`None` and `set()` are different answers, written at the field that holds
+them. That argument is the fix: the older guard could rule out a namespace
+head naming *no* canvas node and had no way to rule out one naming a node that
+is not a mount, which is every agent in the product, because `create_agent`
+returns a compiled LangGraph and its loop is namespaced under the node that
+owns it.
 
 **`ToolWatcher` is where a split was available and was taken.** It reads the
 same `messages` list `SpawnWatcher` does, and four more lines inside that class
@@ -574,7 +585,7 @@ RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(570, NODE_RUNTIME),
     "cli.py": Recorded(1125, CLI),
     "compile/workflow_compiler.py": Recorded(964, WORKFLOW_COMPILER),
-    "api/streaming.py": Recorded(1026, STREAMING),
+    "api/streaming.py": Recorded(1042, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(698, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
