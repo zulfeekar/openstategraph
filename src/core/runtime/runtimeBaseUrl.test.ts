@@ -50,6 +50,47 @@ describe('resolveRuntimeBaseUrl', () => {
     expect(resolveRuntimeBaseUrl({ dev: true, configured: '   ' })).toBe(DEV_RUNTIME_BASE_URL);
   });
 
+  it('follows a <base href> when the product is mounted under a host app path', () => {
+    // A host FastAPI service mounts us at /osg. The page is served from
+    // /osg/, so `/api/...` would leave the mount entirely and hit the host's
+    // own 404. The prefix is not a build-time fact — the same wheel is
+    // mounted at different paths by different hosts — so it is read from the
+    // document's own <base href>, which is the one thing the server can set
+    // per deployment.
+    expect(resolveRuntimeBaseUrl({ dev: false, baseHref: 'http://svc.example/osg/' })).toBe('/osg');
+    expect(resolveRuntimeBaseUrl({ dev: false, baseHref: 'http://svc.example/a/b/' })).toBe('/a/b');
+  });
+
+  it('stays same-origin relative when the base href is the origin root', () => {
+    // `openstategraph serve`, Docker, and any mount at `/`. There is no
+    // prefix to add, and adding `''` must not become `'/'` — every caller
+    // appends a rooted path.
+    expect(resolveRuntimeBaseUrl({ dev: false, baseHref: 'http://svc.example/' })).toBe('');
+  });
+
+  it('lets the explicit override and dev mode beat the base href', () => {
+    // Precedence is the project's standing rule: explicit argument wins, and
+    // the cross-origin dev stack is not a mount.
+    expect(
+      resolveRuntimeBaseUrl({
+        dev: false,
+        configured: 'http://rt:9000',
+        baseHref: 'http://s/osg/',
+      }),
+    ).toBe('http://rt:9000');
+    expect(resolveRuntimeBaseUrl({ dev: true, baseHref: 'http://s/osg/' })).toBe(
+      DEV_RUNTIME_BASE_URL,
+    );
+  });
+
+  it('ignores a base href it cannot parse rather than breaking every call', () => {
+    // `document.baseURI` is always absolute in a browser, but this function is
+    // pure and callable with anything. A bad value must degrade to the
+    // same-origin default, never to a base that prefixes garbage onto /api.
+    expect(resolveRuntimeBaseUrl({ dev: false, baseHref: 'not a url' })).toBe('');
+    expect(resolveRuntimeBaseUrl({ dev: false, baseHref: '' })).toBe('');
+  });
+
   it('describes the empty base in words, because "the runtime at " is not a message', () => {
     expect(describeRuntimeBase('')).toBe('this page’s own origin');
     expect(describeRuntimeBase('http://rt')).toBe('http://rt');

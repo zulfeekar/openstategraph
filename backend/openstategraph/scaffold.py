@@ -424,6 +424,11 @@ class InitResult:
     #: can only say "already covers it" in the case where it does. Never a
     #: reason to write: the fix was the sentence, not the file.
     gitignore_gaps: tuple[str, ...]
+    #: The packages already in the workflows root when `--adopt` took it over.
+    #: Empty whenever there was nothing to adopt, which is what makes
+    #: `--adopt` inert in a fresh directory rather than a second, quieter
+    #: `init` that skips the starter.
+    adopted: tuple[FoundPackage, ...] = ()
 
 
 def _existing_directory_refusal(target: Path, label: str) -> str | None:
@@ -503,6 +508,76 @@ def _looks_like_our_project(target: Path) -> bool:
     return any((target / name).is_file() for name in CONFIG_FILENAMES)
 
 
+@dataclass(frozen=True)
+class FoundPackage:
+    """One directory inside a workflows root somebody else wrote.
+
+    `error` rather than an omission, which is the catalogue's rule for the
+    same reason: a review that silently drops the one package that will not
+    parse hides exactly what a reader most needs before adopting a directory.
+    """
+
+    #: The folder name — the slug this package would be addressed by.
+    slug: str
+    #: `name` from its document, or the slug when the document does not say.
+    name: str
+    #: How many nodes it draws. Zero when the document could not be read.
+    node_count: int
+    #: Why it could not be read, or `None`.
+    error: str | None
+
+
+def review_workflows_root(root: Path) -> tuple[FoundPackage, ...]:
+    """What is already in a workflows root, read without compiling anything.
+
+    **The reading is `WorkflowStore.list`'s, not a second one.** The envelope
+    a `workflow.json` carries — `document.nodes`, a `published` flag, a
+    `savedAt` — is knowledge that already has one owner, and a hand-rolled
+    `json.loads` here would be a second copy of it that drifts silently. The
+    first draft of this function was exactly that, and it reported a real
+    seven-node package as *"0 nodes"* because it read `nodes` off the
+    envelope instead of off the document inside it.
+
+    Cheap by construction rather than by promise: that method reads one
+    `workflow.json` per package and imports no runtime, builds no model and
+    executes nobody's `tools/*.py` — which matters more here than anywhere
+    else, because this runs against a directory that is not ours and before a
+    project exists at all.
+
+    `include_broken=True`, and hidden packages included: this answers "what am
+    I about to adopt", and the honest answer names everything the root holds.
+    """
+    from openstategraph.api.workflow_store import WorkflowStore
+
+    if not root.is_dir():
+        return ()
+    rows = WorkflowStore(root).list(include_broken=True, include_hidden=True)
+    return tuple(
+        FoundPackage(
+            slug=row.slug,
+            name=row.name or row.slug,
+            node_count=row.node_count,
+            error=row.error or None,
+        )
+        for row in sorted(rows, key=lambda row: row.slug)
+    )
+
+
+def _review_lines(found: tuple[FoundPackage, ...]) -> list[str]:
+    """The review, as the refusal and the adoption report both print it."""
+    if not found:
+        return ["  (no packages in it yet)"]
+    width = max(len(row.slug) for row in found)
+    lines = []
+    for row in found:
+        if row.error is not None:
+            lines.append(f"  {row.slug.ljust(width)}  will not parse — {row.error}")
+        else:
+            plural = "" if row.node_count == 1 else "s"
+            lines.append(f"  {row.slug.ljust(width)}  {row.name} — {row.node_count} node{plural}")
+    return lines
+
+
 def _shared_workflows_root_refusal(target: Path, workflows_dir: str, label: str) -> str | None:
     """production-ready/68 — the one directory `init` was most likely to
     collide over, and the only one it said nothing about.
@@ -534,14 +609,20 @@ def _shared_workflows_root_refusal(target: Path, workflows_dir: str, label: str)
     ordinal = 2
     while (target / f"{workflows_dir}_{ordinal}").exists():
         ordinal += 1
+    review = "\n".join(_review_lines(review_workflows_root(root)))
     return (
         f"{label}/{workflows_dir}/ already exists and is not ours. Nothing was written.\n"
+        f"Here is what is in it:\n"
+        f"{review}\n"
+        f"  adopt it:           openstategraph init {label} --force --adopt\n"
         f"  pick another root:  openstategraph init {label} --force"
         f" --workflows-dir {workflows_dir}_{ordinal}\n"
         f"  or move theirs:     mv {label}/{workflows_dir} {label}/{workflows_dir}_old\n"
         f"--force is consent to use a directory with things in it, not consent to share\n"
         f"the workflows root: OpenStateGraph scans {workflows_dir}/ for packages, so from\n"
-        f"then on it would be reading directories it did not write."
+        f"then on it would be reading directories it did not write. `--adopt` is that\n"
+        f"second consent, and it is the right answer when those packages are yours —\n"
+        f"a service that already ships workflows and now wants the canvas over them."
     )
 
 
@@ -552,6 +633,7 @@ def init_project(
     workflows_dir: str = "workflows",
     force: bool = False,
     starter: bool = True,
+    adopt: bool = False,
 ) -> InitResult:
     """Make `directory` an OpenStateGraph project. The third writer here.
 
@@ -602,9 +684,11 @@ def init_project(
 
     existing_project_warning = _existing_directory_warning(target, name, workflows_dir)
 
-    shared = _shared_workflows_root_refusal(target, workflows_dir, name)
-    if shared is not None:
-        raise ScaffoldError(shared)
+    adopted = review_workflows_root(target / workflows_dir) if adopt else ()
+    if not adopt:
+        shared = _shared_workflows_root_refusal(target, workflows_dir, name)
+        if shared is not None:
+            raise ScaffoldError(shared)
 
     reused_empty = target.is_dir() and not any(target.iterdir())
     target.mkdir(parents=True, exist_ok=True)
@@ -635,7 +719,10 @@ def init_project(
     root.mkdir(parents=True, exist_ok=True)
 
     package: Path | None = None
-    if starter:
+    # No starter into a root that already holds somebody else's packages. It
+    # is a teaching aid for an empty root; in an adopted one it is litter,
+    # under a slug (`starter`) the owners may already be using.
+    if starter and not adopted:
         package = root / STARTER_SLUG
         if not package.exists():
             new_package(root, STARTER_SLUG, template=templates.DEFAULT_TEMPLATE)
@@ -653,6 +740,7 @@ def init_project(
         reused_empty=reused_empty,
         existing_project_warning=existing_project_warning,
         gitignore_gaps=ignore_gaps,
+        adopted=adopted,
     )
 
 

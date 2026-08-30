@@ -450,6 +450,48 @@ print(answer.decisions)               # ...and which branch each router took
 | `.mermaid()` | the compiled topology as text, no network call |
 | `.slug` / `.package_dir` / `.document` | what it loaded, and from where |
 
+### One process, two surfaces — mounting the editor in your own app
+
+The section above gives your service the *runtime*. This gives it the
+*canvas*, in the same process, without a second deployment:
+
+```python
+from fastapi import FastAPI
+from openstategraph.api.embed import mount_openstategraph
+
+app = FastAPI()                        # your service, with all of your routes
+mount_openstategraph(app, "/osg")      # the canvas, /chat and the API under /osg
+```
+
+Every route you already had is untouched. `/osg/` is the canvas, `/osg/chat`
+is the customer chat, `/osg/api/...` is the same HTTP surface
+[`api.md`](api.md) documents — and all of it reads the workflows root your
+service reads, so a flow edited in the browser is written into the directory
+`load_workflow` and `Workflows` load from.
+
+Serving the canvas needs its assets, which stay behind the same switch
+everything else uses: `OPENSTATEGRAPH_SERVE_STATIC=1`. Leave it unset and you
+get the API mounted and no static files in your process — which is the right
+shape for a deployment that wants the runtime and does not want an editor on
+a public port. Put the mount behind a flag of your own for the same reason.
+
+| | |
+| --- | --- |
+| the path | rooted, no trailing slash — `"/osg"`, or `"/"` for the origin root. Anything else is a `ValueError` at mount time rather than a page that half works |
+| the return value | the mounted app, so you can reach `mounted.state.services` |
+| lifespan | chained onto your app's automatically. Starlette does not run a mounted sub-application's lifespan, and ours is where the state directory is locked and every sqlite handle is released — so the helper wraps yours rather than leaving them unrun |
+| workers | one. The single-worker refusal is not waived by being mounted: the state directory it protects is the same one |
+
+**What reaches the running service, and when.** The editor writes
+`workflow.json`; your process decides when it reads it. `Workflows.list()`
+re-reads on every call, so the catalogue is live. A *compiled* workflow is
+not: `load_workflow` and `Workflows.load` build a graph, import the package's
+`tools/*.py` and construct a model, which is per-process work — so if you
+cache the compiled object (and you should), an edit reaches your service when
+you drop that cache, and otherwise on restart. `GET /api/events` is the
+change signal, and the same broadcaster is reachable in-process through
+`mounted.state.services` if you would rather invalidate than restart.
+
 ### More than one workflow: the catalogue
 
 A path per call is right for one package and wrong for a directory of them —

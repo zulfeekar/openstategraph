@@ -862,6 +862,7 @@ def cmd_init(args: argparse.Namespace) -> int:
             workflows_dir=args.workflows_dir,
             force=args.force,
             starter=not args.empty,
+            adopt=args.adopt,
         )
     except ScaffoldError as exc:
         return _error(str(exc))
@@ -870,6 +871,18 @@ def cmd_init(args: argparse.Namespace) -> int:
         print(f"{label}/ exists and is empty — using it")
     if result.existing_project_warning is not None:
         print(result.existing_project_warning)
+    if result.adopted:
+        # The same review the refusal prints, printed again as a report — this
+        # is now what the project reads, and a reader should see the list they
+        # consented to rather than take the word `--adopt` on trust.
+        from openstategraph.scaffold import _review_lines
+
+        count = len(result.adopted)
+        noun = "package" if count == 1 else "packages"
+        print(f"adopted {args.workflows_dir}/ — {count} {noun} already in it:")
+        for line in _review_lines(result.adopted):
+            print(line)
+        print("  no starter was written into it — those packages are yours")
 
     def state(path: Path) -> str:
         return "" if path in result.created else "   (already there — left alone)"
@@ -1859,6 +1872,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="use a directory that already has things in it; overwrites nothing",
+    )
+    # The second consent, and it is a different one: `--force` says the
+    # project directory may have things in it, `--adopt` says the *workflows
+    # root* is already full of packages and they are yours to read. The
+    # refusal that names it prints the review first, so nobody adopts a
+    # directory they have not seen.
+    init.add_argument(
+        "--adopt",
+        action="store_true",
+        help="take over an existing workflows/ directory as this project's root",
     )
     init.set_defaults(handler=cmd_init)
 

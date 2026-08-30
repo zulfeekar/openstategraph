@@ -37,12 +37,16 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, Mapping
 
 from openstategraph.workflows_root import checkout_root
 
 logger = logging.getLogger(__name__)
+
+#: A `<base>` element already in the document, however it was spelled.
+_BASE_TAG = re.compile(r"<base\b[^>]*>", re.IGNORECASE)
 
 #: Set by the container, by `openstategraph serve`, and by nobody else.
 SERVE_STATIC_ENV = "OPENSTATEGRAPH_SERVE_STATIC"
@@ -61,6 +65,36 @@ PACKAGED_MERMAID = Path(__file__).resolve().parent / "static" / "vendor" / "merm
 #: The page shown when no build exists anywhere. A file, not a Python string —
 #: the same rule `chat_page.py` follows.
 EDITOR_MISSING_PAGE = Path(__file__).resolve().parent / "static" / "editor_missing.html"
+
+
+#: Where `<base href>` goes, and the only place it may go. `<head>` is the
+#: browser's own rule: a `<base>` after the first URL-bearing tag has already
+#: been overtaken by it.
+_HEAD_OPEN = "<head>"
+
+
+def with_base_href(html: str, base: str) -> str:
+    """The served document, told which path prefix it was mounted at.
+
+    The one fact a built bundle cannot carry: the same wheel is mounted at `/`
+    by `openstategraph serve`, and at whatever a host application chose by an
+    embedder. So the *server* states it, in the document, and the bundle reads
+    it back — assets through the build's relative base, API calls through
+    `runtimeBaseUrl()`.
+
+    Two things it deliberately does not do. It does not add a second `<base>`
+    to a document that already declares one — the browser honours the first
+    and the second is silent, so replacing is the only honest merge. And it
+    does not guess a position in a document with no `<head>`: that is not a
+    build of ours, and a tag in the wrong place is worse than an absent one.
+    """
+    if _BASE_TAG.search(html):
+        return _BASE_TAG.sub(f'<base href="{base}">', html, count=1)
+    head = html.find(_HEAD_OPEN)
+    if head < 0:
+        return html
+    cut = head + len(_HEAD_OPEN)
+    return f'{html[:cut]}<base href="{base}">{html[cut:]}'
 
 
 def _is_build(directory: Path) -> bool:
@@ -166,7 +200,7 @@ def editor_missing_html() -> str:
     return EDITOR_MISSING_PAGE.read_text()
 
 
-def _editor_files(directory: Path) -> Any:
+def _editor_files(directory: Path, base: str = "") -> Any:
     """`StaticFiles` that answers a person before it answers a 404.
 
     The class is built inside the function for the same reason the import used
@@ -177,6 +211,7 @@ def _editor_files(directory: Path) -> Any:
     — a 404 response, or a raised `HTTPException` — so both are caught and
     asked the same question.
     """
+    from fastapi.responses import HTMLResponse
     from fastapi.staticfiles import StaticFiles
     from starlette.datastructures import Headers
 
@@ -186,7 +221,19 @@ def _editor_files(directory: Path) -> Any:
     from starlette.exceptions import HTTPException
 
     class EditorFiles(StaticFiles):
+        def _document(self) -> Any:
+            """`index.html` read and stamped with the mount prefix.
+
+            Read per request rather than cached, the same rule
+            `editor_missing_html()` follows: the file is package data an
+            operator may replace under a running process, and the page is one
+            document, not a hot path."""
+            html = with_base_href((directory / "index.html").read_text(), base)
+            return HTMLResponse(html)
+
         async def get_response(self, path: str, scope: Any) -> Any:
+            if base and path in ("", ".", "/", "index.html"):
+                return self._document()
             try:
                 response = await super().get_response(path, scope)
             except HTTPException as exc:
@@ -200,12 +247,16 @@ def _editor_files(directory: Path) -> Any:
                 if response is None:
                     raise HTTPException(status_code=404)
                 return response
+            if base:
+                return self._document()
             return await super().get_response("index.html", scope)
 
     return EditorFiles(directory=directory, html=True)
 
 
-def mount_editor(app: Any, env: Mapping[str, str] | None = None) -> Path | None:
+def mount_editor(
+    app: Any, env: Mapping[str, str] | None = None, base_path: str = ""
+) -> Path | None:
     """Serve the editor at `/`, and return where it came from.
 
     Called last, after every route is declared, so `/api/*`, `/chat` and
@@ -213,13 +264,20 @@ def mount_editor(app: Any, env: Mapping[str, str] | None = None) -> Path | None:
     else claimed. `html=True` serves `index.html` at `/`; a path that matches
     no file falls back to the same page when `serves_the_editor` says a person
     in a browser is asking, and 404s exactly as before when it does not.
+
+    `base_path` is the prefix a host application mounted this app at, and when
+    it is given every served copy of `index.html` carries it as `<base href>`.
+    Empty is not the same as `"/"`: empty means nobody said, which is the
+    behaviour every existing caller had and keeps.
     """
     if not serving_enabled(env):
         return None
 
+    base = f"{base_path.rstrip('/')}/" if base_path else ""
+
     directory = editor_dir(env)
     if directory is not None:
-        app.mount("/", _editor_files(directory), name="editor")
+        app.mount("/", _editor_files(directory, base), name="editor")
         logger.info("editor served from %s", directory)
         return directory
 
