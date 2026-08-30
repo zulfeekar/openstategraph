@@ -24,6 +24,12 @@
   argument, its prior art and what was rejected are in
   `docs/decisions/importing-the-projects-own-code.md`
   (`launch-readiness/195`).
+- **`docs/cli.md`** — every command and subcommand, its flags, its exit codes,
+  what it does and when to reach for it. It is now the single enumeration of
+  the CLI (`docs/README.md` names it, `docs/adoption.md` links to it), and
+  `test_documented_cli_surface.py` walks the real parser in both directions:
+  a flag argparse accepts and the page does not document fails, as does one
+  the page documents and argparse does not (`launch-readiness/196`).
 
 ### Added
 - **Three additions to the run stream's published vocabulary**

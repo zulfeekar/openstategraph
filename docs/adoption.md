@@ -114,13 +114,11 @@ so sharing it means reading directories OpenStateGraph did not write.
 the file, for the reason it always did: the file is committed and shared, the
 environment is the machine in front of you.
 
-### Ports — what each form means
+### Ports — why it behaves that way
 
-| You type | What happens |
-| --- | --- |
-| `openstategraph serve` | port 8000, or the **next free port** if 8000 is busy |
-| `openstategraph serve --port 8080` | exactly 8080, or a clear failure if it is taken |
-| `openstategraph serve --port 0` | the OS picks a free port |
+The three forms `--port` takes are enumerated in
+[The `openstategraph` command](cli.md#serve). What matters here is the
+reasoning behind them.
 
 In every case the last thing printed before the server's own log is the URLs it
 actually ended up on — editor, chat and health — so `--port 0` is a usable mode
@@ -370,39 +368,16 @@ You do not have to write a Python file to find out whether a package works.
 openstategraph run ./workflows/chinook-assistant "How many invoices are there?"
 ```
 
-That is the whole first five minutes. The rest of the commands each wrap a
-seam the library already has — there is no behaviour in the CLI that
-`load_workflow` does not have:
+That is the whole first five minutes.
 
-| Command | What it does |
-| --- | --- |
-| `openstategraph run <package> "<question>"` | ask it. `--model`, `--thread-id`, `--trace-file`, `--knowledge-dir`, and `--json` for the whole result rather than the answer. A run that stopped at a `human.approval` gate **exits 1** and prints the pause, the thread id and the `resume` line that finishes it — it is not a finished run and no longer says it is |
-| `openstategraph resume <package> <thread-id> --approve\|--reject [--feedback "…"]` | answer the approval a run is paused on and let the rest of it happen. The decision is **required** — there is no default and nothing infers one — and `--feedback` is a note on a rejection, refused with **2** on an approval rather than silently dropped. A thread that is not stored, is not paused, or belongs to another package is refused with **1** and a sentence. Same flags as `run` otherwise; **it executes**, so it announces the thread, the gate and the decision on stderr before it acts |
-| `openstategraph validate <package\|workflow.json>` | the compiler's plan and findings, plus the two questions a plan held in memory cannot answer: does every mount name a package that is there **and stop short of mounting its own package again**, and does every bound tool have an implementation **in this installation** (built-in, an installed plugin, or the package's own `tools/`). **Exit 1** on blocking findings, so it is a CI gate. A document copied without its package's `tools/`, and a package whose mount chain closes on itself, fail here rather than at the first run |
-| `openstategraph graph <package>` | the compiled topology as Mermaid **text**, on stdout. Never a network call — but it *builds* the graph, so a package with an agent needs a provider extra installed (exit 3 otherwise). `validate` needs no provider |
-| `openstategraph new <slug> [name] [--template NAME]` | scaffold a package into `./workflows` (`--root` to change that) from one of the templates in the wheel — `minimal` (default), `loop`, `routed-qa`, `team`. An unknown name exits **2** and lists the valid ones; `--team` is a deprecated alias for `--template team` |
-| `openstategraph new --list-templates` | the templates and one line on what each is for |
-| `openstategraph examples list` | the worked examples in the wheel, in reading order: slug, the pattern it demonstrates, and its one-line purpose |
-| `openstategraph examples copy <slug>` | copy one into `./workflows` (`--root` to change that), **with every package it mounts**. The copy is severed — an upgrade never touches it. An unknown slug exits **2** and lists the real ones; `<slug>` itself already existing always exits **1** and nothing is written, but a *mounted dependency* that already exists byte-identical to the shipped copy is left alone and named "already yours, unchanged — kept" rather than refused — an actually-edited dependency still exits **1**, same as before. `--all` takes the whole gallery instead of one slug, all-or-nothing, printing the size before the first byte |
-| `openstategraph eval <package>` | grade the package against the golden dataset in its `evals/` folder — this one **runs a model**. `--dataset`, `--limit N`, `--model`, `--json` for the scorecard, `--repeat N` to ask each case N times and report whether the answers agreed (each repetition on its own thread, so it is the question asked again rather than a follow-up; reported, never gated), and `--threshold 0.8` to exit **1** below a number you are willing to defend (default 0, i.e. report but do not gate). The metric is in [Evaluation](evaluation.md) |
-| `openstategraph export plugin <package> [--out DIR]` | write the package out as an [Agent Plugins](decisions/agent-plugins.md) v1 bundle — the same thing `GET /api/workflows/<slug>/plugin-export` previews, actually written down. Defaults to `./<the package's folder name>`; a destination that already holds files exits **1** and writes nothing. What no portable v1 component type can carry travels under `org.openstategraph/`, and every lossy edge is printed as a `note:` on stderr. Needs no extra and calls no model |
-| `openstategraph threads list\|show` | past runs the checkpointer stored, newest first; `show` replays one checkpoint by checkpoint without re-running it. A `paused` thread's `show` also prints the gate's message, the candidate, and the exact `resume` line that finishes it — `list` only notes in a footer that something is waiting, so the table stays scannable |
-| `openstategraph runs list` | what this machine has run, one row per turn, newest first — **whichever door ran it**: the library (`ask`/`resume`, and so the CLI and a package's own `tests/`), `POST /api/runs`, `POST /api/runs/stream` and the MCP `run_workflow` tool all write the same row. A turn a reader stopped — Stop, or a closed tab — is written too, as `kind="stopped"` rather than as a failure, because the model call already issued was still paid for. A turn that spent its **whole step budget** and reached no answer is the third kind, `kind="exhausted"`: not a failure either, because no node failed — the ceiling stopped a graph that was running perfectly well — and the most expensive row in the table, since it was billed for the entire budget. Each row carries what the turn cost and how long it took. Read from the **run store**, a local sqlite file written with no configuration at all; `--workflow`, `--thread` (one conversation), `--session` (a grouping that spans them), `--limit`, and `--json` for the same rows as JSON. The complement of `threads list`, which reads the checkpointer and holds what a run *said*: this holds what it *cost* and *executed* |
-| `openstategraph runs path` | print the run store's path, so you can point `sqlite3` at it and write your own query. Prints `memory` when the store has been opted out with `OPENSTATEGRAPH_RUN_STORE_PATH=memory` |
-| `openstategraph runs export [--to FILE]` | the same rows as a JSON array, to stdout or to a file, **with the cadence** — every burst of streamed output a run produced, with each chunk's own measured offset, so a replay of an exported run shows what it actually looked like arriving. What you run **before** truncating a store that has grown large — nothing here ever deletes a run, because a conversation is the raw material for replay. It **refuses rather than under-delivers**: if the cadence cannot be read the command writes no file and exits non-zero, because a file missing how its answers arrived is not a copy of the store and must not be truncated against |
-| `openstategraph providers` | which model providers are registered, whether each has a credential, its default model, **which** of the variables it reads actually supplied one, and the extra it needs. The first thing to run when a model call fails. It **calls nobody**, so `configured` on a row means a credential is present in this environment — never that the endpoint is reachable or that a request will be answered, and the command says so under the list |
-| `openstategraph providers --check` | the same list, then **one real, billable request per configured provider**, reporting which answered. Opt-in because it costs money: a status command must not spend an adopter's budget to render a word. Exits **1** if any configured provider fails to answer, and **1** when there is nothing to check at all — unlike plain `providers`, which is a status command and exits **0** whenever it could report, including on a machine where nothing is configured |
-| `openstategraph env-example` | print the provider block of `.env.example` — names only, never values — to redirect into your own `.env` |
-| `openstategraph knowledge list <package>` | the second brain's topics, their one-line hints, and each doc's owner and stale badge (`--knowledge-dir` to look elsewhere, which drops the badges — a store outside the package has no source to recompute) |
-| `openstategraph knowledge build <package>` | generate them; prints `written / skipped / collisions / warnings`. `--source` runs one builder, `--instruction` steers the agentic one, `--model` picks the model |
-| `openstategraph init [directory]` | make a directory an OpenStateGraph project — `openstategraph.yaml`, a `workflows/` folder and a starter package. Defaults to the current directory; `--workflows-dir` renames the packages folder, `--empty` skips the starter, `--force` waives the "directory is not empty" refusal and nothing else — it overwrites no file it did not write, and does not waive the refusal to share a pre-existing workflows root. The one command that creates a project, and the only thing the install line cannot carry |
-| `openstategraph serve [--host --port --open --workers]` | the whole product on one origin: editor at `/`, chat at `/chat`, API under `/api`. No `--port` takes 8000 or the next free port; `--port N` means exactly N; `--port 0` lets the OS choose; the URLs it landed on are printed. Needs `openstategraph[server,ollama]` — `[server]` is the web layer and carries **no** model integration, so an install without a provider extra serves an editor that cannot run anything, and says so before it binds. `--workers` exists only to be **refused** by name: it must be 1, and `--workers 4` exits with the reason rather than silently serving four processes that cannot see each other's drafts, approvals or catalogue events — see [Deploying](deploying.md) |
-| `openstategraph mcp [--transport stdio\|streamable-http]` | the MCP transport. Needs `openstategraph[mcp]` |
-
-Exit codes are fixed, because they are what CI consumes: **0** success, **1**
-run or validation failure, **2** usage error, **3** a required extra is missing
-(the message names the exact `pip install` line). Every command takes its paths
-from its arguments, so it works from any directory.
+**Every command, every flag and every exit code is in
+[The `openstategraph` command](cli.md)** — including which one to reach for
+when, and what each refuses to do. It is the only enumeration of them, held
+against the real parser by a test. What follows here is only the part an
+adopter needs while reading this page: nothing in the CLI is behaviour
+`load_workflow` does not have, every command takes its paths from its
+arguments so it works from any directory, and the exit codes are fixed
+because they are what CI consumes.
 
 A **paused run** is the one thing that exits **1** on its own, without the
 second half: a run stopped at a `human.approval` gate has not failed and has

@@ -17,6 +17,7 @@ Start with what you came here to do.
 | **add it to a service I already have** | [Adding it to a project you already have](adding-openstategraph-to-your-project.md) — the ordered walk a stranger follows: the install line that works today, `init` into a directory that is already yours, the smallest `workflow.json` that answers with no model call, and an existing `POST /chat` rewired through `Workflows().load(...).ask(...)` | [Wiring a workflow into your app](wiring-it-in.md) |
 | **add it to a codebase that already uses LangGraph** | [OpenStateGraph in a LangGraph codebase](openstategraph-in-a-langgraph-codebase.md) — for a reader who already has `StateGraph`s: what `.graph` is exactly, composition in both directions (your graph calling a workflow three ways; a workflow calling your code through `functions/`, `tools/` and an installed distribution), what crosses the state boundary and what structurally cannot, an honest list of what stays easier hand-written, and how to reach checkpointing, `interrupt()`, streaming and the step budget from a compiled workflow. Plus how to report a defect this repository can act on | [Export and portability](export-and-portability.md) |
 | **wire it into an app I already own** | [Wiring a workflow into your app](wiring-it-in.md) — the two integration shapes and how to tell which you are in, a runnable `.astream_events()` → SSE loop for the embedded one, the four `configurable` identity keys in one table for both, and the consumer's half of the memory model | [The HTTP API](api.md) |
+| **look up a command** | [The `openstategraph` command](cli.md) — every command and subcommand, its flags, its exit codes, what it does and when you would reach for it, held against the real parser by a test | [Using it in your project](adoption.md) |
 | **know what I can build, and how to arrange it** | [Patterns](patterns.md) — the seven arrangements mapped to our node vocabulary, with the criteria for choosing between them | [Ports and edges](ports-and-edges.md) |
 | **measure whether my workflow is any good** | [Evaluation](evaluation.md) — `openstategraph eval`, execution accuracy (the metric Spider and BIRD report) and why it is not string comparison, how to add a case to a golden dataset, and how to read a regression | [Testing a second brain](second-brain.md) |
 | **check that my workflow's knowledge is right** | [Testing a second brain](second-brain.md) — what a project-level second brain is, what to build and read, how to tell a *stale* doc from a *wrong* one, the ablation that says whether the store earns its place, and the three checks worth pinning in a test | [`decisions/knowledge-architecture.md`](decisions/knowledge-architecture.md) |
@@ -38,8 +39,8 @@ mount semantics, the loop rule and the class/instance model in one place before
 they have any reason to open the pages those facts otherwise live in. It is
 allowed to repeat; the pages below are not allowed to repeat each other:
 [Ports and edges](ports-and-edges.md) is the only reference for the type
-system; [adoption](adoption.md) is the only place the CLI's flags and exit
-codes are enumerated for a consumer; [evaluation](evaluation.md) is the only
+system; [the `openstategraph` command](cli.md) is the only place the CLI's commands,
+flags and exit codes are enumerated; [evaluation](evaluation.md) is the only
 place the scoring metric is defined; [testing a second brain](second-brain.md)
 is the only place the knowledge store's verification procedure is written down;
 [stability](stability.md) is the only

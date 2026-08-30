@@ -1,0 +1,438 @@
+# The `openstategraph` command
+
+Every command on the CLI, what it does, and when you would reach for it.
+
+This page is the **only** enumeration of the CLI's commands, flags and exit
+codes — `docs/README.md` says so, and
+`backend/tests/test_documented_cli_surface.py` holds it to that: it walks the
+real `argparse` parser and fails when a command or a flag exists here and does
+not appear below, or appears below and does not exist. Everything on this page
+was run before it was written down; where a command could not be exercised
+without a credential or a dataset, the line says so.
+
+Two rules shape what you find here, and they are worth knowing before you go
+looking for something that is deliberately absent:
+
+- **No new logic.** Every command wraps a seam the library already has —
+  `load_workflow`, `ValidateWorkflowTool`, `scaffold`, `PackageKnowledge`,
+  `api.main:app`, `mcp_server.main`. There is nothing the CLI can do that a
+  Python caller cannot.
+- **`argparse` only**, no `click` and no `rich`. A project arguing for a
+  four-dependency core cannot then spend two more on colour and a decorator
+  syntax.
+
+Every command takes its paths from its arguments and works from any directory.
+A bare slug (`openstategraph validate starter`) resolves against the project's
+workflows root; an explicit path, relative or absolute, is resolved against
+the directory you are standing in.
+
+## Which one do I want?
+
+| I want to… | Command |
+| --- | --- |
+| make a directory I already have into a project | [`init`](#init) |
+| start a new package from a scaffold | [`new`](#new) |
+| start from a worked example instead | [`examples`](#examples) |
+| check a package compiles, before anything costs money | [`validate`](#validate) |
+| see the topology the compiler actually built | [`graph`](#graph) |
+| ask a package a question | [`run`](#run) |
+| answer an approval a run is waiting on | [`resume`](#resume) |
+| score a package against a dataset whose answers I know | [`eval`](#eval) |
+| find out why a model call failed | [`providers`](#providers) |
+| write the variable names I need into my own `.env` | [`env-example`](#env-example) |
+| read back what a past run *said* | [`threads`](#threads) |
+| read back what my runs *cost* | [`runs`](#runs) |
+| build or read a package's second brain | [`knowledge`](#knowledge) |
+| open the editor, the chat and the API on one port | [`serve`](#serve) |
+| let my own LLM compose workflows | [`mcp`](#mcp) |
+| hand the package to a different client | [`export plugin`](#export-plugin) |
+
+## Making things
+
+### `init`
+
+```
+openstategraph init [directory] [--workflows-dir NAME] [--empty] [--force]
+```
+
+Makes a directory an OpenStateGraph project: an `openstategraph.yaml`, a
+`.gitignore`, a workflows folder and a starter package. Defaults to the
+current directory. **This is the one command that creates a project**, and the
+only thing an install line cannot carry.
+
+It is written for a directory that is already yours. A directory with files in
+it is not refused — it is reported (*"already has N files in it — this looks
+like an existing project"*) and added to. Nothing it did not write is ever
+overwritten: run it twice and the second run prints `(already there — left
+alone)` beside each line.
+
+| Flag | Effect |
+| --- | --- |
+| `--workflows-dir NAME` | name the packages folder something other than `workflows`, and record it in the config |
+| `--empty` | config and `.gitignore` only, no starter package |
+| `--force` | waive the *"directory is not empty"* refusal and **nothing else** — it still overwrites no file it did not write, and still refuses to share a workflows root that was already there |
+
+The generated `openstategraph.yaml` is commented, and one of its keys is worth
+knowing about before you need it: `prepend_sys_path:`, which is what makes a
+package's `tools/*.py` able to `import` the project it lives in. The reasoning
+is [`decisions/importing-the-projects-own-code.md`](decisions/importing-the-projects-own-code.md).
+
+### `new`
+
+```
+openstategraph new <slug> [name] [--template NAME] [--root DIR]
+openstategraph new --list-templates
+```
+
+Scaffolds a package from one of the templates in the wheel. `--list-templates`
+prints them with a line each on what they are for. An unknown name exits **2**
+and lists the valid ones. `--root` writes somewhere other than the project's
+workflows root. `--team` is a deprecated alias for `--template team`; it works
+and prints a note saying so.
+
+Reach for this when you know the shape you want. If you do not, copy an
+example instead — a scaffold is a skeleton, an example is a workflow that
+already answers something.
+
+### `examples`
+
+```
+openstategraph examples list
+openstategraph examples copy <slug> [--root DIR]
+openstategraph examples copy --all [--root DIR]
+```
+
+`list` prints the worked examples that ship inside the wheel, in reading order
+— slug, the pattern each demonstrates, and a one-line purpose. `copy` takes
+one into your workflows root **with every package it mounts**.
+
+The copy is **severed**: it is yours, and upgrading the framework never
+touches it. An unknown slug exits **2** and lists the real ones. A slug you
+already have exits **1** and writes nothing — except a *mounted dependency*
+that is already there byte-identical to the shipped copy, which is left alone
+and named `already yours, unchanged — kept` rather than refused. An
+actually-edited dependency still exits **1**.
+
+`--all` takes the whole gallery, all-or-nothing, and prints the total size and
+the largest single file before it writes a byte.
+
+A copied example arrives as a **draft** (`published: false`), so the `/chat`
+picker skips it until you publish it. The command says so.
+
+## Checking things
+
+### `validate`
+
+```
+openstategraph validate <package | workflow.json>
+```
+
+The compiler's plan and findings — **no model is called and no provider extra
+is needed**, which is what makes this the gate to put in CI. Exit **1** on
+blocking findings.
+
+It answers three questions a plan held in memory cannot:
+
+- does every mount name a package that is actually there, **and** stop short
+  of mounting its own package again;
+- does every bound tool have an implementation *in this installation* —
+  built-in, an installed distribution, or the package's own `tools/`;
+- what did the compiler notice while it actually built the graph.
+
+A document copied without its package's `tools/`, and a package whose mount
+chain closes on itself, fail here rather than at the first run.
+
+When a `tools/` module is present but will not import, the report names **the
+module the interpreter could not find** and the two ways to fix it — an
+editable install of the project, or `prepend_sys_path:`. It does not tell you
+to move a folder that is already in place.
+
+Findings appear under `PROBLEMS FOUND:` and move the exit code. Anything under
+`Notes:` does not: a note cannot fail your CI, so it is kept out of the list
+that can.
+
+### `graph`
+
+```
+openstategraph graph <package> [--model MODEL] [--xray | --no-xray]
+```
+
+The compiled topology as Mermaid **text**, on stdout. Never a network call —
+`draw_mermaid_png()` would post your graph to a third-party API and is not
+used anywhere in this project.
+
+`--xray` (the default) opens every mounted package to any depth, as nested
+`subgraph` blocks. `--no-xray` draws what LangGraph itself holds — one box per
+mount — which is the honest picture when a mount is the thing you suspect.
+
+Unlike `validate` it *builds* the graph, so a package with an agent needs a
+provider extra installed; without one it exits **3** and names the `pip
+install` line. `--model` picks which model the build resolves, though nothing
+is invoked.
+
+### `eval`
+
+```
+openstategraph eval <package> [--dataset FILE] [--limit N] [--model MODEL]
+                              [--threshold X] [--repeat N] [--json]
+```
+
+Grades the package against the golden dataset in its `evals/` folder. **This
+one runs a model**, and is the only command on this page that does so without
+being asked a question.
+
+| Flag | Effect |
+| --- | --- |
+| `--dataset FILE` | use one dataset instead of the folder. A path that is not there exits **1** and says so |
+| `--limit N` | stop after N cases |
+| `--model MODEL` | grade with a model other than the package's own |
+| `--repeat N` | ask each case N times and report whether the answers agreed. Each repetition is its own thread, so it is the question asked again rather than a follow-up. Reported, never gated |
+| `--threshold X` | exit **1** below a score you are willing to defend. Default 0 — report, do not gate |
+| `--json` | the scorecard as JSON |
+
+The metric, and why it is not string comparison, is in
+[Evaluation](evaluation.md). *(The flags above were exercised against a
+missing dataset, which is the path that needs no credential; a scored run
+needs a provider key.)*
+
+## Running things
+
+### `run`
+
+```
+openstategraph run <package> "<question>" [--model MODEL] [--thread-id ID]
+        [--trace-file FILE] [--knowledge-dir DIR] [--context k=v] [--json]
+```
+
+Ask a package a question. This is the whole first five minutes: you do not
+have to write a Python file to find out whether a package works.
+
+| Flag | Effect |
+| --- | --- |
+| `--model MODEL` | override the model for this run |
+| `--thread-id ID` | continue a conversation instead of starting one |
+| `--trace-file FILE` | write the run's trace as it happens |
+| `--knowledge-dir DIR` | read the second brain from somewhere other than the package |
+| `--context k=v` | supply one declared run-context value; repeatable. It is `key=value`, and JSON is refused with **2**. A key the workflow does not declare is refused with **1** and a sentence naming the workflow |
+| `--json` | the whole `RunResult` rather than the answer text |
+
+**A paused run exits 1.** A run stopped at a `human.approval` gate has not
+failed and has not answered — it is waiting — so it prints the pause, the
+thread id and the exact `resume` line that finishes it, and does not claim
+success.
+
+### `resume`
+
+```
+openstategraph resume <package> <thread-id> (--approve | --reject)
+        [--feedback "…"] [--model MODEL] [--trace-file FILE]
+        [--knowledge-dir DIR] [--json]
+```
+
+Answer the approval a run is paused on and let the rest of it happen. **The
+decision is required** — there is no default and nothing infers one.
+`--feedback` is a note on a rejection; passing it with `--approve` is refused
+with **2** rather than silently dropped.
+
+A thread that is not stored, is not paused, or belongs to another package is
+refused with **1** and a sentence. Otherwise the flags are `run`'s. It
+**executes**, so it announces the thread, the gate and the decision on stderr
+before it acts.
+
+## Looking back
+
+### `threads`
+
+```
+openstategraph threads list [--workflow SLUG] [--user EMAIL] [--session ID]
+                            [--limit N] [--workflows-root DIR] [--json]
+openstategraph threads show <thread-id> [--workflow SLUG]
+                            [--workflows-root DIR] [--json]
+```
+
+What the checkpointer stored — what a run **said**. `list` is newest first and
+stays scannable: a paused thread is noted in a footer rather than expanded
+inline. `show` replays one thread checkpoint by checkpoint and prints
+`(a recording, not a re-run — no model or tool was called to show this)`,
+because it is a profiler and not an execution.
+
+A paused thread's `show` also prints the gate's message, the candidate, and
+the exact `resume` line that finishes it.
+
+### `runs`
+
+```
+openstategraph runs list [--workflow SLUG] [--thread ID] [--session ID]
+                         [--limit N] [--workflows-root DIR] [--json]
+openstategraph runs export [--to FILE] [--limit N] [--workflows-root DIR]
+openstategraph runs path [--workflows-root DIR]
+```
+
+What this machine has run — what a run **cost**. One row per turn, newest
+first, **whichever door ran it**: the library (`ask`/`resume`, and so this CLI
+and a package's own `tests/`), the two HTTP run endpoints, and the MCP
+`run_workflow` tool all write the same row.
+
+Three kinds of row that are not failures and are not successes either:
+
+| `kind` | What happened |
+| --- | --- |
+| `stopped` | a reader pressed Stop or closed the tab. The model call already issued was still paid for |
+| `exhausted` | the turn spent its **whole step budget** and reached no answer. No node failed — the ceiling stopped a graph that was running perfectly well — which makes it the most expensive row in the table |
+| `failed` | a node failed |
+
+It reads a local sqlite file written with no configuration at all. `runs path`
+prints where, so you can point `sqlite3` at it and write your own query; it
+prints `memory` when the store has been opted out.
+
+`runs export` writes the same rows as a JSON array, to stdout or to a file,
+**with the cadence** — every burst of streamed output a run produced, each
+chunk carrying its own measured offset, so a replay shows what the answer
+actually looked like arriving. Run it **before** truncating a store that has
+grown large; nothing here ever deletes a run. It refuses rather than
+under-delivers: if the cadence cannot be read it writes no file and exits
+non-zero, because a file missing how its answers arrived is not a copy of the
+store and must not be truncated against.
+
+`threads` and `runs` are complements, not alternatives: one holds what was
+said, the other what it cost and what executed.
+
+## Knowing what is configured
+
+### `providers`
+
+```
+openstategraph providers [--check]
+```
+
+Which model providers are registered, whether each has a credential, its
+default model, **which** of the variables it reads actually supplied one, and
+the extra it needs. It also prints which config file is in force and whether
+a `.env` was found. **The first thing to run when a model call fails.**
+
+Plain `providers` **calls nobody**. `configured` on a row means a credential
+is present in this environment — never that the endpoint is reachable — and
+the command says so under the list. It is a status command, so it exits **0**
+whenever it could report, including on a machine where nothing is configured.
+
+`--check` makes **one real, billable request per configured provider** and
+reports which answered. Opt-in because it costs money: a status command must
+not spend your budget to render a word. It exits **1** if any configured
+provider fails to answer, and **1** when there is nothing to check at all.
+
+### `env-example`
+
+```
+openstategraph env-example
+```
+
+Prints the provider block of a `.env.example` — **names only, never values** —
+generated from the provider registry, to redirect into your own `.env`. Its
+first line says how to regenerate it, because a hand-edited copy is one that
+goes stale the next time a provider is added.
+
+## Serving things
+
+### `serve`
+
+```
+openstategraph serve [--host HOST] [--port N] [--open] [--workers N]
+```
+
+The whole product on one origin: editor at `/`, chat at `/chat`, API under
+`/api`. The URLs it landed on are printed.
+
+| Form | Port |
+| --- | --- |
+| no `--port` | 8000, or the **next free port** if 8000 is busy |
+| `--port N` | exactly N, or a clear failure if it is taken |
+| `--port 0` | the OS picks |
+
+`--host` defaults to `127.0.0.1` — **this machine only**, deliberately not
+`0.0.0.0`: this process holds your provider keys and has no authentication, so
+publishing it to the network publishes those. `--open` also launches a
+browser, and is off by default. Needs the server extra; that extra is the web
+layer and carries **no** model integration, so an install without a provider
+extra serves an editor that cannot run anything — and says so before it binds.
+A source checkout with no built editor serves a *"run the build"* page at `/`
+and a fully working API and `/chat`.
+
+**`--workers` exists only to be refused by name.** It must be 1. `--workers 4`
+exits **1** and prints the two reasons — the sqlite checkpointer and store
+serialise writes with a per-instance lock that two OS processes do not share,
+and the catalogue event fan-out behind the events endpoint is an in-process
+queue — rather than silently serving several processes that cannot see each
+other's drafts, approvals or events. See [Deploying](deploying.md).
+
+### `mcp`
+
+```
+openstategraph mcp [--transport stdio | streamable-http]
+```
+
+Runs the MCP server, so your own LLM can compose and inspect workflows.
+Defaults to `stdio`, which is what an MCP client launches. Needs the MCP
+extra. An unknown transport exits **2**. What the server exposes is
+[The MCP layer](mcp.md).
+
+### `export plugin`
+
+```
+openstategraph export plugin <package> [--out DIR]
+```
+
+Writes the package out as an [Agent Plugins](decisions/agent-plugins.md) v1
+bundle — the same thing the plugin-export endpoint previews, actually written
+to disk. Defaults to `./<the package's folder name>`; a destination that
+already holds files exits **1** and writes nothing.
+
+Everything no portable v1 component type can carry travels under a namespaced
+directory, and **every lossy edge is printed as a `note:` on stderr** — what
+was carried non-portably, what was excluded, and what was deliberately not
+emitted rather than fabricated. Needs no extra and calls no model.
+
+## Knowledge
+
+### `knowledge`
+
+```
+openstategraph knowledge list <package> [--knowledge-dir DIR]
+openstategraph knowledge build <package> [--source NAME] [--instruction "…"]
+                                         [--model MODEL]
+```
+
+The package's second brain. `list` prints the topics, their one-line hints,
+and each doc's owner and stale badge. `--knowledge-dir` looks elsewhere, which
+**drops the badges** — a store outside the package has no source to recompute
+against — and a directory that is not there exits **1**.
+
+`build` generates them and prints `written / skipped / collisions / warnings`.
+`--source` runs one builder instead of all of them; an unknown name exits
+**1** and lists the real ones. `--instruction` steers the agentic builder and
+`--model` picks its model. What to build and how to tell a stale doc from a
+wrong one is [Testing a second brain](second-brain.md).
+
+## Exit codes
+
+Fixed and few, because they are what CI consumes.
+
+| | |
+| --- | --- |
+| **0** | success |
+| **1** | the run failed, or validation found blocking findings |
+| **2** | usage error — bad arguments, unknown command (argparse's own code) |
+| **3** | a required extra is not installed; the message names the exact `pip install` line |
+
+There is no fourth code, and adding one is a breaking change under
+[the stability contract](stability.md) — the command line follows the Tier 1
+deprecation policy even though the Python module does not.
+
+Two cases are worth stating on their own because they are the ones a script
+gets wrong:
+
+- **A paused run exits 1.** It has not failed and has not answered. Reporting
+  it as success is what let a human-in-the-loop package look finished when
+  nobody had decided anything.
+- **`providers --check` exits 1 when there is nothing to check**, unlike plain
+  `providers`, which exits 0 on a machine where nothing is configured. One is
+  a status command and the other is an assertion.
