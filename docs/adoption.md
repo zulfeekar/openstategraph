@@ -60,7 +60,7 @@ That is one process serving the whole product from **one origin**:
 
 | Path | What it is |
 | --- | --- |
-| `/` | the editor — the canvas, the inspector, the chat panel, and the run timeline along the bottom |
+| `/` | the editor — the canvas, the inspector, the chat panel, and the run timeline docked under the top bar |
 | `/chat` | the customer chat surface: no canvas, just a conversation |
 | `/api/…` | the HTTP API both surfaces use |
 
