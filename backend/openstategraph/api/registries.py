@@ -179,14 +179,23 @@ def build_tool_registry(
     `warnings` is an optional sink for **everything that failed to load** —
     entry-point failures (ticket 05) and, since ticket 07, workflow-local
     discovery findings: a tool module that would not import, a class left
-    abstract, two classes claiming one `node_type`. A caller that passes a list
-    gets them; a caller that does not still gets the log lines. In practice
+    abstract, two classes claiming one `node_type` — **and, since
+    `rules-that-can-fail/02`, one thing that loaded perfectly and lost
+    anyway**: a plugin whose `node_type` this package's own `tools/` takes
+    over. That is not a load failure, and the sink's contract is widened
+    deliberately rather than by accident: the two are the same question to the
+    only reader either has ("why is the tool I wired not the tool that ran"),
+    and a second channel for it would be a second place to forget. A caller
+    that passes a list gets them; a caller that does not still gets the log
+    lines — except this one, which is computed here rather than logged
+    downstream and so is the sink's alone. In practice
     every transport passes one, because `WorkflowServices.runtime_for` supplies
     the list and hangs it on `NodeRuntime.capability_warnings`, from where
     `runtime_warnings()` carries it to the run response, `load_workflow`'s
     `CompiledWorkflow.warnings` and the CLI.
     """
     from openstategraph.api.capability_discovery import discover_tool_registry
+    from openstategraph.api.plugin_capabilities import shadowed_plugin_warnings
     from openstategraph.prebuilt_knowledge import knowledge_lookup_for
 
     builtin, discovered = _process_tool_layer()
@@ -222,11 +231,12 @@ def build_tool_registry(
         except Exception:
             logger.warning("Knowledge binding failed for %r", slug, exc_info=True)
         try:
-            registry.update(
-                discover_tool_registry(
-                    workflow_store.directory_for(slug), slug, warnings=warnings
-                )
+            local = discover_tool_registry(
+                workflow_store.directory_for(slug), slug, warnings=warnings
             )
+            if warnings is not None:
+                warnings.extend(shadowed_plugin_warnings(discovered.sources, local, slug=slug))
+            registry.update(local)
         except Exception as exc:
             # The whole discovery pass failing (an unreadable directory, a
             # store that cannot resolve the slug) loses every tool the package

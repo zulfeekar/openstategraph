@@ -523,8 +523,11 @@ def get_capabilities(services: Services, slug: str) -> CapabilitiesResponse:
     contribute, which the runtime has been able to bind since ticket 05 and
     the editor had no way to show — and the honesty that goes with both:
     `warnings` carries every capability that failed to load, every plugin
-    that replaced a built-in, and every Python tool that has no editor card
-    at all (the half-authored case, which used to be pure silence).
+    that replaced a built-in, every plugin this package's own `tools/`
+    replaces the other way (`rules-that-can-fail/02` — the two are separate
+    palette cards, so the losing one is a card that can never be bound), and
+    every Python tool that has no editor card at all (the half-authored
+    case, which used to be pure silence).
 
     Requires the workflow to already be saved (so its directory exists);
     an unsaved, canvas-only workflow has no folder to scan yet.
@@ -535,6 +538,7 @@ def get_capabilities(services: Services, slug: str) -> CapabilitiesResponse:
         bindable_tool_types,
         editor_renderable_types,
         plugin_tool_capabilities,
+        shadowed_plugin_warnings,
         unrenderable_tool_warning,
     )
     from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
@@ -552,6 +556,19 @@ def get_capabilities(services: Services, slug: str) -> CapabilitiesResponse:
     functions = discover_functions(workflow_dir, slug=slug)
     plugin_tools, plugin_warnings = plugin_tool_capabilities()
     warnings.extend(plugin_warnings)
+    # The third claimant pair, on the surface a user reads
+    # (`rules-that-can-fail/02`). The other two are already here: a load
+    # failure and a plugin replacing a built-in. This one is a plugin *losing*
+    # to the open package's own `tools/` — the two are minted as different
+    # palette cards, so without this the palette offers a card the run will
+    # never bind.
+    warnings.extend(
+        shadowed_plugin_warnings(
+            {p.node_type: p.distribution for p in plugin_tools if p.node_type},
+            {t.node_type for t in tools if t.node_type},
+            slug=slug,
+        )
+    )
 
     # A type is renderable if the editor ships a card for it (the generated
     # catalogue) or if this very payload describes it — a plugin's declared

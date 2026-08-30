@@ -54,6 +54,34 @@ carries its own namespaced `node_type` (`tool.acme-ping`), which is visible in
 the document and collides loudly rather than quietly. Functions stay
 package-local; a third party who wants to ship one ships a tool.
 
+**"Collides loudly" is a claim about three boundaries, and it was true of two**
+(`rules-that-can-fail/02`, 2026-08-30). The registry layers built-in <
+third-party < workflow-local, so one `node_type` can be claimed twice in three
+places, and the last of them was silent:
+
+| Two claimants | Who wins | Said where |
+| --- | --- | --- |
+| two installed distributions | the later one | `_discover_tools`, naming both |
+| a plugin over a built-in | the plugin | `replaces_builtin` + a warning |
+| a package's own `tools/` over a plugin | the package | `shadowed_plugin_warnings` |
+
+The third is the one worth having, and the one that had nothing: the other two
+are a single person's decision — whoever ran `pip install` chose to replace a
+bundled tool — while this is two authors who never met, and the editor mints
+them as *two different palette cards*, so a user could place the plugin's card
+and watch the package's tool run. The sentence was made true rather than
+corrected, because the argument above for opening `openstategraph.tools` at all
+rests on it. Pinned in `tests/test_a_plugin_node_type_says_which_one_ran.py`,
+one class per row.
+
+**The fourth case is not a collision: nobody has the type at all.** A document
+naming `tool.acme-ping` on a machine without that distribution runs, is not
+refused, and reports `No implementation for tool "tool.acme-ping"` on the
+developer channel — the `UNRESOLVED_TOOL` path, measured in the same file. That
+is the property `CLAUDE.md` §Portability guardrails now names as the one this
+channel is safe on, in place of "travels with the package", which a plugin type
+does not and a built-in type does not either.
+
 The **middleware** group sketched in `docs/decisions/framework-packaging.md`
 §3.5 is deliberately still **not** reserved here: a group name is a promise,
 and promising one we have not implemented would be exactly the decorative
