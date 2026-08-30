@@ -5,7 +5,7 @@
 `site/` holds three self-contained pages — the landing page, the gallery of
 worked examples, and the five-artifact walk-through. They had exactly one route
 to a reader, GitHub Pages, and that route has never once worked: `pages.yml`
-has run four times and failed four times, each with `HttpError: Not Found` from
+has failed on every run it has ever had, each with `HttpError: Not Found` from
 `actions/configure-pages`, because the repository has no Pages site to deploy
 to. The gallery existed for a day before its own owner could not find it.
 

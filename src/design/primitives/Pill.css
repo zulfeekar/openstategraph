@@ -52,18 +52,25 @@
 }
 
 .pill__detail {
-  color: var(--color-text-quaternary, var(--color-text-tertiary));
+  color: var(--color-text-quaternary);
   white-space: nowrap;
 }
 
-/* The mark: the same dot the thinking rail uses, so a pill and the account it
+/* Two `var()` fallbacks stood here — `--color-text-tertiary` behind the
+   detail's ink and `--color-border-default` behind this mark — and neither
+   could ever render: both outer names are declared at `:root`, so they are in
+   scope on every element in both themes and nothing behind them is reachable.
+   Deleted rather than renamed; the values on screen are unchanged, because
+   they were always the outer names'. `the-look-has-an-author-now/10`.
+
+   The mark: the same dot the thinking rail uses, so a pill and the account it
    opens read as one system rather than two features. */
 .pill__mark {
   flex: none;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--color-border-strong, var(--color-border-default));
+  background: var(--color-border-strong);
 }
 
 /* The comment above says this is the dot the thinking rail uses, and now it

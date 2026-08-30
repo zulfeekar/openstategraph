@@ -2,9 +2,9 @@
 
 Production-ready ticket 28. `site/gallery.html` had existed for a day and the
 owner could not find it, because the only route to it was GitHub Pages and
-`pages.yml` has failed on every run it has ever had — four of them, each
-ending `HttpError: Not Found` out of `actions/configure-pages`, because no
-Pages site exists on the repository to deploy to. These routes are the answer
+`pages.yml` has failed on every run it has ever had, each one ending
+`HttpError: Not Found` out of `actions/configure-pages`, because no Pages
+site exists on the repository to deploy to. These routes are the answer
 that depends on no plan and no network: the pages ship inside the wheel and
 `openstategraph serve` hands them out.
 

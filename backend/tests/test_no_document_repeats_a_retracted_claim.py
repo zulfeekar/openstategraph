@@ -22,6 +22,26 @@ Two rules of construction, both learned from gates that got suppressed:
 Retracted-phrase rules cannot see a *number* going stale — that is what the
 census and ceiling tests are for. This file covers the other half: a claim
 that was corrected in one place and left standing in another.
+
+**One class of number is the exception, and it is here because it is not
+really a number** (`docs-and-gaps/29`). A GitHub Actions *run count* is not a
+property of this tree at all: it changes when somebody pushes, so no literal
+written into a document stays true, and no test in this repository can check
+one without network and credentials. Measured 2026-08-30, every count on
+`docs/releasing.md`'s status table had drifted — `openwiki-update.yml` was
+written "zero runs, ever" the week after its first run, `pages.yml` said six
+here and four in `CLAUDE.md` and was neither, `release-pr.yml`'s two had
+become three — and two of those figures had already been corrected once. So
+the rule below is not "assert the right number", which would be a test edited
+on every push; it is **state the state, never the count**, which is
+`docs-and-gaps/17`'s answer to a figure with no mechanical referent.
+
+The matcher deliberately requires a *workflow filename* or a multi-word
+workflow name in the same paragraph. A bare `CI`, `Release` or `Triage` is ordinary
+English in a repository that ships workflows by those names, and the third
+rule of construction is the one this file already keeps: forbid distinctive
+phrasings, never ordinary English. A count beside `Release` alone therefore
+goes uncaught, and that is priced rather than papered over.
 """
 
 from __future__ import annotations
@@ -51,6 +71,9 @@ RETRACTED_CLAIMS = (
     # the wrong sense of "package" kept being copied to. `package` is
     # `workflows/<slug>/` here; the install footprint is four *dependencies*.
     "core is four packages",
+    # docs-and-gaps/29 — `openwiki-update.yml` had already run and failed when
+    # `docs/releasing.md` wrote this row, and said so forty lines further down.
+    "zero runs, ever",
 )
 
 
@@ -126,4 +149,101 @@ def test_no_document_says_docs_freshness_skips_while_it_does_not() -> None:
         "`ci.yml` carries no event condition on `docs-freshness` — it runs on "
         "pushes to main as well as pull requests — and these lines still say "
         f"it skips: {offenders}"
+    )
+
+
+WORKFLOWS = REPO_ROOT / ".github" / "workflows"
+
+#: A count of executions, in the shapes this repository has actually written.
+RUN_COUNT = re.compile(
+    r"\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+)"
+    r"\s+(?:green |failed |successful |scheduled )?(?:runs?|failures?|times)\b"
+    r"|\b(?:run|ran|fired|failed)\s+(?:once|twice)\b",
+    re.IGNORECASE,
+)
+
+#: A sentence in the past tense is the correction, not the claim — the same
+#: escape hatch the `docs-freshness` rule above uses, and for the same reason:
+#: a page must be able to record that it once carried a wrong number.
+PAST_TENSE = re.compile(r"\b(was|were|used to|until|no longer|had|counted|said|claimed)\b")
+
+
+def _workflow_mentions() -> tuple[str, ...]:
+    """Filenames, plus workflow `name:`s of more than one word.
+
+    Derived from `.github/workflows/` rather than listed, so adding a workflow
+    extends the rule. Single-word names are excluded on purpose — see the
+    module docstring.
+    """
+    mentions = []
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        mentions.append(path.name)
+        match = re.search(r"^name:\s*(.+?)\s*$", path.read_text(encoding="utf-8"), re.M)
+        if match:
+            name = match.group(1).strip("\"'")
+            if " " in name:
+                mentions.append(name)
+    return tuple(mentions)
+
+
+def _paragraphs(text: str) -> list[tuple[int, list[str]]]:
+    """`[(first line number, lines)]`, split on blank lines."""
+    blocks: list[tuple[int, list[str]]] = []
+    current: list[str] = []
+    first = 1
+    for number, line in enumerate(text.splitlines(), 1):
+        if line.strip():
+            if not current:
+                first = number
+            current.append(line)
+        elif current:
+            blocks.append((first, current))
+            current = []
+    if current:
+        blocks.append((first, current))
+    return blocks
+
+
+def test_paragraphs_are_split_on_blank_lines() -> None:
+    assert _paragraphs("a\nb\n\n\nc\n") == [(1, ["a", "b"]), (5, ["c"])]
+
+
+def test_there_are_workflow_names_to_match_on() -> None:
+    """Without this, an empty `.github/workflows/` makes the rule vacuous."""
+    mentions = _workflow_mentions()
+    assert len(mentions) >= 6
+    assert "pages.yml" in mentions
+
+
+def test_no_document_puts_a_run_count_beside_a_workflow() -> None:
+    """`docs-and-gaps/29`: state the state, never the count.
+
+    Every figure this rule now forbids was wrong when it was read back, two of
+    them after having been corrected once already. The number is a `gh run
+    list` away for anyone who needs today's; a document's job is to say which
+    halves of the machinery have never worked, which is a fact that survives
+    the next push.
+    """
+    mentions = _workflow_mentions()
+    offenders = {}
+    for page in CORPUS:
+        for first, block in _paragraphs(page.read_text(encoding="utf-8")):
+            # The workflow's name and the count are rarely on one line: a table
+            # row wraps, a blockquote breaks. So the *paragraph* decides whether
+            # a workflow is under discussion, and the line decides whether it
+            # carries a count. Line-scoped, this rule missed both CLAUDE.md
+            # figures it was written to catch.
+            if not any(mention in "\n".join(block) for mention in mentions):
+                continue
+            for offset, line in enumerate(block):
+                if PAST_TENSE.search(line):
+                    continue
+                hit = RUN_COUNT.search(line)
+                if hit:
+                    offenders[f"{page.relative_to(REPO_ROOT)}:{first + offset}"] = hit.group(0)
+    assert not offenders, (
+        "these lines put a count of GitHub Actions runs next to a workflow's "
+        f"name: {offenders}. A run count changes on the next push and nothing "
+        "here can check it, so say what has never succeeded and leave the "
+        "number to `gh run list` (docs-and-gaps/29)."
     )

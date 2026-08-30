@@ -384,14 +384,17 @@ describe('a token a stylesheet spends is a token something declares', () => {
    *
    * Change the inner name to one that resolves and the whole thing goes
    * silent — dead code in CSS with no signature, which is `CLAUDE.md`'s
-   * `TopBar.tsx` gap in another language. Two live instances remain
-   * (`design/primitives/Pill.css`), and they are not the same as the five
+   * `TopBar.tsx` gap in another language. Two live instances remained
+   * (`design/primitives/Pill.css`), and they were not the same as the five
    * `var(--accent-*, …)` fallbacks beside them: `--accent-solid` and
    * `--accent-on-tint` are declared under `[data-accent]` only, so an element
-   * outside an accented subtree genuinely falls through. Filed as
-   * `the-look-has-an-author-now/10` rather than swept in here, because
-   * telling those two cases apart needs a rule about *conditional* declaration
-   * and that is a pin to design, not a line to edit.
+   * outside an accented subtree genuinely falls through.
+   *
+   * **That is no longer a gap.** `the-look-has-an-author-now/10` found the
+   * rule to be exact rather than a proxy — a name declared by a selector list
+   * containing a bare `:root` is in scope always, and nothing behind it can
+   * render — so section 7 below pins it, the two Pill fallbacks are deleted,
+   * and the five accent ones are asserted to survive.
    */
   const DEAD: readonly string[] = [];
 
@@ -620,5 +623,114 @@ describe('a bar beside a block is a marker, and a marker has a name', () => {
       .filter((d) => d.property.startsWith('border-left') && /^\s*[23]px\s/.test(d.value))
       .map((d) => `${d.file}: ${d.value}`);
     expect(literal.sort()).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * 7. Unreachable fallbacks — `the-look-has-an-author-now/10`
+ * ------------------------------------------------------------------ */
+
+describe('a fallback behind a name that always resolves is dead code', () => {
+  /**
+   * `09` recorded this shape and declined to pin it, because telling the two
+   * kinds apart needs a rule about **conditional declaration** and a pin that
+   * fires wrongly gets suppressed. `10` is that rule, and it turned out to be
+   * exact rather than a proxy.
+   *
+   * A `var()` fallback renders only when the outer custom property is not
+   * *defined*. So the question is never "is this name spelled right" — `09`
+   * answered that one — it is **"is there a state in which this name is out
+   * of scope"**, and the selector a declaration sits under answers it:
+   *
+   * - A rule whose selector list contains a bare `:root` matches the document
+   *   element **always**. `--color-border-strong`, `--color-text-quaternary`
+   *   and 291 others are declared there, so nothing behind them can ever
+   *   render, in any theme, on any element.
+   * - `--accent-solid` and `--accent-on-tint` are declared under
+   *   `[data-accent]` only. An element outside an accented subtree genuinely
+   *   falls through, so the five `var(--accent-*, …)` fallbacks in
+   *   `Slider.css`, `Select.css` and `Minimap.css` are load-bearing. A rule
+   *   that condemned them would have been condemning working code, which is
+   *   exactly the failure `09` was avoiding.
+   *
+   * That is why the rule reads the **selector**, not a list of token names:
+   * a tenth accent, or a token moved out of `:root` into `[data-accent]`,
+   * re-classifies itself.
+   *
+   * **Scoped to a nested `var(--a, var(--b))`**, which is the shape `09` and
+   * `10` both measured. The same reasoning applies to a *literal* fallback —
+   * `var(--radius-sm, 6px)` behind an unconditional name is equally
+   * unreachable — and `src/` carries a dozen of those. They are a separate
+   * decision (a literal fallback can be deliberate belt-and-braces in a way a
+   * token alias is not, and one of them sits in a directory another worktree
+   * held) and are filed as `the-look-has-an-author-now/11` rather than swept
+   * in here, because a ticket about two sites should not quietly become a
+   * ticket about fourteen.
+   */
+
+  /** Custom properties declared by a top-level rule that matches the root always. */
+  const unconditional = (): Set<string> => {
+    const names = new Set<string>();
+    for (const path of stylesheets()) {
+      const css = code(read(path));
+      let cursor = 0;
+      while (cursor < css.length) {
+        const open = css.indexOf('{', cursor);
+        if (open === -1) break;
+        const selector = css.slice(cursor, open);
+        let depth = 1;
+        let end = open + 1;
+        for (; end < css.length && depth > 0; end++) {
+          if (css[end] === '{') depth += 1;
+          else if (css[end] === '}') depth -= 1;
+        }
+        // `:root` as a whole selector in the list — never `:root[data-theme]`
+        // and never a descendant, both of which are conditional.
+        if (/(^|,)\s*:root\s*(,|$)/.test(selector)) {
+          for (const m of css.slice(open + 1, end - 1).matchAll(/(--[a-zA-Z0-9_-]+)\s*:/g)) {
+            names.add(m[1] ?? '');
+          }
+        }
+        cursor = end;
+      }
+    }
+    return names;
+  };
+
+  it('finds both kinds, so neither assertion below is vacuous', () => {
+    const always = unconditional();
+    expect(always.has('--color-border-strong')).toBe(true);
+    expect(always.has('--color-text-quaternary')).toBe(true);
+    expect(always.has('--accent-solid')).toBe(false);
+    expect(always.has('--accent-on-tint')).toBe(false);
+  });
+
+  const nested = (): Array<{ site: string; token: string }> => {
+    const found: Array<{ site: string; token: string }> = [];
+    for (const path of stylesheets()) {
+      const css = code(read(path));
+      for (const m of css.matchAll(/var\(\s*(--[a-zA-Z0-9_-]+)\s*,\s*var\(/g)) {
+        const line = css.slice(0, m.index).split('\n').length;
+        found.push({ site: `${under(path)}:${line}`, token: m[1] ?? '' });
+      }
+    }
+    return found;
+  };
+
+  it('keeps the fallbacks that can fall through', () => {
+    const always = unconditional();
+    const live = nested()
+      .filter((f) => !always.has(f.token))
+      .map((f) => `${f.site} ${f.token}`);
+    expect(live.length).toBeGreaterThan(0);
+    expect(live.every((s) => s.includes('--accent-'))).toBe(true);
+  });
+
+  it('leaves no fallback behind a name that is always in scope', () => {
+    const always = unconditional();
+    const dead = nested()
+      .filter((f) => always.has(f.token))
+      .map((f) => `${f.site} ${f.token}`);
+    expect(dead.sort()).toEqual([]);
   });
 });
