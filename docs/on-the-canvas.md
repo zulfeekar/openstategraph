@@ -619,7 +619,7 @@ The words this product uses, and what each one must not be mistaken for.
 | **replay** | moving a playhead over a run that already happened — a profiler; nothing is executed and nothing is charged | LangGraph's *replay*, which re-executes nodes and fires the model calls again |
 | **re-run** | forking from a checkpoint and executing again, at the cost of the model calls | **not built here** — ask the question again instead |
 | **eval** | grading a workflow **offline** against a committed dataset whose answers are known — `openstategraph eval` | the grader node's in-run verdict, which routes rather than scores |
-| **slug** | a package's folder name, minted by the backend at first save and then frozen — `workflows/<slug>/`, `?w=<slug>` | a title or display name, or anything you choose |
+| **slug** | a package's folder name, minted by the backend at first save and then frozen — `workflows/<slug>/`, `?w=<slug>`. The first save is where you are **asked for the name** it is minted from, and the dialog says it cannot be changed afterwards; until then the top bar reads *Untitled* | a title or display name, or anything you choose |
 | **system of record** | the store a figure actually came from — named in the answer, with the ones it was not taken from listed beside it | the workflow's database connection; a table |
 
 ---

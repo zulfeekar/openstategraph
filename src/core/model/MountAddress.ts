@@ -107,7 +107,7 @@ export function formatMountAddress(address: MountAddress): string {
  *
  * A segment is a raw canvas node id — `node:workflow.subgraph-1` — and the
  * drill-in banner rendered it unchanged, so the bar a user reads to know where
- * they are said `Editing AI Workflow node:workflow.subgraph-1`
+ * they are said `Editing Untitled node:workflow.subgraph-1`
  * (consistency-sweep ticket 10). That is both an internal id on a user surface
  * and the leaked LangGraph name the lexicon forbids.
  *

@@ -36,7 +36,10 @@ import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
  * pressed Save.**
  *
  * Found in a user-seat walk. `workflows/chinook-assistant/workflow.json` — 13
- * nodes — was replaced on disk by a 1-node document called `AI Workflow`. The
+ * nodes — was replaced on disk by a 1-node document called `AI Workflow` — the
+ * editor's default name at the time, which `say-it-on-the-surface/09`
+ * has since made `Untitled` so that a document nobody named cannot look
+ * like one somebody did. The
  * server log carried the write and no Save had been pressed:
  *
  *     INFO: "PUT /api/workflows/chinook-assistant HTTP/1.1" 200 OK

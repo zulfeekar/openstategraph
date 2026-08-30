@@ -215,7 +215,9 @@ describe('back from a mount keeps the override it just saved', () => {
         create: async () => Ok('unused'),
       },
       workbench: {
-        model: { name: 'Music Analyst' },
+        // An instance is open, so the create branch is never reached and
+        // nothing renames the model — but the type still has to be honest.
+        model: { name: 'Music Analyst', setName: () => {} },
         serializer: {
           toJSONString: () => '{}',
           canonicalise: (document: unknown) => document,
@@ -223,6 +225,10 @@ describe('back from a mount keeps the override it just saved', () => {
         },
         controller: { document: { mountContext: () => mounts } },
       },
+      // Unreachable on this path — the instance branch returns before the
+      // create branch — but `SaveDeps` requires it, deliberately: a surface
+      // that can mint a slug must say how it asks.
+      promptName: (suggestion: string) => suggestion,
       confirm: () => true,
     });
     expect(outcome).toEqual({ kind: 'overrides', root: 'front-desk' });

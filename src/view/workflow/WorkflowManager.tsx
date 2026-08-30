@@ -40,7 +40,7 @@ import {
 } from '@core/runtime/WorkflowFileClient';
 import { clearDrillStack } from '@app/drillStack';
 import { loadWorkflowIntoEditor } from './loadWorkflowIntoEditor';
-import { saveMessage, saveSucceeded, saveWorkflow } from './saveWorkflow';
+import { namePromptMessage, saveMessage, saveSucceeded, saveWorkflow } from './saveWorkflow';
 import {
   BLANK_TEMPLATE,
   createNewWorkflow,
@@ -260,7 +260,15 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   // panel is showing.
   const handleSave = useCallback(async () => {
     setBusy(true);
-    const outcome = await saveWorkflow({ client, workbench, confirm: (m) => confirm(m) });
+    const outcome = await saveWorkflow({
+      client,
+      workbench,
+      confirm: (m) => confirm(m),
+      // The same question the toolbar asks, because this is the same act
+      // (`say-it-on-the-surface/09`). Both surfaces mint through `create`, so
+      // both have to say what the answer freezes.
+      promptName: (suggestion) => window.prompt(namePromptMessage(), suggestion),
+    });
     setBusy(false);
     const message = saveMessage(outcome);
     if (message !== null) onNotify(message);
