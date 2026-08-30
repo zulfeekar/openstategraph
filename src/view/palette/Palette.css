@@ -231,7 +231,13 @@
 .palette-howto {
   max-width: 100%;
   min-width: 0;
-  margin: var(--space-2) 0 var(--space-1);
+  /* Horizontal inset matches every other direct child of the body — the
+     group label, the footnote, the warnings block — all of which carry
+     `var(--space-3)` themselves because `.panel__body` carries none
+     (`the-look-has-an-author-now/14`). This paragraph was the one row that
+     didn't, so it ran wider than the search field above it and the section
+     blocks below it. */
+  margin: var(--space-2) var(--space-3) var(--space-1);
   color: var(--color-text-secondary);
   font: var(--type-body-sm);
   line-height: var(--line-height-snug);
