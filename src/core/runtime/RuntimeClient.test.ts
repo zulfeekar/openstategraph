@@ -1337,6 +1337,10 @@ describe('the base URL a real page gets', () => {
    */
   it('is same-origin relative in a production bundle', async () => {
     vi.stubEnv('DEV', false);
+    // A developer's own `.env.local` (`VITE_RUNTIME_BASE_URL`, documented in
+    // runtimeBaseUrl.ts) is ambient to Vitest in every mode. This pins the
+    // *default*, so it must not see that value (`the-cost-of-one-more/23`).
+    vi.stubEnv('VITE_RUNTIME_BASE_URL', '');
     const stub = stubFetch(jsonResponse(GOOD));
 
     await new RuntimeClient(undefined, stub.fetch).run({ workflow: {}, question: 'q' });
@@ -1347,6 +1351,7 @@ describe('the base URL a real page gets', () => {
 
   it('is the dev backend when Vite is serving the app', async () => {
     vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_RUNTIME_BASE_URL', '');
     const stub = stubFetch(jsonResponse(GOOD));
 
     await new RuntimeClient(undefined, stub.fetch).run({ workflow: {}, question: 'q' });
@@ -1357,6 +1362,7 @@ describe('the base URL a real page gets', () => {
 
   it('names the origin rather than an empty string when nothing answers', async () => {
     vi.stubEnv('DEV', false);
+    vi.stubEnv('VITE_RUNTIME_BASE_URL', '');
     const client = new RuntimeClient(undefined, () => Promise.reject(new Error('down')));
 
     const result = await client.run({ workflow: {}, question: 'q' });
