@@ -231,9 +231,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     # conversation they just had, and an id generated inside the run and thrown
     # away is an id they can never continue.
     thread_id = args.thread_id or f"openstategraph-cli-{uuid.uuid4().hex}"
-    result = _ask(
-        lambda: workflow.ask(args.question, thread_id=thread_id, context=context or None)
-    )
+    result = _ask(lambda: workflow.ask(args.question, thread_id=thread_id, context=context or None))
 
     if args.json:
         print(
@@ -610,9 +608,7 @@ def _compiler_findings(package: Path) -> tuple[list[str], list[str]]:
         # In-memory durability rather than the durable default: validating a
         # package must not create a checkpoint file — or a memory database —
         # for a run that never happens. See `_ephemeral_state`.
-        workflow = load_workflow(
-            package, model=_drawing_only_model(), **_ephemeral_state()
-        )
+        workflow = load_workflow(package, model=_drawing_only_model(), **_ephemeral_state())
     except Exception as exc:  # noqa: BLE001 - reported, never raised at a user
         return ([f"this package could not be compiled: {_terminal_message(exc)}"], [])
     try:
@@ -759,9 +755,7 @@ def cmd_export_plugin(args: argparse.Namespace) -> int:
     if not (package / "workflow.json").is_file():
         return _error(f"no workflow.json in {package} — is that a workflow package?")
     destination = (
-        Path(args.out).expanduser().resolve()
-        if args.out
-        else Path.cwd().resolve() / package.name
+        Path(args.out).expanduser().resolve() if args.out else Path.cwd().resolve() / package.name
     )
     if destination.exists() and any(destination.iterdir()):
         return _error(f"{destination} already has files in it — name an empty --out")
@@ -870,7 +864,20 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     print(f"created {result.directory}{os.sep}")
     print(f"  {result.config.name:<22}  workflows_dir: {args.workflows_dir}{state(result.config)}")
-    print(f"  {'.gitignore':<22}  .env, .openstategraph/{state(result.gitignore)}")
+    if result.gitignore_gaps:
+        # launch-readiness/191: the branch that declined to write is the one
+        # that used to claim the rule was there. Print the lines instead of a
+        # claim — the same honesty the `.env` block below already practises,
+        # which prints variable names it will not write. Nothing is appended:
+        # the fix is the sentence, not the file.
+        gap = " and ".join(result.gitignore_gaps)
+        one = len(result.gitignore_gaps) == 1
+        print(f"  {'.gitignore':<22}  left alone (yours) — it does not ignore {gap}.")
+        print(f"  {'':<22}  Add {'this line' if one else 'these lines'} before you make one:")
+        for pattern in result.gitignore_gaps:
+            print(f"  {'':<22}    {pattern}")
+    else:
+        print(f"  {'.gitignore':<22}  .env, .openstategraph/{state(result.gitignore)}")
     if result.starter is not None:
         where = f"{args.workflows_dir}/{result.starter.name}/"
         print(f"  {where:<22}  the smallest workflow that runs{state(result.starter)}")
@@ -890,7 +897,11 @@ def cmd_init(args: argparse.Namespace) -> int:
     )
     print()
     print("no .env was written — a generated credential file is a committed one waiting")
-    print(f"to happen. Create {label}/.env yourself; .gitignore already covers it:")
+    if ".env" in result.gitignore_gaps:
+        print(f"to happen. Create {label}/.env yourself — and add the .gitignore line above")
+        print("first, because right now your ignore file does not cover it:")
+    else:
+        print(f"to happen. Create {label}/.env yourself; .gitignore already covers it:")
     for spec in provider_catalogue().list():
         for variable in spec.env_vars:
             print(f"  {variable}=")
@@ -1257,9 +1268,7 @@ def cmd_runs_export(args: argparse.Namespace) -> int:
         # own machine's store from that machine's own terminal, and an export
         # that silently dropped half the cadence is the partial file this
         # command refuses to write (`memory-and-replay` 71).
-        rows = read_runs(
-            path, limit=args.limit, with_bursts=True, audience="developer"
-        )
+        rows = read_runs(path, limit=args.limit, with_bursts=True, audience="developer")
     except RunCadenceUnavailable as exc:
         return _error(
             f"could not read the run cadence out of {path}: {exc}. Nothing was "
@@ -1745,8 +1754,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     resume.add_argument("--model", help="a model string, e.g. ollama:gpt-oss:120b-cloud")
     resume.add_argument("--trace-file", dest="trace_file", help="append one JSON line per run")
-    resume.add_argument("--knowledge-dir", dest="knowledge_dir", help="override <package>/knowledge")
-    resume.add_argument("--json", action="store_true", help="print the whole result, not the answer")
+    resume.add_argument(
+        "--knowledge-dir", dest="knowledge_dir", help="override <package>/knowledge"
+    )
+    resume.add_argument(
+        "--json", action="store_true", help="print the whole result, not the answer"
+    )
     resume.set_defaults(handler=cmd_resume)
 
     evaluate = subparsers.add_parser(
@@ -2125,7 +2138,7 @@ def cmd_providers(args: argparse.Namespace) -> int:
         print()
         print(
             textwrap.fill(
-                "No provider was called. \"configured\" means a credential is present "
+                'No provider was called. "configured" means a credential is present '
                 "in this environment — not that the endpoint is reachable, and not "
                 "that a request will be answered. Run `openstategraph providers "
                 "--check` to make one real (billable) request per configured "

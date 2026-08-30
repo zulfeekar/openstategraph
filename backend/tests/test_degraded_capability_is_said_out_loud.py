@@ -235,3 +235,162 @@ class TestTheNoticeItself:
         """
         for markup in ("_", "*", "`", "#", "|", "<"):
             assert markup not in CAPABILITY_NOTICE
+
+
+def _report_only_doc() -> dict[str, Any]:
+    """A run that loses no capability and still produces a warning.
+
+    `guard.check` with `revise` wired to nothing records
+    `Finding.UNWIRED_REVISE` — advice about the drawing, on `REPORT_ONLY`
+    since `workflow-gallery` 31, and a **static property of the document**: it
+    cannot be absent on any run of this graph. The check itself is built in,
+    so nothing here needs a model or a credential; the graph answers
+    correctly, every time, and used to carry the notice anyway.
+    """
+    return {
+        "version": 1,
+        "name": "report-only",
+        "nodes": [
+            _node("node:input.text-1", "input.text"),
+            _node("node:guard.check-1", "guard.check", check="numbers_in_prose"),
+            _node("node:output.formatted-1", "output.formatted"),
+        ],
+        "edges": [
+            _edge("node:input.text-1", "text", "node:guard.check-1", "candidate"),
+            _edge("node:guard.check-1", "pass", "node:output.formatted-1", "result"),
+        ],
+    }
+
+
+class TestTheNoticeIsAboutACapabilityAndNotAboutAdvice:
+    """`every-workflow-green` 47 — the notice was on for every run there is.
+
+    `CAPABILITY_NOTICE` claims one thing exactly, and every word of it was
+    argued: a capability **did not reach this run**. The condition it was
+    computed from was `plan.warnings + runtime_warnings(runtime)` — the whole
+    developer channel, which carries advice about the drawing and reports
+    about what happened alongside the capability losses.
+
+    So `concierge` ended three correct live answers — *59 customers*, *Rock,
+    $826.65*, *1,069 tracks* — with "part of this workflow was unavailable".
+    Nothing was. Its only warnings were `Finding.UNDECLARED_FALLBACK`, a
+    static property of the shipped document, so the sentence could never be
+    off. A notice that is always on is a notice nobody reads, and then ticket
+    51 — which put the notice there to keep a degraded run from reading as a
+    confident one — buys nothing either.
+
+    Reproduced here with the same shape and no model: a warning that is a
+    report, a run that answers correctly, and a customer who must be told
+    nothing.
+    """
+
+    def test_a_report_only_warning_produces_no_notice_on_the_streaming_door(self) -> None:
+        client = TestClient(create_app())
+        done = _done(
+            client.post("/api/runs/stream", json=_body("hello", _report_only_doc())).text
+        )
+
+        assert CAPABILITY_NOTICE not in done["answer"]
+        assert done["answer"] == "hello"
+
+    def test_a_report_only_warning_produces_no_notice_on_the_blocking_door(self) -> None:
+        client = TestClient(create_app())
+        body = _body("hello", _report_only_doc())
+
+        assert CAPABILITY_NOTICE not in client.post("/api/runs", json=body).json()["answer"]
+
+    def test_a_report_only_warning_produces_no_notice_on_the_mcp_door(self, tmp_path) -> None:
+        """Three doors, not one — ticket 15's rule. A fix at one is a fourth
+        spelling waiting."""
+        from openstategraph.api.services import WorkflowServices
+        from openstategraph.mcp_server import WorkflowRuns
+
+        root = tmp_path / "workflows"
+        root.mkdir()
+        result = WorkflowRuns(WorkflowServices(workflows_root=root)).run(
+            question="hello",
+            document=_report_only_doc(),
+            audience=Audience.CUSTOMER,
+        )
+
+        assert result["error"] is None, result
+        assert CAPABILITY_NOTICE not in result["answer"]
+
+    def test_the_warning_still_reaches_the_developer_unchanged(self) -> None:
+        """The two lists have different jobs, and this ticket is the evidence
+        that one variable cannot hold both. Nothing left the channel."""
+        client = TestClient(create_app())
+        body = _body("hello", _report_only_doc())
+        body["audience"] = "developer"
+        done = _done(client.post("/api/runs/stream", json=body).text)
+
+        assert any("revise" in w for w in done["developer"]["warnings"])
+
+    def test_a_genuine_capability_loss_still_says_so_at_every_door(self, tmp_path) -> None:
+        """The other half, or the fix is a deletion. Ticket 43's shape."""
+        from openstategraph.api.services import WorkflowServices
+        from openstategraph.mcp_server import WorkflowRuns
+
+        client = TestClient(create_app())
+        streamed = _done(
+            client.post("/api/runs/stream", json=_body("hello", _degraded_doc())).text
+        )
+        blocking = client.post("/api/runs", json=_body("hello", _degraded_doc())).json()
+        root = tmp_path / "workflows"
+        root.mkdir()
+        over_mcp = WorkflowRuns(WorkflowServices(workflows_root=root)).run(
+            question="hello",
+            document=_degraded_doc(),
+            audience=Audience.CUSTOMER,
+        )
+
+        assert CAPABILITY_NOTICE in streamed["answer"]
+        assert CAPABILITY_NOTICE in blocking["answer"]
+        assert CAPABILITY_NOTICE in over_mcp["answer"]
+
+    def test_a_plan_finding_is_not_a_capability_loss_either(self) -> None:
+        """`plan.warnings` is `validate`'s PROBLEMS FOUND about the document as
+        an artifact — never a claim that a capability was missing. It left the
+        notice's condition with the reports."""
+        from openstategraph.api.audience import capability_loss_warnings
+
+        class _Diagnostics:
+            @staticmethod
+            def failure_warnings() -> list[str]:
+                return []
+
+        class _Runtime:
+            diagnostics = _Diagnostics()
+
+        assert capability_loss_warnings(_Runtime()) == []
+
+    def test_no_door_computes_the_condition_for_itself(self) -> None:
+        """The check lives beside `CAPABILITY_NOTICE` so that what the sentence
+        claims and what triggers it are one declaration.
+
+        A caller assembling its own list is a caller that will one day compute
+        the notice from a different list than the one it reports — which is
+        this ticket, at three doors at once. `with_capability_notice` takes the
+        **runtime** for that reason, so there is no list left to get wrong, and
+        this is what fails on a fourth door that reintroduces one.
+        """
+        import ast
+        from pathlib import Path
+
+        import openstategraph
+
+        root = Path(openstategraph.__file__).parent
+        offenders: list[str] = []
+        for module in root.rglob("*.py"):
+            tree = ast.parse(module.read_text(), filename=str(module))
+            for call in ast.walk(tree):
+                if not isinstance(call, ast.Call):
+                    continue
+                name = getattr(call.func, "id", None) or getattr(call.func, "attr", None)
+                if name != "with_capability_notice" or len(call.args) < 2:
+                    continue
+                second = call.args[1]
+                if not (isinstance(second, ast.Name) and second.id == "runtime"):
+                    offenders.append(f"{module.relative_to(root)}:{call.lineno}")
+
+        assert offenders == [], offenders

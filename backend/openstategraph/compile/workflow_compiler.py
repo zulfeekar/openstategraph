@@ -339,8 +339,30 @@ def run_health_from_state(state: Any) -> RunHealth:
     return run_health(**{name: source.get(name) for name in _HEALTH_SOURCES})
 
 
+#: What the shape route of the build door claims, in one sentence, published
+#: once (`every-workflow-green` 51).
+#:
+#: The predicate below implements it and `src/view/ask/doorHeadline.ts` — the
+#: card that says it to a developer — quotes it, with
+#: `tests/test_the_build_door_opens_on_a_turn_that_called_six_tools.py`
+#: failing when the two drift. Before this the docstring on the card was the
+#: only statement of the rule, in a different language from the code, with
+#: nothing between them; the ticket that found the door open on a turn which
+#: had called six tools could not tell from either side whether the rule was
+#: per turn or per node.
+#:
+#: **"anywhere in the turn" is the load-bearing clause.** It is what makes a
+#: node the router never reached — an `agent-web` holding the web tools on a
+#: run that went to the data branch — not a gap: a node that never ran cannot
+#: have declined.
+DOOR_SHAPE_RULE = "tools were bound and none were called, anywhere in the turn"
+
+
 def used_no_tools(tool_use: Any) -> bool:
     """Whether this run had tools available and called none of them.
+
+    The shape route's whole claim, and it is `DOOR_SHAPE_RULE`: *tools were
+    bound and none were called, anywhere in the turn*.
 
     Both halves are load-bearing. A run with **nothing bound** is not a run
     that lacked a capability — a writer agent has no tools by design, and
@@ -348,7 +370,16 @@ def used_no_tools(tool_use: Any) -> bool:
     never touched is the shape a blocked agent leaves behind.
 
     Any single use anywhere defeats it: a document whose SQL agent answered and
-    whose summariser did not is not a document missing a capability.
+    whose summariser did not is not a document missing a capability. That is
+    the scope word doing its work, and it is per **turn** — this returns
+    `False` on the first row carrying a `ran` entry, so no node opens the door
+    on its own account.
+
+    What it cannot do is check its own input. `every-workflow-green` 51 is the
+    case where this answered correctly about a `tool_use` that had lost a lap:
+    the streaming door folded the map with `dict.update` where the channel
+    declares `MERGE_ROWS`, and a grader's second lap erased the first lap's
+    record of a tool that genuinely ran.
 
     Tolerant about its input for the same reason `run_health` is — the two
     doors read state off different shapes and either can hand over `None`.

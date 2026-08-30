@@ -228,9 +228,7 @@ class TestTheFourExistingDirectoryCases:
 
         assert "has 1 file in it" in capsys.readouterr().out
 
-    def test_the_refusal_and_the_warning_are_distinguishable(
-        self, tmp_path: Path, capsys
-    ) -> None:
+    def test_the_refusal_and_the_warning_are_distinguishable(self, tmp_path: Path, capsys) -> None:
         """An existing OpenStateGraph project still refuses and sends the
         reader to `serve`; a directory that merely has files in it now warns
         and proceeds. The two must never collapse into one sentence."""
@@ -425,9 +423,7 @@ class TestAWorkflowsDirectoryThatWasAlreadyThere:
         assert code == cli.EXIT_OK
         assert (target / "workflows" / "starter").is_dir()
 
-    def test_it_is_distinguishable_from_the_non_empty_warning(
-        self, tmp_path: Path, capsys
-    ) -> None:
+    def test_it_is_distinguishable_from_the_non_empty_warning(self, tmp_path: Path, capsys) -> None:
         """The non-empty case now warns and proceeds (launch-readiness/32);
         the shared-workflows-root case still refuses. Different moves,
         different sentences, different streams."""
@@ -475,9 +471,7 @@ class TestAWorkflowsDirectoryThatWasAlreadyThere:
 
         assert "--workflows-dir workflows_3" in capsys.readouterr().err
 
-    def test_a_file_standing_where_the_root_should_be_says_so(
-        self, tmp_path: Path, capsys
-    ) -> None:
+    def test_a_file_standing_where_the_root_should_be_says_so(self, tmp_path: Path, capsys) -> None:
         """`workflows/` with a trailing slash is a lie when it is a file, and
         `mv` is the wrong advice. Mirrors the refusal one level up, which
         already distinguishes a file from a directory."""
@@ -493,3 +487,122 @@ class TestAWorkflowsDirectoryThatWasAlreadyThere:
         assert "Nothing was written" in printed
         assert not (target / "openstategraph.yaml").exists()
         assert (target / "workflows").read_text() == "not a directory"
+
+
+class TestAnExistingGitignoreIsReadRatherThanAssumed:
+    """launch-readiness/191 — the safe branch was the one that lied.
+
+    `init` writes `.gitignore` only when there is not one already, which is
+    correct: clobbering somebody's ignore file would be worse. What was wrong
+    is what the run then *said* about the file it had just declined to write —
+    a flat "`.gitignore` already covers it" in the same breath as "put your
+    API key in `.env`". One `git add .` later the key is staged.
+
+    So the copy is pinned, not the file: nothing is appended to anybody's
+    ignore file. What changes is that the two patterns are checked and the
+    missing ones are printed as lines to add.
+    """
+
+    def test_the_patterns_it_checks_are_ones_it_would_have_written(self) -> None:
+        """The required set cannot drift away from the generated file."""
+        from openstategraph.config_file import GITIGNORE_LINES, GITIGNORE_REQUIRED
+
+        assert set(GITIGNORE_REQUIRED) <= set(GITIGNORE_LINES)
+
+    def test_no_gitignore_at_all_reports_both_patterns_missing(self, tmp_path: Path) -> None:
+        from openstategraph.config_file import GITIGNORE_REQUIRED, gitignore_gaps
+
+        assert gitignore_gaps("") == tuple(GITIGNORE_REQUIRED)
+
+    def test_a_gitignore_we_wrote_has_no_gaps(self) -> None:
+        from openstategraph.config_file import gitignore_gaps, render_gitignore
+
+        assert gitignore_gaps(render_gitignore()) == ()
+
+    def test_a_commented_out_rule_does_not_count(self) -> None:
+        from openstategraph.config_file import gitignore_gaps
+
+        assert ".env" in gitignore_gaps("# .env\n__pycache__/\n")
+
+    def test_equivalent_spellings_count(self) -> None:
+        """`.env`, `**/.env` and `/.env` all ignore the file we mean."""
+        from openstategraph.config_file import gitignore_gaps
+
+        for spelling in (".env", "**/.env", "/.env", " .env "):
+            assert ".env" not in gitignore_gaps(f"{spelling}\n")
+
+    def test_a_narrower_rule_is_not_the_broad_one(self) -> None:
+        """`workflows/.openstategraph/` covers one directory, not every one."""
+        from openstategraph.config_file import gitignore_gaps
+
+        assert "**/.openstategraph/" in gitignore_gaps("workflows/.openstategraph/\n")
+
+    def test_the_result_carries_the_gaps(self, tmp_path: Path) -> None:
+        target = tmp_path / "p"
+        target.mkdir()
+        (target / ".gitignore").write_text("__pycache__/\n")
+        (target / "app.py").touch()
+
+        result = init_project(target, starter=False)
+
+        assert ".env" in result.gitignore_gaps
+        assert (target / ".gitignore").read_text() == "__pycache__/\n"
+
+    def test_a_project_we_scaffolded_reports_none(self, tmp_path: Path) -> None:
+        result = init_project(tmp_path / "p", starter=False)
+
+        assert result.gitignore_gaps == ()
+
+    def test_it_does_not_claim_coverage_it_did_not_check(self, tmp_path: Path, capsys) -> None:
+        """The ticket's own pin: this string must not appear in this case."""
+        target = tmp_path / "p"
+        target.mkdir()
+        (target / ".gitignore").write_text("__pycache__/\n")
+        (target / "app.py").touch()
+
+        cli.main(["init", str(target)])
+        printed = capsys.readouterr().out
+
+        assert "already covers it" not in printed
+
+    def test_it_prints_the_lines_to_add(self, tmp_path: Path, capsys) -> None:
+        """Lines, not a claim — the caller already prints variable names it
+        will not write, so printing two ignore lines is the same honesty."""
+        target = tmp_path / "p"
+        target.mkdir()
+        (target / ".gitignore").write_text("__pycache__/\n")
+        (target / "app.py").touch()
+
+        cli.main(["init", str(target)])
+        printed = capsys.readouterr().out
+
+        assert "does not ignore" in printed
+        assert "\n" + " " * 28 + ".env\n" in printed
+        assert "\n" + " " * 28 + "**/.openstategraph/\n" in printed
+
+    def test_the_half_case_names_only_the_missing_half(self, tmp_path: Path, capsys) -> None:
+        target = tmp_path / "p"
+        target.mkdir()
+        (target / ".gitignore").write_text(".env\n")
+        (target / "app.py").touch()
+
+        cli.main(["init", str(target)])
+        printed = capsys.readouterr().out
+
+        assert "**/.openstategraph/" in printed
+        assert "\n" + " " * 28 + ".env\n" not in printed
+
+    def test_an_ignore_file_that_does_cover_it_is_still_told_so(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """The reassurance is not deleted — it is earned."""
+        target = tmp_path / "p"
+        target.mkdir()
+        (target / ".gitignore").write_text(".env\n**/.openstategraph/\n")
+        (target / "app.py").touch()
+
+        cli.main(["init", str(target)])
+        printed = capsys.readouterr().out
+
+        assert "already covers it" in printed
+        assert "does not ignore" not in printed

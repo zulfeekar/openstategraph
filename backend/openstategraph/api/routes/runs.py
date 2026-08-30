@@ -397,7 +397,10 @@ def run_workflow(
     # …and the same aside the streaming door appends (ticket 51). This door
     # exists precisely so a client can skip SSE, so a customer who takes it
     # must not get the confident answer the other one declines to give.
-    prose = with_capability_notice(prose, degraded, audience)
+    # The **runtime**, not `degraded` — see `capability_loss_warnings`
+    # (`every-workflow-green` 47): that list is the developer channel entire,
+    # and a report on it cannot be absent, so the notice could never be off.
+    prose = with_capability_notice(prose, runtime, audience)
 
     # Developer guidance stays off a customer surface, in `outputs` as
     # much as in `answer` — the same seam ticket 15 found one field along.

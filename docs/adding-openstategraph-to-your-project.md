@@ -174,11 +174,12 @@ Three things now exist beside your app:
 | `workflows/` | the **workflows root** — the directory holding `<slug>/workflow.json`. `workflows_dir:` in the config renames it; `OPENSTATEGRAPH_WORKFLOWS_ROOT` overrides both, because the file is shared and the environment is the machine in front of you. |
 | `workflows/starter/` | one **package** — a workflow, its `tests/`, and room for its own `tools/`. `--empty` skips it. |
 
-> **If you already had a `.gitignore`, check it before you make a `.env`.**
-> `init` leaves an existing one alone — correctly, it is yours — but the run
-> still prints *".gitignore already covers it"*, which in that case it does
-> not. Add `.env` and `**/.openstategraph/` yourself
-> (`launch-readiness/191`).
+> **If you already had a `.gitignore`, `init` leaves it alone — correctly, it
+> is yours — and now reads it before saying anything about it.** When it does
+> not cover `.env` or `**/.openstategraph/`, the run names the missing rules
+> and prints them as lines to paste, rather than the flat *".gitignore already
+> covers it"* it used to print in every case (`launch-readiness/191`). It
+> still writes nothing: the ignore file is yours to edit.
 
 Nothing writes a `.env`. `openstategraph env-example` prints the variable
 names; the values are yours to put there.

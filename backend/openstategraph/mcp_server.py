@@ -998,7 +998,12 @@ class WorkflowRuns:
         # Ticket 51 — the sentences stay developer-only, *the fact* cannot.
         # A customer who no longer reads the warnings must still be told the
         # run was degraded, or a lost capability reads as a confident answer.
-        prose = with_capability_notice(prose, degraded, audience)
+        # It is handed the **runtime**, not `degraded`: that list is the whole
+        # developer channel, and a report on it is a static property of the
+        # document, which made the notice permanently on
+        # (`every-workflow-green` 47). `capability_loss_warnings` owns which
+        # warnings the sentence is about.
+        prose = with_capability_notice(prose, runtime, audience)
         raw_outputs = final.get("outputs") or {}
         visible = raw_outputs if developer else redact_failure_markers(raw_outputs)
 

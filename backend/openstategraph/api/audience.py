@@ -74,7 +74,7 @@ developer-only by their own convention.
 | capability suggestions | developer | proposes an edit to a workflow the customer cannot edit |
 | `runtime_warnings` — unbound tools, unresolved functions/subgraphs, mount overrides, discovery failures | developer | authoring diagnostics, naming node ids and tool types; a customer can act on none of it |
 | plan warnings | developer | same: findings about the document as an artifact |
-| **that** a capability was lost — `CAPABILITY_NOTICE`, appended to `answer` | **both**, differently | ticket 51. The sentences above stay developer-only; *the fact* cannot, because the alternative is a customer reading a degraded answer as a confident one and concluding the product does not know things. A developer gets the list and no notice; a customer gets the notice and no list. It rides `answer` rather than a field of its own for a hard reason as well as a soft one — a customer `done` frame may not carry a `warnings` key at all (see `payload` below, and the test that requires it *absent*), and `answer` is the one field every customer client already renders. |
+| **that** a capability was lost — `CAPABILITY_NOTICE`, appended to `answer`, on the condition `capability_loss_warnings` owns (`every-workflow-green` 47: the losses only — never a report about the drawing, never a plan finding) | **both**, differently | ticket 51. The sentences above stay developer-only; *the fact* cannot, because the alternative is a customer reading a degraded answer as a confident one and concluding the product does not know things. A developer gets the list and no notice; a customer gets the notice and no list. It rides `answer` rather than a field of its own for a hard reason as well as a soft one — a customer `done` frame may not carry a `warnings` key at all (see `payload` below, and the test that requires it *absent*), and `answer` is the one field every customer client already renders. |
 | guardrail `redactions` — counts and entity types per node, never values | developer | a customer must not be told what was removed from their own answer, and the developer needs to know the machinery rewrote it |
 | `statements` — what the run executed, with the tool that ran it and what came back | developer | `one-chinook-honest/30`. The evidence behind an answer, quoting node ids, tool names and a customer's own literal values. No credential can reach it: only an argument recognised as a *statement* is ever recorded, never the argument map (`executed_statements`) |
 | `mermaid` | **both** | `/chat` renders it as its live flow diagram, and `GET /api/workflows/{slug}/graph` already serves it to that page. Moving it here while leaving that endpoint open would be theatre, and it is topology, not guidance. |
@@ -500,15 +500,50 @@ def capability_notice(warnings: Sequence[str], audience: Audience) -> str:
     return CAPABILITY_NOTICE if any(str(w).strip() for w in warnings) else ""
 
 
-def with_capability_notice(prose: str, warnings: Sequence[str], audience: Audience) -> str:
+def capability_loss_warnings(runtime: Any) -> list[str]:
+    """The warnings that mean **a capability did not reach this run**.
+
+    `every-workflow-green` 47. `CAPABILITY_NOTICE` is exact about what it
+    claims and every word of it was argued; the list it was computed from was
+    `plan.warnings + runtime_warnings(runtime)`, which is the whole developer
+    channel. That channel carries three kinds of sentence and only one of them
+    is this one:
+
+    - **capability losses** — an unbound tool, an unresolved function, a mount
+      that would not load. The notice's subject, and `runtime_failure_warnings`
+      is already the name for exactly this set (`REPORT_ONLY` subtracted).
+    - **reports** — `UNDECLARED_FALLBACK`, `UNWIRED_REVISE`: advice about the
+      drawing, and *static properties of the shipped document*. They cannot be
+      absent, so a document carrying one made the notice permanently on. Three
+      correct live `concierge` answers ended with "part of this workflow was
+      unavailable"; nothing was.
+    - **plan findings** — `validate`'s PROBLEMS FOUND about the document as an
+      artifact, never a claim that a capability was missing.
+
+    Declared here rather than at each door so that what the sentence claims
+    and what triggers it are one declaration. `DeveloperChannel.warnings`
+    keeps the full list unchanged: the two have different jobs, and this
+    ticket is the evidence that one variable cannot hold both.
+    """
+    from openstategraph.api.registries import runtime_failure_warnings
+
+    return runtime_failure_warnings(runtime)
+
+
+def with_capability_notice(prose: str, runtime: Any, audience: Audience) -> str:
     """`prose` with the notice appended, when one is due.
 
     The reply comes **first** and the notice is an aside after it. A notice
     that led would make every degraded run look like an error page, and a
     notice that replaced the answer would be a worse bug than the silence it
     is fixing.
+
+    Takes the **runtime**, not a list of warnings (`every-workflow-green` 47).
+    A door that hands over its own list is a door that will one day hand over
+    a different list than the one it reports — which is what happened, at all
+    three of them at once.
     """
-    notice = capability_notice(warnings, audience)
+    notice = capability_notice(capability_loss_warnings(runtime), audience)
     if not notice:
         return prose
     return f"{prose.rstrip()}\n\n{notice}" if prose.strip() else notice

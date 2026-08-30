@@ -410,6 +410,12 @@ class InitResult:
     #: already ours — a warning that proceeds, never a refusal. `None` when
     #: there was nothing to say.
     existing_project_warning: str | None
+    #: launch-readiness/191: which of the ignore rules this project needs an
+    #: *existing* `.gitignore` does not carry. Empty when we wrote the file
+    #: ourselves, and empty when theirs already covers both — so the caller
+    #: can only say "already covers it" in the case where it does. Never a
+    #: reason to write: the fix was the sentence, not the file.
+    gitignore_gaps: tuple[str, ...]
 
 
 def _existing_directory_refusal(target: Path, label: str) -> str | None:
@@ -489,9 +495,7 @@ def _looks_like_our_project(target: Path) -> bool:
     return any((target / name).is_file() for name in CONFIG_FILENAMES)
 
 
-def _shared_workflows_root_refusal(
-    target: Path, workflows_dir: str, label: str
-) -> str | None:
+def _shared_workflows_root_refusal(target: Path, workflows_dir: str, label: str) -> str | None:
     """production-ready/68 — the one directory `init` was most likely to
     collide over, and the only one it said nothing about.
 
@@ -515,9 +519,7 @@ def _shared_workflows_root_refusal(
     if not root.exists() or _looks_like_our_project(target):
         return None
     if not root.is_dir():
-        return (
-            f"{label}/{workflows_dir} exists and is not a directory. Nothing was written."
-        )
+        return f"{label}/{workflows_dir} exists and is not a directory. Nothing was written."
     # Never suggest the name that just collided — a suggestion that repeats
     # the failing input is a loop rather than an exit. Ordinals, the same
     # spelling case four uses for the project directory.
@@ -571,7 +573,12 @@ def init_project(
     never been forceable at all — so `force` no longer touches either of
     them.
     """
-    from openstategraph.config_file import CONFIG_FILENAMES, render_config_file, render_gitignore
+    from openstategraph.config_file import (
+        CONFIG_FILENAMES,
+        gitignore_gaps,
+        render_config_file,
+        render_gitignore,
+    )
 
     target = Path(directory).expanduser()
     name = label if label is not None else str(directory)
@@ -602,9 +609,12 @@ def init_project(
         created.append(config)
 
     gitignore = target / ".gitignore"
+    ignore_gaps: tuple[str, ...] = ()
     if not gitignore.exists():
         gitignore.write_text(render_gitignore())
         created.append(gitignore)
+    else:
+        ignore_gaps = gitignore_gaps(gitignore.read_text(errors="replace"))
 
     root = target / workflows_dir
     root.mkdir(parents=True, exist_ok=True)
@@ -625,6 +635,7 @@ def init_project(
         created=frozenset(created),
         reused_empty=reused_empty,
         existing_project_warning=existing_project_warning,
+        gitignore_gaps=ignore_gaps,
     )
 
 
