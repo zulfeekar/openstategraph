@@ -22,6 +22,26 @@
      edge, which is the edge it shares with the paper. */
   border-bottom: var(--border-width-rule) solid var(--color-rule);
   z-index: var(--z-panel);
+
+  /* The owner's rule of thumb, applied inside this dock and nowhere else —
+     a separate ticket owns the rest of the app (`memory-and-replay` 64):
+     *"darker border only for the draggable; other normal borders should be
+     the same border colour but a lighter variant or opacity of the dark
+     colour, about 60% — a greyish."*
+
+     So there is **one** border colour in this panel, at two weights. The
+     dark one is `--color-rule`, and the only thing wearing it is the edge
+     above, which is the edge the grip drags. Every other hairline in here —
+     the head, the pane divider, the lane rules, the axis ticks, the stat
+     dividers, the transport buttons — is that same colour at 60%, so a
+     reader can tell the one border that is a control from the ones that are
+     structure without reading a cursor.
+
+     Local on purpose: the right answer is a shared `--color-rule-soft`
+     beside `--color-rule` in `design/styles/theme.css`, and `design/` is
+     being edited elsewhere. Recorded here so it is a token waiting to be
+     minted rather than a value somebody has to rediscover. */
+  --rtl-rule: color-mix(in srgb, var(--color-rule) 60%, transparent);
 }
 
 /* The draggable edge — the **lower** one, the edge this panel shares with
@@ -61,7 +81,7 @@
   flex: none;
   min-height: 36px;
   padding: var(--space-1) var(--space-3);
-  border-bottom: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-bottom: var(--border-width-hairline) solid var(--rtl-rule);
 }
 
 .run-dock__title {
@@ -139,13 +159,21 @@
   overflow: auto;
 }
 
+/* The chart is not a scrolling document: it owns its own scroller, and it is
+   the lanes. Left to scroll as a whole it took the transport and the axis
+   off the top the first time a run had more rows than fitted — which is the
+   moment a reader most needs the numbers the axis prints
+   (`memory-and-replay` 64). */
 .run-dock__bars {
   flex: 3 1 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .run-dock__detail {
   flex: 2 1 0;
-  border-left: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-left: var(--border-width-hairline) solid var(--rtl-rule);
   padding-left: var(--space-3);
 }
 
@@ -165,7 +193,7 @@
 
   .run-dock__detail {
     border-left: none;
-    border-top: var(--border-width-hairline) solid var(--color-border-subtle);
+    border-top: var(--border-width-hairline) solid var(--rtl-rule);
     padding-left: 0;
     padding-top: var(--space-2);
   }
@@ -204,6 +232,10 @@
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
+  /* The chart fills the room the dock gives it and shrinks below its content,
+     so the scroller is the lanes rather than the whole panel. */
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 /* ---- transport ---- */
@@ -220,7 +252,7 @@
 .rtl__transport button {
   font: var(--type-label);
   border-radius: var(--radius-sm);
-  border: var(--border-width-hairline) solid var(--color-border-default);
+  border: var(--border-width-hairline) solid var(--rtl-rule);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
   padding: 2px var(--space-2);
@@ -266,12 +298,12 @@
   grid-template-columns: repeat(6, minmax(0, 1fr));
   margin: 0;
   flex: none;
-  border-block: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-block: var(--border-width-hairline) solid var(--rtl-rule);
 }
 
 .rtl__kpi {
   padding: var(--space-1) var(--space-2) var(--space-1) 0;
-  border-inline-end: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-inline-end: var(--border-width-hairline) solid var(--rtl-rule);
 }
 
 .rtl__kpi:last-child {
@@ -303,6 +335,7 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .rtl__axis,
@@ -322,11 +355,22 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  border-inline-start: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-inline-start: var(--border-width-hairline) solid var(--rtl-rule);
   padding-inline-start: 3px;
   font: var(--type-label);
   font-family: var(--font-mono);
   color: var(--color-text-quaternary);
+}
+
+/* Axis and lanes together, so the playhead is a rule down the chart rather
+   than a rule down the lanes' scroll content. */
+.rtl__chart {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .rtl__lanes {
@@ -338,13 +382,21 @@
 }
 
 .rtl__lane {
-  border-block-end: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-block-end: var(--border-width-hairline) solid var(--rtl-rule);
   min-height: 22px;
 }
 
-.rtl__lane[data-depth='1'] .rtl__name {
-  padding-inline-start: var(--space-3);
+/* Depth is drawn, not indented: the gutter is a `│` per level, printed in
+   the same subdued ink the design uses, so a name that has to be ellipsised
+   still says how far in it sits. An indent alone loses that at the first
+   long node name. */
+.rtl__gutter {
   color: var(--color-text-quaternary);
+  white-space: pre;
+}
+
+.rtl__lane[data-depth]:not([data-depth='0']) .rtl__name {
+  color: var(--color-text-tertiary);
 }
 
 .rtl__name {
