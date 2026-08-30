@@ -344,6 +344,35 @@
   --border-width-hairline: var(--osg-hairline);
   --border-width-rule: var(--osg-rule);
 
+  /* The third line, and it is not a third *number*.
+   *
+   * A rule is a seam **between** regions of the shell. A marker is a bar
+   * **beside** a block — the left edge of a blockquote, of a quoted run, of
+   * an inspector row whose value is locked, of a palette section that
+   * belongs to one workflow. It says "this text is set apart", which is a
+   * different sentence from "these two regions are different regions", and
+   * calling it `--border-width-rule` would have put the wrong one into four
+   * files that are meant to be read. `the-look-has-an-author-now/07` stopped
+   * at exactly that point and filed 08; this is 08's answer.
+   *
+   * It **derives** from `--osg-rule` rather than re-picking a number,
+   * because the authored file names two weights and this is not a third: it
+   * is the heavier of the two, spent on a different job. Deriving keeps the
+   * product's line weights countable — two numbers, three names — and means
+   * an owner who re-weights the rule re-weights the markers with it, which
+   * is what "the same hand drew both" means.
+   *
+   * Four of the nine bars 08 tabulated were **already** disagreeing about
+   * their width: two blockquote implementations, one at 2px and one at 3px,
+   * drawing the same element. A width picked twice is a duplication of
+   * knowledge, so the token is what a marker *is* and 3px was not a second
+   * weight — it was the second guess. Two things 08 listed are deliberately
+   * **not** markers and keep their literals: `NodeCard`'s resize corner,
+   * which is a glyph drawn out of two border edges rather than a bar beside
+   * anything, and `Tabs`'s transparent `border-bottom`, which is a
+   * *selection slot* holding space for an underline that is not drawn yet. */
+  --border-width-marker: var(--osg-rule);
+
   /* ---------- Neutral ramp (the authored warm ink) ----------
    * Was a cool slate; is now the authored ink family — `#f7f6f6` through
    * `#201e1d`, warm, almost chroma-free.

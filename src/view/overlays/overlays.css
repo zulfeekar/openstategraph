@@ -111,7 +111,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background: rgba(9, 12, 17, 0.45);
+  background: var(--color-scrim);
   animation: fade-in var(--duration-fast) var(--ease-out);
 }
 

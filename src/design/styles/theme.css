@@ -124,6 +124,24 @@
   --color-danger: var(--osg-node-error);
   --color-danger-subtle: var(--osg-accent-100);
 
+  /* The veil a modal drops over the app.
+   *
+   * It had never been a role, so the two overlays that need one disagreed:
+   * `.dialog-backdrop` carried `rgba(9, 12, 17, 0.45)` and `.graph-preview`
+   * carried `color-mix(in srgb, var(--color-bg, #000) 55%, transparent)` —
+   * where `--color-bg` is a name this product has never declared, so the
+   * literal `#000` was the value in force in both themes. One of them was a
+   * chosen colour and the other was a fallback nobody meant to ship; the
+   * chosen one wins and the name is what makes it choosable next time.
+   *
+   * **It does not flip with the theme**, and that is the one thing worth
+   * saying about it: a scrim darkens whatever is behind it, and a light
+   * scrim on a dark app would raise the ground rather than lower it. The
+   * dark block below therefore restates it at the same value on purpose,
+   * so a reader diffing the two blocks sees a decision rather than an
+   * omission. */
+  --color-scrim: rgba(9, 12, 17, 0.45);
+
   /* ---------- Canvas chrome ---------- */
   --color-canvas-grid-dot: #dbd9d8;
   --color-canvas-link: #b9b6b4;
@@ -238,6 +256,10 @@
 
   --color-danger: #f9b3a6; /* authored dark `--osg-node-error` */
   --color-danger-subtle: rgba(244, 113, 92, 0.14);
+
+  /* Restated, not flipped — see the light block. A scrim lowers the ground
+     it covers, in either theme. */
+  --color-scrim: rgba(9, 12, 17, 0.45);
 
   --color-canvas-grid-dot: #2c2928;
   --color-canvas-link: #474443;

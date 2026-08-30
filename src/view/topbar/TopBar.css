@@ -135,10 +135,10 @@
   background: var(--color-text-muted);
 }
 .topbar__health[data-state='up'] {
-  background: var(--color-status-success, #22c55e);
+  background: var(--color-status-success);
 }
 .topbar__health[data-state='down'] {
-  background: var(--color-status-danger, #ef4444);
+  background: var(--color-status-error);
 }
 
 /* Positioning context for the first-run credentials hint. */
@@ -180,7 +180,7 @@
    ring reads as a warning at 6px where a hue change alone would not. */
 .topbar__unsaved[data-state='unreachable'] {
   background: transparent;
-  box-shadow: inset 0 0 0 2px var(--color-status-danger, #ef4444);
+  box-shadow: inset 0 0 0 2px var(--color-status-error);
 }
 
 /* The lifecycle cluster — `ship-it` 39. The badge and its verb read as one
