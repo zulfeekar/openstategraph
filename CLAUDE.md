@@ -22,6 +22,16 @@ disagree: a trailer whose ticket still says open, a ticket whose file carries a
 resolution its header does not, a header citing a commit this repository does
 not have. Run it before trusting any statement about what is left.
 
+**And open the rows rather than carrying them.** Every drift row prints the
+subject line of the commit that claims the ticket, beside the ticket's own
+filename, so a mistyped trailer is legible where it is printed rather than one
+`git show` away. That is not a courtesy: one row stood from 2026-08-26 reading
+`launch-readiness/94 ← 7c776f3`, was carried through six handoffs and a dozen
+session reports as *"pre-existing, unchanged"*, and hid a live compiler defect
+the whole time — because two opaque tokens cost a deliberate act to read and
+"pre-existing" is the word that buys the deliberate act off. A row nobody opens
+is not a signal.
+
 **A trailer says a commit's work belongs to that ticket — never that the ticket
 is finished.** The header word for the difference is `partially`, and it covers
 both shapes: half the fix shipped, *and* a different defect found on the way
