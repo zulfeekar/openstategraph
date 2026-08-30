@@ -352,11 +352,20 @@ class TestTheCustomerSurfaceHonoursTheContract:
             assert f'event === "{name}"' in page
 
     def test_the_interrupt_branch_stops_the_running_treatment(self) -> None:
-        """UX-01 exactly: it used to render the approval card and nothing else."""
+        """UX-01 exactly: it used to render the approval card and nothing else.
+
+        The badge is placed through `flowFrameName(d)` rather than off `d.node`,
+        and that is this pin's own lesson repeated one level down: an approval
+        inside a *mounted* workflow reported a node id the parent's diagram has
+        no box for, so the run stopped, the page said so in words, and the
+        diagram showed nothing waiting anywhere — the same silence UX-01 is
+        about, reached by a different route. What is pinned is that the branch
+        pauses the diagram at all; which node it names is `flowFrameName`'s.
+        """
         page = self._page()
         branch = page.split('event === "interrupt"')[1].split('event === "done"')[0]
 
-        assert "pauseFlow(d.node)" in branch
+        assert "pauseFlow(flowFrameName(d))" in branch
         assert "renderInterrupt" in branch
 
     def test_pausing_removes_running_and_marks_the_node_distinctly(self) -> None:
