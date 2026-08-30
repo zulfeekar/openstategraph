@@ -1,3 +1,6 @@
+// The one non-test module under `src/core/` that imports sideways, and a
+// declared exception rather than an accidental one: the argument, and the
+// assertion that keeps it honest, are in `src/layerBoundaries.test.ts`.
 import { Workbench } from '@app/Workbench';
 import { EdgeModel } from '@core/model/EdgeModel';
 import { resetIds } from '@core/kernel/id';

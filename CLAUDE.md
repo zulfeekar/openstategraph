@@ -298,6 +298,35 @@ The canvas is a **one-way projection** of the model. No gesture writes to the gr
 
 `core/` is framework-free TypeScript. `canvas/` owns JointJS. `view/` owns React. `design/` owns tokens and primitives and contains no app logic.
 
+**Both halves of that sentence are gated, and they are gated by different
+instruments on purpose.** A package restriction is by **name** — `react`,
+`@joint/*` — and a name has one spelling, so it is `no-restricted-imports` in
+`eslint.config.js`, firing on the keystroke. A layer restriction is by
+**path**, and a path in this repository has at least two spellings:
+`../view/AppShell` and `@view/AppShell` are the same file, and only the first
+looks like a path. So the sideways rule is `src/layerBoundaries.test.ts`, which
+**reads `tsconfig.app.json`'s alias table** and asks which file an import lands
+on rather than how it was written.
+
+Until 2026-08-30 the sideways rule was a third ESLint group matching
+`'**/view/**'` and three siblings. It had never once fired: the codebase writes
+`@view/`, which has no path segment called `view`, and `core/testing/fixtures.ts`
+had walked through it. Adding the four aliases to the group was the obvious
+repair and was rejected — the gate and the alias table would have stayed two
+descriptions of one directory set, which is this file's named recurring defect,
+so the eighth alias would have re-opened it in silence. **Never restate the
+alias table. Resolve through it.** The table the gate does own is one row per
+layer (`core` → `core`, `design`; `design` → `design`), and a row is a sentence
+a reader can check.
+
+Test code is exempt, declared rather than assumed: a test is not shipped and
+cannot carry a framework into a worker, and `src/core/extendability.test.ts` —
+the walk that proves "extend by registering" — needs a real `Workbench` to
+walk. `src/core/testing/` spends that same exemption on a module that is not
+itself a test, and it is the one exception; it costs a second assertion that no
+shipped module imports from that directory, so the claim the exemption rests on
+is a claim that can fail.
+
 **PureMVC the framework is rejected** — layering kept, framework not adopted. Reasoning: `.scratch/fullstack-langgraph/decisions/puremvc.md`. Do not reintroduce it.
 
 ---
