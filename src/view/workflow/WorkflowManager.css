@@ -97,7 +97,7 @@
 }
 
 .workflow-manager__badge--published {
-  color: var(--color-text-success, var(--color-text-primary));
+  color: var(--color-text-success);
   border-color: currentColor;
 }
 

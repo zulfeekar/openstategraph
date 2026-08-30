@@ -4,7 +4,7 @@
 .rich-text {
   font-size: var(--font-size-13);
   line-height: var(--line-height-normal);
-  color: var(--color-text);
+  color: var(--color-text-primary);
   overflow-wrap: break-word;
 }
 
@@ -50,13 +50,13 @@
 .rich-text code {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--font-size-12);
-  background: var(--color-surface-sunken, rgba(127, 127, 127, 0.12));
+  background: var(--color-bg-muted);
   border-radius: var(--radius-sm);
   padding: var(--space-px) var(--space-1);
 }
 
 .rich-text pre {
-  background: var(--color-surface-sunken, rgba(127, 127, 127, 0.12));
+  background: var(--color-bg-muted);
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-2-5);
   overflow-x: auto;
@@ -78,7 +78,7 @@
 
 .rich-text th,
 .rich-text td {
-  border: var(--border-width-hairline) solid var(--color-border);
+  border: var(--border-width-hairline) solid var(--color-border-default);
   padding: var(--space-1) var(--space-2);
   text-align: left;
   white-space: nowrap;
@@ -86,15 +86,15 @@
 
 .rich-text th {
   font-weight: var(--font-weight-semibold);
-  background: var(--color-surface-sunken, rgba(127, 127, 127, 0.08));
+  background: var(--color-bg-subtle);
 }
 
 .rich-text blockquote {
   border-left: var(--border-width-marker) solid var(--color-border-default);
   padding-left: var(--space-2-5);
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
 }
 
 .rich-text a {
-  color: var(--color-accent, inherit);
+  color: var(--color-text-link);
 }

@@ -58,6 +58,17 @@
      white. A link was `--blue-600`; a system with one accent voice does not
      get to spend a second hue on the least-used control in the product. */
   --color-text-link: var(--osg-accent-700);
+  /* Green as *ink*, which is not the same role as green as a fill, and the
+     reason it is minted rather than aliased is that the two ends of this
+     palette are at opposite luminances. `.workflow-manager__badge--published`
+     asked for `--color-text-success`, a name nothing declared, so the badge
+     had been rendering in ordinary body ink and "published" was carrying no
+     colour at all.
+     `--color-primary` is the nearest existing role and is 4.78:1 here — but
+     it is tuned as a *fill* under white text, and in the dark theme that same
+     token is 2.53:1 as text on `--color-bg-subtle`, which is where this badge
+     sits. So the role flips: the dark block takes the bright end instead. */
+  --color-text-success: var(--green-600);
 
   /* ---------- Borders ---------- */
   --color-border-subtle: var(--neutral-100);
@@ -221,6 +232,12 @@
   /* The authored `--osg-accent-300`, which the design system ships as the
      accent for dark grounds. */
   --color-text-link: #f9b3a6;
+  /* The bright end, and it is `--color-status-success`'s own dark value read
+     by name rather than restated — 8.04:1 on `--color-bg-subtle`, against
+     2.53 for `--color-primary`. Referencing a role declared a few lines above
+     in this same block is safe; the rule at the top of this file is about
+     `--osg-*` primitives, which flip underneath us. */
+  --color-text-success: var(--color-status-success);
 
   --color-border-subtle: #272524;
   --color-border-default: #312f2e;

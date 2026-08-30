@@ -37,10 +37,13 @@
   border-color: var(--color-border-default);
 }
 
-.pill:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
+/* No `:focus-visible` block of its own. There was one — a 2px outline in
+   `--color-accent`, a name this product has never declared, so the whole
+   declaration was invalid at computed-value time and the pill had **no focus
+   ring at all**. An invalid `var()` does not fall through to the rule below
+   it; it unsets the property. Deleting it is the fix rather than renaming it:
+   `reset.css` already draws one ring for every interactive surface, and a
+   chip on the canvas is not the place to invent a second geometry. */
 
 .pill__label {
   overflow: hidden;
@@ -63,8 +66,12 @@
   background: var(--color-border-strong, var(--color-border-default));
 }
 
+/* The comment above says this is the dot the thinking rail uses, and now it
+   is: `--color-status-running`, exactly as `.thinking--live .thinking__mark`.
+   It was `--color-accent`, which resolved to nothing, so the mark the whole
+   `--live` state exists to show was drawn in no colour whatsoever. */
 .pill--live .pill__mark {
-  background: var(--color-accent);
+  background: var(--color-status-running);
   animation: pill-pulse 1.6s var(--ease-in-out, ease-in-out) infinite;
 }
 

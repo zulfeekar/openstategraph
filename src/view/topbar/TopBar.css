@@ -132,7 +132,11 @@
   height: 8px;
   border-radius: 50%;
   flex: none;
-  background: var(--color-text-muted);
+  /* Probing, and it is the state you see first. `--color-text-muted` is not a
+     name this product declares, so the dot was drawn in nothing at all until
+     the first probe answered. `--color-status-idle` is the role that already
+     means exactly this — the authored `--osg-node-idle` grey. */
+  background: var(--color-status-idle);
 }
 .topbar__health[data-state='up'] {
   background: var(--color-status-success);
@@ -161,16 +165,25 @@
  * about durability rather than an instruction. `aria-hidden`, because the
  * sentence a screen reader needs is the tooltip's, not a decoration's.
  *
- * Accent rather than danger: nothing is wrong, the work simply is not on disk
+ * Warning rather than danger: nothing is wrong, the work simply is not on disk
  * yet, and colouring an ordinary first save as an error would teach people to
- * ignore the colour that does mean danger. */
+ * ignore the colour that does mean danger.
+ *
+ * It said "accent" and spent `--color-accent`, which nothing declares — so the
+ * fallback was `currentColor` and the dot has always been the topbar's own ink.
+ * The rename is not cosmetic: in this identity the accent **is** the danger
+ * colour (`--color-status-error` is `--osg-accent`), so the name it asked for
+ * would have painted the exact hue the paragraph above rules out, and the
+ * unreachable state below — which is genuinely an error — would have become
+ * the same colour in a different shape. Amber keeps the two states two
+ * colours, which is what that state's own comment claims. */
 .topbar__unsaved {
   display: inline-block;
   width: 6px;
   height: 6px;
   margin-inline-start: var(--space-1, 4px);
   border-radius: 50%;
-  background: var(--color-accent, currentColor);
+  background: var(--color-status-warning);
   vertical-align: middle;
 }
 

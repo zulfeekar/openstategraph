@@ -142,13 +142,13 @@
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   user-select: none;
   margin-bottom: var(--space-2);
 }
 
 .inspector__advanced-summary:hover {
-  color: var(--color-text);
+  color: var(--color-text-primary);
 }
 
 /* Locked prompt sections (ticket 31): visible, never editable. */
@@ -160,7 +160,7 @@
 .inspector__locked-row {
   margin: 0;
   font-size: var(--font-size-12);
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   border-left: var(--border-width-marker) solid var(--color-border-default);
   padding-left: var(--space-2);
 }
@@ -184,9 +184,22 @@
   line-height: 1;
   padding: 0.125rem 0.375rem;
   border-radius: var(--radius-sm, 4px);
-  border: var(--border-width-hairline) solid var(--color-accent-border, currentColor);
-  background: var(--color-accent-subtle, transparent);
-  color: var(--color-accent-text, inherit);
+  /* `--color-accent-border/-subtle/-text` — three names this product has never
+     declared, so all three fallbacks were in force and the badge was ink on
+     nothing inside a currentColor hairline. It is the quiet one of the pair on
+     purpose: an override is the ordinary state of a mount, and the roles below
+     are the ones the theme already has for "a chip that is not saying
+     anything alarming".
+
+     No `--color-accent-*` role was minted to keep the old spelling alive. In
+     this identity the accent tint and the accent text step are already
+     declared, under the names `--color-danger-subtle` and `--color-danger` —
+     one accent voice, and it is red. A synonym would have been the same two
+     values under a second name, and would have made the revert button the
+     colour of an error. */
+  border: var(--border-width-hairline) solid var(--color-border-strong);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
@@ -207,9 +220,23 @@
   padding: 0.125rem 0.375rem;
   margin-left: 0.25rem;
   border-radius: var(--radius-sm, 4px);
-  border: var(--border-width-hairline) solid var(--color-warning-border, currentColor);
-  background: var(--color-warning-subtle, transparent);
-  color: var(--color-warning-text, inherit);
+  /* And this is the loud one, which is the whole point of the paragraph above
+     it: the two controls had asked for `--color-accent-*` and
+     `--color-warning-*`, neither of which exists, so both fell to
+     `currentColor` on transparent and the two buttons that "must not be
+     mistaken for one control with two labels" rendered **identically**.
+
+     `--color-warning-*` was not minted either, and the reason is contrast
+     rather than taste: the amber ramp this product carries stops at
+     `--amber-600` (#d97706), which is 3.0:1 on `--amber-50` — a warning
+     nobody can read at 11px. The accent voice is the one step the design
+     system publishes *as* accent text at body size (`--osg-accent-700`,
+     6.35:1), and it is already declared as `--color-danger`. Writing into a
+     package for every mount that has not narrowed the field is the
+     consequential half of this pair, so it gets it. */
+  border: var(--border-width-hairline) solid var(--color-danger);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
   cursor: pointer;
 }
 

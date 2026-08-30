@@ -431,7 +431,7 @@
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   border: var(--border-width-hairline) solid var(--color-border-default);
-  background: var(--color-bg-input);
+  background: var(--color-bg-surface);
 }
 
 .repeatable-group__field input:focus,
@@ -439,7 +439,7 @@
 .repeatable-group__field select:focus {
   outline: none;
   border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 2px var(--color-border-focus-transparent);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring-soft);
 }
 
 /* A row's own validator, said where the row is. The flat field shows this

@@ -308,45 +308,54 @@ describe('a token a stylesheet spends is a token something declares', () => {
    * as long as the rule had existed.
    *
    * Twenty-nine of these were live when this file was written, across
-   * fourteen stylesheets and twenty distinct names — `--color-accent`,
-   * `--color-text`, `--color-warning-*`, `--font-size-2xs`, `--type-code`.
-   * Fixing them is a visual change to fourteen files in three worktrees and
-   * is **not** this ticket; `the-look-has-an-author-now/09` carries it.
+   * fourteen stylesheets and twenty distinct names. `09` swept them: the
+   * headline was `.rich-text th/td`, whose `border: … var(--color-border)`
+   * measured `0px none` in both themes — **rendered Markdown tables in this
+   * product had no gridlines** — beside a live pill mark and a runtime health
+   * dot drawn in no colour at all, and an inspector badge pair the code says
+   * "must not be mistaken for one control with two labels" rendering
+   * identically because both had fallen to `currentColor` on transparent.
    *
-   * So the set is recorded **exactly**, which makes it a ratchet in both
-   * directions: a thirtieth reference is red, and repairing one is red too
-   * until its row is deleted. A list that can only be edited deliberately is
-   * the difference between a debt and a suppression.
+   * Each was decided rather than aliased, and the decisions were of three
+   * kinds: a **misspelling** of a role that exists (`--color-text` for
+   * `--color-text-primary`, `--color-surface-sunken` for a declared ground),
+   * a **role chosen freshly** because the name asked for something this
+   * identity does not have (`--color-warning-*`, `--color-accent-*`), and one
+   * **deletion** — `.pill:focus-visible` had invented a second focus geometry
+   * and drawn none, so `reset.css`'s single ring took it back. **Nothing was
+   * minted.** An alias for a name that should never have been used freezes
+   * the mistake, and `--color-accent-subtle` would have been a second
+   * spelling of `--color-danger-subtle` in a system with one accent voice.
+   *
+   * Five remain, and every one of them is in `src/view/ask/`, which a
+   * concurrent worktree held for the whole of `09`'s session — the same
+   * directory, and the same reason, as the two quarantines above and the
+   * three literal bars below. They are named individually rather than
+   * counted, so the row that survives says which fix is owed:
+   *
+   * - `AskPanel.css --color-border`, `--color-surface`, `--color-text` — the
+   *   build door's frame, ground and ink. Misspellings of `--color-border-
+   *   default`, `--color-bg-surface` and `--color-text-primary`; the door
+   *   currently has no border and inherits its ink.
+   * - `PastRuns.css --color-surface-sunken` — the same misspelling of
+   *   `--color-bg-surface-sunken`, behind a `transparent` fallback, so a past
+   *   run's lane has no ground.
+   * - `PastRuns.css --type-code` — the one that is not a colour. It falls back
+   *   to `--type-caption`, which renders; the role it wants is `--type-mono-sm`,
+   *   which is declared and is what a monospaced caption in this scale is
+   *   called.
+   *
+   * The set stays recorded **exactly**, which makes it a ratchet in both
+   * directions: a sixth reference is red, and repairing one is red too until
+   * its row is deleted. A list that can only be edited deliberately is the
+   * difference between a debt and a suppression.
    */
   const DEAD: readonly string[] = [
-    'design/primitives/Pill.css --color-accent',
     'view/ask/AskPanel.css --color-border',
     'view/ask/AskPanel.css --color-surface',
     'view/ask/AskPanel.css --color-text',
     'view/ask/PastRuns.css --color-surface-sunken',
     'view/ask/PastRuns.css --type-code',
-    'view/common/RichText.css --color-accent',
-    'view/common/RichText.css --color-border',
-    'view/common/RichText.css --color-surface-sunken',
-    'view/common/RichText.css --color-text',
-    'view/common/RichText.css --color-text-muted',
-    'view/inspector/Inspector.css --color-accent-border',
-    'view/inspector/Inspector.css --color-accent-subtle',
-    'view/inspector/Inspector.css --color-accent-text',
-    'view/inspector/Inspector.css --color-text',
-    'view/inspector/Inspector.css --color-text-muted',
-    'view/inspector/Inspector.css --color-warning-border',
-    'view/inspector/Inspector.css --color-warning-subtle',
-    'view/inspector/Inspector.css --color-warning-text',
-    'view/nodes/CompositionBody.css --color-border',
-    'view/nodes/IntentBody.css --color-text-muted',
-    'view/nodes/NodeCard.css --color-bg-input',
-    'view/nodes/NodeCard.css --color-border-focus-transparent',
-    'view/palette/Palette.css --color-text-muted',
-    'view/run/RunDock.css --color-bg-sunken',
-    'view/topbar/TopBar.css --color-accent',
-    'view/topbar/TopBar.css --color-text-muted',
-    'view/workflow/WorkflowManager.css --color-text-success',
   ];
 
   it('names the ones that resolve to nothing, and the list only shrinks by decision', () => {
