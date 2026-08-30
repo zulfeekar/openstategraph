@@ -86,7 +86,7 @@ interface Recorded {
 
 const RECORDED: Readonly<Record<string, Recorded>> = {
   'view/ask/AskPanel.tsx': {
-    lines: 920,
+    lines: 946,
     reason: `The largest module under \`src/\` and the one the ticket named: the counterpart
       of \`node_runtime.py\` with no split ticket behind it at all. Eight hundred and
       eighty-nine code lines out of 2,237 physical — the rest is JSX structure, imports and
@@ -160,7 +160,17 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       explaining why an unpaced burst coalesces into one commit and a paced run
       does not, which is exactly the kind of line this ceiling does not charge
       for elsewhere and charges for here because a component's prose is code
-      lines away from its JSX. The transcript seam is still the next one.`,
+      lines away from its JSX. The transcript seam is still the next one.
+
+      **920 -> 946** (\`memory-and-replay/66\`). Two frames the stream has
+      carried since \`55\` and this reader threw away: an \`invoked\` frame is a
+      tool call's ask, a \`token\` frame with \`kind: 'tool'\` is its answer, and
+      the wire's own contract says to pair them on \`callId\`. Nobody did, so
+      the chart could not draw a tool call at all and the strip counted seven
+      of something a reader had nowhere to click. Both branches already existed
+      here and already read those frames; what is added is a \`queueRow\` in
+      each, which is this module's one job — turn a frame into a row. No new
+      reason to change, and the transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
     lines: 728,

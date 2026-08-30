@@ -1053,6 +1053,27 @@ export function AskPanel({
             activate(tokenTarget, null);
             queuedActive = tokenTarget;
           }
+          // The other end of the bar the `invoked` frame opened
+          // (`memory-and-replay` 66). One frame per tool call carries the
+          // whole result — measured on the recorded run: fourteen calls,
+          // fourteen frames, 232 to 457 characters each — so this is a row
+          // per call rather than a row per chunk, and the 372 prose token
+          // frames of the same run queue nothing.
+          if (event.kind === 'tool' && event.toolName !== '') {
+            queueRow({
+              node: event.node,
+              taskId: null,
+              internal: true,
+              namespace: event.namespace,
+              path: event.path,
+              pathSlugs: event.pathSlugs,
+              activeNode: event.activeNode,
+              durationMs: 0,
+              elapsedMs: event.elapsedMs,
+              output: event.content,
+              tool: { name: event.toolName, callId: event.toolCallId, phase: 'result' },
+            });
+          }
           setTurns((all) =>
             all.map((turn) =>
               turn.id === id
@@ -1136,6 +1157,32 @@ export function AskPanel({
             seen.add(invokedTarget);
             activate(invokedTarget, null);
             queuedActive = invokedTarget;
+          }
+          // …and it opens a bar (`memory-and-replay` 66). The paragraph above
+          // was written when this frame moved the glow and nothing else, and
+          // it is now half true: the *card* is still filled by the `token`
+          // frame carrying the answer, and the second copy this warns against
+          // is still not written. What is written is the **ask**, which is one
+          // half of a bar the chart could not draw at all — the frame's own
+          // docstring says to pair on `callId` and, until now, nobody did.
+          //
+          // Dropped when the tool was withheld: a customer's frame carries
+          // `name: ''`, and a row whose identity is blank is not an identity.
+          // The boundary stays decided on the wire, where `59` left it.
+          if (event.name !== '') {
+            queueRow({
+              node: event.node,
+              taskId: null,
+              internal: true,
+              namespace: event.namespace,
+              path: event.path,
+              pathSlugs: event.pathSlugs,
+              activeNode: event.activeNode,
+              durationMs: 0,
+              elapsedMs: event.elapsedMs,
+              output: null,
+              tool: { name: event.name, callId: event.callId, phase: 'invoked' },
+            });
           }
         } else if (event.type === 'error') {
           // The one terminal frame that does not arrive as an outcome — the

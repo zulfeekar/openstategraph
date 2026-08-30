@@ -80,6 +80,7 @@ describe('a lane the run never closed', () => {
       measured: false,
       payload: { output: null, check: null, reason: null },
       concurrent: [],
+      events: [],
     };
     expect(value(open('detached'), step, 'Closed')).toMatch(/still running/);
     expect(value(open('unknown'), step, 'Closed')).toMatch(/owing an account/);

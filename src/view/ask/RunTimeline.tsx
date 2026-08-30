@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import {
-  axisTicks,
-  chartRows,
-  type ChartRow,
-  type RunLane,
-  type RunLanes,
-  type StepKind,
-  type TimelineStep,
-} from './timeline';
+import { type RunLane, type RunLanes, type StepKind, type TimelineStep } from './timeline';
+import { axisLabels, chartRows, type ChartRow } from './chartRows';
 import { REPLAY_SPEEDS, replayTransport, stopsOf, transportOffered } from '../run/replayTransport';
 import { runProfile } from '../run/runProfile';
 import { WHY, barFacts, formatMs, laneCaption } from '../run/barDetail';
@@ -213,6 +206,7 @@ export function RunTimeline({
                       at={offered ? at : null}
                       selected={picked === step.key}
                       onSelect={setPicked}
+                      named={!row.event}
                     />
                   ))}
                   {/* `54`'s `settled` frame, made visible: a 2 px tick where
@@ -332,6 +326,7 @@ function Bar({
   at,
   selected,
   onSelect,
+  named,
 }: {
   readonly step: TimelineStep;
   readonly totalMs: number | null;
@@ -339,6 +334,23 @@ function Bar({
   readonly at: number | null;
   readonly selected: boolean;
   readonly onSelect: (key: string) => void;
+  /**
+   * Whether the bar prints what it is inside itself.
+   *
+   * `false` on an **event** row (`memory-and-replay` 66), and it is the row
+   * model rather than a fit problem: a row *is* a component's identity, so a
+   * label on every bar of one would print the row's own name once per
+   * occurrence. Seen live on a run whose agent made twelve model calls, the
+   * row read `model model mo mo mod mo model ×7 model` — twelve clipped copies
+   * of a word already printed in the gutter, and `×7` counting occurrences of
+   * a thing the row is entirely made of. The design labels a bar because a
+   * *node* row can hold different work in each of its bars — `router` says
+   * `classify` — which an event row cannot.
+   *
+   * What it is stays reachable: the fill says model or tool, the `title` says
+   * both name and span, and clicking it fills the pane.
+   */
+  readonly named: boolean;
 }) {
   const clocked = totalMs !== null && totalMs > 0 && step.startMs !== null;
   const unmeasured = step.durationMs === null;
@@ -363,10 +375,12 @@ function Bar({
       title={`${step.label} · ${formatMs(step.durationMs)}`}
       onClick={() => onSelect(step.key)}
     >
-      <span>
-        {step.label}
-        {step.visit > 1 ? ` ×${step.visit}` : ''}
-      </span>
+      {named ? (
+        <span>
+          {step.label}
+          {step.visit > 1 ? ` ×${step.visit}` : ''}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -496,13 +510,13 @@ function Axis({ totalMs }: { readonly totalMs: number }) {
     <div className="rtl__axis">
       <div />
       <div className="rtl__ticks">
-        {axisTicks(totalMs).map((tick) => (
+        {axisLabels(totalMs).map(([tick, label]) => (
           <div
             key={tick}
             className="rtl__tick"
             style={{ insetInlineStart: `${(tick / totalMs) * 100}%` }}
           >
-            {formatMs(tick)}
+            {label}
           </div>
         ))}
       </div>
@@ -515,7 +529,9 @@ function Profile({ profile }: { readonly profile: ReturnType<typeof runProfile> 
     ['Duration', formatMs(profile.totalMs), false],
     ['Steps', String(profile.steps), false],
     ['Model calls', String(profile.modelCalls), false],
-    ['Tool calls', String(profile.toolCalls), false],
+    // A dash, never a zero, when the recording took tool laps and did not say
+    // how many calls they made (`memory-and-replay` 66, and 108's rule).
+    ['Tool calls', profile.toolCalls === null ? '—' : String(profile.toolCalls), false],
     ['Revise laps', String(profile.reviseLaps), profile.reviseLaps > 0],
     ['Measured ends', `${profile.measured} of ${profile.steps}`, false],
   ];

@@ -164,8 +164,13 @@
   flex-direction: column;
 }
 
+/* `memory-and-replay` 67: a floor, and the chart is what gives against it.
+   Wide enough for the selected-step facts' longest term and a quoted payload —
+   the pane's own `dl` is one column, so this is a reading width rather than a
+   two-column grid's minimum. */
 .run-dock__detail {
   flex: 2 1 0;
+  min-width: 240px;
   border-left: var(--border-width-hairline) solid var(--color-border);
   padding-left: var(--space-3);
 }
@@ -177,20 +182,20 @@
   color: var(--color-text-tertiary);
 }
 
-/* One column once the dock is narrower than two readable columns: the
- * detail pane goes under the bars rather than to a sliver beside them. */
-@media (max-width: 900px) {
-  .run-dock__body {
-    flex-direction: column;
-  }
-
-  .run-dock__detail {
-    border-left: none;
-    border-top: var(--border-width-hairline) solid var(--color-border);
-    padding-left: 0;
-    padding-top: var(--space-2);
-  }
-}
+/* There is deliberately no one-column fallback — `memory-and-replay` 67.
+ *
+ * There was one, at `max-width: 900px`, and it was correct for `51`'s bottom
+ * drawer: the alternative to stacking was a sliver. `63` docked this surface
+ * under the top bar and it is now a region with a **fixed height**, where the
+ * two behave nothing alike. A document that stacks gets longer and a reader
+ * scrolls the page; a dock that stacks gets two half-height scrollers and
+ * there is no page. Driven to 880 px the chart kept three of its five rows,
+ * the scrub rail landed on the lanes, and the selected-step facts, the payload
+ * and the trace were all under a fold with no scrollbar to reach them — which
+ * is the surface the owner photographed and called a missing component.
+ *
+ * So the columns stay columns at every width, the detail column has a floor
+ * above, and the chart is what narrows. */
 
 /* ------------------------------------------------------------------ *
  * The run chart — `memory-and-replay` 58 and 52.
@@ -339,9 +344,12 @@
   align-items: center;
 }
 
+/* 26px, the design's own — `memory-and-replay` 68. The axis is the half of
+   this chart a reader cannot supply by looking, and at 16px its labels sat on
+   the first lane's hairline. */
 .rtl__ticks {
   position: relative;
-  height: 16px;
+  height: 26px;
 }
 
 .rtl__tick {
@@ -366,17 +374,33 @@
   overflow: hidden;
 }
 
+/* The lane block ends with its last row — `memory-and-replay` 68.
+ *
+ * It grew (`flex: 1 1 auto`) and so reserved the dock's whole remaining height
+ * for however many rows a run had: five rows at 23px sat at the top of a 128px
+ * box inside a 144px chart inside a 206px pane, and roughly two thirds of the
+ * surface was empty below the last one. It may still shrink and scroll — a run
+ * with more rows than fit is the case the scroller exists for — but a chart
+ * that grows past its content is a chart claiming room it has nothing to put
+ * in. */
 .rtl__lanes {
   position: relative;
   overflow-y: auto;
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   touch-action: none;
 }
 
+/* 34px, and it is 9 + 16 + 9 — `memory-and-replay` 68.
+ *
+ * The three numbers are one number: a 16px bar on a 9px offset sits on the
+ * row's centre **by construction**, which is the single baseline the owner
+ * asked for. At 22/14/4 the name and the bar were centred against different
+ * boxes and read as two lines that nearly agree, and no offset fixes that at
+ * that height. */
 .rtl__lane {
   border-block-end: var(--border-width-hairline) solid var(--color-border);
-  min-height: 22px;
+  min-height: 34px;
 }
 
 /* Depth is drawn, not indented: the gutter is a `│` per level, printed in
@@ -404,14 +428,14 @@
 
 .rtl__track {
   position: relative;
-  height: 22px;
+  height: 34px;
   cursor: ew-resize;
 }
 
 .rtl__bar {
   position: absolute;
-  top: 4px;
-  height: 14px;
+  top: 9px;
+  height: 16px;
   padding: 0;
   border-radius: var(--radius-sm);
   border: var(--border-width-hairline) solid var(--color-text-primary);
@@ -427,7 +451,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-10);
   line-height: 1;
-  padding: 0 3px;
+  padding: 0 4px;
   white-space: nowrap;
   color: var(--color-text-primary);
 }

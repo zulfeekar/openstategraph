@@ -134,6 +134,25 @@ export interface TimelineRow {
    * it would show the second draft against the first bar.
    */
   readonly output?: string | null;
+  /**
+   * A tool call, at one of its two ends — `memory-and-replay` 66.
+   *
+   * The wire has carried both since `55` and nothing read either: an `invoked`
+   * frame is the ask, and the `token` frame with `kind: "tool"` repeating the
+   * same `callId` is the answer. `RunStreamEvent`'s own docstring says *"pair
+   * on that to time the call"*, and this field is the pairing arriving at the
+   * fold.
+   *
+   * Never set on a frame whose tool the audience boundary withheld: a
+   * customer's `invoked` carries `name: ''`, and a row with a blank identity
+   * is not an identity. `AskPanel` drops those rather than minting an
+   * anonymous row, which keeps the boundary decided where `59` put it.
+   */
+  readonly tool?: {
+    readonly name: string;
+    readonly callId: string;
+    readonly phase: 'invoked' | 'result';
+  };
   /** Set on a spawn row: a run announced a child. Never a bar of its own —
    * a spawn takes no time — but it is what a lane gets its *name* from. */
   readonly spawn?: {
@@ -252,6 +271,27 @@ export interface TimelineStep {
    * once. The fold knows; it now says.
    */
   readonly payload: StepPayload;
+  /**
+   * What executed *inside* this bar, each occurrence at its own offset —
+   * `memory-and-replay` 66.
+   *
+   * The owner's rule, and it is the general one: **a row is a component's
+   * identity, a bar is an occurrence.** `chartRows` groups these by `label`
+   * into one child row per distinct component, so fourteen calls across three
+   * tools draw as three rows carrying four, ten and — on another run — however
+   * many bars the run actually made. Never fourteen rows, and never one row
+   * with fourteen bars laid over each other.
+   *
+   * They are `TimelineStep`s rather than a narrower shape on purpose. An event
+   * *is* a bar at a finer grain, and it is drawn by the one chart, selected by
+   * the one `findStep`, and explained by the one payload pane. A second shape
+   * would be a second vocabulary for the same rectangle, which is the defect
+   * `51` refused when it asked whether there were two timelines.
+   *
+   * Empty for an event itself — the recursion stops at one level because the
+   * wire reports nothing inside a tool call.
+   */
+  readonly events: readonly TimelineStep[];
 }
 
 /**
@@ -329,8 +369,12 @@ function add(a: number | null, b: number | null): number | null {
  */
 // The payload is unwrapped a second time because the mapped type above strips
 // only the top level, and this fold writes into it frame by frame.
-type Draft = Omit<{ -readonly [K in keyof TimelineStep]: TimelineStep[K] }, 'payload'> & {
+type Draft = Omit<
+  { -readonly [K in keyof TimelineStep]: TimelineStep[K] },
+  'payload' | 'events'
+> & {
   payload: { -readonly [K in keyof StepPayload]: StepPayload[K] };
+  events: Draft[];
 };
 
 /**
@@ -425,6 +469,67 @@ export function timelineFold(): Fold<TimelineRow, Timeline> {
   let pending: Draft | null = null;
   /** Whose work opened it — the `activeNode` those frames named. */
   let pendingOwner: string | null = null;
+  /**
+   * The window the frame now being pushed closes, so `charge` can give a model
+   * call a bar without re-deriving it (`memory-and-replay` 66).
+   *
+   * Held here rather than passed through `charge`'s five call sites for the
+   * reason `charge` exists at all: five branches that each have to remember an
+   * argument is four chances to forget one.
+   */
+  let window: { startedAt: number | null; duration: number | null } = {
+    startedAt: null,
+    duration: null,
+  };
+  /**
+   * Tool calls the run has asked for and not yet answered, by `callId`.
+   *
+   * The join `55` published and nobody used. It is a map rather than a scan
+   * because a loop interleaves: `chinook-assistant` has four calls open across
+   * two laps in the recorded run.
+   */
+  const openCalls = new Map<string, Draft>();
+
+  /**
+   * One occurrence of something that executed inside a bar.
+   *
+   * A `TimelineStep`, because an event *is* a bar at a finer grain and the one
+   * chart draws both. `visit` counts occurrences of this component within this
+   * bar, so a key is stable while the run streams and unique when the same
+   * tool is called twice.
+   */
+  const event = (
+    bar: Draft,
+    label: string,
+    kind: StepKind,
+    startMs: number | null,
+    durationMs: number | null,
+    measured: boolean,
+    output: string | null,
+  ): Draft => {
+    const visit = bar.events.filter((each) => each.label === label).length + 1;
+    const drawn: Draft = {
+      key: `${bar.key}/${label}#${visit}`,
+      label,
+      taskId: bar.taskId,
+      order: bar.events.length + 1,
+      startMs,
+      durationMs,
+      count: 1,
+      internalSteps: 0,
+      kind,
+      modelCalls: kind === 'model' ? 1 : 0,
+      toolCalls: kind === 'tool' ? 1 : 0,
+      namespace: null,
+      visit,
+      measured,
+      concurrent: [],
+      payload: { output, check: null, reason: null },
+      events: [],
+    };
+    bar.events.push(drawn);
+    return drawn;
+  };
 
   const mutable = (): Draft | undefined => steps[steps.length - 1];
 
@@ -456,7 +561,18 @@ export function timelineFold(): Fold<TimelineRow, Timeline> {
       // node's loop; it is not a second model call. Counting it would have
       // reported the recorded run's 22 model calls as 75, because three
       // middlewares wrap each one.
-      if (stepLabel(row.node) === 'model') bar.modelCalls += 1;
+      if (stepLabel(row.node) === 'model') {
+        bar.modelCalls += 1;
+        // `66`: the call gets a bar of its own on the node's `model` row.
+        // A **span**, and it says so — this frame is the step *completing*
+        // and the wire has no frame for it starting, so the other end is the
+        // last one the run dated. That is the footing every non-mount bar on
+        // this chart already stands on, and `57`'s word for it is `measured:
+        // false`. `payload.output` stays `null` because nothing on the wire
+        // attributes prose to one call, and an empty quotation would read as
+        // a call that produced nothing.
+        event(bar, 'model', 'model', window.startedAt, window.duration, false, null);
+      }
       if (bar.kind === 'tool') bar.kind = 'model';
     } else if (isToolStep(row.node)) bar.toolCalls += 1;
   };
@@ -489,6 +605,7 @@ export function timelineFold(): Fold<TimelineRow, Timeline> {
       measured: false,
       concurrent: [],
       payload: { output: null, check: null, reason: null },
+      events: [],
     };
     steps.push(draft);
     return draft;
@@ -512,15 +629,73 @@ export function timelineFold(): Fold<TimelineRow, Timeline> {
     draft.key = `${draft.label}#${draft.visit}${taskId ? `@${taskId}` : ''}`;
   };
 
+  /**
+   * The bar an event belongs to: the one the run said was active.
+   *
+   * The same rule `launch-readiness` 108 settled for a frame — the owner the
+   * server resolved, never whichever bar happened to be open. `null` when the
+   * recording has no bar by that name yet, and the event is then dropped
+   * rather than given a phantom one, exactly as an internal frame that names
+   * nobody already is.
+   */
+  const barOwnedBy = (owner: string | null): Draft | null => {
+    if (owner === null) return null;
+    if (pending && pending.label === owner) return pending;
+    for (let at = steps.length - 1; at >= 0; at -= 1) {
+      const bar = steps[at];
+      if (bar !== undefined && bar.label === owner) return bar;
+    }
+    return null;
+  };
+
   const push = (row: TimelineRow): void => {
     // The span this frame closes: from the last frame the server dated to
     // this one. The first dated frame is measured from the stream's own
     // opening, which is what `elapsedMs` is relative to. `null` propagates
     // rather than collapsing to zero.
     const elapsed = Number.isFinite(row.elapsedMs as number) ? (row.elapsedMs as number) : null;
+
+    // A tool frame is an **annotation on the run, not a step of it** — taken
+    // before the clock moves, and it never moves it (`memory-and-replay` 66).
+    // An `invoked` frame and the `model` frame that follows it share a
+    // millisecond, so letting these advance `clock` would re-attribute every
+    // span on the chart to a frame that reports no work; the run's own total
+    // would move too. `stepEvents.test.ts` pins that it does not.
+    if (row.tool) {
+      const bar = barOwnedBy(row.activeNode ? stepLabel(row.activeNode) : null);
+      if (bar === null) return;
+      if (row.tool.phase === 'invoked') {
+        openCalls.set(
+          row.tool.callId,
+          event(bar, row.tool.name, 'tool', elapsed, null, false, null),
+        );
+        return;
+      }
+      const asked = openCalls.get(row.tool.callId);
+      openCalls.delete(row.tool.callId);
+      const answer = typeof row.output === 'string' && row.output !== '' ? row.output : null;
+      if (asked === undefined) {
+        // The answer with no ask: a reader that joined mid-run, or a stream
+        // whose `invoked` frame was withheld. When it returned is known and
+        // when it started is not, so the bar is one stamp and says so rather
+        // than borrowing a start from the frame before it.
+        event(bar, row.tool.name, 'tool', elapsed, null, false, answer);
+        return;
+      }
+      asked.payload.output = answer;
+      if (asked.startMs !== null && elapsed !== null) {
+        asked.durationMs = Math.max(0, elapsed - asked.startMs);
+        // Two stamps of *this call*, which is `57`'s definition and is a
+        // stronger claim than any other bar on this chart can make.
+        asked.measured = true;
+      }
+      return;
+    }
+
     const previous = clock;
     const startedAt = previous ?? (elapsed !== null ? 0 : null);
     const duration = elapsed === null ? null : Math.max(0, elapsed - (previous ?? 0));
+    window = { startedAt, duration };
     if (elapsed !== null) clock = elapsed;
 
     const namespace = row.namespace?.[0] ?? null;
@@ -649,7 +824,14 @@ export function timelineFold(): Fold<TimelineRow, Timeline> {
     // `payload` is copied too, not shared: `result()` is called on every
     // frame while a run streams, and a shallow copy would hand every earlier
     // snapshot the same object the still-open draft is about to write into.
-    const finished: Draft[] = steps.map((draft) => ({ ...draft, payload: { ...draft.payload } }));
+    const finished: Draft[] = steps.map((draft) => ({
+      ...draft,
+      payload: { ...draft.payload },
+      // Copied for the reason `payload` is, one level down: a tool call is
+      // open across frames, so a snapshot taken between the ask and the answer
+      // must not be handed the object the answer is about to write into.
+      events: draft.events.map((each) => ({ ...each, payload: { ...each.payload } })),
+    }));
     const copyOf = (draft: Draft): Draft | undefined => finished[draft.order - 1];
 
     // Rule 6, second half: a mount's bar is its own two dated frames, not the
@@ -1140,206 +1322,4 @@ function assignSiblings(
     }
     close();
   }
-}
-
-/**
- * One drawn row of the chart — `memory-and-replay` 64.
- *
- * A lane and a row are not the same thing, and the difference is the whole of
- * this ticket. **A lane is what the run dispatched**: announced, owned,
- * closed, and `50` settled that a branch through this same graph is not one.
- * **A row is what the chart draws.** The run's own lane holds every top-level
- * bar in sequence, which is true and is not a drawing: fifteen nodes crowded
- * onto one line called `The workflow`, with a fan-out reading as overlapping
- * bars rather than as parallel rows.
- *
- * So the run's lane is split **by node**, and every dispatched child is
- * indented under the row that announced it. Nothing here is a second
- * derivation of a bar: a row holds the lanes' own steps, which is what
- * `chartRows` is asserted to preserve.
- */
-export interface ChartRow {
-  /** Stable within a run; safe as a React key. */
-  readonly key: string;
-  /**
-   * The node's own name, or the name the run put on the child it announced.
-   *
-   * A `whole` row's siblings are not spelled here: "1 of 2" is a caption the
-   * pane beside the chart also prints, and one sentence written twice is the
-   * defect this repository names most often.
-   */
-  readonly name: string;
-  /** 0 at the top level; one more for each row this one sits inside. */
-  readonly depth: number;
-  /** The lane these bars came off — a child's own, or the run's. */
-  readonly lane: RunLane;
-  readonly steps: readonly TimelineStep[];
-  /**
-   * This row *is* a whole lane, so the lane's `settled` tick and open-ended
-   * strip belong to it.
-   *
-   * `false` for a node row, which is a slice of the run's own lane. That
-   * lane's end is the recording's end, so drawing a settled tick on every
-   * node row would say the run closed fifteen things it never announced —
-   * which is what the single-row chart did once, at the right-hand edge.
-   */
-  readonly whole: boolean;
-}
-
-/**
- * The lanes, projected into the rows a chart draws.
- *
- * Ordering is depth-first and comes from the run twice over: a node row sits
- * where the run first heard from that node, and a child row sits directly
- * under the row that announced it, in the order the run announced them.
- *
- * # Which row a child belongs under
- *
- * A child lane records the canvas node that announced it (`RunLane.parent`)
- * and the millisecond it was announced. The parent row is therefore the row
- * carrying a bar with that label **whose window contains the spawn** — which
- * is what resolves a nested subagent under its own parent rather than under
- * the top-level namesake, since rows are added parents-first and the deepest
- * match is the last one.
- *
- * With no window match the named top-level row is taken, and with no named
- * row at all the child sits at the top level. Neither is a guess dressed as a
- * fact: a child whose parent this recording has no bar for gets a row with no
- * gutter, rather than a gutter under a row that was invented for it.
- *
- * # A mount is still not a row
- *
- * `50`'s table, unchanged. A mount is one node on the canvas, so it folds into
- * that node's bar and draws hatched at the length its own two dated frames
- * give it (`buildTimeline` rule 6). Giving it a row would claim a shape the
- * fold deliberately does not produce.
- */
-export function chartRows(lanes: readonly RunLane[]): readonly ChartRow[] {
-  type Draft = { -readonly [K in keyof ChartRow]: ChartRow[K] } & { steps: TimelineStep[] };
-  type Node = { readonly row: Draft; readonly kids: Node[] };
-
-  const added: Node[] = [];
-  const roots: Node[] = [];
-  const byLabel = new Map<string, Node>();
-
-  const run = lanes.find((lane) => lane.kind === 'run');
-  if (run) {
-    for (const step of run.steps) {
-      let node = byLabel.get(step.label);
-      if (!node) {
-        node = {
-          row: {
-            key: `node:${step.label}`,
-            name: step.label,
-            depth: 0,
-            lane: run,
-            steps: [],
-            whole: false,
-          },
-          kids: [],
-        };
-        byLabel.set(step.label, node);
-        added.push(node);
-        roots.push(node);
-      }
-      node.row.steps.push(step);
-    }
-  }
-
-  for (const lane of lanes) {
-    if (lane.kind === 'run') continue;
-    const parent = parentRow(added, lane);
-    const node: Node = {
-      row: {
-        key: lane.key,
-        name: lane.name,
-        depth: parent === null ? 0 : parent.row.depth + 1,
-        lane,
-        steps: [...lane.steps],
-        whole: true,
-      },
-      kids: [],
-    };
-    (parent === null ? roots : parent.kids).push(node);
-    added.push(node);
-  }
-
-  const drawn: ChartRow[] = [];
-  const walk = (nodes: readonly Node[]): void => {
-    for (const node of nodes) {
-      drawn.push(node.row);
-      walk(node.kids);
-    }
-  };
-  walk(roots);
-  return drawn;
-}
-
-/**
- * The row a dispatched child belongs under, in three attempts and no guesses.
- *
- * 1. **A lane that was open on the child's own task.** This is `claim`'s rule
- *    one level up: a child announced from inside another child carries that
- *    child's task id, and its spawn lands inside that child's dated window. It
- *    is tried first because it is the only one of the three that reads a value
- *    the run wrote down rather than a name it repeated.
- * 2. **The row that was drawing `lane.parent` when the spawn arrived.** Rows
- *    are added parents-first, so the deepest match is the last one.
- * 3. **The row named `lane.parent`**, whichever it is.
- *
- * `null` — the top level — when the recording has no bar by that name at all.
- * A gutter under a row invented for the occasion would be worse than none.
- */
-function parentRow<
-  T extends { readonly row: { readonly lane: RunLane; readonly steps: readonly TimelineStep[] } },
->(rows: readonly T[], lane: RunLane): T | null {
-  const at = lane.startMs;
-  const opened = (row: T): boolean => {
-    const host = row.row.lane;
-    return (
-      host !== lane &&
-      host.taskId !== null &&
-      host.taskId === lane.taskId &&
-      host.startMs !== null &&
-      at !== null &&
-      at >= host.startMs &&
-      (host.endMs === null || at <= host.endMs)
-    );
-  };
-  const inherited = rows.filter(opened).at(-1);
-  if (inherited) return inherited;
-
-  const parent = lane.parent;
-  if (parent === null) return null;
-  const named = rows.filter((row) => row.row.steps.some((step) => step.label === parent));
-  const within =
-    at === null
-      ? []
-      : named.filter((row) =>
-          row.row.steps.some(
-            (step) =>
-              step.label === parent &&
-              step.startMs !== null &&
-              step.startMs <= at &&
-              step.startMs + (step.durationMs ?? 0) >= at,
-          ),
-        );
-  return within.at(-1) ?? named[0] ?? null;
-}
-
-/**
- * Five or so round offsets across the run — never more than the width can hold.
- *
- * Here rather than in the chart because an axis tick is a number the run has,
- * not a rectangle somebody draws: it is decidable, so it is tested directly
- * (`memory-and-replay` 64).
- */
-export function axisTicks(totalMs: number): readonly number[] {
-  if (totalMs <= 0) return [0];
-  const raw = totalMs / 5;
-  const magnitude = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 5, 10].map((n) => n * magnitude).find((n) => n >= raw) ?? raw;
-  const ticks: number[] = [];
-  for (let at = 0; at < totalMs; at += step) ticks.push(at);
-  return ticks;
 }
