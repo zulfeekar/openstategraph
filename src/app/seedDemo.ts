@@ -3,7 +3,13 @@ import { registerNodeTypesForRawDocument } from '@nodes/workflowScoped';
 import envelope from '../../workflows/chinook-assistant/workflow.json';
 
 /**
- * The workflow the editor opens with: **the shipped example itself**.
+ * The workflow `/?demo=1` opens with: **the shipped example itself**.
+ *
+ * Not the workflow *the editor* opens with, which is what this line said until
+ * `install-experience` 23 — and it was describing the defect. A bare address
+ * seeded this unconditionally in a checkout, so `http://localhost:5273/` came
+ * up holding 13 nodes of somebody else's workflow before any storage had been
+ * read. `shouldSeedDemo` below is the gate; the document is unchanged.
  *
  * This used to hand-build a Chinook showcase node by node, and that was the
  * defect the one-chinook ticket exists to fix. There were two Chinook
@@ -25,6 +31,32 @@ import envelope from '../../workflows/chinook-assistant/workflow.json';
  * stack empty, since replacing the document clears history by design. The
  * first Cmd-Z should undo the *user's* first edit, not dismantle the example.
  */
+/**
+ * The parameter that asks for the demo document — `install-experience` 23.
+ *
+ * Deliberately not `w`. `?w=<slug>` names a document the *backend* holds and
+ * is answered by the load path; this names the copy compiled into the dev
+ * bundle, which exists so the e2e suite has a populated canvas with no Python
+ * process running. Two different documents would be a lie; two different
+ * questions with two different parameters is the truth.
+ */
+export const DEMO_URL_PARAM = 'demo';
+
+/**
+ * Whether this address is asking for the demo.
+ *
+ * Presence, not value: `?demo` and `?demo=1` both mean yes, because a flag
+ * that silently ignores its bare form is a flag people write wrong once and
+ * then distrust. Anything else — a bare address most of all — means no.
+ *
+ * Pure and exported so it can be tested without a DOM. `main.tsx` runs before
+ * React exists and cannot be reached by a unit test at all; what *can* be
+ * pinned is this decision, and the shape of the one line that calls it.
+ */
+export function shouldSeedDemo(search: string): boolean {
+  return new URLSearchParams(search).has(DEMO_URL_PARAM);
+}
+
 export function seedDemoWorkflow(workbench: Workbench): void {
   const { document } = envelope as { document: unknown };
 

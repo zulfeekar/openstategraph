@@ -545,54 +545,81 @@ export function isClaimedByAnother(
 /**
  * Decides which workflow this tab is editing, and whether to restore it.
  *
- * This is the fix for a compounding defect, so it is worth stating what went
- * wrong. Previously the save hook **minted a fresh `wf-<timestamp>` id whenever
- * the session had none**, and separately performed an unconditional "initial
- * save" on mount. The load hook then imported the *most recent* workflow. The
- * result, on every new tab:
+ * Two answers, and only the first of them restores anything:
  *
- *   1. a new id is minted,
- *   2. the seeded demo is saved under it,
- *   3. some older workflow is imported over the top,
- *   4. autosave writes *that* content under the new id as well.
+ * - **This tab already had a document.** `sessionStorage` survives ⌘R and
+ *   nothing else, so a session id is a statement about *this* tab and no
+ *   other. It gets its document back.
+ * - **This tab has never had one.** It starts blank, whatever else the origin
+ *   is holding — and is told, once, that the holding is still there.
  *
- * So each tab open left another full copy of the graph in `localStorage`, keyed
- * by a fresh id, forever. Adopting the existing id instead of minting is what
- * stops the duplication.
+ * ## What the second answer used to be, and why it changed
  *
- * `shouldRestore` is false for a freshly minted id: there is nothing to restore,
- * and importing over the default document would clear the undo stack for nothing.
+ * It used to adopt `mostRecentId` — the newest draft in this origin's
+ * `localStorage` — and restore it. That is `install-experience` 23: a bare URL
+ * with no `?w=` of any kind came up holding a previous session's 13-node
+ * workflow, because "no parameter" reaches here as *restore* and restore was
+ * spelled "put the newest draft on screen, whoever left it". Every genuinely
+ * new tab took that branch, and so did the first visit after a browser
+ * restart. The first screen of the product was somebody else's document.
  *
- * **`isClaimed` closes UX-04's third failure.** When another live tab already
- * holds the most recent workflow, this tab mints instead of adopting — and
- * pointedly does *not* restore into the new id, because copying the other tab's
- * graph under a second key is the duplication bug above wearing a new hat.
- * The user is told, which is the whole difference from the old behaviour.
+ * The adoption was not careless. It was written against a compounding defect:
+ * the save hook minted a fresh `wf-<timestamp>` whenever the session had none
+ * **and** performed an unconditional initial save on mount, while a separate
+ * hook imported the most recent workflow over the top — so every tab open left
+ * another full copy of one graph in storage, forever. Adopting stopped that.
+ *
+ * What is no longer true is the middle of that chain. There is no
+ * unconditional initial save and no import-over-the-top; autosave writes on
+ * change. A fresh tab that mints and restores nothing writes nothing at all
+ * until the user edits, and what it then writes is their new blank document —
+ * not a second copy of anybody's graph. The duplication this branch existed to
+ * prevent cannot happen by minting any more, which is why minting is now the
+ * right answer to a question it was once the wrong answer to.
+ *
+ * ## Nothing is lost, and that is a claim with somewhere to check it
+ *
+ * The draft is not deleted, swept, or rewritten — it stops being *adopted*.
+ * `recentDrafts` is how it is reached deliberately, surfaced as *Unsaved in
+ * this browser* in the Workflows panel, and `notice` is what points a user at
+ * it on the one page load where they would otherwise have expected their
+ * document to be sitting there.
+ *
+ * `shouldRestore` is false for a freshly minted id: there is nothing to
+ * restore, and importing over the default document would clear the undo stack
+ * for nothing.
+ *
+ * **`isClaimed` is gone with the adoption it gated.** It existed so that a
+ * workflow another live tab was editing was not adopted into a second tab; no
+ * tab adopts anything now, so the parameter could only ever have been a
+ * condition on a branch that no longer exists. Multi-tab ownership itself is
+ * untouched — `claimSession` still records the holder, the heartbeat still
+ * refreshes it, `isClaimedByAnother` still answers, and the compare-and-set in
+ * `saveWorkflow` is still what actually stops a clobber.
  */
 export function resolveSession(input: {
   sessionId: string | null;
+  /**
+   * The newest draft this browser holds, or `null`. Read to decide whether
+   * there is anything to *mention* — never to decide what to open.
+   */
   mostRecentId: string | null;
   mintId: () => string;
-  isClaimed?: (id: string) => boolean;
 }): { id: string; shouldRestore: boolean; notice?: string } {
   if (input.sessionId != null && input.sessionId !== '') {
     return { id: input.sessionId, shouldRestore: true };
   }
+  const id = input.mintId();
   if (input.mostRecentId != null && input.mostRecentId !== '') {
-    if (input.isClaimed?.(input.mostRecentId) === true) {
-      return {
-        id: input.mintId(),
-        shouldRestore: false,
-        notice:
-          'Another browser tab is already editing your autosaved workflow, so ' +
-          'this tab started a blank one. Your work is safe in the other tab.',
-      };
-    }
-    // Adopt rather than mint: two tabs sharing an id is now prevented above,
-    // and unbounded duplicate entries were the alternative.
-    return { id: input.mostRecentId, shouldRestore: true };
+    return {
+      id,
+      shouldRestore: false,
+      notice:
+        'Started a blank canvas. Unsaved work from an earlier session is still ' +
+        'in this browser — open it from Workflows ▸ Unsaved in this browser.',
+    };
   }
-  return { id: input.mintId(), shouldRestore: false };
+  return { id, shouldRestore: false };
 }
 
 function isQuotaError(error: unknown): boolean {

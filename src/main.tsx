@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import '@design/styles/index.css';
 import { createWorkbench } from '@app/Workbench';
 import { WorkbenchProvider } from '@app/WorkbenchContext';
-import { seedDemoWorkflow } from '@app/seedDemo';
+import { seedDemoWorkflow, shouldSeedDemo } from '@app/seedDemo';
 import { AppShell } from '@view/AppShell';
 import { ErrorBoundary } from '@view/ErrorBoundary';
 
@@ -37,7 +37,17 @@ try {
   // provenance the customer can see. `import.meta.env.DEV` is a literal at
   // build time, so this also takes the document *out of the bundle*, which is
   // what `seedDemo.test.ts` asserts.
-  if (import.meta.env.DEV) {
+  //
+  // **And asked for by name** (`install-experience` 23). Dev alone was not a
+  // small enough audience: a stranger who clones this repository runs
+  // `npm run dev`, and `http://localhost:5273/` came up holding those same 13
+  // nodes before a byte of storage had been read — the first screen behind a
+  // public repository, showing a workflow nobody had made. `/` is a blank
+  // canvas now. `/?demo=1` is the fixture, and the e2e suite asks for it that
+  // way, which is the only caller that needs it: Playwright starts the dev
+  // server and no backend, so `?w=chinook-assistant` — how a person opens this
+  // package in a checkout — is not available to it.
+  if (import.meta.env.DEV && shouldSeedDemo(window.location.search)) {
     seedDemoWorkflow(workbench);
   }
   workbench.warmUp();

@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Workbench } from './Workbench';
-import { seedDemoWorkflow } from './seedDemo';
+import { DEMO_URL_PARAM, seedDemoWorkflow, shouldSeedDemo } from './seedDemo';
 
 const repoRoot = join(__dirname, '..', '..');
 
@@ -136,7 +136,8 @@ describe('the shipped bundle carries no example document', () => {
     // guard has to be a build-time literal for the document to be dropped
     // from the bundle at all, so a runtime check would prove nothing.
     const main = readFileSync(join(repoRoot, 'src', 'main.tsx'), 'utf8');
-    const guarded = /if \(import\.meta\.env\.DEV\) \{\s*\n\s*seedDemoWorkflow\(workbench\);/;
+    const guarded =
+      /if \(import\.meta\.env\.DEV && shouldSeedDemo\(window\.location\.search\)\) \{\s*\n\s*seedDemoWorkflow\(workbench\);/;
 
     expect(main).toContain('seedDemoWorkflow(workbench)');
     expect(main).toMatch(guarded);
@@ -172,5 +173,66 @@ describe('the shipped bundle carries no example document', () => {
       .filter((name) => readFileSync(join(assets, name), 'utf8').includes('Chinook Assistant'));
 
     expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * `install-experience` 23 — **the checkout's fixture is not the checkout's
+ * front door either.**
+ *
+ * Ticket 41 took this document out of the *shipped bundle* and stopped there,
+ * which was the whole of the problem it could see: a customer met a 13-node
+ * graph they had not made. In a checkout the seed stayed unconditional, so
+ * `http://localhost:5273/` — no `?w=` of any kind — came up holding Chinook
+ * Assistant, 13 nodes and 17 links, before a single byte of storage had been
+ * read. That is the document the owner reported, and the counts identify it
+ * exactly.
+ *
+ * A stranger cloning the repository runs `npm run dev`, so "only in a
+ * checkout" is not a smaller audience than the wheel's — it is the audience
+ * the README sends here. Landing inside somebody else's workflow is the same
+ * first impression ticket 41 fixed, on the path more people take.
+ *
+ * ## Why gated rather than deleted
+ *
+ * The seed still earns its keep, for one reason and it is worth stating
+ * plainly: it is the **only** way the e2e suite gets a populated canvas with
+ * no backend running. Playwright's `webServer` starts `npm run dev` and
+ * nothing else, so `?w=chinook-assistant` — which is how a *person* opens this
+ * package in a checkout, and what the burst specs already use against the
+ * supervised stack — would make the smoke suite depend on a Python process it
+ * does not start.
+ *
+ * So the document stays, and the *default* moves. `/` is a blank canvas;
+ * `/?demo=1` is the fixture, dev-only exactly as before, and the e2e suite
+ * asks for it by name. A fixture that has to be asked for cannot be mistaken
+ * for a product.
+ */
+describe('the demo is opt-in, even in a checkout', () => {
+  it('does not seed a bare address', () => {
+    expect(shouldSeedDemo('')).toBe(false);
+    expect(shouldSeedDemo('?')).toBe(false);
+  });
+
+  it('does not seed a deep link, which names its own document', () => {
+    // `?w=` is answered by the load path, and seeding underneath it would put
+    // 13 nodes on the canvas for the half-second before the fetch lands.
+    expect(shouldSeedDemo('?w=chinook-assistant')).toBe(false);
+  });
+
+  it('seeds when asked for by name, with or without a value', () => {
+    expect(shouldSeedDemo(`?${DEMO_URL_PARAM}`)).toBe(true);
+    expect(shouldSeedDemo(`?${DEMO_URL_PARAM}=1`)).toBe(true);
+    expect(shouldSeedDemo(`?w=chinook-assistant&${DEMO_URL_PARAM}=1`)).toBe(true);
+  });
+
+  it('is the parameter the e2e suite actually asks for', () => {
+    // The one pairing nothing else can check: a rename here that missed the
+    // specs would leave every smoke test waiting on a node that never appears,
+    // and the failure would read as a canvas bug.
+    for (const spec of ['canvas.smoke.spec.ts', 'copyTextOutOfTheEditor.spec.ts']) {
+      const source = readFileSync(join(repoRoot, 'e2e', spec), 'utf8');
+      expect(source).toContain(`page.goto('/?${DEMO_URL_PARAM}=1')`);
+    }
   });
 });

@@ -91,17 +91,27 @@ checkout once `npm run build` has run at least once.
 > [Deploying for other people](deploying.md) when this stops being your own
 > machine.
 
-The editor opens on a seeded demo that runs with **no credentials at all**:
-the canvas preview's default model is `Mock · Offline`, a deterministic
-simulator that exercises the real execution path (it requests a tool, then
-answers from the tool's result).
+The editor opens on a **blank canvas**, with the START FROM templates and the
+EXAMPLES shelf in the Workflows drawer. An address that names no workflow opens
+no workflow — not the last thing this browser was editing, and not a demo
+document (`install-experience` 23). Open `chinook-assistant` from **Workflows**
+and it runs with **no credentials at all**: the canvas preview's default model
+is `Mock · Offline`, a deterministic simulator that exercises the real
+execution path (it requests a tool, then answers from the tool's result).
 
-> **Only in a checkout.** The seed is `workflows/chinook-assistant/workflow.json`,
-> which exists here and does not exist in a `pip install` — so a wheel install
-> opens on a blank canvas instead, with the templates and the examples shelf in
-> the Workflows drawer. Shipping the demo inside the bundle was
-> workflow-gallery ticket 41: a customer met a 13-node graph they had not made
-> and could not run.
+> **Where the demo went.** `workflows/chinook-assistant/workflow.json` is also
+> compiled into the *dev* bundle, so the browser test suite has a populated
+> canvas with no backend running; `npm run dev` serves it at `/?demo=1` and
+> nowhere else. Shipping it as the first screen was workflow-gallery ticket 41
+> for a wheel install — a customer met a 13-node graph they had not made — and
+> `install-experience` 23 for a checkout, where a stranger running `npm run
+> dev` met the same thing.
+
+> **Your unsaved edits are kept, and they are not opened for you.** The editor
+> autosaves to this browser as you work. Arriving at a bare address starts a
+> blank canvas and says so; the drafts are under **Workflows ▸ Unsaved in this
+> browser**, each with an *Open* button. A draft of a saved workflow is also
+> restored the moment you reopen that workflow, as it always was.
 
 ## 3. Models and credentials
 
@@ -564,6 +574,15 @@ seen this workflow — the editor fetches the file, and it does so whether or no
 the URL carries the slug. **A missing autosave is never an empty canvas**
 (`production-ready` 49 and 71). An empty canvas that still believed it was a
 saved workflow is what let a blank document be written over a real one.
+
+And it has one boundary, which is the clause that clause does not reach: all of
+it is about a URL that **names a workflow**. A bare address names none, so
+there is nothing to restore and nothing to fall back to, and the answer is a
+blank canvas — not the newest draft this browser happens to be holding, which
+is what it used to be (`install-experience` 23). A tab that reloads still gets
+its own document back, because a reload is the same tab; a *new* tab has never
+had one. What the drafts get instead of an implicit adoption is a list with a
+button: **Workflows ▸ Unsaved in this browser**.
 
 The other half of the same rule is what **New** does: a new workflow gets an
 identity of its own from the moment it exists, so nothing you draw in it is

@@ -1,8 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
 
-/** The seeded demo is the fixture: it loads with no backend and no keys. */
+/**
+ * The seeded demo is the fixture: it loads with no backend and no keys.
+ *
+ * Asked for by name since `install-experience` 23 — a bare `/` is a blank
+ * canvas, because that is what a stranger arriving at this repository should
+ * meet. `?demo=1` is the one caller that still needs the compiled-in copy:
+ * Playwright starts the dev server and no Python, so `?w=chinook-assistant`
+ * (how a person opens this package) is not available here.
+ */
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?demo=1');
   await expect(page.locator('[data-node-id]').first()).toBeVisible();
 });
 

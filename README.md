@@ -225,9 +225,11 @@ ok, `1` failure, `2` usage, `3` a missing extra) so `validate` works as a CI
 gate. The same thing from Python is `load_workflow("./workflows/my-thing")` —
 see [Using OpenStateGraph in your project](docs/adoption.md).
 
-Opens on a seeded demo that **runs with no credentials** on the canvas
-preview — the default model there is `Mock · Offline`, a deterministic
-simulator. The real backend, once running, defaults to **Ollama cloud**, which
+Opens on a **blank canvas**: an address that names no workflow opens no
+workflow, whoever last used this browser (`install-experience` 23). Open one
+from **Workflows**, start from a template, or copy an example — the shipped
+`chinook-assistant` **runs with no credentials** on the canvas preview, where
+the default model is `Mock · Offline`, a deterministic simulator. The real backend, once running, defaults to **Ollama cloud**, which
 needs `OLLAMA_API_KEY` (or `OLLAMA_HOST` for a daemon you run);
 `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` are preferred over it when set — see
 `resolve_model` in `backend/openstategraph/api/model_resolution.py`. Until

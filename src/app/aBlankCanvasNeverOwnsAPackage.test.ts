@@ -76,6 +76,27 @@ import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
  * Sibling of ticket 49, which was the same shape one layer up: *"dragging one
  * node in to see what is wrong autosaves that empty canvas over the package.
  * 1 826 bytes became 586."*
+ *
+ * ## What this file does **not** reach, and why it was green while a bare URL
+ * opened somebody else's workflow (`install-experience` 23)
+ *
+ * A page load makes two decisions and this file runs both. It is honest about
+ * the first — no `?w=`, `resolveOpenRequest` answers `restore` — and silent
+ * about the second, which is `resolveSession`, and which is where "restore"
+ * was being spelled *"open this origin's newest draft, whoever left it"*.
+ *
+ * `aPreviousVisitTo` writes `DRAFT_SESSION_KEY` into `sessionStorage` before
+ * every page load here, and it is right to: this file is about a **reload**,
+ * where the tab genuinely had a document and restoring it is correct. But
+ * `resolveSession` returns on its *first* branch whenever a session id is
+ * present, so the adoption limb below it was never entered by this file at
+ * all. The reported defect is a **fresh** tab — empty `sessionStorage`, which
+ * is every new tab and every first visit after a browser restart.
+ *
+ * Two different questions, and both are worth having: what a canvas may
+ * *claim* once it is on screen (here), and whether a bare URL puts a previous
+ * session's document there in the first place
+ * (`aBareUrlOpensNobodysWorkflow.test.ts`).
  */
 
 class FakeStore implements KeyValueStore {
