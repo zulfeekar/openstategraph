@@ -826,6 +826,18 @@ def cmd_new(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+#: What `init` says about the brief it just delivered. Four states, because
+#: "we wrote the file", "we added our block to yours", "we replaced a stale
+#: block" and "it was already right" are four different things to have done
+#: to a file somebody else may own (install-experience/25).
+_AGENTS_MD_STATE = {
+    "created": "how to build here, for your coding agent",
+    "added": "our block added to yours — nothing else touched",
+    "refreshed": "our block refreshed — nothing else touched",
+    "current": "already current — left alone",
+}
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     """`openstategraph init [dir]` — the one command that creates a project.
 
@@ -881,6 +893,12 @@ def cmd_init(args: argparse.Namespace) -> int:
     if result.starter is not None:
         where = f"{args.workflows_dir}/{result.starter.name}/"
         print(f"  {where:<22}  the smallest workflow that runs{state(result.starter)}")
+    # install-experience/25: `docs/` and the architecture principles are
+    # repository files, so a stranger's coding agent never saw them. The
+    # distribution carries the brief and this is where it lands — inside
+    # markers, so the four states below are all truthful and none of them
+    # touches a word the user wrote.
+    print(f"  {'AGENTS.md':<22}  {_AGENTS_MD_STATE[result.agents_md_action]}")
     print()
 
     # The generated config was written before this process had any chance to

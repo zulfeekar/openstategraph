@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from openstategraph import templates
+from openstategraph import agent_brief, templates
 
 #: A package's directory name is its frozen identity, and it is what scopes
 #: tool, function, skill and knowledge discovery. Same rule as `slugify`.
@@ -396,6 +396,14 @@ class InitResult:
     config: Path
     #: `<directory>/.gitignore`.
     gitignore: Path
+    #: `<directory>/AGENTS.md` — the brief a coding agent reads
+    #: (install-experience/25).
+    agents_md: Path
+    #: Which of `created` / `added` / `refreshed` / `current` happened to the
+    #: marked block in it. Four states rather than a boolean, because "we
+    #: wrote the file", "we added a block to yours" and "it was already right"
+    #: are three different sentences and `init` prints one of them.
+    agents_md_action: str
     #: The workflows root inside it — `workflows/` unless renamed.
     workflows: Path
     #: `<workflows>/starter`, or `None` when the starter was not asked for.
@@ -616,6 +624,13 @@ def init_project(
     else:
         ignore_gaps = gitignore_gaps(gitignore.read_text(errors="replace"))
 
+    # The brief the wheel carries, put where an agent looks. Never touches a
+    # byte outside its markers, so it is safe on a directory that already had
+    # an AGENTS.md — which is the common case for the reader this exists for.
+    agents_md, agents_md_action = agent_brief.write_into(target)
+    if agents_md_action == agent_brief.CREATED:
+        created.append(agents_md)
+
     root = target / workflows_dir
     root.mkdir(parents=True, exist_ok=True)
 
@@ -630,6 +645,8 @@ def init_project(
         directory=target,
         config=config,
         gitignore=gitignore,
+        agents_md=agents_md,
+        agents_md_action=agents_md_action,
         workflows=root,
         starter=package,
         created=frozenset(created),
