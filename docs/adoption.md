@@ -349,6 +349,12 @@ If that friction is the dealbreaker, you want mode (b).
 
 ## (b) Artifact — you never run the editor in production
 
+> This section is the *reference* for mode (b) — the CLI, `load_workflow`,
+> `RunResult`, the catalogue, what you actually install. For the ordered walk
+> instead — from `pip install` inside a directory that already has an app in
+> it, to that app's own endpoint answering — see
+> [Adding it to a project you already have](adding-openstategraph-to-your-project.md).
+
 Author once, commit the package to **your own** repository, and run the
 compiled graph from your own service. The editor's involvement ends at
 authoring time.
