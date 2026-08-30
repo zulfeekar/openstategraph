@@ -30,6 +30,11 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Literal
 
 from openstategraph import injection
+from openstategraph.abc.run_context_prompt import (
+    MARKER as RUN_CONTEXT_MARKER,
+    RUN_CONTEXT_SLOT,
+    build_run_context_middleware,
+)
 from openstategraph.async_tasks import ASYNC_TASKS_KEY, ASYNC_TASKS_SLOT
 from openstategraph.compile.context import (
     advisor_context,
@@ -244,22 +249,44 @@ def _agent(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compil
         return "upstream" if node_id in seen else "bystander"
 
     rejector_roles = {src: _role_towards(src) for src in feedback_sources}
-    built: dict[tuple[str, str], Any] = {}
+    #: Whether this workflow shows a model anything about the run it was
+    #: started with. Read once, here, because it decides two things that must
+    #: agree — whether the marker is rendered into the prompt below, and
+    #: whether the middleware that resolves it is in the slot table.
+    shows_run_context = bool(self._prompt_context)
+    built: dict[str, Any] = {}
     # `launch-readiness/106`: the `NarrationMiddleware` instance behind
     # each built agent, kept here because this is the compiler that made
     # it — exactly as `rubric` and `summarization` above are built here
     # and nowhere else. A retry reads this dict rather than the node,
     # so the node's public surface never grows for it. Keyed identically
     # to `built`; `None` where narration was silenced for this key.
-    narration_by_key: dict[tuple[str, str], Any] = {}
+    narration_by_key: dict[str, Any] = {}
 
-    def agent_for(skill: str, run_ctx: str = "") -> Any:
-        # Keyed by the run-context block as well as the wired skill
-        # (`organisms-first-class/72`). One compiled graph serves many
-        # runs, and this cache outlives all of them — keying on `skill`
-        # alone would have handed the second caller the first caller's
-        # tenant, which is the precise leak this ticket exists to prevent.
-        key = (skill, run_ctx)
+    def agent_for(skill: str) -> Any:
+        # Keyed by the wired skill and by nothing else, which is the whole
+        # of `launch-readiness/182`. It used to carry the *rendered*
+        # run-context block as well (`organisms-first-class/72`), so that
+        # the second caller could not be handed the first caller's tenant
+        # — a real leak, closed with a key whose lifetime was wrong. One
+        # compiled graph serves many runs and this cache outlives all of
+        # them, so keying on a per-run value made it an unbounded dict of
+        # fully-assembled agents: measured at one build, ~60 KiB and ~1050
+        # live objects per run, kept forever, on a workflow declaring a
+        # `caseId`. `POST /api/runs` never felt it (a fresh graph per
+        # request); `CompiledWorkflow.ask` and any long-lived mount did.
+        #
+        # 72's guarantee is not weakened by removing it, it is made
+        # unconditional: the block is no longer baked into anything that
+        # is kept. It rides on the invocation instead — rendered in `run`
+        # below from the values ambient to that run, substituted into the
+        # prompt at model-call time by `RunContextMiddleware` — so there
+        # is no shared entry for two callers to collide in.
+        #
+        # The wired skill stays in the key because it is not a per-run
+        # value: it arrives through state, from a document a *graph*
+        # declares, and its cardinality is the number of skill files.
+        key = skill
         if key not in built:
             contributions: dict[str, Any] = dict(self.services.workflow_middleware)
             # Prompt-injection screening, if this workflow asked for it and
@@ -327,6 +354,14 @@ def _agent(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compil
             # that already named "narration" in `contributions` (the
             # declared way to silence or replace the slot) is left alone;
             # this only fills the slot when nothing already has.
+            # `launch-readiness/182`. Filled only for a workflow that
+            # declares a prompt-visible run-context field, because only
+            # such a workflow carries the marker this resolves. The base
+            # owns where the slot sits; this decides whether it is filled.
+            if shows_run_context:
+                contributions.setdefault(
+                    RUN_CONTEXT_SLOT, build_run_context_middleware()
+                )
             if "narration" not in contributions:
                 from openstategraph.abc.narration import build_narration_middleware
 
@@ -472,11 +507,20 @@ def _agent(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compil
                         # about a tool sitting in its own schema.
                         held_tools_context(lc_tools),
                         advisor_context(node_id, self.services.advisor_catalog),
-                        # What this *run* was started with, for the fields
-                        # the author opted in (`organisms-first-class/72`).
-                        # Generated, so it is context and never rules, and
-                        # the locked output contract still renders last.
-                        run_ctx,
+                        # Where what this *run* was started with goes, for
+                        # the fields the author opted in
+                        # (`organisms-first-class/72`) — a marker rather
+                        # than the values, resolved per invocation
+                        # (`launch-readiness/182`). Generated, so it is
+                        # context and never rules; rendered here rather
+                        # than appended by the middleware so that the
+                        # locked output contract still comes last, which
+                        # appending would have broken.
+                        #
+                        # Absent entirely when the workflow declares no
+                        # prompt-visible field, so such a workflow's system
+                        # prompt is byte-for-byte what it always was.
+                        RUN_CONTEXT_MARKER if shows_run_context else "",
                     )
                     if part
                 ),
@@ -516,11 +560,7 @@ def _agent(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compil
         if not any(decisions.get(src) in ("revise", "rejected") for src in feedback_sources):
             feedback = ""
 
-        agent = (
-            agent_for(skill, self._run_context_section())
-            if model is not None
-            else None
-        )
+        agent = agent_for(skill) if model is not None else None
         if agent is None:
             return {
                 "outputs": {node_id: ""},
@@ -566,13 +606,14 @@ def _agent(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compil
             # `launch-readiness/106`: a retry gets pointed at what this
             # run's own findings store already holds, not merely at what
             # was wrong. `narration_by_key` holds the exact instance this
-            # compiler built for this skill/run-context key — never a
-            # fresh one, and never one fetched back off the agent — so
-            # the inventory reflects the store the retry's own tool calls
-            # will read and write.
-            retry_narration_mw = narration_by_key.get(
-                (skill, self._run_context_section())
-            )
+            # compiler built for this skill — never a fresh one, and never
+            # one fetched back off the agent — so the inventory reflects
+            # the store the retry's own tool calls will read and write.
+            # Keyed identically to `built`, which is now the skill alone
+            # (`launch-readiness/182`): a retry lap re-renders the run
+            # context and would previously have had to reproduce that
+            # rendering byte-for-byte to find its own narrator.
+            retry_narration_mw = narration_by_key.get(skill)
             inventory_fn = getattr(retry_narration_mw, "findings_inventory", None)
             if inventory_fn is not None:
                 thread_id = run_identity().get("thread_id", "")
@@ -583,6 +624,14 @@ def _agent(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compil
         elif not payload or payload[-1].type != "human" or payload[-1].content != prompt:
             payload.append(HumanMessage(content=prompt))
         invocation: dict[str, Any] = {"messages": payload}
+        if shows_run_context:
+            # `launch-readiness/182`: rendered here, in the node body, for
+            # exactly the reason `_run_context_section` documents — the
+            # opted-in *fields* are known at build time and the *values*
+            # are ambient to this run. It travels on the invocation, the
+            # way the rubric below does, and `RunContextMiddleware`
+            # substitutes it for the marker when the model is called.
+            invocation["run_context_section"] = self._run_context_section()
         rubric_text = _text(data, "rubric").strip()
         if rubric_text:
             invocation["rubric"] = rubric_text

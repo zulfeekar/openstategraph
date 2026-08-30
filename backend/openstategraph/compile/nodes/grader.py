@@ -138,6 +138,14 @@ def _grader(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
         reason `_agent` rebuilds. With nothing wired this is one
         construction per invocation of a plain dataclass-ish object, and
         with something wired it is the only correct order of events.
+
+        **Per call, with no cache behind it** — the answer to
+        `launch-readiness/182`'s fourth question for this family. The agent
+        family's memo was keyed on the rendered run-context block and
+        outlived every run, which made it an unbounded dict of built
+        agents; nothing here is kept between invocations, so the 3.2
+        KiB/run that sweep measured is construction that is collected
+        again, not accumulation.
         """
         return Grader(
             criteria=_text(data, "criteria"),

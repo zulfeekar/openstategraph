@@ -91,6 +91,16 @@ def _router(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
         The branch validation `Router.__init__` performs still happens at
         compile time via the construction below, so a router with no
         branches is rejected when the graph is built, not on first run.
+
+        **There is no cache here, and that is the answer to
+        `launch-readiness/182`'s fourth question.** That ticket found the
+        agent family's memo keyed on the rendered run-context block — a
+        per-run value inside a dict that outlives every run — and asked
+        whether the other three prompted families carried the same defect.
+        They do not: this constructs per call and `prebuilt` below is one
+        object made at compile time for the case where nothing varies, so
+        nothing accumulates. The 3.4 KiB/run that sweep measured here was
+        per-call construction, collected each lap, not retention.
         """
         return Router(
             branches,
