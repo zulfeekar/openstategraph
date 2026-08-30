@@ -730,6 +730,55 @@ _BURST_TYPES: dict[str, str] = {
 }
 
 
+#: `runs.at` read as the instant it names, rather than as the text it is.
+#:
+#: `now()` stores local wall clock with a numeric offset —
+#: `2026-08-30T01:06:29+0200` — and `ORDER BY at DESC` compared that as a
+#: **string**, which compares the offset as text. Two rows written either side
+#: of a DST fall-back, or by a laptop that crossed a timezone, come back in the
+#: order of their local clocks rather than the order they happened
+#: (`the-cost-of-one-more/11`):
+#:
+#: | stored `at` | the instant | text order |
+#: | --- | --- | --- |
+#: | `2026-10-25T02:50:00+0200` | 00:50Z | second |
+#: | `2026-10-25T02:30:00+0100` | 01:30Z | **first** |
+#:
+#: **Nothing about the stored value changes, and that is the decision.** The
+#: three candidates were a new UTC column, re-spelling `now()`, and deriving
+#: the key at read time. Re-spelling makes it worse at the boundary — the same
+#: instant in two spellings sorts a day apart, so new rows would list among
+#: yesterday's, and either every row moves or none does. A new column is a
+#: backfill over every row a store has ever held, on the first open after an
+#: upgrade, on a file whose only guarantee is that it grows; it is exactly what
+#: `_reconcile` records itself as not doing (*"there is no derived value a
+#: backfill would have to recompute"*), and an interrupted one leaves a store
+#: listing in neither ordering. Deriving costs neither. A row written years ago
+#: sorts correctly the moment this expression is used against it, there is no
+#: state a migration can be halfway through, and `at` stays what a person reads
+#: in `runs list` — local wall clock, which is what they want and which a UTC
+#: column would have taken away or duplicated.
+#:
+#: **And it is still O(limit)**, because sqlite indexes expressions: the
+#: indexes in `_open` are built on this text and satisfy the `ORDER BY` that
+#: names it. That is the whole reason the derived answer is affordable.
+#:
+#: Three parses, tried in order, because a store holds every spelling it was
+#: ever written in and may not lose the rows it cannot read:
+#:
+#: 1. `%z`'s offset has no colon (`+0200`) and sqlite's date functions require
+#:    one, so the colon is spliced in — `at` is fixed-width to character 22.
+#: 2. Anything sqlite parses as it stands: `Z`, `+02:00`, or no offset at all.
+#: 3. The raw string, so a value neither parse understands keeps the ordering
+#:    it had rather than collapsing to `NULL` alongside every other one.
+CHRONOLOGICAL = (
+    "COALESCE("
+    "strftime('%Y-%m-%dT%H:%M:%SZ',substr(at,1,22)||':'||substr(at,23,2)),"
+    "strftime('%Y-%m-%dT%H:%M:%SZ',at),"
+    "at)"
+)
+
+
 #: How many run ids one cadence query may name.
 #:
 #: `_attach_bursts` binds one SQL variable per row id, and sqlite refuses a
@@ -970,32 +1019,61 @@ class SqliteRunSink:
                     )
                     + ")"
                 )
-                # The two questions this store is asked: *this conversation*,
-                # and *this workflow, newest first*. Both would otherwise scan.
+                # The four questions this store is asked — *out of
+                # everything*, *this workflow*, *this session*, *this
+                # conversation* — each of them **newest first**. Without an
+                # index the unfiltered one read and sorted every row ever
+                # written to print a page of 25 (`the-cost-of-one-more/08`),
+                # and a store that never sweeps makes that a cost that only
+                # ever rises. Sqlite carries `rowid` as the last column of
+                # every index, so each of these satisfies the trailing
+                # `rowid DESC` outright as well.
+                #
+                # **Keyed on `CHRONOLOGICAL`, not on `at`.** The column is
+                # local wall clock with an offset and sorting it as text is not
+                # sorting it by time (`the-cost-of-one-more/11`); an index on
+                # `at` made the wrong order fast. Sqlite indexes expressions,
+                # so the derived key costs a store no column, no backfill and
+                # no state a migration can be halfway through — see
+                # `CHRONOLOGICAL` for why the other two candidates were not
+                # taken.
+                #
+                # **The four `at`-keyed indexes are dropped, and that is not
+                # the store sweeping.** The standing rule is that no *run* is
+                # ever removed; an index holds nothing that is not in the rows
+                # and is rebuilt from them, so replacing one loses nothing a
+                # reader could ask for. Keeping them beside these would have
+                # doubled the index maintenance on every write, forever, on the
+                # one structure this product guarantees only grows — and would
+                # have kept the wrong ordering indexed. An older build reopening
+                # the file recreates its own; both sets are correct for the
+                # build that made them.
+                for superseded in (
+                    "runs_thread",
+                    "runs_workflow_at",
+                    "runs_at",
+                    "runs_session_at",
+                ):
+                    connection.execute(f"DROP INDEX IF EXISTS {superseded}")
                 connection.execute(
-                    "CREATE INDEX IF NOT EXISTS runs_thread ON runs (thread_id)"
+                    f"CREATE INDEX IF NOT EXISTS runs_at_utc ON runs ({CHRONOLOGICAL})"
                 )
                 connection.execute(
-                    "CREATE INDEX IF NOT EXISTS runs_workflow_at ON runs (workflow_slug, at)"
+                    "CREATE INDEX IF NOT EXISTS runs_workflow_utc "
+                    f"ON runs (workflow_slug, {CHRONOLOGICAL})"
                 )
-                # And the question the listing asks when nobody narrowed it —
-                # *newest first, out of everything*. `runs list` with no flag
-                # supplies no `WHERE`, so it had nothing to seek on and read
-                # and sorted every row ever written to print a page of 25
-                # (`the-cost-of-one-more/08`). A store that never sweeps makes
-                # that a cost that only ever rises. Sqlite carries `rowid` as
-                # the last column of every index, so `(at)` is `(at, rowid)`
-                # and satisfies `ORDER BY at DESC, rowid DESC` outright.
-                connection.execute("CREATE INDEX IF NOT EXISTS runs_at ON runs (at)")
-                # `--session` had no index at all — the one filter of the four
-                # that scanned. Shaped like `runs_workflow_at` because it is
-                # the same question about a different key: *this session,
-                # newest first*. `--thread` deliberately gets no second index:
-                # `runs_thread` already seeks, and the sort it leaves behind is
-                # over one conversation, which is bounded by a person rather
-                # than by the store.
                 connection.execute(
-                    "CREATE INDEX IF NOT EXISTS runs_session_at ON runs (session_id, at)"
+                    "CREATE INDEX IF NOT EXISTS runs_session_utc "
+                    f"ON runs (session_id, {CHRONOLOGICAL})"
+                )
+                # `--thread` gets one too, where `08` left it with a temp sort
+                # on the argument that one conversation is bounded by a
+                # person's patience. That was right and it is now free: the
+                # index it already needed for the equality search is the same
+                # index, one column longer.
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS runs_thread_utc "
+                    f"ON runs (thread_id, {CHRONOLOGICAL})"
                 )
                 # The cadence table (`memory-and-replay` 47). Created here, on
                 # the same first row, so the two tables cannot exist apart.
@@ -1207,7 +1285,7 @@ def read_runs(
             return []
         rows = connection.execute(
             f"SELECT rowid,{','.join(known)} FROM runs{where} "
-            "ORDER BY at DESC, rowid DESC LIMIT ?",
+            f"ORDER BY {CHRONOLOGICAL} DESC, rowid DESC LIMIT ?",
             [*values, max(1, limit)],
         ).fetchall()
         records = [_record(row[1:], known) for row in rows]
@@ -1472,5 +1550,14 @@ def _record(row: tuple[Any, ...], names: tuple[str, ...] = _COLUMNS) -> RunRecor
 
 
 def now() -> str:
-    """The timestamp spelling `_append_trace` already used, kept identical."""
+    """The timestamp spelling `_append_trace` already used, kept identical.
+
+    Kept identical **again** in `the-cost-of-one-more/11`, deliberately. Local
+    wall clock with an offset does not sort as text, and the temptation was to
+    re-spell it as UTC — which fixes nothing a store already holds and breaks
+    the boundary it is aimed at, because the same instant in two spellings
+    sorts a day apart. The ordering is derived instead (`CHRONOLOGICAL`), so
+    this stays the thing a person reads in `runs list`: their own clock, and
+    the offset that says which one it was.
+    """
     return time.strftime("%Y-%m-%dT%H:%M:%S%z")

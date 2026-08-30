@@ -36,14 +36,17 @@ the two `runs.sqlite` files this machine actually holds — 39 turns across
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import AIMessage, ToolMessage
 
+from openstategraph import run_findings as run_findings_module
 from openstategraph.api.audience import Audience
 from openstategraph.run_findings import (
     REDUNDANT_TOOL_CALL,
     UNSTABLE_TOOL_RESULT,
+    grouping_key,
     normalised_arguments,
     run_findings,
 )
@@ -353,3 +356,168 @@ class TestNothingFoundIsAnAnswer:
             )
             == []
         )
+
+
+class _ProviderCall:
+    """A tool call whose arguments arrived as the provider's own string.
+
+    `api/threads._call_field` reads a tool call off *"a provider object with
+    attributes"* as well as off a `dict`, in its own words — so the arguments
+    this module is handed are not always something `AIMessage` validated into a
+    `dict`. `AIMessage` refuses a string `args`; this shape is what the reader
+    documents itself as also accepting, and it is the shape through which a
+    whitespace-only argument reaches the grouping.
+    """
+
+    def __init__(self, call_id: str, name: str, arguments: Any) -> None:
+        self.content = ""
+        self.tool_calls = [
+            {"id": call_id, "name": name, "args": arguments, "type": "tool_call"}
+        ]
+
+
+def _raw_thread(*exchanges: tuple[str, str, Any, str]) -> list[Any]:
+    """`_thread`, but the arguments are passed through exactly as given."""
+    messages: list[Any] = []
+    tuples: list[Any] = []
+    for step, (call_id, name, arguments, result) in enumerate(exchanges):
+        messages = [*messages, _ProviderCall(call_id, name, arguments)]
+        tuples.append(_Stub(step * 2, messages))
+        messages = [*messages, _answer(call_id, name, result)]
+        tuples.append(_Stub(step * 2 + 1, messages))
+    return tuples
+
+
+class TestTheKeyIsTheGuard:
+    """`the-cost-of-one-more/09`. The empty argument came back, one line below
+    the guard written to refuse it.
+
+    The rule that *an argument we do not know is not an argument* was enforced
+    on the **raw** string while the key was built from the **normalised** one.
+    Everything that is truthy and normalises to nothing therefore walked
+    through: `'   '`, `'\\t\\n'`, and every other whitespace spelling. That is
+    the same collapse the three false B findings were bought to end,
+    reconstituted by the line underneath.
+
+    The fix is not a second copy of the guard — two doors into one grouping
+    with one of them watched is the shape this repository names as the defect
+    one level up. The guard is inside the key, and the census below is what
+    keeps it the only door.
+    """
+
+    def test_two_whitespace_calls_of_one_tool_are_not_one_call(self) -> None:
+        """The red test: truthy arguments, empty key, unrelated calls."""
+        assert (
+            _findings(
+                _raw_thread(
+                    ("c1", "service_registry", "   ", "owner: payments"),
+                    ("c2", "service_registry", "\t\n", "owner: ledger"),
+                )
+            )
+            == []
+        )
+
+    def test_the_key_refuses_every_string_that_identifies_no_call(self) -> None:
+        for arguments in ("", "   ", "\t\n", "\n\n", " \t "):
+            assert grouping_key("service_registry", arguments) is None, arguments
+
+    def test_a_tool_called_twice_with_no_arguments_is_a_real_repeat(self) -> None:
+        """The one collapse that is deliberate, and it was nowhere written down.
+
+        `{}` is *this tool takes no arguments and the run asked it twice* — a
+        known argument, and waste. An empty **string** is *we do not know what
+        it was asked*. They looked identical to the old guard and they are two
+        different facts.
+        """
+        assert grouping_key("clock", "{}") == ("clock", "{}")
+        assert grouping_key("clock", "{ }") == grouping_key("clock", "{}")
+
+        found = _findings(
+            _thread(
+                ("c1", "clock", {}, "12:00"),
+                ("c2", "clock", {}, "12:00"),
+            )
+        )
+        assert [finding.name for finding in found] == [REDUNDANT_TOOL_CALL]
+
+    def test_two_long_arguments_of_one_length_are_not_the_same_call(self) -> None:
+        """`_cap`'s `(+N chars)` disambiguates only values of *different* lengths.
+
+        Two arguments that share their first 4,000 characters and their length
+        render identically, and were reported as one call answered two ways —
+        a false B, aimed at the largest payloads a run makes.
+        """
+        shared = "a" * 4200
+        assert (
+            _findings(
+                _raw_thread(
+                    ("c1", "query", '{"q": "' + shared + 'X"}', "17 rows"),
+                    ("c2", "query", '{"q": "' + shared + 'Y"}', "3 rows"),
+                )
+            )
+            == []
+        )
+
+    def test_the_marker_it_refuses_is_the_one_the_cap_actually_writes(self) -> None:
+        """Recognised by shape, so pin the shape against the thing that makes it.
+
+        This module reads a display projection to do analysis; it asks
+        `api/threads` for nothing and matches the tail `_cap` appends. That is
+        a copy of a decision made elsewhere, so it is pinned to the decision
+        rather than to a paragraph — the day the marker changes, this is red
+        instead of the detector quietly recognising nothing.
+        """
+        from openstategraph.api import threads
+
+        capped = threads._cap("z" * 100_000)
+
+        assert capped != "z" * 100_000
+        assert run_findings_module._TRUNCATED.search(capped)
+        assert not run_findings_module._TRUNCATED.search("z" * 10)
+
+    def test_the_module_builds_a_grouping_key_in_exactly_one_place(self) -> None:
+        """The census, which is what makes "no second door" a fact.
+
+        A guard beside the key was correct on the day it was written and was
+        bypassed by the next line. So the question this asks is not *is the
+        guard right* but *how many places build a key at all* — and the answer
+        must be one. `normalised_arguments` is the thing a key is made of, so
+        every call to it in this module is counted, and every one must be
+        inside `grouping_key`.
+        """
+        import ast
+
+        source = Path(run_findings_module.__file__).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+
+        doors = [
+            function.name
+            for function in ast.walk(tree)
+            if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
+            for node in ast.walk(function)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "normalised_arguments"
+        ]
+
+        assert doors == ["grouping_key"], (
+            f"a grouping key is built in {sorted(set(doors))} — every guard "
+            "written at one of those call sites is a guard the others walk past"
+        )
+
+    def test_a_refused_call_is_still_counted_as_a_call_the_run_made(self) -> None:
+        """Refusing to group is not refusing to have happened.
+
+        `thread_tool_calls` is what the conversation cost. A call whose
+        arguments this module cannot read still cost a lap.
+        """
+        found = _findings(
+            _raw_thread(
+                ("c1", "service_registry", {"service": "a"}, "same"),
+                ("c2", "service_registry", {"service": "a"}, "same"),
+                ("c3", "service_registry", "   ", "unrelated"),
+            )
+        )
+        assert [finding.name for finding in found] == [REDUNDANT_TOOL_CALL]
+        assert found[0].calls == 2
+        assert found[0].thread_tool_calls == 3
