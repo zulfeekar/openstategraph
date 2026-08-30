@@ -63,6 +63,24 @@ export interface WorkflowSummary {
    * matched the behaviour, and this sentence was the odd one out.)
    */
   readonly hidden: boolean;
+  /**
+   * What the backend found wrong with the **package folder** — ticket 49's
+   * `validate_package`, one string per line, `"error: …"` blocking and
+   * `"warning: …"` advice.
+   *
+   * Not the document's validation, which the editor derives itself from the
+   * same rules in `core/model` and is right not to re-read. These are facts
+   * only a process that can open `workflows/<slug>/` can know: no
+   * `workflow.json` at all, a `workflow.json` that will not parse, `tools/`
+   * with no `tests/` beside it. A package in the first two states cannot run,
+   * and until `the-cost-of-one-more/14` its row in the Workflows panel looked
+   * exactly like a healthy one.
+   *
+   * Empty is the answer, not the absence of one — the contract defaults it to
+   * `[]`, and a row from an older backend that omits the key is a row with
+   * nothing to report rather than a row that was not checked.
+   */
+  readonly findings: readonly string[];
 }
 
 /** Ticket 18: one `BaseTool` subclass discovered in a workflow's `tools/` folder. */
@@ -1020,6 +1038,10 @@ function asSummary(record: Record<string, unknown>): WorkflowSummary {
     edgeCount: typeof record['edge_count'] === 'number' ? record['edge_count'] : 0,
     published: record['published'] !== false,
     hidden: record['hidden'] === true,
+    // Every entry coerced, not the array trusted: a non-string in this list
+    // reaches a surface that prints it, and `String(undefined)` on a row is a
+    // worse answer than an empty one.
+    findings: Array.isArray(record['findings']) ? record['findings'].map(asString) : [],
   };
 }
 

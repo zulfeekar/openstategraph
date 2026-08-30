@@ -239,6 +239,23 @@ export function CredentialsDialog({ onClose }: { onClose: () => void }) {
               </p>
             )}
 
+            {/* Which model a run gets when the field is left empty
+                (`the-cost-of-one-more/14`). The line above it says whether
+                this server can reach the provider at all; this one says what
+                it reaches for, which is the fact the picker could not state —
+                every model in the list beside it is one somebody chose, and
+                the default is the one nobody does.
+
+                A **server** answer, so it renders only where the server's
+                other answers do, and only when one arrived: `defaultModel` is
+                `''` when the row did not carry it, and an empty default is
+                silence rather than a sentence about nothing. */}
+            {serverStatus(provider.id)?.defaultModel ? (
+              <p className="provider__hint">
+                {`Server default: ${serverStatus(provider.id)?.defaultModel} — used when a run names no model`}
+              </p>
+            ) : null}
+
             {serverStatus(provider.id)?.configured ? (
               <Button onClick={() => void verify(provider.id)} disabled={verifying === provider.id}>
                 {verifying === provider.id ? 'Checking…' : 'Verify key'}

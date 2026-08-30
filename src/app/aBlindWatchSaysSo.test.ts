@@ -20,6 +20,7 @@ const summary = (slug: string, savedAt: string): WorkflowSummary => ({
   nodeCount: 0,
   edgeCount: 0,
   hidden: false,
+  findings: [],
 });
 
 const failed = Err('TypeError: Failed to fetch');

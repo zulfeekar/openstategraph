@@ -89,10 +89,48 @@ describe('WorkflowFileClient.list', () => {
         edgeCount: 1,
         published: false,
         hidden: false,
+        findings: [],
       },
     ]);
     // The editor sees everything, drafts included — its surface is explicit.
     expect(stub.calls[0]!.url).toBe('http://rt/api/workflows?surface=editor');
+  });
+
+  /**
+   * The package-contract findings (`the-cost-of-one-more/14`). Ticket 49 has
+   * published these on every row since it landed and `asSummary` read no such
+   * key, so a package with no `workflow.json` — one that cannot run and
+   * cannot be opened — listed exactly like a healthy one.
+   *
+   * Two rows, because the interesting property is per-row: a clean package
+   * next to a broken one must not borrow its neighbour's verdict.
+   */
+  it("carries each row's package-contract findings, and an absent key is a clean row", async () => {
+    const stub = stubFetch(
+      jsonResponse([
+        {
+          slug: 'broken',
+          name: 'Broken',
+          saved_at: 't',
+          node_count: 0,
+          edge_count: 0,
+          findings: ['error: no workflow.json in broken/', 'warning: no AGENTS.md'],
+        },
+        { slug: 'clean', name: 'Clean', saved_at: 't', node_count: 1, edge_count: 0 },
+      ]),
+    );
+
+    const result = await new WorkflowFileClient('http://rt', stub.fetch).list();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]!.findings).toEqual([
+      'error: no workflow.json in broken/',
+      'warning: no AGENTS.md',
+    ]);
+    // Absent is empty, never undefined: a surface that maps over this must
+    // not have to ask whether an older backend answered.
+    expect(result.value[1]!.findings).toEqual([]);
   });
 
   /**

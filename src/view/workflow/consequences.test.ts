@@ -3,6 +3,7 @@ import {
   deleteConfirmation,
   deletedMessage,
   duplicateNameConfirmation,
+  packageFindingsMark,
   publishedMessage,
   rowActionHint,
   rowStatusHint,
@@ -110,5 +111,43 @@ describe('rowActionHint', () => {
     }
     // Unpublish still says nothing is deleted (ship-it 39's own worry).
     expect(rowActionHint(true)).toMatch(/nothing is deleted/i);
+  });
+});
+
+/**
+ * `the-cost-of-one-more/14`. The findings come from `validate_package` and
+ * arrive already prefixed, so the whole of the decision here is which of two
+ * words a row wears and whether it wears one at all.
+ */
+describe('packageFindingsMark', () => {
+  it('says nothing about a clean package', () => {
+    // The mark is worth looking at only because most rows do not have one.
+    expect(packageFindingsMark([])).toBeNull();
+  });
+
+  it('calls a package with an error broken, and quotes every line', () => {
+    const mark = packageFindingsMark([
+      'error: no workflow.json in half-built/',
+      'warning: no AGENTS.md — collaborators (and agents) have no orientation',
+    ]);
+
+    expect(mark?.label).toBe('Broken');
+    expect(mark?.hint).toContain('cannot run');
+    // Both lines, not just the blocking one: the tooltip is the whole answer,
+    // and a warning hidden behind an error is a warning nobody ever sees.
+    expect(mark?.hint).toContain('error: no workflow.json in half-built/');
+    expect(mark?.hint).toContain('warning: no AGENTS.md');
+  });
+
+  it('keeps a warnings-only package separate, because it still runs', () => {
+    const mark = packageFindingsMark([
+      'warning: tools/ without tests/ — hand-written code with no guard',
+    ]);
+
+    expect(mark?.label).toBe('Check');
+    // The distinction that matters to somebody scanning the list: this one
+    // works. Saying "Broken" here would teach a reader to ignore the word.
+    expect(mark?.hint).toContain('runs');
+    expect(mark?.hint).not.toContain('cannot run');
   });
 });

@@ -194,3 +194,48 @@ export function browserStorageLine(held: {
     'a draft of a workflow you still have is kept until you save or delete it.'
   );
 }
+
+/** What a row says about the package folder behind it — see below. */
+export interface PackageFindingsMark {
+  /** The word on the badge. */
+  readonly label: string;
+  /** The whole of what the backend found, as the badge's tooltip. */
+  readonly hint: string;
+}
+
+/**
+ * The package-contract findings, turned into a row mark
+ * (`the-cost-of-one-more/14`).
+ *
+ * `GET /api/workflows` has carried these since ticket 49 and nothing in the
+ * editor showed them, so a package with **no `workflow.json` at all** — which
+ * cannot run, and cannot be opened — listed exactly like a healthy one. The
+ * facts are the backend's alone: only a process that can open
+ * `workflows/<slug>/` knows whether `AGENTS.md` is there or `tools/` has
+ * `tests/` beside it. The editor cannot derive any of it, which is what
+ * separates these from the document validation it derives continuously.
+ *
+ * **Two severities, one badge, and no new colour.** `validate_package` writes
+ * every line as `error: …` or `warning: …`, and the difference is real —
+ * an error blocks running, a warning is advice. It is carried by the *word*
+ * rather than by a hue: `--color-danger` and `--color-status-warning` are
+ * both declared in both themes and both are tuned as fills, and this badge
+ * sits as ink on `--color-bg-subtle`, which is the exact reuse
+ * `primaryContrast.test.ts` exists to catch. Which colour a flagged package
+ * earns is `the-look-has-an-author-now/06`'s question about this identity's
+ * accent voice, and it belongs to the owner. Nothing is minted here.
+ *
+ * `null` for a clean package, so a healthy row gains nothing at all — the
+ * point of the mark is that it is rare.
+ */
+export function packageFindingsMark(findings: readonly string[]): PackageFindingsMark | null {
+  if (findings.length === 0) return null;
+  const blocking = findings.some((line) => line.startsWith('error:'));
+  const lines = findings.map((line) => `• ${line}`).join('\n');
+  return {
+    label: blocking ? 'Broken' : 'Check',
+    hint: blocking
+      ? `This package cannot run as it stands:\n${lines}`
+      : `The package runs; the backend has notes on the folder:\n${lines}`,
+  };
+}

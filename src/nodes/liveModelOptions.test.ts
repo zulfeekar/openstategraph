@@ -48,6 +48,7 @@ function status(name: string, configured: boolean): ProviderStatus {
     installHint: '',
     extra: '',
     keyHint: null,
+    defaultModel: '',
   };
 }
 
