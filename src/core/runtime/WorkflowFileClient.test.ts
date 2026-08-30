@@ -612,6 +612,10 @@ describe('WorkflowFileClient.capabilities', () => {
 describe('the base URL a real page gets', () => {
   it('is same-origin relative in a production bundle, so any port works', async () => {
     vi.stubEnv('DEV', false);
+    // A developer's own `.env.local` (`VITE_RUNTIME_BASE_URL`, documented in
+    // runtimeBaseUrl.ts) is ambient to Vitest in every mode. This pins the
+    // *default*, so it must not see that value (`the-cost-of-one-more/23`).
+    vi.stubEnv('VITE_RUNTIME_BASE_URL', '');
     const stub = stubFetch(jsonResponse([]));
 
     await new WorkflowFileClient(undefined, stub.fetch).list();
@@ -622,6 +626,7 @@ describe('the base URL a real page gets', () => {
 
   it('keeps the explicit cross-origin dev backend under Vite', async () => {
     vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_RUNTIME_BASE_URL', '');
     const stub = stubFetch(jsonResponse([]));
 
     await new WorkflowFileClient(undefined, stub.fetch).list();

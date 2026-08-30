@@ -18,7 +18,11 @@
  * editor on :5273 and uvicorn runs on :8000 — genuinely different origins,
  * which is why `ALLOWED_ORIGINS` in `api/main.py` names exactly those two. So
  * a dev build keeps the absolute URL, and `VITE_RUNTIME_BASE_URL` overrides
- * either mode for anyone running the two halves somewhere else again.
+ * either mode for anyone running the two halves somewhere else again — set it
+ * in `.env.development.local`, which Vite loads in dev mode only. Not
+ * `.env.local`: Vite loads that one in every mode, including `vitest`'s, so a
+ * value there reaches the tests that pin the default below and fails them on
+ * a file nobody touched (`the-cost-of-one-more/23`).
  *
  * Framework-free by construction: the Vite-specific `import.meta.env` lookup
  * is confined to `runtimeBaseUrl()`, and the decision itself is a pure

@@ -59,6 +59,20 @@ processes and restarts either if it crashes:
 
 Stop with `./start stop`; follow status with `scripts/status.sh`.
 
+> **Port 8000 taken?** Start uvicorn on another port and point the editor at
+> it with `VITE_RUNTIME_BASE_URL` (`src/core/runtime/runtimeBaseUrl.ts`). Put
+> the override in **`.env.development.local`**, not `.env.local` — Vite loads
+> `.env.local` in every mode, including `vitest`, so a value there compares
+> against the suite's own assertions of the default (`http://localhost:8000`)
+> and turns them red on a file you never touched
+> (`the-cost-of-one-more/23`). `.env.development.local` is loaded only in dev
+> mode, which is exactly where this override belongs:
+>
+> ```
+> # .env.development.local
+> VITE_RUNTIME_BASE_URL=http://localhost:8123
+> ```
+
 The containerised alternative is `./start` on its own: one origin, port 8000,
 serving the editor, `/chat` and the API together. Use it when you want the
 production shape rather than hot reload. `openstategraph serve` gives you that
