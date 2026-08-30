@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 from contextlib import ExitStack, suppress
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -288,12 +288,34 @@ class SpawnWatcher:
     a fact about this run rather than a guess about the child.
     """
 
-    def __init__(self, node_ids_by_name: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        node_ids_by_name: dict[str, str] | None = None,
+        mount_ids: Collection[str] | None = None,
+    ) -> None:
         #: Graph-node name -> canvas node id. A namespace head that is not in
         #: here belongs to a node's *own* compiled loop (`node_agent_llm_1`
         #: and friends), not to a mounted workflow — announcing it as a spawn
         #: showed internal machinery as if it were a new actor.
         self._known = dict(node_ids_by_name or {})
+        #: The canvas nodes the compiler recorded as **mounts**, or `None`
+        #: when no compiler answered — `memory-and-replay/65`.
+        #:
+        #: The map above rules out a head that names no canvas node. It cannot
+        #: rule out a head that names one and is still not a mount, and that
+        #: is the ordinary case rather than a corner: `create_agent` returns a
+        #: compiled LangGraph, so **every agent node's own ReAct loop** gets a
+        #: checkpoint namespace named after the very node that owns it. The
+        #: shipped `chinook-assistant` — which holds no `workflow.subgraph`
+        #: node at all — announced `agent-sql` as `kind: "subgraph"` on that
+        #: evidence, and the editor's run surface duly called it *a mounted
+        #: workflow*, with the mount's whole explanation under it.
+        #:
+        #: `None` and `set()` are deliberately different answers. `None` is
+        #: *nobody said* — a scripted stub and a hand-driven fold both mean
+        #: that — and it leaves the older reading in place; an empty set is the
+        #: compiler stating that this document mounts nothing.
+        self._mount_ids = None if mount_ids is None else set(mount_ids)
         #: `self._known.values()` is a view, so membership on it is a linear
         #: scan — and `inspect` asked for it once per stream frame. The
         #: mapping is fixed for the life of a run (one watcher per run), so
@@ -339,7 +361,13 @@ class SpawnWatcher:
         # rows that already named each child. One announcement per mounted
         # node per run is the honest count.
         is_canvas_node = not self._known or mounted in self._known or mounted in self._known_ids
-        if mounted and is_canvas_node and mounted not in self._namespaces:
+        # …and a canvas node is not yet a mount. Asked of the compiler rather
+        # than guessed from the frame, because the frame cannot tell them
+        # apart: a mount's namespace and an agent's own loop's namespace are
+        # both `safe_name(<canvas node>):<checkpoint id>`. `None` withholds the
+        # question rather than answering it — see `_mount_ids`.
+        is_mount = self._mount_ids is None or self._known.get(mounted, mounted) in self._mount_ids
+        if mounted and is_canvas_node and is_mount and mounted not in self._namespaces:
             self._namespaces.add(mounted)
             mounted = self._known.get(mounted, mounted)
             spawns.append(
@@ -1400,6 +1428,28 @@ def _question_asked(graph_input: Any) -> str:
     return ""
 
 
+
+def _mount_ids(runtime: Any) -> set[str] | None:
+    """The canvas nodes the compiler recorded as **mounts** — `memory-and-replay/65`.
+
+    `None` when nothing answered, which is not the same claim as an empty set:
+    a scripted stub and a hand-driven fold declare no compiler names, and
+    suppressing a spawn on their behalf would be an accusation with no
+    evidence behind it. `SpawnWatcher._mount_ids` carries the argument.
+
+    `mount_slugs` is keyed by mount **path** — `wf-music` at the top, and
+    `wf-music/inner` one level down — while a checkpoint namespace *head*
+    names only the outermost segment. So the first segment of each path is
+    what a head can ever match, and taking it here rather than in the watcher
+    keeps the watcher ignorant of how the compiler spells a path.
+    """
+    names = getattr(runtime, "names", None)
+    slugs = getattr(names, "mount_slugs", None)
+    if slugs is None:
+        return None
+    return {str(path).split("/")[0] for path in slugs}
+
+
 async def _stream_run(
     graph: Any,
     graph_input: Any,
@@ -1508,7 +1558,7 @@ async def _stream_run(
     # is the wrapper every terminal path goes through, and a lane left open
     # when the stream ends has to be closed on all of them — the fold's own
     # ending *and* the error handler below, which the fold never reaches.
-    spawns = SpawnWatcher(node_ids_by_name)
+    spawns = SpawnWatcher(node_ids_by_name, _mount_ids(runtime))
     frames = _run_frames(
         graph,
         graph_input,
@@ -1876,7 +1926,11 @@ async def _run_frames(
     # is (`memory-and-replay` 54): the wrapper is the frame that sees every
     # terminal path, and it is the one that has to close the lanes this fold
     # left open. A caller driving the fold directly gets its own.
-    spawns = spawns if spawns is not None else SpawnWatcher(node_ids_by_name)
+    spawns = (
+        spawns
+        if spawns is not None
+        else SpawnWatcher(node_ids_by_name, _mount_ids(runtime))
+    )
     # The ordinary tool calls this run announces (`memory-and-replay` 55).
     # Owned **here** and not by `_stream_run`, unlike the spawn watcher above,
     # and the difference is the reason that one had to move: a lane left open
