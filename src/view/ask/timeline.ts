@@ -98,6 +98,18 @@ export interface TimelineRow {
    * field is the run saying whose seconds they are.
    */
   readonly activeNode?: string;
+  /**
+   * The deterministic check that rejected this node's candidate before any
+   * model was invoked (`production-ready` 92) — empty, or absent, on every
+   * other frame.
+   *
+   * Read here for one reason: it is the only thing on this wire that says a
+   * step **refused**, and a refusal is the one place the design system spends
+   * its accent. Nothing else is inferred to be one — a step that merely took
+   * a long time, or a lane whose child never ran, is not drawn as a refusal
+   * on the strength of a guess.
+   */
+  readonly check?: string;
   /** Set on a spawn row: a run announced a child. Never a bar of its own —
    * a spawn takes no time — but it is what a lane gets its *name* from. */
   readonly spawn?: {
@@ -125,6 +137,29 @@ export interface TimelineRow {
   };
 }
 
+/**
+ * What a bar *is*, which is what makes a chart readable without a legend.
+ *
+ * Four words, each drawn differently and each derived from frames that were
+ * already on the wire — `memory-and-replay` 58 added no field to the stream.
+ *
+ * | | drawn as | said by |
+ * | --- | --- | --- |
+ * | `model` | solid ink | an internal frame named `model`, or a middleware hook around one |
+ * | `tool` | hollow, an ink ring | the absence of the above — **no model time was spent in this bar** |
+ * | `mount` | hatched | a checkpoint namespace, or a `subgraph` spawn: another document, not this one |
+ * | `refusal` | accent fill | a frame carrying `check` — a rule rejected the candidate |
+ *
+ * `tool` is the honest default and its name is about the *ring*, not about a
+ * tool call: an input node, an output node and a join all spend no model time
+ * and all draw hollow, which is the fact a reader is being told. `toolCalls`
+ * below is the narrower question, and it is a number rather than a word.
+ *
+ * Precedence is refusal, then mount, then model, then tool. A refusal wins
+ * outright because it is the only one of the four that is a *verdict*.
+ */
+export type StepKind = 'model' | 'tool' | 'mount' | 'refusal';
+
 /** One bar. */
 export interface TimelineStep {
   /** Stable within a run; safe as a React key. */
@@ -141,6 +176,18 @@ export interface TimelineStep {
   readonly count: number;
   /** Internal loop steps (model calls, tool calls, middleware) folded on. */
   readonly internalSteps: number;
+  /** How this bar draws — see `StepKind`. */
+  readonly kind: StepKind;
+  /**
+   * Internal frames named `model`, or a middleware hook around one.
+   *
+   * The expensive thing, counted rather than merely flagged, because the
+   * profile strip above the chart has to add them up and a boolean cannot be
+   * summed. Zero is a real answer and is what makes a bar hollow.
+   */
+  readonly modelCalls: number;
+  /** Internal frames named `tools` — the loop's tool step, counted the same way. */
+  readonly toolCalls: number;
   /** Set when this bar is a subgraph/team lane rather than one canvas node. */
   readonly namespace: string | null;
   /** Which visit to this label this is — >1 marks a revise-loop lap. */
@@ -178,6 +225,30 @@ export interface Timeline {
 /** Strips the `node:` prefix the canvas ids carry, for display. */
 export function stepLabel(node: string): string {
   return node.replace(/^node:/, '');
+}
+
+/**
+ * Whether an internal frame's name is a model call.
+ *
+ * The names are LangGraph's own — `create_agent` compiles a loop whose nodes
+ * are `model` and `tools`, and a middleware hook arrives as
+ * `NarrationMiddleware.before_model`. Read tolerantly and trusted strictly, the
+ * rule this repository already applies to a model's replies: the hook is
+ * accepted as *proof a model step exists in this node's loop*, and anything
+ * that is not one of these two shapes contributes nothing rather than being
+ * guessed at.
+ *
+ * Read here rather than on the wire because the frame already carries it and
+ * `48` priced what putting a second spelling of it on the wire would cost.
+ */
+export function isModelStep(node: string): boolean {
+  const name = stepLabel(node);
+  return name === 'model' || name.endsWith('_model');
+}
+
+/** Whether an internal frame's name is the loop's tool step. */
+export function isToolStep(node: string): boolean {
+  return stepLabel(node) === 'tools';
 }
 
 /** `a + b`, where `null` means "nothing was measured" rather than zero. */
@@ -262,6 +333,26 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
 
   const mutable = (): Draft | undefined => steps[steps.length - 1];
 
+  /**
+   * What this frame tells the bar it landed on about *what kind of bar it is*.
+   *
+   * One place, called from every branch that charges a frame to a bar, because
+   * the alternative is five branches that each have to remember — and the one
+   * that forgets draws a model call as a plain step for ever.
+   */
+  const charge = (bar: Draft, row: TimelineRow): void => {
+    if ((row.check ?? '').trim() !== '') bar.kind = 'refusal';
+    if (!row.internal) return;
+    if (isModelStep(row.node)) {
+      // A middleware hook is *evidence* that a model step exists in this
+      // node's loop; it is not a second model call. Counting it would have
+      // reported the recorded run's 22 model calls as 75, because three
+      // middlewares wrap each one.
+      if (stepLabel(row.node) === 'model') bar.modelCalls += 1;
+      if (bar.kind === 'tool') bar.kind = 'model';
+    } else if (isToolStep(row.node)) bar.toolCalls += 1;
+  };
+
   const open = (
     label: string,
     taskId: string | null,
@@ -279,6 +370,12 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
       durationMs: null,
       count: 1,
       internalSteps: 0,
+      // A namespace *is* a mount, so a collapsed lane knows what it is the
+      // moment it opens; every other bar starts hollow and earns `model` by
+      // folding a model frame, which is the only evidence of one there is.
+      kind: namespace === null ? 'tool' : 'mount',
+      modelCalls: 0,
+      toolCalls: 0,
       namespace,
       visit,
       measured: false,
@@ -369,6 +466,7 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
       // dropped rather than given a phantom bar; the clock has already moved.
       if (bar) {
         bar.internalSteps += 1;
+        charge(bar, row);
         bar.durationMs = add(bar.durationMs, duration);
         if (mount) {
           // The mount's frames have a bar now, and keep it until the run says
@@ -400,6 +498,7 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
     const owner = row.activeNode ? stepLabel(row.activeNode) : null;
     if (pending && pendingOwner !== null && (owner ?? label) === pendingOwner) {
       rename(pending, label, row.taskId);
+      charge(pending, row);
       pending.durationMs = add(pending.durationMs, duration);
       pending = null;
       pendingOwner = null;
@@ -414,6 +513,7 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
     const bound = mount?.bar ?? null;
     if (bound !== null) {
       bound.count += 1;
+      charge(bound, row);
       bound.durationMs = add(bound.durationMs, duration);
       pending = bound;
       pendingOwner = bound.label;
@@ -423,11 +523,13 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
     const last = mutable();
     if (namespace !== null && last && last.namespace === namespace && last.taskId === row.taskId) {
       last.count += 1;
+      charge(last, row);
       last.durationMs = add(last.durationMs, duration);
       continue;
     }
 
     const draft = open(label, row.taskId, namespace, startedAt);
+    charge(draft, row);
     draft.durationMs = duration;
   }
 
@@ -440,6 +542,17 @@ export function buildTimeline(rows: readonly TimelineRow[]): Timeline {
     if (mount.endMs === null) continue;
     mount.bar.durationMs = Math.max(0, mount.endMs - mount.startMs);
     mount.bar.measured = true;
+  }
+  // The kind, last, because it is a reading of the whole bar rather than of
+  // any one frame: a mount is a mount whichever frame opened it, and a bar is
+  // `model` on the evidence of a model frame it folded at any point. A refusal
+  // is already set and wins outright — it is the only one of the four that is
+  // a verdict rather than a description.
+  for (const mount of mounts.values()) {
+    if (mount.bar !== null && mount.bar.kind !== 'refusal') mount.bar.kind = 'mount';
+  }
+  for (const draft of steps) {
+    if (draft.kind === 'tool' && draft.modelCalls > 0) draft.kind = 'model';
   }
   assignConcurrency(steps);
 

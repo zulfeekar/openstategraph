@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { CSSProperties } from 'react';
 import type { Theme } from '@design/tokens';
 import type { Shortcut } from '@canvas/features/KeyboardFeature';
+import { replayTransport } from './run/replayTransport';
 import {
   usePaperController,
   useWorkbench,
@@ -387,6 +388,43 @@ export function AppShell() {
         label: 'Toggle run timeline',
         group: 'View',
         run: toggleDock,
+      },
+      // The replay transport (`memory-and-replay` 52). Rows in the one binding
+      // table for the same reason the dock's own toggle is one: a control
+      // wired to a handler inside the panel works and is undiscoverable,
+      // because this table is also what the shortcuts drawer prints.
+      //
+      // **Every row takes the functional form**, calling a module singleton
+      // rather than closing over transport state — which is the bug `51`
+      // recorded when it put state in this table's dependency list. The
+      // transport is deliberately inert when a run has no end: a live run has
+      // nothing ahead of the playhead, so these press and do nothing rather
+      // than pretending there is somewhere to go.
+      {
+        keys: 'Mod+Shift+Enter',
+        label: 'Play or pause the replay',
+        group: 'Run',
+        run: () => replayTransport.toggle(),
+      },
+      {
+        // By frame, not by second: the useful unit is "what happened next",
+        // and a ten-second model call is one thing happening.
+        keys: 'Mod+Shift+ArrowRight',
+        label: 'Replay: one step forward',
+        group: 'Run',
+        run: () => replayTransport.stepForward(),
+      },
+      {
+        keys: 'Mod+Shift+ArrowLeft',
+        label: 'Replay: one step back',
+        group: 'Run',
+        run: () => replayTransport.stepBack(),
+      },
+      {
+        keys: 'Mod+Shift+0',
+        label: 'Replay: back to the start',
+        group: 'Run',
+        run: () => replayTransport.restart(),
       },
       {
         // The convention every editor on this machine already trained the

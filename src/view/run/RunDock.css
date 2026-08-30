@@ -164,3 +164,444 @@
     padding-top: var(--space-2);
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * The run chart — `memory-and-replay` 58 and 52.
+ *
+ * Ported from the design prototype the owner authored (`osg-replay.html`)
+ * rather than re-derived from it. That stylesheet defines no token of its
+ * own: every rule consumes one, so the port is a rename of each `--osg-*`
+ * to the `--color-*` role that already resolves to it. The class names
+ * are kept because the class names are the design.
+ *
+ * The bar vocabulary is semantic, and this is the whole of it:
+ *
+ *   model    solid ink          the node doing the expensive thing
+ *   tool     hollow, ink ring   no model time was spent here
+ *   mount    hatched            another document, not this one
+ *   refusal  accent fill        the one place the accent is spent
+ *   pending  reduced opacity    the playhead has not reached it
+ *
+ * Two shapes are deliberately *not* bars, and they carry `58`'s honesty
+ * rules: an unmeasured bar is a short dashed notch, never a rectangle of
+ * some invented width; an open-ended one runs to the edge and is cut off
+ * there with no closing border, because a bar with no end must not look
+ * like a bar with one.
+ * ------------------------------------------------------------------ */
+
+.rtl {
+  /* The prototype's name column, to the pixel. It is measured off a real
+     `.rtl__track` when seeking, never read back out of here — which is the
+     reason it can stay a stylesheet number at all. */
+  --rtl-name: 148px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* ---- transport ---- */
+
+.rtl__transport {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  flex: none;
+  padding-bottom: var(--space-1);
+}
+
+.rtl__transport button {
+  font: var(--type-label);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+}
+
+.rtl__transport button:hover {
+  background: var(--color-bg-hover);
+}
+
+.rtl__transport button[aria-pressed='true'] {
+  background: var(--color-bg-inverse);
+  color: var(--color-text-inverse);
+  border-color: var(--color-bg-inverse);
+}
+
+.rtl__speeds {
+  display: flex;
+  gap: 2px;
+}
+
+.rtl__speeds button {
+  min-width: 32px;
+  font-family: var(--font-mono);
+}
+
+.rtl__clock {
+  margin-inline-start: auto;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
+}
+
+.rtl__clock b {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+/* ---- the profile strip: only once the dock has been dragged taller ---- */
+
+.rtl__kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0;
+  flex: none;
+  border-block: 1px solid var(--color-border-subtle);
+}
+
+.rtl__kpi {
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  border-inline-end: 1px solid var(--color-border-subtle);
+}
+
+.rtl__kpi:last-child {
+  border-inline-end: 0;
+}
+
+.rtl__kpi dt {
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.rtl__kpi dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.rtl__kpi[data-accent] dd {
+  color: var(--color-status-error);
+}
+
+/* ---- the chart ---- */
+
+.rtl__main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.rtl__axis,
+.rtl__lane,
+.rtl__scrubrow {
+  display: grid;
+  grid-template-columns: var(--rtl-name) minmax(0, 1fr);
+  align-items: center;
+}
+
+.rtl__ticks {
+  position: relative;
+  height: 16px;
+}
+
+.rtl__tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-inline-start: 1px solid var(--color-border-subtle);
+  padding-inline-start: 3px;
+  font: var(--type-label);
+  font-family: var(--font-mono);
+  color: var(--color-text-quaternary);
+}
+
+.rtl__lanes {
+  position: relative;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+  touch-action: none;
+}
+
+.rtl__lane {
+  border-block-end: 1px solid var(--color-border-subtle);
+  min-height: 22px;
+}
+
+.rtl__lane[data-depth='1'] .rtl__name {
+  padding-inline-start: var(--space-3);
+  color: var(--color-text-quaternary);
+}
+
+.rtl__name {
+  font: var(--type-caption);
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+  padding-inline-end: var(--space-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rtl__track {
+  position: relative;
+  height: 22px;
+  cursor: ew-resize;
+}
+
+.rtl__bar {
+  position: absolute;
+  top: 4px;
+  height: 14px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-text-primary);
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.rtl__bar > span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  padding: 0 3px;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+
+/* Solid ink: the node doing the expensive thing. */
+.rtl__bar[data-kind='model'] {
+  background: var(--color-text-primary);
+}
+
+.rtl__bar[data-kind='model'] > span {
+  color: var(--color-bg-surface);
+}
+
+/* Hatched: another document, not this one. */
+.rtl__bar[data-kind='mount'] {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-border-emphasis) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+/* The one place the accent is spent. */
+.rtl__bar[data-kind='refusal'] {
+  background: var(--color-status-error);
+  border-color: var(--color-status-error);
+}
+
+.rtl__bar[data-kind='refusal'] > span {
+  color: #fff;
+}
+
+/* The playhead has not reached it. */
+.rtl__bar[data-pending='true'] {
+  opacity: 0.28;
+}
+
+.rtl__bar[aria-pressed='true'] {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+/* A bar the run never timed. Not a rectangle of some invented width: a
+   short dashed notch, so the eye reads "nothing was measured here" rather
+   than "this was very fast". `108` settled the label; this is the shape. */
+.rtl__bar[data-unmeasured='true'] {
+  width: 12px;
+  border-style: dashed;
+  background: none;
+}
+
+.rtl__bar[data-unmeasured='true'] > span {
+  display: none;
+}
+
+/* An open-ended lane: the run never said it ended, so the strip runs to the
+   right edge and is cut off there. No closing border, no end, and a fade — a
+   lane with no end must not look like a lane with one, which is the shape
+   `memory-and-replay` 50 asked for and a caption could never supply. */
+.rtl__open {
+  position: absolute;
+  top: 6px;
+  height: 10px;
+  inset-inline-end: 0;
+  border-block-start: 1px dashed var(--color-text-quaternary);
+  background: repeating-linear-gradient(
+    90deg,
+    var(--color-text-quaternary) 0 3px,
+    transparent 3px 9px
+  );
+  mask-image: linear-gradient(90deg, #000 30%, transparent 100%);
+}
+
+/* A run that reported no clock at all has no axis, so its bars are laid
+   out in sequence with no widths — there is nothing to be in scale with. */
+.rtl__bar[data-flow='true'] {
+  position: relative;
+  inset-inline-start: auto;
+  margin-inline-end: 3px;
+}
+
+.rtl[data-unclocked] .rtl__track {
+  display: flex;
+  align-items: center;
+  cursor: default;
+}
+
+/* `54`'s `settled` frame, made visible: where the run said a child closed. */
+.rtl__mark {
+  position: absolute;
+  top: 2px;
+  height: 18px;
+  width: 2px;
+  background: var(--color-primary);
+}
+
+.rtl__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-status-error);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Pinned to the head while frames are still arriving — there is nothing
+   ahead of it to scrub to. */
+.rtl__playhead[data-live] {
+  inset-inline-start: auto !important;
+  inset-inline-end: 0;
+}
+
+.rtl__scrubrow {
+  flex: none;
+  padding-top: 2px;
+}
+
+.rtl__scrublabel {
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.rtl__scrub {
+  position: relative;
+  height: 14px;
+  cursor: ew-resize;
+  background: var(--color-bg-sunken, var(--color-bg-subtle));
+  touch-action: none;
+}
+
+.rtl__scrubfill {
+  position: absolute;
+  inset-block: 3px;
+  inset-inline-start: 0;
+  background: var(--color-border-emphasis);
+}
+
+.rtl__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  flex: none;
+  padding-top: var(--space-1);
+  font: var(--type-label);
+  color: var(--color-text-tertiary);
+}
+
+.rtl__legend i {
+  display: inline-block;
+  width: 18px;
+  height: 8px;
+  margin-inline-end: var(--space-1);
+  border: 1px solid var(--color-text-primary);
+  vertical-align: -1px;
+}
+
+.rtl__legend i[data-kind='model'] {
+  background: var(--color-text-primary);
+}
+
+.rtl__legend i[data-kind='mount'] {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-border-emphasis) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+.rtl__legend i[data-kind='refusal'] {
+  background: var(--color-status-error);
+  border-color: var(--color-status-error);
+}
+
+.rtl__legend i[data-kind='settled'] {
+  width: 3px;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.rtl__caveat {
+  margin: var(--space-1) 0 0;
+  flex: none;
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+}
+
+/* ---- the selected bar, at the head of the detail pane ---- */
+
+.rtl__detail dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1px var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+
+.rtl__detail dl > div {
+  display: contents;
+}
+
+.rtl__detail dt {
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.rtl__detail dd {
+  margin: 0;
+  font: var(--type-caption);
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  word-break: break-word;
+}
+
+.rtl__why {
+  margin: 0 0 var(--space-2);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rtl__bar {
+    transition: none;
+  }
+}
