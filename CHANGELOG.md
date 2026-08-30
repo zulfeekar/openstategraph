@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.3.0rc9 — 2026-08-31
+
+Everything under *Unreleased* above this line at the time of the cut. The
+pre-release that first carries the host mount — a service can mount the whole
+product inside itself — and the live workflow, which notices its own package
+changing without a restart.
+
 ### Added
 - **`LiveWorkflows` — a held workflow that notices its own package changing**
   (`scale-and-adopt` 14). A service compiles a package once and serves many
