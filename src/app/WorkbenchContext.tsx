@@ -26,7 +26,6 @@ import type { FlowDirection } from '@core/model/contracts/ports';
 import type { PaperController } from '@canvas/PaperController';
 import {
   claimSession,
-  isClaimedByAnother,
   mostRecentWorkflowId,
   newWriteGuard,
   releaseSession,
@@ -41,6 +40,7 @@ import {
   DRAFT_SESSION_KEY,
   draftIdForSlug,
   draftSavedAt,
+  followAdoptedDraftKey,
   followOpenSubjectWithDraftKey,
   hasDraftFor,
   restoreSessionDraft,
@@ -350,9 +350,6 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
             sessionId: sessionStorage.getItem(DRAFT_SESSION_KEY),
             mostRecentId: mostRecentWorkflowId(localStorage),
             mintId: () => `wf-${Date.now()}`,
-            // The clobber gate: a workflow another live tab is editing is not
-            // adopted at all, so two tabs never share one autosave key.
-            isClaimed: (id) => isClaimedByAnother(localStorage, id, writer),
           });
     if (session.notice != null) reportRef.current(session.notice);
 
@@ -386,6 +383,23 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
   useEffect(
     () =>
       followOpenSubjectWithDraftKey(
+        (writerRef.current ??= newWriteGuard()),
+        (id) =>
+          setState((previous) =>
+            previous.workflowId === id ? previous : { ...previous, workflowId: id },
+          ),
+        localStorage,
+      ),
+    [],
+  );
+
+  // The other way this tab's autosave key moves — a draft recovered by name
+  // from *Unsaved in this browser* (`install-experience` 23). Without this the
+  // recovered document would go on screen while the tab kept writing under the
+  // key it minted at startup, leaving a second entry holding the same graph.
+  useEffect(
+    () =>
+      followAdoptedDraftKey(
         (writerRef.current ??= newWriteGuard()),
         (id) =>
           setState((previous) =>

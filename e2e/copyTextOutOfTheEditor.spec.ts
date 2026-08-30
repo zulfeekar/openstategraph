@@ -19,7 +19,7 @@ import { expect, test } from '@playwright/test';
 test('a selection over prose keeps ⌘C, and the canvas keeps it back when nothing is selected', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('/?demo=1');
   await page.locator('.node').first().waitFor();
 
   /** Listeners added now run after the app's, so they can read its verdict. */

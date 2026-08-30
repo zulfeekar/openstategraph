@@ -259,36 +259,28 @@ describe('workflowStore', () => {
       expect(saveAs(later, 'wf-1', '2026-08-06T09:00:00Z').ok).toBe(true);
     });
 
-    it('mints a fresh id rather than adopting a workflow another live tab holds', () => {
+    it('never opens a workflow another live tab holds, claim or no claim', () => {
+      // Two cases that used to differ and no longer can: a live claim made
+      // `resolveSession` mint instead of adopt, and a stale one let it adopt
+      // again. Since `install-experience` 23 a tab with no session id of its
+      // own adopts nothing at all, so the claim has nothing left to gate here.
+      // The claim itself is untouched and still does its real job — see
+      // `saveWorkflow`'s compare-and-set below.
       claimSession(store, 'wf-1', newWriteGuard('tab-a'), () => 1_000);
+      expect(isClaimedByAnother(store, 'wf-1', newWriteGuard('tab-b'), () => 2_000)).toBe(true);
+      expect(isClaimedByAnother(store, 'wf-1', newWriteGuard('tab-b'), () => 10_000_000)).toBe(
+        false,
+      );
 
-      const session = resolveSession({
-        sessionId: null,
-        mostRecentId: 'wf-1',
-        mintId: () => 'wf-minted',
-        isClaimed: (id) => isClaimedByAnother(store, id, newWriteGuard('tab-b'), () => 2_000),
-      });
-
-      expect(session.id).toBe('wf-minted');
-      // Restoring the other tab's document under a new id is the duplication
-      // bug this file already exists to prevent — so it does not restore.
-      expect(session.shouldRestore).toBe(false);
-      expect(session.notice).toMatch(/another/i);
-    });
-
-    it('adopts again once the other tab’s claim has gone stale', () => {
-      claimSession(store, 'wf-1', newWriteGuard('tab-a'), () => 1_000);
-
-      const session = resolveSession({
-        sessionId: null,
-        mostRecentId: 'wf-1',
-        mintId: () => 'wf-minted',
-        // Far past the staleness window: a crashed tab must not lock a user
-        // out of their own work forever.
-        isClaimed: (id) => isClaimedByAnother(store, id, newWriteGuard('tab-b'), () => 10_000_000),
-      });
-
-      expect(session).toEqual({ id: 'wf-1', shouldRestore: true });
+      for (const _ of [1, 2]) {
+        const session = resolveSession({
+          sessionId: null,
+          mostRecentId: 'wf-1',
+          mintId: () => 'wf-minted',
+        });
+        expect(session.id).toBe('wf-minted');
+        expect(session.shouldRestore).toBe(false);
+      }
     });
 
     it('does not treat a tab’s own claim as somebody else’s', () => {
@@ -365,16 +357,23 @@ describe('workflowStore', () => {
       expect(session).toEqual({ id: 'wf-current', shouldRestore: true });
     });
 
-    it('adopts the most recent id rather than minting a new one', () => {
+    it('starts a tab that has never had a document on a blank one', () => {
       const session = resolveSession({
         sessionId: null,
         mostRecentId: 'wf-recent',
         mintId: () => 'wf-minted',
       });
 
-      // Minting here is what duplicated the graph on every tab open.
-      expect(session.id).toBe('wf-recent');
-      expect(session.shouldRestore).toBe(true);
+      // This used to adopt `wf-recent` and restore it, which is how a bare URL
+      // came to open a previous session's workflow (`install-experience` 23).
+      // Minting duplicated the graph back when a minted id was followed by an
+      // unconditional initial save *and* an import over the top; neither
+      // survives, so a minted id now writes nothing until the user edits.
+      expect(session.id).toBe('wf-minted');
+      expect(session.shouldRestore).toBe(false);
+      // …and the draft is mentioned rather than opened, because it is still
+      // there and the user has no other way to know that.
+      expect(session.notice).toMatch(/unsaved/i);
     });
 
     it('mints only when there is genuinely nothing saved, and does not restore', () => {
@@ -397,23 +396,30 @@ describe('workflowStore', () => {
       expect(session).toEqual({ id: 'wf-minted', shouldRestore: false });
     });
 
-    it('does not accumulate entries across repeated tab opens', () => {
-      // Simulate three tab opens against the same storage.
+    it('never copies an existing graph into a second entry, however many tabs open', () => {
+      // The defect this resolver was written for, stated as what it actually
+      // was: three tab opens each *restored* the newest workflow and then
+      // autosaved it under a fresh key, so storage filled with copies of one
+      // graph. What is asserted is that copying — not the entry count, which
+      // was only ever a proxy for it and stopped being one when adoption went.
+      save('wf-1', '2026-08-05T10:00:00Z');
+      const original = readWorkflow(store, 'wf-1');
+      expect(original.status).toBe('ok');
+
       let sessionId: string | null = null;
       for (let i = 0; i < 3; i += 1) {
         const session = resolveSession({
           sessionId,
           mostRecentId: mostRecentWorkflowId(store),
-          mintId: () => 'wf-minted',
+          mintId: () => `wf-minted-${i}`,
         });
-        const tab = newWriteGuard(`tab-${i}`);
-        const restored = readWorkflow(store, session.id);
-        if (restored.status === 'ok') tab.lastSeenAt = restored.savedAt;
-        saveAs(tab, session.id, `2026-08-0${i + 1}T10:00:00Z`);
+        expect(session.shouldRestore).toBe(false);
         sessionId = null; // a fresh tab each time
       }
 
-      expect(listWorkflows(store)).toHaveLength(1);
+      // Nothing restored means nothing to write back, so the one graph in
+      // storage is still the one graph in storage.
+      expect(listWorkflows(store).map((wf) => wf.id)).toEqual(['wf-1']);
     });
   });
 });

@@ -198,6 +198,74 @@ export function followOpenSubjectWithDraftKey(
 }
 
 /**
+ * Tell this tab it is now editing the draft stored under `id` —
+ * **`install-experience` 23**, and the other half of removing implicit
+ * adoption.
+ *
+ * A recovered draft has to become *this tab's* draft, or the recovery is a
+ * copy: the document goes on screen, the tab keeps autosaving under the key it
+ * minted at startup, and the next edit writes a second entry holding the same
+ * graph. That duplication is precisely what the adoption this ticket removed
+ * was originally introduced to stop, so bringing it back through the recovery
+ * door would be a poor trade.
+ *
+ * A channel rather than a `sessionStorage` write, for the reason
+ * `subscribeOpenSlug` gives about the slug: `sessionStorage` fires no event in
+ * the tab that wrote it, and that tab is the only one that cares. Storage is
+ * settled before anyone is told, and a listener that throws does not stop the
+ * others hearing.
+ *
+ * Distinct from `followOpenSubjectWithDraftKey`'s channel on purpose. That one
+ * carries the **open subject** — a package or a mount — and derives the key
+ * from it; a scratch draft has no subject to carry, which is exactly the case
+ * that had no way back.
+ */
+const adoptedKeyListeners = new Set<(id: string) => void>();
+
+/** Subscribe to "this tab's autosave key was adopted deliberately". */
+export function subscribeAdoptedDraftKey(listener: (id: string) => void): () => void {
+  adoptedKeyListeners.add(listener);
+  return () => adoptedKeyListeners.delete(listener);
+}
+
+/** Record `id` as this tab's autosave key, and say so. */
+export function adoptDraftKey(id: string): void {
+  try {
+    sessionStorage.setItem(DRAFT_SESSION_KEY, id);
+  } catch {
+    // Storage unavailable; the id handed to listeners is still what this
+    // session autosaves under, which is the half that matters now.
+  }
+  for (const listener of [...adoptedKeyListeners]) {
+    try {
+      listener(id);
+    } catch {
+      // A subscriber's failure is its own; the key has still moved.
+    }
+  }
+}
+
+/**
+ * Keep the write guard and the caller honest about an adopted key.
+ *
+ * The mirror of `followOpenSubjectWithDraftKey`: baselining the guard against
+ * the draft just adopted is what stops the first autosave comparing itself
+ * against a previous key's write, calling that a conflict with a tab that does
+ * not exist, and refusing to save for the rest of the session.
+ */
+export function followAdoptedDraftKey(
+  writer: WriteGuard,
+  onId: (id: string) => void,
+  store: KeyValueStore = browserStore(),
+): () => void {
+  return subscribeAdoptedDraftKey((id) => {
+    const draft = readWorkflow(store, id);
+    writer.lastSeenAt = draft.status === 'ok' ? draft.savedAt : null;
+    onId(id);
+  });
+}
+
+/**
  * Drop this browser's draft of a package it has just written to disk itself —
  * **`production-ready` 101**, and the one line between a saved override and a
  * deleted one.

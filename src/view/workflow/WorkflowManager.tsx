@@ -28,7 +28,10 @@ import {
 import { useController, useModelEvents, useWorkbench } from '@app/WorkbenchContext';
 import { abandonDeletedWorkflow } from '@app/diskAutosave';
 import { sweepBrowserStorage, type SweepReport } from '@app/browserStorageSweep';
-import { getOpenSlug } from '@app/openWorkflow';
+import { clearOpenSlug, getOpenSlug } from '@app/openWorkflow';
+import { listRecentDrafts, type RecentDraft } from '@app/recentDrafts';
+import { adoptDraftKey, restoreSessionDraft } from '@app/workflowDrafts';
+import { newWriteGuard } from '@app/workflowStore';
 import {
   WorkflowFileClient,
   type WorkflowExample,
@@ -106,6 +109,11 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
   const [workflows, setWorkflows] = useState<readonly WorkflowSummary[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [storage, setStorage] = useState<SweepReport | null>(null);
+  // The drafts this browser is holding. Read when the panel opens rather
+  // than subscribed to: autosave writes on every debounce, and a list that
+  // re-sorted itself under the cursor while somebody read it would be worse
+  // than one that is a few seconds old.
+  const [drafts, setDrafts] = useState<readonly RecentDraft[]>([]);
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
   // The scaffold's own templates (scale-and-adopt ticket 04), fetched — never
@@ -148,6 +156,14 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
     // "no workflows": it sweeps with `knownSlugs: null`, which touches no
     // slug-keyed draft at all and retires only what needs no listing.
     setStorage(sweepStorage(outcome.ok ? new Set(outcome.value.map((wf) => wf.slug)) : null));
+    // `install-experience` 23. A page load no longer adopts the newest draft
+    // in this browser, so this list is the way back to one — and for a
+    // `wf-<timestamp>` scratch draft it is the *only* way back, because it
+    // never had a slug and no listing of packages can name it. Read here, on
+    // the same refresh, so it is read **after** the sweep rather than beside
+    // it: a row offering a draft the sweep had just dropped would be a control
+    // that fails when pressed.
+    setDrafts(typeof localStorage === 'undefined' ? [] : listRecentDrafts(localStorage));
     if (outcome.ok) {
       setListError(null);
       setWorkflows(outcome.value);
@@ -275,6 +291,52 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
       onClose();
     },
     [client, workbench, onNotify, onClose],
+  );
+
+  /**
+   * Put a draft this browser is holding back on the canvas — the deliberate
+   * half of `install-experience` 23.
+   *
+   * Two paths, because the two kinds of draft are not two spellings of one
+   * thing. A draft keyed `slug-<slug>` belongs to a package: it is reopened by
+   * **loading the package**, so the file arrives first and registers the
+   * workflow's capabilities, and only then does `restoreDraftFor` decide the
+   * draft supersedes it. Importing those bytes straight onto the canvas would
+   * skip the registration and drop every workflow-scoped node in the document.
+   *
+   * A `wf-<timestamp>` draft has no package and no file, so its bytes are the
+   * whole story — and `adoptDraftKey` is what makes it *this tab's* document
+   * from here on rather than a copy the next edit duplicates.
+   */
+  const handleOpenDraft = useCallback(
+    async (draft: RecentDraft) => {
+      if (draft.slug !== null) {
+        await handleLoad(draft.slug);
+        return;
+      }
+      // Nothing on disk answers to this document, so the tab is holding no
+      // package while it is on screen — said before the restore, because
+      // clearing the open slug re-keys autosave and `adoptDraftKey` below has
+      // to be the last word on which key that is.
+      clearOpenSlug();
+      const report = restoreSessionDraft(
+        { id: draft.id, shouldRestore: true },
+        workbench,
+        newWriteGuard(),
+        localStorage,
+      );
+      if (!report.restored) {
+        onNotify(report.notice ?? `Could not open the draft "${draft.name}".`);
+        return;
+      }
+      adoptDraftKey(draft.id);
+      clearDrillStack();
+      onNotify(
+        `Opened: ${draft.name} — unsaved work from this browser. Save it to give it a folder.`,
+      );
+      onClose();
+    },
+    [handleLoad, workbench, onNotify, onClose],
   );
 
   // Draft → publish lifecycle (launch-readiness ticket 04): flipping the
@@ -606,6 +668,62 @@ export function WorkflowManager({ open, onClose, onNotify }: WorkflowManagerProp
             {storage != null && (
               <p className="workflow-manager__storage">{browserStorageLine(storage)}</p>
             )}
+          </PanelSection>
+        )}
+
+        {/* `install-experience` 23. A bare URL used to adopt whichever of these
+            was newest and put it on the canvas, so the first screen anybody saw
+            was a previous session's document. Nothing was ever wrong with
+            *keeping* the drafts — only with opening one nobody asked for. This
+            is the asking. */}
+        {activeTab === 'saved' && drafts.length > 0 && (
+          <PanelSection heading="Unsaved in this browser">
+            <p className="workflow-manager__hint">
+              Edits the editor autosaved but nobody has saved to a folder. They live in{' '}
+              <strong>this browser only</strong>. Opening one puts it back on the canvas; it is not
+              opened for you when you arrive, because a bare address belongs to no workflow.
+            </p>
+            <ul className="workflow-manager__list">
+              {drafts.map((draft) => (
+                <li key={draft.id} className="workflow-manager__item">
+                  <div className="workflow-manager__info">
+                    <Icon glyph={FileJson} size="sm" />
+                    <span className="workflow-manager__ident">
+                      <span className="workflow-manager__name">{draft.name}</span>
+                      {/* The identity, on the same terms the saved rows use it:
+                          a package's draft says which package, and a draft that
+                          never had one says so rather than showing a storage
+                          key nobody chose. */}
+                      <code
+                        className="workflow-manager__slug"
+                        title={
+                          draft.slug === null
+                            ? 'Never saved — this draft has no folder yet'
+                            : `workflows/${draft.slug}/`
+                        }
+                      >
+                        {draft.slug ?? 'never saved'}
+                      </code>
+                    </span>
+                    <span className="workflow-manager__date">
+                      {draft.savedAt ? new Date(draft.savedAt).toLocaleString() : ''}
+                    </span>
+                  </div>
+                  <div className="workflow-manager__actions">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      title={`Put "${draft.name}" back on the canvas`}
+                      onClick={() => void handleOpenDraft(draft)}
+                      icon={<Icon glyph={FolderOpen} size="xs" />}
+                    >
+                      Open
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </PanelSection>
         )}
 
