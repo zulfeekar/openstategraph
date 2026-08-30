@@ -58,6 +58,17 @@ Two things follow, and both are worth knowing before you go looking for a bug:
   agent must never hold a pointer to something its own
   `platform_describe_workflow` will then refuse to describe.
 
+- **Publishing does not rebuild anything, and the editor says so.** Knowledge
+  builds are build-time only, never a side effect of a lifecycle flip
+  (`routes/workflows.py::publish_workflow`), so the publish toast adds a
+  clause: automatic routing still answers from what it last learned, and the
+  rebuild is *Build second brain* on the Knowledge card **of the workflow that
+  mounts this one** — routing docs are `root`'s, and `root`'s topics are the
+  children a document mounts, so a leaf pressing its own card is told it has no
+  knowledge source. The clause is conditional on the note the endpoint sends
+  rather than hardcoded beside the call, so a build that did rebuild on publish
+  would stop the toast claiming otherwise.
+
 **Pointers, not copies**, at every level. A catalogue or routing doc says what
 another workflow is and where depth lives; it never carries that workflow's
 table-level detail upward. Copying detail up recreates context bloat one level

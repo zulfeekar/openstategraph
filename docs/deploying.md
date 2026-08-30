@@ -242,7 +242,12 @@ openstategraph serve --host 0.0.0.0
   database: it reads environment variables, and — for the `editor_stale` field
   — takes two `stat` walks over a directory the process already sits in,
   returning `None` the moment there is no source tree to compare against, which
-  is every installed wheel. This said "a
+  is every installed wheel. **The editor reads it**: a chip beside the runtime
+  dot in the toolbar says *Editor is stale* when the served bundle predates
+  `src/`, and says nothing at all for the other two answers — `false` and
+  `null` both render nothing, because a surface that reported "current" for a
+  wheel that cannot tell would be making a claim the server declined to make.
+  This said "a
   fixed literal": `model_configured` *was* the constant `True`, on the
   reasoning that Ollama was always available, which was itself the defect. It
   is now computed — true when any registered provider has the environment it

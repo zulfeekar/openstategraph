@@ -1272,6 +1272,32 @@ describe('RuntimeClient.health', () => {
     const client = new RuntimeClient('http://rt', () => Promise.reject(new Error('down')));
     expect((await client.health()).ok).toBe(false);
   });
+
+  /**
+   * `editor_stale` is **three-valued and must stay three-valued through the
+   * mirror** (`the-cost-of-one-more/16`). `HealthResponse` says so at the
+   * field: `False` claims "this editor is current" and an installed wheel
+   * cannot claim that, so `null` is the honest "cannot tell". A client that
+   * coerces the wire value with `=== true` collapses `false` and `null` into
+   * one answer and makes the stronger claim on the server's behalf.
+   */
+  it.each([
+    [true, true],
+    [false, false],
+    [null, null],
+    [undefined, null],
+    ['yes', null],
+  ])('mirrors editor_stale %s as %s, keeping the third state', async (wire, expected) => {
+    const body: Record<string, unknown> = { ok: true, model_configured: false };
+    if (wire !== undefined) body['editor_stale'] = wire;
+    const client = new RuntimeClient('http://rt', stubFetch(jsonResponse(body)).fetch);
+
+    const result = await client.health();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.editorStale).toBe(expected);
+  });
 });
 
 describe('the base URL a real page gets', () => {

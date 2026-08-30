@@ -60,6 +60,7 @@ import { OnboardingHint } from '@view/overlays/OnboardingHint';
 import { ExamplesHint } from '@view/overlays/ExamplesHint';
 import { rememberExamplesShelf } from '@view/workflow/examplesShelf';
 import { RuntimeHealthDot } from './RuntimeHealthDot';
+import { EditorFreshnessChip } from './EditorFreshnessChip';
 import { useEntryQuestion } from './useEntryQuestion';
 import { runIntent } from './runIntent';
 import { subscribeOpenSlug } from '@app/openWorkflow';
@@ -305,14 +306,16 @@ export function TopBar({
     if (action === null) return;
     if (confirmation !== null && !confirm(confirmation)) return;
     setPublishing(true);
-    const failure = await publish.setPublished(action === 'publish');
+    const { error, outcome } = await publish.setPublished(action === 'publish');
     setPublishing(false);
     const name = workbench.model.name;
-    if (failure !== null) {
-      onNotify(`Could not ${action}: ${failure}`);
+    if (error !== null || outcome === null) {
+      onNotify(`Could not ${action}: ${error ?? 'the runtime said nothing'}`);
       return;
     }
-    onNotify(action === 'publish' ? publishedMessage(name) : unpublishedMessage(name));
+    // The publish answer, not a constant: whether the routing clause is said
+    // at all is the backend's to decide (`the-cost-of-one-more/18`).
+    onNotify(action === 'publish' ? publishedMessage(name, outcome) : unpublishedMessage(name));
   }, [publish, workbench, onNotify]);
 
   const exportEntries: MenuEntry[] = [
@@ -384,6 +387,11 @@ export function TopBar({
           <span className="topbar__product">OpenStateGraph</span>
           <span className="topbar__divider" role="presentation" />
           <RuntimeHealthDot />
+          {/* Beside the dot, not inside it: reachable and current are two
+              questions, and one light cannot answer both
+              (`the-cost-of-one-more/16`). Renders nothing unless the served
+              bundle is actually stale. */}
+          <EditorFreshnessChip />
           <span className="topbar__doc" title={workbench.model.name}>
             {workbench.model.name}
           </span>

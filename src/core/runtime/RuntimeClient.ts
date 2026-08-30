@@ -1099,11 +1099,28 @@ export interface IRuntimeClient {
     onEvent: (event: RunStreamEvent) => void,
     options?: StreamOptions,
   ): Promise<Result<RunOutcome, string>>;
-  health(): Promise<Result<{ modelConfigured: boolean }, string>>;
+  health(): Promise<Result<RuntimeHealth, string>>;
   /** Past runs this backend has stored, newest first. Reads only. */
   pastRuns(query?: PastRunQuery): Promise<Result<readonly PastRun[], string>>;
   /** One past run, checkpoint by checkpoint. Reads only — nothing re-executes. */
   pastRun(threadId: string, workflowSlug?: string): Promise<Result<PastRunHistory, string>>;
+}
+
+/**
+ * `GET /api/health`, mirrored.
+ *
+ * **`editorStale` is `boolean | null` and the `null` is load-bearing**
+ * (`the-cost-of-one-more/16`). `HealthResponse` publishes it three-valued on
+ * purpose: `true` is *the editor this process serves predates the source it
+ * was built from*, `false` is *it does not*, and `null` is *the question does
+ * not apply* — an installed wheel has no `src/` to compare against, and a
+ * fresh clone has no `dist/` yet (`backend/openstategraph/editor_freshness.py`
+ * argues both). Treating `null` as a falsy `false` would make the editor claim
+ * its bundle is current on evidence the server declined to give.
+ */
+export interface RuntimeHealth {
+  readonly modelConfigured: boolean;
+  readonly editorStale: boolean | null;
 }
 
 /** Injected so tests need no server and no network. */
@@ -1758,12 +1775,19 @@ export class RuntimeClient implements IRuntimeClient {
     }
   }
 
-  async health(): Promise<Result<{ modelConfigured: boolean }, string>> {
+  async health(): Promise<Result<RuntimeHealth, string>> {
     try {
       const response = await this.fetchImpl(`${this.baseUrl}/api/health`);
       if (!response.ok) return Err(`Runtime is unhealthy (${response.status})`);
       const payload = (await response.json()) as Record<string, unknown>;
-      return Ok({ modelConfigured: payload['model_configured'] === true });
+      const stale = payload['editor_stale'];
+      return Ok({
+        modelConfigured: payload['model_configured'] === true,
+        // Three-valued, and mirrored as three. `=== true` alone would answer
+        // `false` for the wheel's `null`, which is the one claim the backend
+        // deliberately refuses to make about itself.
+        editorStale: typeof stale === 'boolean' ? stale : null,
+      });
     } catch {
       return Err('Runtime is not reachable');
     }

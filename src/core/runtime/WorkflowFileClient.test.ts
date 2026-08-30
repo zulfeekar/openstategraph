@@ -257,6 +257,61 @@ describe('WorkflowFileClient.setPublished', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe("No workflow named 'x'");
   });
+
+  /**
+   * `the-cost-of-one-more/18`. The note was dropped on the floor — this
+   * method's own docstring named the note it dropped — so a developer
+   * published and never learned the concierge would not route to the change.
+   * It is carried now, unedited: what it *says* is the surface's problem, and
+   * this client's job is not to have an opinion about the wording.
+   */
+  it('carries the note the publish endpoint answers with', async () => {
+    const note = 'Concierge routing knowledge was not rebuilt automatically; rebuild it via …';
+    const stub = stubFetch(jsonResponse({ slug: 'my-flow', published: true, note }));
+    const client = new WorkflowFileClient('http://rt', stub.fetch);
+
+    const result = await client.setPublished('my-flow', true);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.note).toBe(note);
+  });
+
+  /**
+   * **`null`, not `''`.** The absence of a note is the backend saying it has
+   * nothing to add — today it always has, but a build that rebuilt routing on
+   * publish would send none, and the toast reads exactly this to decide
+   * whether to make the claim at all. An empty string would be a note that
+   * says nothing, which is a different fact and one no surface can act on.
+   */
+  it.each([[{ slug: 'f', published: true }], [{ slug: 'f', published: true, note: 42 }]])(
+    'reports no note as null rather than as an empty one (%j)',
+    async (body) => {
+      const client = new WorkflowFileClient('http://rt', stubFetch(jsonResponse(body)).fetch);
+
+      const result = await client.setPublished('f', true);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.note).toBeNull();
+    },
+  );
+
+  /**
+   * A publish whose body cannot be read is still a publish: the flag flipped
+   * server-side before the response was written. Failing the call here would
+   * make the editor report an error for work that succeeded, which is worse
+   * than losing one sentence.
+   */
+  it('still succeeds, noteless, when the answer is not readable JSON', async () => {
+    const client = new WorkflowFileClient(
+      'http://rt',
+      stubFetch(new Response('not json', { status: 200 })).fetch,
+    );
+
+    const result = await client.setPublished('f', true);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.note).toBeNull();
+  });
 });
 
 describe('WorkflowFileClient.duplicate', () => {

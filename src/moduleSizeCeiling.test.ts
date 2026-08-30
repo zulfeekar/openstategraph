@@ -146,7 +146,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       removed: this module is still not the thing that draws a run.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 717,
+    lines: 723,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -200,7 +200,17 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       and its coercion in \`providers\` — the model a run gets when it names
       none, published on every provider row since the endpoint existed and read
       by nothing. One declared member and one line in a mapper, which is this
-      entry's cheapest possible bill and the shape it exists to permit.`,
+      entry's cheapest possible bill and the shape it exists to permit.
+
+      **717 -> 723** (\`the-cost-of-one-more/16\`). \`RuntimeHealth\`, which is
+      what \`health()\` used to return as an inline object literal in two
+      places. Four of the six lines are the interface and its two members; the
+      other two are the coercion that keeps \`editor_stale\` three-valued
+      through the mirror, and they are the whole point of the ticket — the
+      obvious \`=== true\` beside \`model_configured\` would have answered
+      \`false\` for the wheel's \`null\` and made a claim the server declined to
+      make. Declared members and a two-line reader: the same bill this entry
+      has taken four times and the same shape.`,
   },
 };
 

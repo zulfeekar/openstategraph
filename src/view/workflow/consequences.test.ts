@@ -64,8 +64,13 @@ describe('deletedMessage', () => {
 });
 
 describe('publishedMessage', () => {
+  /** What `POST /api/workflows/{slug}/publish` actually answers with today. */
+  const BACKEND_NOTE =
+    'Concierge routing knowledge was not rebuilt automatically; rebuild it via ' +
+    'POST /api/workflows/{root}/knowledge/build when routing should learn about this change.';
+
   it('says what changed: draft, then visible to the chat app', () => {
-    const text = publishedMessage('Support Triage');
+    const text = publishedMessage('Support Triage', { note: BACKEND_NOTE });
     expect(text).toContain('Support Triage');
     expect(text).toContain('draft');
     // Plain words, the same ones the toolbar badge uses (ship-it 52) — never
@@ -76,6 +81,56 @@ describe('publishedMessage', () => {
     // Publishing never rebuilds routing knowledge as a side effect, and the
     // one moment somebody cares is this one.
     expect(text).toMatch(/knowledge/i);
+  });
+
+  /**
+   * `the-cost-of-one-more/18`. The backend's note is **read as a signal and
+   * never forwarded**. It is addressed to an API caller — it names an HTTP
+   * verb and a path template — and putting that in front of somebody who just
+   * clicked Publish tells them to make a REST call by hand, in a product whose
+   * whole argument is that they should not have to. Same finding `13` made
+   * about `_truncation`'s *"ask again with a higher limit"*, true of the CLI
+   * and false of a lane with no such control.
+   */
+  it('never forwards the backend sentence, verb and path template and all', () => {
+    const text = publishedMessage('Support Triage', { note: BACKEND_NOTE });
+
+    expect(text).not.toContain('/api/');
+    expect(text).not.toContain('POST');
+    expect(text).not.toContain('{root}');
+    expect(text).not.toContain(BACKEND_NOTE);
+  });
+
+  /**
+   * And what it says instead names a control that **exists in this editor**.
+   *
+   * The rebuild is the Knowledge card's "Build second brain"
+   * (`view/nodes/KnowledgeBody.tsx` → `POST .../knowledge/build`), and the
+   * routing docs are written by `RootKnowledgeBuilder`, whose topics are the
+   * children a document *mounts*. So the card that has to be pressed is on the
+   * workflow that mounts this one, not on this one — which the sentence says,
+   * because the obvious wrong reading is the expensive one.
+   */
+  it('names the editor control that does the rebuild, and whose card it is on', () => {
+    const text = publishedMessage('Support Triage', { note: BACKEND_NOTE });
+
+    expect(text).toContain('Build second brain');
+    expect(text).toMatch(/mounts this one/);
+  });
+
+  /**
+   * The half that makes this a **read** rather than a mirror with the value
+   * thrown away. The clause was hardcoded beside a call that has always
+   * carried the backend's own answer, so an install that started rebuilding
+   * routing on publish would have gone on being contradicted by this toast.
+   * No note, no claim.
+   */
+  it('drops the routing clause entirely when the backend sent no note', () => {
+    const text = publishedMessage('Support Triage', { note: null });
+
+    expect(text).toContain('Support Triage');
+    expect(text).toContain('chat app');
+    expect(text).not.toMatch(/knowledge|second brain|routing/i);
   });
 });
 
