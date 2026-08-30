@@ -50,6 +50,7 @@ see that module.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 #: The deployment's explicit answer. Absolute, and it wins over everything.
@@ -72,19 +73,65 @@ def checkout_root() -> Path | None:
     return None
 
 
-def workflows_root() -> Path:
-    """The directory that holds `<slug>/workflow.json` packages."""
+@dataclass(frozen=True)
+class RootChoice:
+    """The directory, and the thing that chose it.
+
+    Two views of one chain, never two chains. `workflows_root()` answers the
+    question every reader in the codebase asks; this answers the one a
+    *person* asks when the answer surprises them — and the surprise is the
+    whole reason it exists. Standing in the wrong directory silently edits a
+    different project's workflows, and the four sources below are
+    indistinguishable from inside the result. Naming which one won is most of
+    the fix (install-experience/26).
+
+    `source` is the machine word — `environment`, `config`, `checkout`,
+    `convention` — and `why` is the sentence a reader is shown. Never a second
+    precedence chain: `workflows_root()` is defined as this function's `path`,
+    so the two cannot disagree.
+    """
+
+    path: Path
+    source: str
+    why: str
+
+
+def resolve_workflows_root() -> RootChoice:
+    """`workflows_root()`, plus what decided it. See `RootChoice`."""
     configured = os.environ.get(WORKFLOWS_ROOT_ENV, "").strip()
     if configured:
-        return Path(configured).expanduser().resolve()
+        return RootChoice(
+            Path(configured).expanduser().resolve(),
+            "environment",
+            f"{WORKFLOWS_ROOT_ENV} is set in this environment",
+        )
     # Lazy: `import openstategraph` must stay cheap, and this pulls pydantic.
-    from openstategraph.config_file import configured_workflows_dir
+    from openstategraph.config_file import configured_workflows_dir, find_config_file
 
     from_file = configured_workflows_dir()
     if from_file is not None:
-        return from_file
+        source = find_config_file()
+        # `configured_workflows_dir` resolved relative to that file, so the
+        # file is the honest answer to "why here" — not the working directory.
+        where = str(source) if source is not None else "the active configuration"
+        return RootChoice(from_file, "config", f"workflows_dir: in {where}")
     checkout = checkout_root()
-    return (checkout / "workflows") if checkout else (Path.cwd() / "workflows")
+    if checkout:
+        return RootChoice(
+            checkout / "workflows",
+            "checkout",
+            "this command was run from inside an OpenStateGraph checkout",
+        )
+    return RootChoice(
+        Path.cwd() / "workflows",
+        "convention",
+        "the ./workflows convention, under the directory in front of you",
+    )
+
+
+def workflows_root() -> Path:
+    """The directory that holds `<slug>/workflow.json` packages."""
+    return resolve_workflows_root().path
 
 
 def has_project_root() -> bool:
@@ -142,10 +189,12 @@ def content_root() -> Path:
 
 
 __all__ = [
+    "RootChoice",
     "WORKFLOWS_ROOT_ENV",
     "checkout_root",
     "content_root",
     "has_project_root",
     "resolve_package",
+    "resolve_workflows_root",
     "workflows_root",
 ]

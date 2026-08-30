@@ -110,6 +110,43 @@ pip install "openstategraph[ollama]"          # once published
 > (`launch-readiness/171`) was fixed the same day, and this page is written
 > after that fix.
 
+## 0.1. Two installs, and they are not the same thing
+
+Both of these are right, and most projects end up with both. They answer
+different questions and they are versioned separately.
+
+| | **The library** | **The tool** |
+| --- | --- | --- |
+| Why | your service **imports** it at runtime — `load_workflow`, `ask()` | the editor is a developer tool, like a linter or a formatter |
+| Where it goes | `[project.dependencies]` in your `pyproject.toml`, pinned, committed | once, globally, outside every project |
+| Who needs it | every process that runs a workflow, including production | the people who draw workflows |
+| How | `pip install "openstategraph[<provider>]"`, in your project's environment | `uv tool install "openstategraph[server,<provider>]"` (or `pipx install`) |
+| What you then run | nothing — you `import openstategraph` | `openstategraph .` in any project, with nothing activated |
+
+The tool form is why the verb takes a directory. One global install, and
+`openstategraph .` in any project opens the editor on **that** project's
+workflows — the same way you run a formatter you installed once:
+
+```bash
+uv tool install "openstategraph[server,ollama]"
+
+cd ~/svc  && openstategraph .      # svc's workflows
+cd ~/app2 && openstategraph .      # app2's workflows
+```
+
+It prints the directory it chose and why before it binds anything, because the
+alternative is the failure this verb was built to end: standing in the wrong
+place and silently editing another project's packages. [The CLI
+reference](cli.md#open) has the flags and the four states.
+
+**The two versions are independent, and nothing warns you when they drift.**
+The tool has its own virtualenv; your project has yours. Upgrading one leaves
+the other exactly where it was, and neither the editor nor the library reports
+the other's version — a workflow drawn by a newer editor and loaded by an older
+library fails at load, not at draw. If that matters to you, install the tool
+from the same pin your `pyproject.toml` carries, and re-run both upgrades
+together. There is no check today; this paragraph is the whole of the warning.
+
 ## 1. Which shape you are in
 
 Two ways to consume this, and the choice changes what you install.
@@ -612,7 +649,7 @@ event, where your handler can still answer 422 — the same `OpenStateGraphError
 | --- | --- |
 | Stream from a handler that is not on this page's framework | [§8](#8-streaming-without-picking-your-web-framework), above |
 | Drive the raw LangGraph stream yourself | [wiring-it-in.md §3](wiring-it-in.md#3-the-same-thing-streamed) — the `.astream_events()` loop, and the four things `ask()` does that it does not |
-| Draw the next workflow instead of typing JSON | `openstategraph serve --open`, with the `[server]` extra — the canvas at `/`, over this same workflows root |
+| Draw the next workflow instead of typing JSON | `openstategraph .`, with the `[server]` extra — the canvas at `/`, over this same workflows root ([§0.1](#01-two-installs-and-they-are-not-the-same-thing)) |
 | Understand what you are drawing | [On the canvas](on-the-canvas.md) |
 | Know what we may take away | [The stability contract](stability.md) |
 | Know how far a package travels without us | [Export and portability](export-and-portability.md) |

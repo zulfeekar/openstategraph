@@ -307,6 +307,30 @@ and "it was already right" are four different things to have done to a file
 the user may own, and this command's one job is to say which. The knowledge —
 what the brief says, where it goes, what the markers mean — is
 `agent_brief.py`; nothing about it is duplicated here.
+
+**1158 -> 1238** (`install-experience/26`). Eighty lines, and this is
+the one entry where the rule was in genuine danger, so the split is worth
+stating. `open` is the developer's one verb — point it at a folder and the
+editor opens on it — and *everything it decides* is
+`openstategraph.opening.plan`: which directory, why that one, what is already
+in it, whether to refuse and what to offer instead. None of that is here.
+
+What is here is the three things a decision cannot do for itself and the
+declaration of the flags that reach it: `chdir` into the directory (the whole
+of what the argument does, so no second precedence chain exists), the `input()`
+call, one `mkdir`, and then `cmd_serve(args)` — the same server, not a second
+one. Two of the eighty are `startup_facts` gaining the *reason* the
+workflows root resolved where it did — the one printer for that directory, so
+`open` does not print it a second time. Roughly half the rest is the parser block, which is the pure
+declaration this entry's second paragraph already prices at twenty lines a
+command.
+
+`expand_bare_path` is the other named piece and it is nine lines: it turns
+`openstategraph .` into `openstategraph open .`, resolving the first token
+against this parser's own subcommand set before it will read it as a path.
+That has to be here — it is a fact about the parser — and it is the only
+place this CLI reads an argument tolerantly, which is why it is written to be
+strict about what it then trusts.
 """
 
 WORKFLOW_COMPILER = """
@@ -676,7 +700,7 @@ and the reader read.
 #: worried about.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1158, CLI),
+    "cli.py": Recorded(1238, CLI),
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

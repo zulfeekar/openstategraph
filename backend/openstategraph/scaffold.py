@@ -563,7 +563,7 @@ def review_workflows_root(root: Path) -> tuple[FoundPackage, ...]:
     )
 
 
-def _review_lines(found: tuple[FoundPackage, ...]) -> list[str]:
+def review_lines(found: tuple[FoundPackage, ...]) -> list[str]:
     """The review, as the refusal and the adoption report both print it."""
     if not found:
         return ["  (no packages in it yet)"]
@@ -609,7 +609,7 @@ def _shared_workflows_root_refusal(target: Path, workflows_dir: str, label: str)
     ordinal = 2
     while (target / f"{workflows_dir}_{ordinal}").exists():
         ordinal += 1
-    review = "\n".join(_review_lines(review_workflows_root(root)))
+    review = "\n".join(review_lines(review_workflows_root(root)))
     return (
         f"{label}/{workflows_dir}/ already exists and is not ours. Nothing was written.\n"
         f"Here is what is in it:\n"
@@ -773,6 +773,8 @@ __all__ = [
     "new_package",
     "new_team",
     "new_workflow",
+    "review_lines",
+    "review_workflows_root",
     "starter_document",
     "team_document",
 ]
