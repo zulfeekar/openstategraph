@@ -7,7 +7,7 @@ unmodified, edit through a parent, break deliberately.
 ## Isolation
 
 ```
-mkdir -p /tmp/stranger4 && cp /Users/zulfeekar.cheriyampu/dyflow/.env /tmp/stranger4/.env
+mkdir -p /tmp/stranger4 && cp "$CHECKOUT"/.env /tmp/stranger4/.env   # your own credentials
 python3 -m venv /tmp/stranger4/venv
 /tmp/stranger4/venv/bin/pip install --no-cache-dir --index-url https://test.pypi.org/simple/ \
     --extra-index-url https://pypi.org/simple/ "openstategraph[server,anthropic]==0.3.0rc6"
