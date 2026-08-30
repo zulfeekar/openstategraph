@@ -1526,6 +1526,38 @@ endpoint can start or change a run — a `paused` thread is continued through
 server-side and private channels are omitted, so a thread carrying a long
 message history does not become a multi-megabyte response.
 
+#### How much of a long run comes back, and how you know
+
+`GET /api/threads/{id}` reads the **newest 200** checkpoints of a thread by
+default. `?limit=` raises that, up to 2000.
+
+A read that left something behind says so, on both audiences:
+
+```json
+{
+  "thread": { "...": "..." },
+  "steps": [],
+  "truncation": {
+    "kept": 200, "end": "oldest", "limit": 200,
+    "message": "Only the newest 200 checkpoints of this run were read. …"
+  }
+}
+```
+
+`truncation` is `null` when the whole thread came back, so testing the field
+for truth is the right reading. Two details worth knowing before you rely on a
+long history:
+
+- **The end kept is the newest.** That is the end the store yields first and
+  the end a person looking at a run came for. It means a tool *result* whose
+  request fell outside the window is listed with an empty `arguments` — an
+  execution point with no argument, rather than a silently dropped one.
+- **The read is linear in what it returns.** Asking for ten times as many
+  checkpoints costs about ten times as much, not a hundred times
+  (`the-cost-of-one-more/06`).
+
+`openstategraph threads show` prints the same sentence as a `truncated:` line.
+
 #### A stored run has an audience too
 
 `GET /api/threads/{id}` takes `?audience=customer|developer`, the same

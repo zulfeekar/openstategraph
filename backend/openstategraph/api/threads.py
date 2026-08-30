@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 from openstategraph.developer_channel import transcript_text
 from openstategraph.compile.workflow_compiler import node_failure_warnings
@@ -52,6 +52,7 @@ from openstategraph.api.schemas import (
     ThreadSummary,
     ThreadTokens,
     ThreadToolCall,
+    ThreadTruncation,
 )
 
 #: Checkpoint channels that belong to the scheduler, not to the run. Showing
@@ -69,6 +70,24 @@ _VALUE_LIMIT = 4000
 #: the entire sqlite file.
 _SCAN_MULTIPLIER = 40
 _SCAN_FLOOR = 400
+
+#: How many checkpoints one thread is read back as, unless a caller asks for
+#: more, and the most any caller may ask for.
+#:
+#: The default was 200 before `the-cost-of-one-more/06` and stays 200; what
+#: changed is that it is no longer the *only* number and no longer silent. A
+#: cap a caller cannot raise and cannot detect is two states — "this is the
+#: whole run" and "this is the newest fifth of it" — producing one
+#: indistinguishable output, which is the failure mode this repository names
+#: by that phrase. So: the door takes a `limit`, a bounded read says it was
+#: bounded (`ThreadTruncation`), and the ceiling exists because an unbounded
+#: read of a store that never sweeps is a request that never ends.
+#:
+#: 2,000 is the ticket's own figure for a long thread, and it is a ceiling
+#: rather than a cost: the read is linear in what it returns now, so asking for
+#: ten times as many rows costs ten times as much rather than a hundred.
+DEFAULT_READ_LIMIT = 200
+MAX_READ_LIMIT = 2000
 
 
 def list_threads(
@@ -95,10 +114,19 @@ def list_threads(
     the opposite of the truth, which is worse than no reason.)
     """
     scan = max(limit * _SCAN_MULTIPLIER, _SCAN_FLOOR)
+    # Narrowed in the store where the store can do it. `user_email` stays out
+    # of it on purpose: it is compared case-folded below, and `filter=` is an
+    # equality match, so pushing it down would silently drop the person who
+    # typed `A@b.com` yesterday and `a@b.com` today.
+    metadata = {
+        key: value
+        for key, value in (("workflow_slug", workflow_slug), ("session_id", session_id))
+        if value
+    }
     latest: dict[str, ThreadSummary] = {}
     counts: dict[str, int] = {}
     for saver in _distinct(savers):
-        for tuple_ in _safe_list(saver, None, scan):
+        for tuple_ in _safe_list(saver, None, scan, metadata):
             thread_id = _thread_id(tuple_)
             if not thread_id:
                 continue
@@ -126,7 +154,7 @@ def read_thread(
     thread_id: str,
     *,
     audience: Audience = Audience.CUSTOMER,
-    limit: int = 200,
+    limit: int = DEFAULT_READ_LIMIT,
 ) -> ThreadHistoryResponse | None:
     """One past run, oldest checkpoint first — or `None` if no saver holds it.
 
@@ -145,23 +173,78 @@ def read_thread(
     (`api/main.py`), and a door that refuses one forecloses it. So the door
     takes an audience, and a customer's history is the same shape as a
     customer's live run.
+
+    **`limit` is now disclosed rather than merely enforced.** It has always
+    kept the *newest* `limit` checkpoints, because that is the end
+    `saver.list` yields first and the end a person looking at a run wants; a
+    truncated read said nothing about it, so a thread of 201 supersteps and a
+    thread of 20,000 returned the same shape. A read that left something behind
+    now says so in `truncation`, on both audiences, because *some of this run
+    is missing* is a fact about the answer rather than about the machinery.
+
+    Keeping the newest end has one cost, and disclosure is what makes it
+    payable: a `ToolMessage` whose request fell off the older end is reported
+    with no arguments, and `run_findings.py` discards an argument-less call
+    deliberately. Keeping the *oldest* end instead would swap that for a worse
+    trade — it needs an unbounded scan to find the far end of a thread, and it
+    answers "what happened at the start of a run somebody is looking at now".
+    So the end stays, and the caller is told which end it is.
     """
+    limit = max(1, min(limit, MAX_READ_LIMIT))
     config = {"configurable": {"thread_id": thread_id}}
     for saver in _distinct(savers):
-        tuples = list(_safe_list(saver, config, limit))
-        if not tuples:
+        # One more than asked for. A bound that reads exactly its own limit
+        # cannot tell a thread that ends there from one that does not, and
+        # that is the whole defect — the extra row is measured, never returned.
+        found = list(_safe_list(saver, config, limit + 1))
+        if not found:
             continue
+        cut = len(found) > limit
+        tuples = found[:limit]
         summary = _summarize(thread_id, tuples[0], steps=len(tuples))
         # Oldest first, and the reader is stateful over that order — it counts
         # a channel's new messages against what earlier checkpoints already
         # held, which only means anything walked forwards.
         oldest_first = list(reversed(tuples))
-        tools = _ToolCallReader(oldest_first)
+        tails = _message_tails(oldest_first)
+        tools = _ToolCallReader(tails)
         clock = _ClockReader()
-        usage = _UsageReader()
-        steps = [_step(tuple_, tools, clock, usage, audience) for tuple_ in oldest_first]
-        return ThreadHistoryResponse(thread=summary, steps=steps)
+        steps = [
+            _step(tuple_, tools, clock, audience, tail)
+            for tuple_, tail in zip(oldest_first, tails)
+        ]
+        return ThreadHistoryResponse(
+            thread=summary, steps=steps, truncation=_truncation(len(tuples), limit, cut)
+        )
     return None
+
+
+def _truncation(kept: int, limit: int, cut: bool) -> ThreadTruncation | None:
+    """What this read left behind, or `None` when it left nothing behind.
+
+    `None` and not a zeroed row, for the reason `_ClockReader` gives about
+    durations: a truncation of nothing is not a truncation, and a client
+    testing the field for truth is the reading everybody will write.
+
+    The count of what was dropped is deliberately absent. Knowing it means
+    counting the whole thread, which is the scan this bound exists to prevent —
+    so the honest thing to publish is what was kept, which end is missing, and
+    the limit that decided it. A caller who wants the rest raises `limit` and
+    reads the field again.
+    """
+    if not cut:
+        return None
+    return ThreadTruncation(
+        kept=kept,
+        end="oldest",
+        limit=limit,
+        message=(
+            f"Only the newest {kept} checkpoints of this run were read. Older ones "
+            f"are stored but not included — ask again with a higher limit (up to "
+            f"{MAX_READ_LIMIT}) to see more. A tool result whose request fell "
+            "outside this window is listed without its arguments."
+        ),
+    )
 
 
 def savers_for(services: Any, workflow_slug: str | None = None) -> list[Any]:
@@ -196,14 +279,31 @@ def _distinct(savers: Iterable[Any]) -> list[Any]:
     return list(seen.values())
 
 
-def _safe_list(saver: Any, config: Any, limit: int) -> list[Any]:
+def _safe_list(saver: Any, config: Any, limit: int, metadata: dict[str, Any] | None = None) -> list[Any]:
     """`saver.list(...)`, tolerating a saver that cannot enumerate.
 
     A custom or future saver may refuse a null config. That must degrade to
     "this saver contributed nothing", never to a failed request — the caller
     is asking what history exists, and the honest answer from a saver that
     cannot say is silence.
+
+    `metadata` is `BaseCheckpointSaver.list`'s own `filter=`, which narrows on
+    the checkpoint metadata the store already indexes. It is passed rather than
+    applied afterwards because a scan bound in *rows* with the filter outside
+    it answers the wrong question: `_SCAN_FLOOR` checkpoints of one busy
+    workflow used to be enough for `?workflow_slug=` to report that a quieter
+    workflow had never run (`the-cost-of-one-more/06`). Inside the scan, the
+    window is spent on rows that can appear in the answer.
+
+    A saver that cannot filter falls back to listing unfiltered rather than to
+    silence — `_matches` still narrows them afterwards, which is the behaviour
+    that was there before. Degrading a *narrowing* into an empty list would
+    turn a saver's limitation into a claim that nothing was ever run.
     """
+    try:
+        return list(saver.list(config, filter=metadata or None, limit=limit))
+    except Exception:  # pragma: no cover - defensive, saver-specific
+        pass
     try:
         return list(saver.list(config, limit=limit))
     except Exception:  # pragma: no cover - defensive, saver-specific
@@ -255,8 +355,41 @@ _NS_SEP = "|"
 _NS_END = ":"
 
 
+def _channel_key(tuple_: Any) -> str:
+    """Whose state this checkpoint extends — the namespace **verbatim**.
+
+    The other half of `_namespace` below, and they are two functions because
+    one string was answering two questions that disagree
+    (`the-cost-of-one-more/05`). `_namespace` answers *what should this row be
+    called*, and its job is to **merge**: two subtasks dispatched to one
+    `worker_web` are one node that ran twice, and a panel must say so. This
+    answers *whose counter is this*, where merging is the defect — two
+    dispatched instances are two graphs with two separate `messages` channels,
+    so one shared cursor made the second one's first call look like something
+    already reported. Six messages seen, two of its own, `[6:]` of a
+    two-element list: every tool call it made, gone, and a `duration_ms` that
+    was the gap between two unrelated graphs' clocks.
+
+    Verbatim is the right key rather than merely the safe one, and it was
+    checked against the runtime rather than reasoned about: a real `Send`
+    fan-out into one node yields `worker_web:634a7a57-…` and
+    `worker_web:68ef3b83-…`, which is LangGraph's own guarantee that a
+    dispatched task gets a namespace of its own. Mounting nests it —
+    `mount1:abc|worker_web:def` — and nesting only ever makes the string more
+    distinct, because every segment carries the id of the task that opened it.
+
+    So nothing is stripped. Not even the subgraph counter `_namespace` drops:
+    `|1` and `|2` are exactly what tells one invocation of a subgraph from the
+    next, which is the one thing a per-channel cursor must never merge.
+    """
+    return str(((tuple_.config or {}).get("configurable") or {}).get("checkpoint_ns") or "")
+
+
 def _namespace(tuple_: Any) -> list[str]:
-    """Which graph this checkpoint belongs to, outermost first.
+    """What to **call** the graph this checkpoint belongs to, outermost first.
+
+    A display name, and only that. `_channel_key` above is the identity, and
+    keeping them apart is the whole of `the-cost-of-one-more/05`.
 
     The parent graph checkpoints under `""` and every agent loop or mounted
     workflow under a namespace that **names the node owning it**, so this is
@@ -283,7 +416,7 @@ def _namespace(tuple_: Any) -> list[str]:
     scheduler builds `f"{name}{NS_END}{task_id}"` before a task ever sees it.
     Anything else is left exactly as stored.
     """
-    raw = str(((tuple_.config or {}).get("configurable") or {}).get("checkpoint_ns") or "")
+    raw = _channel_key(tuple_)
     names = []
     for segment in raw.split(_NS_SEP):
         if _NS_END not in segment and segment.isdigit():
@@ -294,6 +427,53 @@ def _namespace(tuple_: Any) -> list[str]:
     return names
 
 
+def _message_tails(oldest_first: Sequence[Any]) -> list[list[Any]]:
+    """What each checkpoint **added** to its own `messages` channel, once.
+
+    The one walk every stateful reader below now shares, and the reason the
+    read stopped being quadratic (`the-cost-of-one-more/06`). The channel is
+    cumulative — every checkpoint carries the whole history — so three readers
+    each asking a checkpoint for its messages meant three full copies of a list
+    that grows with the checkpoint count, C times over: ×3.76 per doubling,
+    measured on synthetic supersteps before anything was changed.
+
+    **The fold itself was doing real work and is kept.** The last checkpoint
+    holds every message, so the *contents* need no fold — but nothing in it
+    says which superstep added which message, and that attribution is the
+    entire product here: a step row's tool calls, its token spend, and the
+    pairing of a request in one superstep to its answer in the next. What was
+    redundant was re-reading the prefix, not the walk. So this is one forward
+    pass keeping one cursor per channel, and each message is sliced out exactly
+    once — O(C + M) where it was O(C × M).
+
+    A slice, never `list(value)`: the copy was the cost, and the tail is what
+    every caller actually wanted.
+
+    **Order matters and is the caller's.** The cursor only means anything
+    walked oldest-first, which is why this takes the whole sequence rather
+    than being asked one checkpoint at a time.
+
+    One limit is inherited rather than fixed, and it is worth naming: this
+    counts, so a channel that is *trimmed* or summarised mid-run — fewer
+    messages after than before — leaves the cursor ahead of the list and that
+    checkpoint reports nothing new. Counting cannot survive a rewrite of the
+    thing being counted; only message identity could, and LangGraph gives no id
+    to a message that has none of its own.
+    """
+    seen: dict[str, int] = {}
+    tails: list[list[Any]] = []
+    for tuple_ in oldest_first:
+        value = _values(tuple_).get("messages")
+        if not isinstance(value, (list, tuple)):
+            tails.append([])
+            continue
+        key = _channel_key(tuple_)
+        already = seen.get(key, 0)
+        seen[key] = len(value)
+        tails.append(list(value[already:]))
+    return tails
+
+
 class _ToolCallReader:
     """Which tool calls belong to which step, across one thread.
 
@@ -302,9 +482,12 @@ class _ToolCallReader:
 
     - **The message channel is cumulative.** Every checkpoint holds the whole
       history, so "what this step called" is the *new tail*, not the contents.
-      One counter per namespace — a worker's channel is not the workflow's, and
-      sharing a counter would make a second graph's first call look like
-      something already seen.
+      `_message_tails` cuts those tails, once, before any reader runs —
+      **one cursor per channel, keyed by `_channel_key`**, which is the
+      namespace verbatim rather than the node name it displays as. Two
+      instances of one dispatched node are two channels; keying them alike is
+      what made the second one's first call look like something already seen
+      (`the-cost-of-one-more/05`).
     - **A request and its answer land in different supersteps.** LangGraph
       writes the `AIMessage` in one and the `ToolMessage` in the next, so the
       results are collected in a first pass over the whole thread and paired
@@ -315,26 +498,21 @@ class _ToolCallReader:
     would be exactly the quiet loss this exists to end.
     """
 
-    def __init__(self, tuples: Iterable[Any]) -> None:
+    def __init__(self, tails: Iterable[Sequence[Any]]) -> None:
         self._results: dict[str, tuple[str, str]] = {}
         self._answered: set[str] = set()
-        self._seen: dict[str, int] = {}
-        for tuple_ in tuples:
-            for message in _messages(tuple_):
+        for tail in tails:
+            for message in tail:
                 call_id = str(getattr(message, "tool_call_id", "") or "")
                 if not call_id:
                     continue
                 name = str(getattr(message, "name", "") or "")
                 self._results[call_id] = (name, _text(getattr(message, "content", "")))
 
-    def at(self, tuple_: Any) -> list[ThreadToolCall]:
+    def at(self, tail: Sequence[Any]) -> list[ThreadToolCall]:
         """The calls this checkpoint added, in the order it added them."""
-        key = "|".join(_namespace(tuple_)) or ""
-        messages = _messages(tuple_)
-        already = self._seen.get(key, 0)
-        self._seen[key] = len(messages)
         found: list[ThreadToolCall] = []
-        for message in messages[already:]:
+        for message in tail:
             for call in getattr(message, "tool_calls", None) or []:
                 call_id = str(_call_field(call, "id") or "")
                 name, result = self._results.get(call_id, ("", ""))
@@ -367,11 +545,19 @@ class _ClockReader:
     the expensive half of replay and the store already had them
     (`memory-and-replay` 37, part 2).
 
-    **Per namespace**, for the same reason the tool-call reader counts per
-    namespace: an agent subgraph's supersteps are interleaved with its parent's
+    **Per channel**, for the same reason the tool-call reader counts per
+    channel: an agent subgraph's supersteps are interleaved with its parent's
     in one list, so differencing against whatever row happens to precede this
     one would charge the parent a worker's time and the worker the gap since
-    the parent.
+    the parent. Per *channel* and not per node name, since
+    `the-cost-of-one-more/05`: two instances of one dispatched worker read
+    `worker_web` alike, and differencing one against the other produced
+    `1000` ms that was the distance between two unrelated graphs' clocks — a
+    number that looked like a duration and was not one. A channel this reader
+    has not seen now yields `None`, the same silence a first step gets, and
+    that is the honest answer rather than a placeholder: `memory-and-replay/54`
+    gives a dispatched child a **measured** `spawn`/`settled` span, and a
+    guessed duration here would be a second number disagreeing with it.
 
     Silence rather than a zero wherever the arithmetic cannot be done — a first
     step, an unreadable `ts`, a clock that went backwards. `0` is the claim
@@ -393,7 +579,7 @@ class _ClockReader:
         moment = _moment(tuple_)
         if moment is None:
             return None
-        key = "|".join(_namespace(tuple_))
+        key = _channel_key(tuple_)
         previous = self._last.get(key)
         self._last[key] = moment
         if previous is None or _source(tuple_) == "input":
@@ -418,8 +604,8 @@ def _moment(tuple_: Any) -> datetime | None:
         return None
 
 
-class _UsageReader:
-    """What each superstep's model call cost, off `AIMessage.usage_metadata`.
+def _tokens_in(tail: Sequence[Any]) -> ThreadTokens | None:
+    """What one superstep's model call cost, off `AIMessage.usage_metadata`.
 
     LangChain populates it for every provider that reports usage, and it has
     ridden in the checkpoints since the message channel did. Same two rules as
@@ -427,34 +613,30 @@ class _UsageReader:
 
     - **The channel is cumulative**, so this counts the *new tail* only.
       Summing the channel would charge the last row for the whole run.
-    - **One counter per namespace** — a worker's channel is not the workflow's.
+    - **One cursor per channel** — a worker's channel is not the workflow's,
+      and one dispatched instance's is not another's.
+
+    Both are now `_message_tails`' job, which is why this is a function and no
+    longer a stateful `_UsageReader`: three readers each cutting the same
+    tails was the quadratic (`the-cost-of-one-more/06`), and three readers
+    each keying them by node name was the collision (`05`). One walk, one
+    cursor table, and a class with nothing left to remember stops being one.
 
     A superstep whose new messages report no usage gets `None`, not a zeroed
     row: a bookkeeping step did not spend zero tokens, it called no model.
     """
-
-    def __init__(self) -> None:
-        self._seen: dict[str, int] = {}
-
-    def at(self, tuple_: Any) -> ThreadTokens | None:
-        key = "|".join(_namespace(tuple_))
-        messages = _messages(tuple_)
-        already = self._seen.get(key, 0)
-        self._seen[key] = len(messages)
-        totals = [0, 0, 0]
-        found = False
-        for message in messages[already:]:
-            usage = getattr(message, "usage_metadata", None)
-            if not isinstance(usage, dict):
-                continue
-            found = True
-            for index, field in enumerate(("input_tokens", "output_tokens", "total_tokens")):
-                totals[index] += _count(usage.get(field))
-        if not found:
-            return None
-        return ThreadTokens(
-            input_tokens=totals[0], output_tokens=totals[1], total_tokens=totals[2]
-        )
+    totals = [0, 0, 0]
+    found = False
+    for message in tail:
+        usage = getattr(message, "usage_metadata", None)
+        if not isinstance(usage, dict):
+            continue
+        found = True
+        for index, field in enumerate(("input_tokens", "output_tokens", "total_tokens")):
+            totals[index] += _count(usage.get(field))
+    if not found:
+        return None
+    return ThreadTokens(input_tokens=totals[0], output_tokens=totals[1], total_tokens=totals[2])
 
 
 def _count(value: Any) -> int:
@@ -477,17 +659,12 @@ def _call_field(call: Any, key: str) -> Any:
     return getattr(call, key, None)
 
 
-def _messages(tuple_: Any) -> list[Any]:
-    value = _values(tuple_).get("messages")
-    return list(value) if isinstance(value, (list, tuple)) else []
-
-
 def _step(
     tuple_: Any,
     tools: _ToolCallReader | None = None,
     clock: _ClockReader | None = None,
-    usage: _UsageReader | None = None,
     audience: Audience = Audience.CUSTOMER,
+    tail: Sequence[Any] = (),
 ) -> ThreadStep:
     """One checkpoint as a row, holding back what this audience may not read.
 
@@ -528,9 +705,9 @@ def _step(
             )
             if not str(channel).startswith(_PRIVATE_PREFIXES)
         ],
-        tool_calls=tools.at(tuple_) if tools is not None and developer else [],
+        tool_calls=tools.at(tail) if tools is not None and developer else [],
         duration_ms=clock.at(tuple_) if clock is not None else None,
-        tokens=usage.at(tuple_) if usage is not None and developer else None,
+        tokens=_tokens_in(tail) if developer else None,
     )
 
 
@@ -651,7 +828,7 @@ def _text(value: Any) -> str:
     if isinstance(value, (int, float, bool)):
         return str(value)
     if isinstance(value, list):
-        return _cap("\n".join(_text(item) for item in value if item is not None))
+        return _cap_items(value)
     content = getattr(value, "content", None)
     if content is not None:
         role = getattr(value, "type", "") or value.__class__.__name__
@@ -669,3 +846,45 @@ def _cap(text: str) -> str:
     if len(text) <= _VALUE_LIMIT:
         return text
     return text[:_VALUE_LIMIT] + f"… (+{len(text) - _VALUE_LIMIT} chars)"
+
+
+def _cap_items(value: list[Any]) -> str:
+    """A list channel as text, rendering only as far as the cap allows.
+
+    The same output as `_cap("\n".join(...))` up to the cap, and the same
+    output entirely when the list fits under it — what changes is the work and
+    what the marker counts (`the-cost-of-one-more/06`).
+
+    This is where a developer's `values["messages"]` was rendered, and the
+    channel is cumulative: every message of the whole run, each capped at 4,000
+    characters, joined, and *then* capped at 4,000 — a transient string of
+    `M × 4,000` bytes built per checkpoint to publish four kilobytes, C times
+    over. Stopping at the cap makes the work a property of the cap rather than
+    of the history's length.
+
+    The marker changes with it, and deliberately. `… (+N chars)` cannot survive
+    this: knowing N means rendering everything, which is the cost. `… (+N more
+    items)` is the honest thing a bounded reader can say, and it is the more
+    useful of the two — *nineteen more messages* is actionable in a way that
+    *+412,908 chars* never was.
+    """
+    rendered: list[str] = []
+    length = 0
+    remaining = 0
+    for index, item in enumerate(value):
+        if item is None:
+            continue
+        if length > _VALUE_LIMIT:
+            # `len` and an index, never a walk of the tail: counting what was
+            # skipped by looking at it is the cost this stopped paying. An
+            # empty entry counts as an item here, which is the direction to be
+            # wrong in — it never claims less was withheld than was.
+            remaining = len(value) - index
+            break
+        text = _text(item)
+        length += len(text) + (1 if rendered else 0)
+        rendered.append(text)
+    joined = "\n".join(rendered)
+    if len(joined) <= _VALUE_LIMIT and not remaining:
+        return joined
+    return joined[:_VALUE_LIMIT] + f"… (+{remaining} more items)"

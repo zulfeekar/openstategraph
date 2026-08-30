@@ -1517,6 +1517,16 @@
           },
           "thread": {
             "$ref": "#/components/schemas/ThreadSummary"
+          },
+          "truncation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadTruncation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -1749,6 +1759,35 @@
           "name"
         ],
         "title": "ThreadToolCall",
+        "type": "object"
+      },
+      "ThreadTruncation": {
+        "description": "The part of a run a history did **not** read.\n\n`GET /api/threads/{id}` has always kept the newest `limit` checkpoints and\nhas never said so, which made a whole run and the last fifth of a long one\nthe same response (`the-cost-of-one-more/06`). It is not a harmless\nsilence: the older end of a thread carries the `AIMessage` requests that\nthe newer end's `ToolMessage` answers belong to, so a truncated read\nproduces tool calls with no arguments, and `run_findings.py` drops those on\npurpose \u2014 a long conversation quietly yielded no findings at all.\n\nPresent only when something was left behind. A truncation of nothing is not\na truncation, so this field is `null` on a complete read rather than a row\nof zeroes claiming one happened.",
+        "properties": {
+          "end": {
+            "default": "oldest",
+            "title": "End",
+            "type": "string"
+          },
+          "kept": {
+            "title": "Kept",
+            "type": "integer"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kept",
+          "limit",
+          "message"
+        ],
+        "title": "ThreadTruncation",
         "type": "object"
       },
       "ToolCapabilityResponse": {
@@ -2749,7 +2788,7 @@
     },
     "/api/threads/{thread_id}": {
       "get": {
-        "description": "A recorded run played back as text. **Nothing is re-executed.**\n\nEvery value here was written while the run happened; reading it calls\nno model and no tool, so viewing a run that sent an email does not\nsend it again. The endpoint that *does* execute is\n`POST /api/runs/resume`, which continues a `paused` thread from its\ninterrupt \u2014 a different verb on purpose.\n\n`audience` is the same parameter the run doors take, capped by the same\n`resolve()` \u2014 a deployment that sets `OPENSTATEGRAPH_AUDIENCE=customer`\ncannot be talked into a run's machinery through its history either\n(`the-boundary-nobody-checked/02`). It defaults to `customer`, so a client\nwritten before this parameter existed reads a customer's history rather\nthan a developer's; a developer surface asks for what it needs.",
+        "description": "A recorded run played back as text. **Nothing is re-executed.**\n\nEvery value here was written while the run happened; reading it calls\nno model and no tool, so viewing a run that sent an email does not\nsend it again. The endpoint that *does* execute is\n`POST /api/runs/resume`, which continues a `paused` thread from its\ninterrupt \u2014 a different verb on purpose.\n\n`audience` is the same parameter the run doors take, capped by the same\n`resolve()` \u2014 a deployment that sets `OPENSTATEGRAPH_AUDIENCE=customer`\ncannot be talked into a run's machinery through its history either\n(`the-boundary-nobody-checked/02`). It defaults to `customer`, so a client\nwritten before this parameter existed reads a customer's history rather\nthan a developer's; a developer surface asks for what it needs.\n\n`limit` is how many checkpoints to read, newest first, up to\n`MAX_READ_LIMIT`; omitted, it is `DEFAULT_READ_LIMIT` \u2014 the module owns\nboth numbers, so this route restates neither. It existed on `read_thread` from the beginning and this\nroute never passed it, so 200 was a fixed truncation no caller could raise\nand no response mentioned (`the-cost-of-one-more/06`). A read that left\nsomething behind now says so in `truncation`, and a caller who wants the\nrest asks for more.",
         "operationId": "read_thread_endpoint_api_threads__thread_id__get",
         "parameters": [
           {
@@ -2784,6 +2823,22 @@
             "schema": {
               "$ref": "#/components/schemas/Audience",
               "default": "customer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
             }
           }
         ],

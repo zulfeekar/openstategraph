@@ -1405,6 +1405,10 @@ def cmd_threads_show(args: argparse.Namespace) -> int:
     if thread.status == "paused":
         for line in _thread_pause_lines(services, thread):
             print(f"  {line}")
+    if history.truncation is not None:
+        # A terminal is a surface too, and the whole of `the-cost-of-one-more/06`
+        # is that a cap nobody can see is two runs printing as one.
+        print(f"  truncated: {history.truncation.message}")
     for step in history.steps:
         print(f"\nstep {step.step} ({step.source}) {step.at}")
         for key, value in step.values.items():
