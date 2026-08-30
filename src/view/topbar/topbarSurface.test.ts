@@ -34,23 +34,36 @@ describe('the toolbar', () => {
     // `flex: 1 1 auto` here (as this test did until ticket 24) pinned the bug
     // rather than the fix.
     //
-    // **The column is `app-shell__stage`, not `app-shell`, since
-    // `memory-and-replay` 51** — and that is a deliberate restructure with
-    // this red test attached rather than a tidy-up that slipped past it. The
-    // run dock is a *sibling* of everything the app used to be, so that
-    // everything now needs a name: the stage wraps the top bar, the palette,
-    // the canvas and the inspector, and the dock stands under it. Push, not
-    // overlay. The stage is a `flex-direction: column` that stretches its
-    // children across, exactly as `.app-shell` did, so the property this test
-    // was written to protect is unchanged — what moved is which element
-    // provides it, and the next two assertions below are what keep the dock
-    // from quietly becoming a fourth thing floating over the canvas.
-    expect(shell).toMatch(/<div className="app-shell__stage" ref=\{stageRef\}>\s*<TopBar/);
+    // **The column is `.app-shell` again, since `memory-and-replay` 63.** It
+    // was `.app-shell__stage` from `51` until then, and both moves are
+    // deliberate restructures with this red test attached rather than
+    // tidy-ups that slipped past it.
+    //
+    // `51` docked the run surface along the bottom, so everything above it
+    // needed a name and the top bar went inside that name. `63` docks it
+    // under the top bar — the owner asked for the control and its surface to
+    // be in the same place, and for the paper to move *down* — so the top bar
+    // is no longer inside the thing being pushed and comes back out to the
+    // shell. The property this test was written to protect is unchanged
+    // either way: the toolbar's width is the cross-axis stretch of whichever
+    // column holds it, and both are `flex-direction: column`.
+    expect(shell).toMatch(
+      /<div className="app-shell" ref=\{shellRef\}>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<TopBar/,
+    );
+    expect(shellCss).toMatch(/\.app-shell\s*\{[^}]*flex-direction:\s*column/);
     expect(shellCss).toMatch(/\.app-shell__stage\s*\{[^}]*flex-direction:\s*column/);
-    // The dock is outside the stage. Inside it, it would be a panel in the
-    // canvas's row and every promise `RunDock` makes about pushing rather
-    // than covering would be false.
-    expect(shell).toMatch(/<\/div>\s*\n\s*\{timelineOpen \? \(\s*\n\s*<RunDock/);
+    // The dock stands between the top bar and everything else, and the stage
+    // is what it pushes. Something has to be outside the pushed region, and
+    // with the dock under the top bar it is the top bar — which is why this
+    // move and `51`'s are the same restructure twice rather than one of them
+    // undoing the other.
+    expect(shell).toMatch(
+      /\{timelineOpen \? \(\s*\n\s*<RunDock[\s\S]{0,600}?<div className="app-shell__stage" ref=\{stageRef\}>/,
+    );
+    // And it is still push rather than overlay — the promise `51` made, which
+    // is about flow and not about which edge. A dock that positions itself is
+    // a dock floating over the canvas.
+    expect(shellCss).not.toMatch(/\.run-dock\s*\{[^}]*position:\s*absolute/);
     expect(shellCss).not.toContain('app-shell__workflow-btn');
     expect(shell).not.toContain('app-shell__topbar-row');
   });

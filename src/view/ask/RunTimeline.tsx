@@ -211,10 +211,16 @@ export function RunTimeline({
               </div>
             </div>
           ))}
-          {totalMs !== null ? (
+          {/* The playhead and the scrubber are one decision, so they read one
+              predicate (`memory-and-replay` 63). A run in flight draws no
+              vertical line at all: it has no right-hand edge to reach, and a
+              rule down the chart that cannot be moved is a control's whole
+              affordance with none of its behaviour. It used to be drawn
+              wherever the run had a clock and pinned to the head by
+              `[data-live]`. */}
+          {offered ? (
             <div
               className="rtl__playhead"
-              data-live={running || undefined}
               style={{
                 insetInlineStart: `calc(var(--rtl-name) + (100% - var(--rtl-name)) * ${fraction})`,
               }}
