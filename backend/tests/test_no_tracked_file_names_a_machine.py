@@ -34,8 +34,13 @@ both a small disclosure and a small trap, and one census catches both.
 Three, because a repository read on three platforms can acquire any of them:
 `/Users/<name>` (macOS), `/home/<name>` (Linux), `C:\\Users\\<name>` (Windows).
 Zero of the second and third exist today, and they are here for the reason
-`bouvet` is in the other gate's table: the cheapest moment to forbid a shape
-is before anything has had a chance to normalise it.
+the other gate's table carries the terms it does: the cheapest moment to
+forbid a shape is before anything has had a chance to normalise it.
+
+This file deliberately names **no** engagement term. It ran red on the
+publishable gate the moment it landed, for quoting one as an illustration —
+which is the gate working, and is why the sentence above now points at that
+table rather than reproducing a row from it (`publishable/05`).
 
 **Placeholders are permitted by name**, because a document that writes
 `/Users/you/project` in an example is doing the right thing and an instrument
