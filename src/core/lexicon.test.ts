@@ -170,6 +170,36 @@ function proseLines(path: string): { line: string; number: number }[] {
  * the "never" on the previous line. A paragraph that says "never" two
  * sentences earlier and misuses the word later is still caught.
  */
+/**
+ * The header row of the markdown table `index` sits in, or `''`.
+ *
+ * The allowance above is *a line that forbids the word may say it*, and its
+ * approximation is the line plus the one before it — which is right for prose
+ * and blind to a table, where the word "never" lives in a **column heading**
+ * several rows up. `CLAUDE.md`'s user-facing lexicon is exactly that shape:
+ * `| User-facing word | Means | Must never mean |`, and every row under it is
+ * a sentence whose subject is the wrong word.
+ *
+ * This sharpens the approximation rather than widening it. A row qualifies
+ * only if it is a pipe row, only if an unbroken run of pipe rows reaches a
+ * header, and only if that header itself carries a `FORBIDS` marker — so a
+ * table about anything else is untouched, and a paragraph that says "never"
+ * far above still fails. Found by `install-experience/25`, whose shipped brief
+ * quotes that table verbatim by construction: the row was the canonical
+ * statement forbidding the phrase, and the gate could not see the heading that
+ * said so.
+ */
+function tableHeaderAbove(lines: { line: string }[], index: number): string {
+  if (!lines[index]?.line.trimStart().startsWith('|')) return '';
+  for (let at = index - 1; at >= 0; at -= 1) {
+    const above = lines[at]?.line.trimStart() ?? '';
+    if (!above.startsWith('|')) return '';
+    if (!/^\|[\s:|-]+\|?\s*$/.test(above)) continue;
+    return lines[at - 1]?.line ?? '';
+  }
+  return '';
+}
+
 const FORBIDS = /\bnever\b|\bnot\b|rather than|instead of|do not|mislabel|misnam|wrong word/i;
 const DOCUMENT_BANNED: { pattern: RegExp; instead: string }[] = [
   {
@@ -225,7 +255,7 @@ describe('the user-facing lexicon', () => {
         for (const path of documents(join(REPO, root))) {
           const lines = proseLines(path);
           for (const [index, { line, number }] of lines.entries()) {
-            const sentence = `${lines[index - 1]?.line ?? ''} ${line}`;
+            const sentence = `${lines[index - 1]?.line ?? ''} ${line} ${tableHeaderAbove(lines, index)}`;
             if (pattern.test(line) && !FORBIDS.test(sentence)) {
               offenders.push(`${path.slice(REPO.length)}:${number}: ${line.trim().slice(0, 90)}`);
             }
