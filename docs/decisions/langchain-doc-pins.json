@@ -82,12 +82,12 @@
     },
     "/oss/python/deepagents/rag.mdx": {
       "sweep_group": 1,
-      "bytes": 60176,
+      "bytes": 60264,
       "first_heading": "# Retrieval Augmented Generation (RAG) with Deep Agents",
-      "read": "2026-08-14",
+      "read": "2026-08-31",
       "verdict_section": "### `/oss/python/deepagents/rag.mdx`",
       "pinned": true,
-      "note": "a different file from /oss/python/deepagents/retrieval.mdx, which ticket 36 sweeps"
+      "note": "a different file from /oss/python/deepagents/retrieval.mdx, which ticket 36 sweeps. watch 2026-08-31: +88 bytes vs the verdicted 60176; the four-pattern list, the rubric beta note and the offload mechanism all still read as verdicted, so no verdict moved. See special-agents-2026-08.md ## Watch - 2026-08-31"
     },
     "/oss/python/deepagents/async-subagents.mdx": {
       "sweep_group": 1,
@@ -259,12 +259,12 @@
     },
     "/oss/python/langgraph/sql-agent.mdx": {
       "sweep_group": 4,
-      "bytes": 35319,
-      "first_heading": "# Build a custom SQL agent",
-      "read": "2026-08-27",
+      "bytes": 10672,
+      "first_heading": "In this tutorial we will build a custom agent that can answer questions about a SQL database using LangGraph.",
+      "read": "2026-08-31",
       "verdict_section": "### `/oss/python/langgraph/sql-agent.mdx`",
       "pinned": true,
-      "note": "watch 2026-08-27: -10 bytes vs the verdicted 35329; see special-agents-2026-08.md ## Watch — 2026-08-27"
+      "note": "watch 2026-08-31: 35319 -> 10672 bytes, and the first line is no longer an H1 - the served document now begins at the intro paragraph and stops after \"## 1. Select an LLM\". Every mechanism the verdict cites (the predetermined tool call, should_continue, interrupt with accept/edit/response) is absent from what the MCP serves, so the verdict can no longer be re-checked against its own source. first_heading records what head -1 actually returns, which is not a heading; that is the honest value under the scheme, not a transcription slip. Ticket organisms-first-class/92. Earlier: watch 2026-08-27 saw -10 bytes vs the verdicted 35329"
     },
     "/oss/python/langgraph/thinking-in-langgraph.mdx": {
       "sweep_group": 4,

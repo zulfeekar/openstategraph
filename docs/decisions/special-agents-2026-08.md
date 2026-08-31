@@ -1753,3 +1753,62 @@ edges, middleware order, or the runtime/framework/harness taxonomy this map's
 verdicts rest on. **No verdict is judged to be altered; no ticket filed.** If a
 future watch finds a *second* change stacked on these same five files, that
 stops being a coincidence worth re-checking by hand.
+
+---
+
+## Watch — 2026-08-31
+
+Second run of the weekly watcher. All 31 `"pinned": true` paths in
+`langchain-doc-pins.json` refetched via the docs-langchain MCP
+(`wc -c` + `head -1`); all 3 `version_pins` re-checked against current doc text.
+Two paths moved; the other 29 reproduced their recorded bytes and first line
+exactly, so only the two are listed here — the 2026-08-27 run printed all 31 and
+the unchanged rows carried no information anyone read twice.
+
+- `/oss/python/deepagents/rag.mdx` — **changed**: 60176 → 60264 bytes (+88). Heading unchanged.
+- `/oss/python/langgraph/sql-agent.mdx` — **changed**: 35319 → 10672 bytes (−24,647). **First line is no longer an H1.**
+- `version_pins.stream_events_version` ("v3") — no drift; `langgraph/event-streaming.mdx` and `deepagents/event-streaming.mdx` still pass `version="v3"` at every sampled call site.
+- `version_pins.deepagents_async_subagents` ("0.5.0 (preview)") — no drift; the page still reads "Async subagents are a preview feature available in `deepagents` 0.5.0."
+- `version_pins.deepagents_rag_rubric` (">=0.6.5 (beta)") — no drift; `rag.mdx` still reads "Grading rubrics require `deepagents>=0.6.5` and are currently in beta."
+
+**`deepagents/rag.mdx` (+88) — no verdict moved.** Everything the verdict section
+cites was re-read and still stands: the four named patterns in the same order
+with the same names, the rubric note at `deepagents>=0.6.5` and beta, and the
+offload mechanism the verdict turns on (the retrieval tool writing chunks to the
+backend rather than returning text). Eighty-eight bytes across a 60kB page with
+no structural difference in the sampled regions reads as prose editing. Also
+noted for its own sake, since the last watch's five-file coincidence is still
+open: this page does **not** carry the SQL provider-setup snippet, so it is not a
+second change stacked on that family.
+
+**`/oss/python/langgraph/sql-agent.mdx` — the page is no longer readable, and
+that is verdict-relevant.** The served document lost 70% of itself. It now begins
+mid-page at the intro paragraph — no `# Build a custom SQL agent` — and stops
+dead after `## 1. Select an LLM`, ending on a provider tab-group and the sentence
+"The output shown in the examples below used OpenAI." Grepping the path for
+`StateGraph`, `should_continue` or `interrupt(` returns nothing but one link in
+the concepts list.
+
+So **every mechanism the verdict above rests on is absent from what the MCP now
+serves**: the predetermined tool call, the dedicated per-step nodes with
+`should_continue` as the conditional edge, and the `interrupt([request])` whose
+`accept` / `edit` / `response` outcomes are the entire evidence for ticket 27's
+`edit` outcome. The verdict is not withdrawn — a verdict is made against the
+document it was made against, and this appendix does not edit one in place — but
+it can no longer be re-checked against its own source, which is the thing the
+pins manifest exists to make possible.
+
+Whether this is an upstream rewrite or the MCP serving one chunk of the page
+cannot be told from here, and the watcher should not guess. The shape argues for
+a serving artifact — a tutorial does not genuinely end at "select an LLM", and
+the missing H1 is what a chunk boundary looks like rather than what an editor
+does — but *"probably a chunking artifact"* is exactly the sentence that lets a
+real deletion sit unnoticed for a quarter. **Ticket 92** files the check.
+
+**It also breaks the fingerprint scheme's own stated assumption.** `_about.
+fingerprint.first_heading` says "the file's first line, which is the H1 on every
+swept page". That is now false for one pinned path, and the pin records what
+`head -1` actually returned rather than the H1 it wishes were there — because a
+manifest that quietly keeps the old heading would report this page as
+byte-changed and heading-stable, which is a smaller event than the one that
+happened. Ticket 92 carries whether the scheme should say so in words.
