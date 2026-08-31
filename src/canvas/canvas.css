@@ -32,11 +32,33 @@
   background: color-mix(in srgb, var(--color-border-focus) 4%, transparent);
 }
 
-/* The paper's own mount node, created by PaperController rather than React
+/* ---------- The stack inside `.canvas-stage` ----------
+ *
+ * Three absolutely-positioned layers share this box, and each one names its
+ * layer from the scale in `tokens.css` rather than relying on the order it
+ * happened to be inserted in:
+ *
+ *   `--z-canvas`          `.canvas-surface`  the JointJS paper
+ *   `--z-canvas-overlay`  `.canvas-empty`    the empty-state guidance and its
+ *                                            start panel
+ *                         `.selection-band`  the rubber band
+ *                         `.snapline-layer`  the alignment guides
+ *
+ * Declared rather than inherited because insertion order here is not stable
+ * (`install-experience` 29): React mounts `.canvas-empty`, `PaperController`
+ * appends `.canvas-surface` from an effect, and which arrives first depends on
+ * whether the canvas was empty when the editor opened or was emptied while it
+ * was open. It read one way on a reload and the other way after a delete, so
+ * the start panel was clickable or dead by accident. The three overlays share
+ * one layer on purpose: only the band and the guides can appear together, both
+ * are `pointer-events: none`, and neither has anything to steal.
+ *
+ * The paper's own mount node is created by PaperController rather than React
  * so JointJS can remove it on teardown without touching the React tree. */
 .canvas-surface {
   position: absolute;
   inset: 0;
+  z-index: var(--z-canvas);
 }
 
 /* JointJS injects its own root; make it fill the stage. */
@@ -494,6 +516,10 @@
      (production-ready 76). `AppShell` sets this to the width the panels
      actually cover, 0 otherwise. */
   right: var(--canvas-empty-inset-right, 0px);
+  /* Over the paper, from the scale — see the stack note beside
+     `.canvas-surface`. Inert itself, so a drag still reaches the paper
+     underneath; the start panel on it takes `pointer-events: auto` back. */
+  z-index: var(--z-canvas-overlay);
   display: flex;
   flex-direction: column;
   align-items: center;
