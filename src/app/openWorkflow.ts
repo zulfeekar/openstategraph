@@ -1,3 +1,4 @@
+import { recordOpened } from './lastOpened';
 import { CURRENT_SLUG_KEY } from './workflowFileWatch';
 
 /**
@@ -111,8 +112,18 @@ export function getOpenSlug(): string | null {
  * Called after a load or a save succeeds — never before. A URL naming a
  * workflow the editor failed to open would be a link that lies, and worse, one
  * a reload would keep trying to honour.
+ *
+ * **And the one place "this browser has opened it" is written**
+ * (`install-experience` 28). Every path that makes a slug this tab's document
+ * ends here — the Workflows panel's load, a save that mints a slug, a deep
+ * link — so the arrival list's second clock is stamped once rather than at
+ * three call sites where a fourth would forget. It is deliberately after the
+ * success this function already represents: an open that failed is not an
+ * open, and ordering the list by attempts would put the workflow that is
+ * broken at the top of it.
  */
 export function setOpenSlug(slug: string): void {
+  recordOpened(slug);
   try {
     sessionStorage.setItem(CURRENT_SLUG_KEY, slug);
   } catch {

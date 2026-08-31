@@ -33,6 +33,8 @@ import { StoredRuns } from './run/StoredRuns';
 import { readDockHeight, rememberDockHeight } from './run/dockHeightMemory';
 import { interruptedRunNotice, takeInterruptedRun } from './ask/interruptedRun';
 import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
+import { useArrivalOffer } from './workflow/useArrivalOffer';
+import { ArrivalDialog } from './overlays/ArrivalDialog';
 import { DrillBanner } from './workflow/DrillBanner';
 import { useWorkflowFileWatch } from '@app/useWorkflowFileWatch';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
@@ -92,7 +94,11 @@ export function AppShell() {
   // user must hear about — a full quota, an unreadable autosave, a second tab
   // that already owns this workflow. Autosave previously discarded every one
   // of those outcomes, which made "your work is safe" a claim nothing checked.
-  useWorkflowSession(notify);
+  // `install-experience` 28 reads three of its four gate inputs from here:
+  // whether this tab restored its own draft, and whether this load handed over
+  // ticket 24's starter. Both are decided in that hook's one startup effect,
+  // and `workflowId` turning non-null is how the arrival offer knows it has.
+  const session = useWorkflowSession(notify);
 
   // Ticket 16's other half: notices when the saved file changes on disk
   // underneath this open editor (another tab, a teammate's pull, a
@@ -105,6 +111,16 @@ export function AppShell() {
   // through `resolveOpenRequest`, so exactly one of "restore this tab's
   // autosave" and "fetch the linked workflow" happens.
   useDeepLinkedWorkflow(notify);
+
+  // `install-experience` 28: with no workflow named, offer the ones this
+  // project holds — and leave them on the blank canvas afterwards. One fetch,
+  // two surfaces; the hook carries the whole argument.
+  const arrival = useArrivalOffer({
+    settled: session.workflowId !== null,
+    restoredDraft: session.restore.restored,
+    placedStarter: session.placedStarter,
+    notify,
+  });
 
   // mcp-connect ticket 07: the `tool.mcp` card's Server picker reads the
   // registry, and the registry arrives over HTTP. One read here so a card
@@ -691,7 +707,21 @@ export function AppShell() {
               } as CSSProperties
             }
           >
-            <CanvasStage shortcuts={shellShortcuts} showGrid={showGrid} onNotify={onNotify} />
+            <CanvasStage
+              shortcuts={shellShortcuts}
+              showGrid={showGrid}
+              onNotify={onNotify}
+              startPanel={{
+                choices: arrival.choices,
+                busy: arrival.busy,
+                onOpen: (slug) => void arrival.openWorkflow(slug),
+                onNew: () => void startNewWorkflow(),
+                // *Open…* is the Workflows panel, which is the browser this
+                // product already has — a second list of saved workflows would
+                // be a second answer to a solved question.
+                onBrowse: () => setWorkflowManagerOpen(true),
+              }}
+            />
             {/* Over the canvas, not in the topbar: it is a fact about *this
               document*, and it appears and disappears with a navigation —
               the topbar's contents are fixed chrome. */}
@@ -774,6 +804,18 @@ export function AppShell() {
         </Popover>
       </div>
 
+      {arrival.open ? (
+        <ArrivalDialog
+          choices={arrival.choices}
+          error={arrival.error}
+          onOpen={(slug) => void arrival.openWorkflow(slug)}
+          onNew={() => {
+            arrival.dismiss();
+            void startNewWorkflow();
+          }}
+          onClose={arrival.dismiss}
+        />
+      ) : null}
       {credentialsOpen ? <CredentialsDialog onClose={() => setCredentialsOpen(false)} /> : null}
       {mcpServersOpen ? <McpServersDialog onClose={() => setMcpServersOpen(false)} /> : null}
       <Toaster toasts={toasts} onDismiss={dismiss} />

@@ -20,6 +20,7 @@ import {
   EMPTY_CANVAS_PATTERN,
   EMPTY_CANVAS_TITLE,
 } from './emptyStateCopy';
+import { StartPanel, type StartPanelProps } from './StartPanel';
 import '@canvas/canvas.css';
 
 /**
@@ -38,6 +39,13 @@ interface CanvasStageProps {
   shortcuts: readonly Shortcut[];
   showGrid: boolean;
   onNotify: (message: string) => void;
+  /**
+   * What the empty canvas offers besides guidance — `install-experience` 28.
+   *
+   * Handed down rather than fetched here: the arrival dialog and this panel
+   * show one list from one request, and the shell is where that request lives.
+   */
+  startPanel: StartPanelProps;
 }
 
 /**
@@ -48,7 +56,7 @@ interface CanvasStageProps {
  * mounts the paper publishes. Keeping that boundary sharp is what stops the
  * two rendering models from fighting over the same DOM.
  */
-export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps) {
+export function CanvasStage({ shortcuts, showGrid, onNotify, startPanel }: CanvasStageProps) {
   const workbench = useWorkbench();
   const controller = useController();
   const setPaper = useSetPaperController();
@@ -289,7 +297,7 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
       }}
     >
       <NodeLayer />
-      <EmptyState />
+      <EmptyState startPanel={startPanel} />
     </div>
   );
 }
@@ -301,7 +309,7 @@ export function CanvasStage({ shortcuts, showGrid, onNotify }: CanvasStageProps)
  * event, every node card would re-render with it — and every card measures
  * itself on render.
  */
-function EmptyState() {
+function EmptyState({ startPanel }: { startPanel: StartPanelProps }) {
   const workbench = useWorkbench();
   useWorkflowVersion();
 
@@ -322,6 +330,11 @@ function EmptyState() {
       {/* Ticket 23: and the other way in, which nothing on this canvas used to
           mention — 23 finished flows are one panel away. */}
       <span className="canvas-empty__hint">{EMPTY_CANVAS_EXAMPLES}</span>
+      {/* `install-experience` 28: and the workflows this project already
+          holds. Below the guidance rather than instead of it — the guidance
+          says how to *draw* a flow, this says how to *open* one, and a project
+          with none still gets the lesson. */}
+      <StartPanel {...startPanel} />
     </div>
   );
 }
