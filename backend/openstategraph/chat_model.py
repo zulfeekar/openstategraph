@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any, cast
 from openstategraph.errors import (
     MissingProviderKey,
     MissingProviderPackage,
+    MissingProviderSetting,
     OpenStateGraphError,
     ProviderRefusedCredential,
     ProviderUnreachable,
@@ -53,16 +54,33 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 def model_kwargs(model_name: str) -> dict[str, Any]:
     """Extra `init_chat_model` arguments this model's provider asks for.
 
-    Empty for a provider that declares no endpoint, so Anthropic and OpenAI are
-    passed exactly what they were passed before this existed. `None` from
-    `base_url` means "the SDK's default is correct" and is deliberately not the
-    same as passing a URL we believe to be that default.
+    Empty for a provider that declares neither an endpoint nor an argument, so
+    Anthropic and OpenAI are passed exactly what they were passed before this
+    existed. `None` from `base_url` means "the SDK's default is correct" and is
+    deliberately not the same as passing a URL we believe to be that default.
+
+    **The single place `constructor_args` becomes a call**
+    (providers-and-credentials/18). A vendor whose constructor needs a keyword
+    no `provider:model` string can carry — Azure's endpoint, deployment and
+    api-version — declares it on its spec, and it arrives here. Nothing else in
+    the package builds an `init_chat_model` argument, which is what keeps a
+    second spelling of the same knowledge from growing on another surface.
+
+    **The two do not collide.** `base_url` is Ollama's and `constructor_args`
+    is Azure's; a spec declaring both would be naming one endpoint twice under
+    two keywords, and the explicit one wins — a keyword a spec wrote out is
+    more specific than one derived from `endpoint_env`.
     """
     spec = provider_catalogue().for_model(model_name)
     if spec is None:
         return {}
-    base_url = ProviderEnvironment(spec).base_url()
-    return {"base_url": base_url} if base_url else {}
+    here = ProviderEnvironment(spec)
+    kwargs: dict[str, Any] = {}
+    base_url = here.base_url()
+    if base_url:
+        kwargs["base_url"] = base_url
+    kwargs.update(here.argument_values())
+    return kwargs
 
 
 class UnconfiguredProvider:
@@ -129,7 +147,17 @@ def build_chat_model(model_name: str) -> "BaseChatModel":
 
     gap = provider_readiness(model_name)
     if gap is not None:
-        error = MissingProviderPackage if gap.missing_package else MissingProviderKey
+        # Three walls, three types, in the order a reader fixes them. The
+        # third is providers-and-credentials/18: a credential that is present
+        # and a constructor that still refuses is neither of the other two,
+        # and typing it as a `CredentialError` would tell somebody to go and
+        # replace a key that is correct.
+        if gap.missing_package:
+            error: type[OpenStateGraphError] = MissingProviderPackage
+        elif gap.missing_key:
+            error = MissingProviderKey
+        else:
+            error = MissingProviderSetting
         return UnconfiguredProvider(gap.message, error)  # type: ignore[return-value]
 
     try:
@@ -167,8 +195,14 @@ def verify_provider(here: ProviderEnvironment) -> str | None:
     """
     from openstategraph.compile.workflow_compiler import describe_failure
 
+    # `has_credential`, not `is_configured`: refusing early is about *not
+    # spending a call we know will fail*, and both of the things that make a
+    # provider unconfigured qualify. The gap composes the sentence, so a
+    # missing api-version reads as a missing setting rather than as a missing
+    # key (providers-and-credentials/18).
     if not here.is_configured():
-        return here.spec.missing_key_message()
+        gap = here.readiness()
+        return gap.message if gap is not None else here.spec.missing_key_message()
     try:
         # The smallest thing that proves the credential is accepted. A single
         # token of output is all this needs to learn.
@@ -184,22 +218,44 @@ def verify_provider(here: ProviderEnvironment) -> str | None:
 _REFUSED = (401, 403)
 
 
-def _provider_of(exc: BaseException) -> "ProviderSpec | None":
-    """Which registered provider raised this, by the SDK it came from.
+def _providers_of(exc: BaseException) -> tuple["ProviderSpec", ...]:
+    """Which registered providers could have raised this, by the SDK it came from.
 
     Matched on the exception's root module against each spec's name, extra and
-    aliases — `openai.AuthenticationError` is `openai`'s. Returns `None` rather
-    than guessing when nothing matches, the same rule
-    `providers.missing_key_diagnosis` follows for an unknown prefix: a
-    confidently wrong "set MYSTERY_API_KEY" is worse than saying nothing.
+    aliases — `openai.AuthenticationError` is `openai`'s. Empty rather than a
+    guess when nothing matches, the same rule `providers.missing_key_diagnosis`
+    follows for an unknown prefix: a confidently wrong "set MYSTERY_API_KEY" is
+    worse than saying nothing.
+
+    **Plural, because one SDK can belong to two providers.** `openai` and
+    `azure_openai` both ship in `langchain-openai` and both raise
+    `openai.AuthenticationError`, so the module — the only thing an exception
+    carries — cannot separate them. This was found by running a workflow rather
+    than by reading the code: a service configured for Azure and given a bad
+    key was told to *"check OPENAI_API_KEY"*, on a machine where that variable
+    was not set at all (providers-and-credentials/18).
+
+    The **environment** is what separates them, and narrowing by it is this
+    project's tolerant/strict rule at the size of two lines: read what the SDK
+    gives, then resolve it against what this machine actually holds. Where two
+    still claim it, both are returned and both are named — guessing between two
+    live credentials is worse than naming two.
     """
     root = (type(exc).__module__ or "").split(".")[0].lower()
     if not root:
-        return None
-    for spec in provider_catalogue().list():
-        if root in {spec.name.lower(), spec.extra.lower(), *(a.lower() for a in spec.aliases)}:
-            return spec
-    return None
+        return ()
+    matches = [
+        spec
+        for spec in provider_catalogue().list()
+        if root in {spec.name.lower(), spec.extra.lower(), *(a.lower() for a in spec.aliases)}
+    ]
+    if len(matches) < 2:
+        return tuple(matches)
+    # `has_credential`, not `is_configured`: a provider whose key was *read and
+    # rejected* is by definition holding one, and may well be the one whose
+    # api-version is also missing.
+    holding = [spec for spec in matches if ProviderEnvironment(spec).has_credential()]
+    return tuple(holding) or tuple(matches)
 
 
 def _was_refused(exc: BaseException) -> bool:
@@ -231,12 +287,18 @@ def credential_error_from(exc: BaseException) -> ProviderRefusedCredential | Non
     """
     if not _was_refused(exc):
         return None
-    spec = _provider_of(exc)
-    if spec is None or not spec.env_vars:
+    specs = [spec for spec in _providers_of(exc) if spec.env_vars]
+    if not specs:
         return None
+    # One name and one variable list in the ordinary case, word for word as
+    # before. Two only where two providers genuinely share an SDK *and* both
+    # hold a credential, which is the case that would otherwise be answered
+    # with a confident guess.
+    who = " or ".join(f'"{spec.name}"' for spec in specs)
+    variables = " or ".join(dict.fromkeys(name for spec in specs for name in spec.env_vars))
     return ProviderRefusedCredential(
-        f'Provider "{spec.name}" refused the credential — check '
-        f"{' or '.join(spec.env_vars)} in .env. The value was read and rejected, "
+        f"Provider {who} refused the credential — check "
+        f"{variables} in .env. The value was read and rejected, "
         "so this is a wrong or expired credential rather than a missing one."
     )
 

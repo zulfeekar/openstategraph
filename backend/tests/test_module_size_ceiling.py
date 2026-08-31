@@ -331,6 +331,17 @@ against this parser's own subcommand set before it will read it as a path.
 That has to be here — it is a fact about the parser — and it is the only
 place this CLI reads an argument tolerantly, which is why it is written to be
 strict about what it then trusts.
+
+**1238 -> 1243** (`providers-and-credentials/18`). Five lines, and four of
+them are one branch: `openstategraph providers` had three row states and now
+has four, because a provider whose credential is present and whose client
+still cannot be built is not "needs a key" — saying so sends a reader to
+rotate a credential that works. The fourth line prints which variable is
+unset, named rather than counted, since a row saying *needs a setting* and not
+which one is the shape of the 500 that ticket came from. The fifth widens two
+column padding literals so a fourth provider does not shunt the model column
+out of line. No knowledge moved here: `ProviderGap` composes the sentence and
+this reads it.
 """
 
 WORKFLOW_COMPILER = """
@@ -700,7 +711,7 @@ and the reader read.
 #: worried about.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1238, CLI),
+    "cli.py": Recorded(1243, CLI),
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

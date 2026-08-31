@@ -2277,12 +2277,25 @@ def cmd_providers(args: argparse.Namespace) -> int:
             state = "configured"
         elif gap.missing_package:
             state = "needs its extra"
-        else:
+        elif gap.missing_key:
             state = "needs a key"
+        else:
+            # Four states now, and the fourth is the one a reader could not
+            # otherwise tell from the third: the key is present, correct, and
+            # not what is missing. Saying "needs a key" here sends somebody to
+            # rotate a credential that works (providers-and-credentials/18).
+            state = "needs a setting"
         elected = "   (default)" if spec is default.spec else ""
-        print(f"{spec.name:<12} {state:<12} {here.model_string()}{elected}")
-        print(f"{'':<12} {_credential_line(here)}")
-        print(f"{'':<12} extra 'openstategraph[{spec.extra}]'")
+        # 13 and 15: the widest name and the widest state, so a fourth
+        # provider does not silently shunt the model column out of line.
+        print(f"{spec.name:<13}{state:<16}{here.model_string()}{elected}")
+        print(f"{'':<13}{_credential_line(here)}")
+        # Named, never merely counted. A row saying "needs a setting" and not
+        # which one is the shape of the 500 this ticket came from: a reader who
+        # cannot see the variable goes and checks the key instead.
+        if gap is not None and gap.missing_arguments:
+            print(f"{'':<13}unset: {gap.argument_clause}")
+        print(f"{'':<13}extra 'openstategraph[{spec.extra}]'")
     for warning in catalogue.warnings:
         print(f"warning: {warning}", file=sys.stderr)
 
@@ -2291,8 +2304,9 @@ def cmd_providers(args: argparse.Namespace) -> int:
         print(
             textwrap.fill(
                 'No provider was called. "configured" means a credential is present '
-                "in this environment — not that the endpoint is reachable, and not "
-                "that a request will be answered. Run `openstategraph providers "
+                "in this environment, and every setting the provider's own client "
+                "cannot be built without — not that the endpoint is reachable, and "
+                "not that a request will be answered. Run `openstategraph providers "
                 "--check` to make one real (billable) request per configured "
                 "provider and find out.",
                 width=88,

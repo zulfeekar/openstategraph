@@ -74,11 +74,24 @@ class TestABareProviderPrefixResolvesToItsDefault:
         assert resolve_model("ollama") == "ollama:gpt-oss:120b-cloud"
 
     def test_an_alias_is_a_prefix_too(self) -> None:
-        """`claude:` and `azure_openai:` are prefixes, not providers."""
+        """`claude:` is a prefix, not a provider."""
         from openstategraph.api.model_resolution import resolve_model
 
         assert resolve_model("claude:") == "anthropic:claude-haiku-4-5"
-        assert resolve_model("azure_openai") == "openai:gpt-4.1-mini"
+
+    def test_azure_stopped_being_a_nickname_for_openai(self) -> None:
+        """It was an alias here, and that was the defect
+        (providers-and-credentials/18).
+
+        `azure_openai:` resolved to a spec whose credential is
+        `OPENAI_API_KEY` and whose class is `ChatOpenAI`, so a service
+        configured for Azure was answered by the wrong client reading the
+        wrong variable. The string a caller types is unchanged; what it
+        resolves to is corrected.
+        """
+        from openstategraph.api.model_resolution import resolve_model
+
+        assert resolve_model("azure_openai") == "azure_openai:gpt-4.1-mini"
 
     def test_expansion_goes_through_the_providers_own_model_override(
         self, monkeypatch: pytest.MonkeyPatch

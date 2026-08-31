@@ -134,7 +134,7 @@ class TestTheHeader:
 
     def test_it_counts_the_configured_ones_honestly(self, tmp_path: Path) -> None:
         result = _cli(tmp_path, ANTHROPIC_API_KEY="sk-a", OPENAI_API_KEY="sk-b")
-        assert "2 of 3" in result.stdout, result.stdout
+        assert "2 of 4" in result.stdout, result.stdout
 
 
 class TestWhatSuppliedTheCredential:

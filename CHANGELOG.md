@@ -2,6 +2,52 @@
 
 ## Unreleased
 
+### Added
+- **Azure OpenAI is a provider, not a nickname** (`providers-and-credentials`
+  18). A service configured for Azure — `AZURE_OPENAI_API_KEY`,
+  `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`,
+  `AZURE_OPENAI_API_VERSION`, all set under their real names — answered every
+  run with a 500 carrying `pydantic_core.ValidationError` from
+  `AzureChatOpenAI`. This library could read none of those variables, and the
+  only fixes available to a consumer were to edit it or to duplicate their
+  values under `OPENAI_API_VERSION`. `azure_openai` now has its own registered
+  spec, its own credential, and its own defaults; nothing about an existing
+  install moves.
+- **`ProviderSpec.constructor_args`** — the third vocabulary a spec can speak,
+  beside its credential (`env_vars`) and its address (`endpoint_env`): a
+  keyword the vendor's client cannot be built without, and the environment
+  variables that fill it, most significant first. Defaults to `()`, so every
+  provider and every plugin written against the older signature is unchanged.
+  `ProviderArgument` is exported with it. A `ProviderArgument` refuses a
+  key-shaped variable at construction: a credential belongs in `env_vars`,
+  where it is masked and where the request allow-list governs it.
+- **`errors.MissingProviderSetting`** — the fifth provider shape, and
+  deliberately not a `CredentialError`. The key is present and correct; a
+  setting is not. `openstategraph providers` grew the matching fourth row
+  state, *needs a setting*, and names the variable under it.
+
+### Changed
+- **`ProviderEnvironment.is_configured()` is now both halves** — a credential
+  *and* every required constructor argument. Unchanged for every provider that
+  declares no arguments, which is every provider that existed before this
+  release. `has_credential()` is the narrow question, split out and public.
+  Without this, `/api/providers` and the CLI reported a provider ready that
+  could not be built at all.
+- **A refused credential names the provider that holds one.**
+  `credential_error_from` attributed a 401 by the SDK module it came from, and
+  `openai` and `azure_openai` share `langchain-openai` — so a workflow
+  configured for Azure and given a bad key was told to *"check
+  `OPENAI_API_KEY`"*, on a machine where that variable was not set at all. The
+  candidates are now narrowed by which provider actually holds a credential,
+  and where two genuinely do, both are named. The one-SDK-one-provider wording
+  is unchanged.
+- **`azure_openai` is no longer an alias of `openai`.** The string a caller
+  types is unchanged and still resolves — `for_prefix` finds a registered name
+  before it looks at anybody's aliases — but it now reaches a spec whose
+  credential is `AZURE_OPENAI_API_KEY` and whose client is `AzureChatOpenAI`,
+  rather than one reading a different vendor's key. Anything that relied on
+  `azure_openai:` meaning plain OpenAI should name `openai:`.
+
 ## 0.3.0rc9 — 2026-08-31
 
 Everything under *Unreleased* above this line at the time of the cut. The

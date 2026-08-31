@@ -69,6 +69,7 @@ openstategraph.errors.GENERIC_FAILURE_MESSAGE = str
 openstategraph.errors.InvalidPackageName = class(WorkflowPackageError,ValueError)(...)
 openstategraph.errors.MissingProviderKey = class(CredentialError)(...)
 openstategraph.errors.MissingProviderPackage = class(OpenStateGraphError,ImportError)(...)
+openstategraph.errors.MissingProviderSetting = class(OpenStateGraphError,RuntimeError)(...)
 openstategraph.errors.NoProviderInstalled = class(OpenStateGraphError,ImportError)(...)
 openstategraph.errors.OpenStateGraphError = class(Exception)(...)
 openstategraph.errors.PackageNotFound = class(WorkflowPackageError,FileNotFoundError)(...)
@@ -98,11 +99,12 @@ openstategraph.providers.ENV_EXAMPLE_BEGIN = str
 openstategraph.providers.ENV_EXAMPLE_END = str
 openstategraph.providers.OPTIONAL_ENV_VARS = dict
 openstategraph.providers.PROVIDERS_GROUP = str
+openstategraph.providers.ProviderArgument = dataclass(object) fields(keyword,env_vars,required)
 openstategraph.providers.ProviderCatalogue = dataclass(object) fields(_specs,warnings)
 openstategraph.providers.ProviderDefault = dataclass(object) fields(spec,model,reason,configured)
 openstategraph.providers.ProviderEnvironment = dataclass(object) fields(spec,env)
-openstategraph.providers.ProviderGap = dataclass(object) fields(spec,missing_package,missing_key)
-openstategraph.providers.ProviderSpec = dataclass(object) fields(name,default_model,extra,env_vars,aliases,endpoint_env,default_endpoint,label,integration_module)
+openstategraph.providers.ProviderGap = dataclass(object) fields(spec,missing_package,missing_key,missing_arguments)
+openstategraph.providers.ProviderSpec = dataclass(object) fields(name,default_model,extra,env_vars,aliases,endpoint_env,default_endpoint,label,integration_module,constructor_args)
 openstategraph.providers.builtin_specs = def() -> 'tuple[ProviderSpec, ...]'
 openstategraph.providers.credential_env_vars = def(catalogue: "'ProviderCatalogue | None'" = None) -> 'frozenset[str]'
 openstategraph.providers.env_example_section = def(catalogue: "'ProviderCatalogue | None'" = None) -> 'str'

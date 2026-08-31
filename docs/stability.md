@@ -52,7 +52,7 @@ from openstategraph.errors import (
     OpenStateGraphError, WorkflowPackageError, PackageNotFound,
     InvalidPackageName, DocumentError, SchemaVersionError,
     ThreadNotResumable, CredentialError, MissingProviderKey, MissingProviderPackage,
-    NoProviderInstalled, ProviderRefusedCredential, ProviderUnreachable, UnknownProvider,
+    MissingProviderSetting, NoProviderInstalled, ProviderRefusedCredential, ProviderUnreachable, UnknownProvider,
     StepBudgetExhausted, RunContextError, RunProducedNothing,
     GENERIC_FAILURE_MESSAGE,
 )
@@ -69,7 +69,7 @@ from openstategraph.extensions import (
     plugins_enabled, reset_entry_point_cache,
 )
 from openstategraph.providers import (
-    ProviderSpec, ProviderEnvironment,
+    ProviderSpec, ProviderArgument, ProviderEnvironment,
     ProviderCatalogue, ProviderDefault, ProviderGap,
     provider_catalogue, load_provider_catalogue, reset_provider_catalogue,
     builtin_specs, provider_readiness, missing_key_diagnosis,
