@@ -139,18 +139,32 @@ first-hour confusion.
 workflow that calls no model runs with none of this set — a credential is
 checked at the moment a model is *used*, not when one is built
 (`UnconfiguredProvider` in `backend/openstategraph/chat_model.py`). Calling a
-model needs one of the three provider credentials. Copy `.env.example` to
+model needs one provider's credentials. Copy `.env.example` to
 `.env` to set any of:
 
 | Variable | Effect |
 | --- | --- |
 | `ANTHROPIC_API_KEY` | backend model resolution prefers Anthropic when set |
 | `OPENAI_API_KEY` | checked next, if Anthropic's key is absent |
-| `OLLAMA_API_KEY` | configures Ollama **cloud**, the last of the three |
+| `OLLAMA_API_KEY` | configures Ollama **cloud** |
 | `OLLAMA_HOST` | *instead* of the key: a daemon you run, local or self-hosted, which needs no key of ours because it owns its own auth. Also the endpoint, ahead of `OLLAMA_ENDPOINT` |
 | `OLLAMA_ENDPOINT` | where the cloud is; defaults to `https://ollama.com`, rarely set |
 | `OPENSTATEGRAPH_OLLAMA_MODEL` | overrides the Ollama cloud model id (default `ollama:gpt-oss:120b-cloud`) |
+| `AZURE_OPENAI_API_KEY` | configures **Azure OpenAI** — a separate provider, not a spelling of OpenAI |
+| `AZURE_OPENAI_ENDPOINT` | required with it: your resource's URL |
+| `AZURE_OPENAI_API_VERSION` | required with it; `OPENAI_API_VERSION` is read as a fallback |
+| `AZURE_OPENAI_DEPLOYMENT` | optional: the deployment to address, if your endpoint needs one named |
 | `OPENSTATEGRAPH_LOG_LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` (default `INFO`) |
+
+**Azure OpenAI needs four variables, and three of them are settings rather
+than credentials.** `AzureChatOpenAI` cannot be constructed without an
+endpoint and an api-version, so this provider reports itself *configured* only
+when they are present, and `openstategraph providers` says `needs a setting`
+and names the missing variable when they are not. The three settings are
+**not** forwardable from a run request — the endpoint is an address, and a
+request that could name the address could redirect the server's own key to it
+— so Azure is configured on the server, not from the editor's credential
+dialog.
 
 The two Ollama variables are alternatives, not a pair —
 `ProviderEnvironment.is_configured`

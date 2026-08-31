@@ -140,14 +140,20 @@ class TestTheCatalogueKnowsWhatIsInstalled:
     def test_a_declared_module_that_is_absent_reads_as_not_installed(self) -> None:
         assert ProviderEnvironment(GHOST).is_installed() is False
 
-    def test_the_built_in_three_declare_their_integration_module(self) -> None:
-        """Without this, nothing can be pre-checked and the traceback returns."""
+    def test_every_built_in_declares_its_integration_module(self) -> None:
+        """Without this, nothing can be pre-checked and the traceback returns.
+
+        Azure ships inside `langchain-openai` — `AzureChatOpenAI` is a sibling
+        of `ChatOpenAI` in one package — so two providers naming one module is
+        correct here rather than a copy-paste (providers-and-credentials/18).
+        """
         from openstategraph.providers import builtin_specs
 
         assert {spec.name: spec.integration_module for spec in builtin_specs()} == {
             "anthropic": "langchain_anthropic",
             "openai": "langchain_openai",
             "ollama": "langchain_ollama",
+            "azure_openai": "langchain_openai",
         }
 
     def test_a_provider_that_declares_no_module_is_never_pre_checked(self) -> None:

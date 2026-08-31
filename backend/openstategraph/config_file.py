@@ -801,6 +801,16 @@ def config_provider_specs(config: OpenStateGraphConfig | None = None) -> list[An
                 # we could name — and `""` is the supported answer for that,
                 # meaning "let `init_chat_model` report the package it missed".
                 integration_module=base.integration_module if base else "",
+                # Inherited and not declarable, on the same two arguments as
+                # `integration_module` above. A file that adjusts Azure's
+                # default model must not thereby take away the endpoint and
+                # api-version its client cannot be built without — which is
+                # exactly the `endpoint_env` accident, one field along. And a
+                # provider the file invents has no arguments we could know,
+                # while `()` is the honest answer for that: no keyword is
+                # passed and the vendor's own defaults stand
+                # (providers-and-credentials/18).
+                constructor_args=base.constructor_args if base else (),
             )
         )
     return specs

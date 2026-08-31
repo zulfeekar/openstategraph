@@ -75,6 +75,14 @@ def test_accepted_keys_cover_the_documented_providers() -> None:
     Ollama contributes three: two that make it configured — `OLLAMA_API_KEY`
     for the cloud, `OLLAMA_HOST` for a daemon you run — and `OLLAMA_ENDPOINT`,
     which only says where the cloud is and has a working default.
+
+    Azure contributes **one**, and the three it does not are the point
+    (providers-and-credentials/18). `AZURE_OPENAI_ENDPOINT` is an address, and
+    a request that could name the address could redirect the server's own key
+    to it — the rule `_is_secret` already states for `endpoint_env`. The other
+    two are deployment-level settings somebody sets once beside the key, not
+    something a caller carries per run. A constructor argument is therefore
+    server configuration, and does not join this list by declaring itself.
     """
     assert ACCEPTED_CREDENTIAL_KEYS == {
         "ANTHROPIC_API_KEY",
@@ -82,4 +90,5 @@ def test_accepted_keys_cover_the_documented_providers() -> None:
         "OLLAMA_API_KEY",
         "OLLAMA_HOST",
         "OLLAMA_ENDPOINT",
+        "AZURE_OPENAI_API_KEY",
     }

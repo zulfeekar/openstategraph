@@ -299,19 +299,33 @@ from templates that ship inside the wheel.
 ### Environment variables
 
 None are required to *start* the backend, and a workflow that calls no model
-runs without any of them. Calling a model needs one of the three provider
-credentials below. Copy [`.env.example`](.env.example) to `.env` to set any of
+runs without any of them. Calling a model needs one provider's credentials from the table
+below. Copy [`.env.example`](.env.example) to `.env` to set any of
 these for the backend process:
 
 | Variable | Effect |
 | --- | --- |
 | `ANTHROPIC_API_KEY` | backend model resolution prefers Anthropic when set |
 | `OPENAI_API_KEY` | checked next, if Anthropic's key is absent |
-| `OLLAMA_API_KEY` | configures Ollama **cloud**, the last of the three |
+| `OLLAMA_API_KEY` | configures Ollama **cloud** |
 | `OLLAMA_HOST` | *instead* of the key: a daemon you run, which owns its own auth. Also the endpoint, ahead of `OLLAMA_ENDPOINT` |
 | `OLLAMA_ENDPOINT` | where the cloud is; defaults to `https://ollama.com`, rarely set |
 | `OPENSTATEGRAPH_OLLAMA_MODEL` | overrides the Ollama cloud model id (default `ollama:gpt-oss:120b-cloud`) |
+| `AZURE_OPENAI_API_KEY` | configures **Azure OpenAI** — a separate provider, not a spelling of OpenAI |
+| `AZURE_OPENAI_ENDPOINT` | required with it: your resource's URL |
+| `AZURE_OPENAI_API_VERSION` | required with it; `OPENAI_API_VERSION` is read as a fallback |
+| `AZURE_OPENAI_DEPLOYMENT` | optional: the deployment to address, if your endpoint needs one named |
 | `OPENSTATEGRAPH_LOG_LEVEL` | backend log verbosity — `DEBUG`/`INFO`/`WARNING`/`ERROR` (default `INFO`) |
+
+**Azure OpenAI needs four variables, and three of them are settings rather
+than credentials.** `AzureChatOpenAI` cannot be constructed without an
+endpoint and an api-version, so this provider reports itself *configured* only
+when they are present, and `openstategraph providers` says `needs a setting`
+and names the missing variable when they are not. The three settings are
+**not** forwardable from a run request — the endpoint is an address, and a
+request that could name the address could redirect the server's own key to it
+— so Azure is configured on the server, not from the editor's credential
+dialog.
 
 `OLLAMA_API_KEY` and `OLLAMA_HOST` are alternatives, not a pair: `is_configured`
 takes **any** of a provider's `env_vars`. With both set the host wins for

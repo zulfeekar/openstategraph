@@ -470,14 +470,22 @@ class TestTheEndpointIsCloudUnlessAHostIsNamed:
 
 
 class TestAnyMixOfProvidersWorks:
-    """Three vendors, independently configured, in any combination.
+    """Every vendor, independently configured, in any combination.
 
     The catalogue has no notion of "the configured provider" — each spec
-    answers for itself, so a developer may hold keys for one, two or all
-    three, and adding Ollama's credential requirement changes none of that.
+    answers for itself, so a developer may hold keys for one, some or all of
+    them, and adding Ollama's credential requirement changed none of that. Nor
+    did adding Azure, whose credential is its own and whose readiness turns on
+    three settings besides (providers-and-credentials/18).
     """
 
-    ALL = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_API_KEY", "OLLAMA_HOST")
+    ALL = (
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "OLLAMA_API_KEY",
+        "OLLAMA_HOST",
+        "AZURE_OPENAI_API_KEY",
+    )
 
     @pytest.fixture(autouse=True)
     def _clean(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -494,7 +502,12 @@ class TestAnyMixOfProvidersWorks:
             for spec in catalogue.list()
             if spec.requires_key
         }
-        assert configured == {"anthropic": False, "openai": True, "ollama": False}
+        assert configured == {
+            "anthropic": False,
+            "openai": True,
+            "ollama": False,
+            "azure_openai": False,
+        }
 
     def test_registration_order_decides_the_default_among_those_configured(
         self, monkeypatch: pytest.MonkeyPatch

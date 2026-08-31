@@ -189,6 +189,23 @@ class MissingProviderKey(CredentialError):
     """
 
 
+class MissingProviderSetting(OpenStateGraphError, RuntimeError):
+    """A provider's credential is present and its constructor still cannot run.
+
+    The **fifth** provider shape, and deliberately **not** a `CredentialError`
+    — which is the whole reason it is a class of its own rather than a
+    `MissingProviderKey` with different words. Both of that family's actions —
+    set the key, replace the key — are wrong advice here: the key is set, is
+    correct, and is not what is missing. Azure OpenAI needs an endpoint and an
+    api-version as well, and a service that had all four under their real
+    names got `pydantic_core.ValidationError` out of `AzureChatOpenAI` and a
+    500 carrying no sentence at all (providers-and-credentials/18).
+
+    The message names the variable and is built by `providers.ProviderGap`,
+    beside the other four, so the five shapes stay in one voice.
+    """
+
+
 class ProviderUnreachable(OpenStateGraphError):
     """A provider's address is configured, and nothing is listening at it.
 
@@ -423,6 +440,7 @@ __all__ = [
     "DocumentError",
     "InvalidPackageName",
     "MissingProviderKey",
+    "MissingProviderSetting",
     "MissingProviderPackage",
     "NoProviderInstalled",
     "OpenStateGraphError",

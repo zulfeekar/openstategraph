@@ -23,7 +23,7 @@ All three now derive from the one catalogue below. Nothing downstream may
 re-enumerate providers; if a new call site needs the list, it asks here.
 
 **Built-in and third-party are indistinguishable, and that is load-bearing.**
-The three bundled providers are plain `ProviderSpec` values pushed through the
+The bundled providers are plain `ProviderSpec` values pushed through the
 very same `ProviderCatalogue.register` a plugin's are. There is no privileged
 field, no `builtin=True`, and no branch anywhere that asks where a spec came
 from — so a capability a built-in has is one a plugin can have, by
@@ -116,6 +116,75 @@ HINT_PREFIX = 2
 
 
 @dataclass(frozen=True)
+class ProviderArgument:
+    """One constructor keyword a vendor needs, and where its value comes from.
+
+    **The third vocabulary, and the one that was missing.** A spec could say
+    what a provider's *credential* is (`env_vars`) and what its *address* is
+    (`endpoint_env`), and had no way at all to say that a vendor's constructor
+    takes a required keyword — so a provider needing one could not be
+    expressed, and adopting it meant editing this library or duplicating
+    variables under names it happens to read (providers-and-credentials/18).
+
+    Azure OpenAI is the first bundled vendor that needs this, and it needs
+    three. The shape was checked against two others before it was settled,
+    because a field shaped around one vendor is a field shaped around nothing:
+    `bedrock`/`bedrock_converse` want a region and `google_vertexai` wants a
+    project and a location, and all three are the same sentence — *a keyword,
+    filled from an environment variable somebody sets*.
+
+    **What is deliberately absent is a class name.** The other half of the
+    obvious widening — *which class in the integration module* — has no
+    reader: `init_chat_model` carries its own `provider -> (module, class)`
+    table (`azure_openai -> langchain_openai.AzureChatOpenAI`,
+    `bedrock -> langchain_aws.ChatBedrock`), and this project is a compiler
+    onto that function rather than a second one. A field nothing reads is a
+    claim nothing can check.
+
+    **Never a secret.** Every value here is passed as a keyword and could be
+    read back off the constructed object; a credential belongs in `env_vars`,
+    where the masking and the request allow-list already live, and is left for
+    the vendor's own SDK to read out of the environment. Refused in
+    `__post_init__` rather than merely asked for, so the field cannot become
+    the way round the config loader's own refusal of key-shaped values.
+    """
+
+    #: The keyword `init_chat_model` forwards to the vendor's constructor.
+    keyword: str
+
+    #: Variables that supply it, **most significant first** — the same idiom
+    #: as `env_vars` and `endpoint_env`, so precedence is tuple order rather
+    #: than a rule written down somewhere else. Azure's api-version lists
+    #: `AZURE_OPENAI_API_VERSION` before the vendor's own `OPENAI_API_VERSION`:
+    #: the first is the name a person setting Azure up reaches for, and the
+    #: second is the one they should never have had to invent.
+    env_vars: tuple[str, ...]
+
+    #: Whether the provider can be called without it. A required argument with
+    #: no source leaves the provider unconfigured and is named in the gap; an
+    #: optional one is simply omitted and the vendor's own default stands.
+    required: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.keyword:
+            raise ValueError("a provider argument declares no keyword")
+        if not self.env_vars:
+            raise ValueError(f"argument {self.keyword!r} names no environment variable")
+        secret = [name for name in self.env_vars if _is_secret(name)]
+        if secret:
+            raise ValueError(
+                f"argument {self.keyword!r} would carry a secret through {secret[0]} — "
+                "a credential belongs in env_vars, where it is masked and never "
+                "forwarded from a request"
+            )
+
+    @property
+    def variables(self) -> str:
+        """Every variable that would supply it, as one readable phrase."""
+        return " or ".join(self.env_vars)
+
+
+@dataclass(frozen=True)
 class ProviderSpec:
     """One vendor, as much as this framework needs to know about it.
 
@@ -176,7 +245,7 @@ class ProviderSpec:
 
     #: The module `init_chat_model` imports to reach this vendor —
     #: `langchain_ollama` for Ollama. Declared rather than derived from `extra`,
-    #: because deriving it is right for the bundled three and wrong for anyone
+    #: because deriving it is right for the bundled set and wrong for anyone
     #: else: `langchain-nvidia-ai-endpoints` is not `langchain_nvidia`.
     #:
     #: Empty means **we cannot pre-check this provider**, and that is a
@@ -186,6 +255,18 @@ class ProviderSpec:
     #: `init_chat_model`'s own ImportError, which names the package it actually
     #: failed on (workflow-gallery ticket 38).
     integration_module: str = ""
+
+    #: Keywords this vendor's constructor needs that no `provider:model` string
+    #: can carry — Azure's endpoint, deployment and api-version. **Empty by
+    #: default, and empty for every provider that existed before this field**,
+    #: so `resolveMiddleware`-style composition is unchanged for anthropic,
+    #: openai, ollama and every plugin written against the older signature.
+    #:
+    #: The field is what stops "adopting this needs a fork" being the answer:
+    #: the arguments are declared beside the credential and the endpoint, in
+    #: one record, and `chat_model.model_kwargs` is the single place they
+    #: become an `init_chat_model` call.
+    constructor_args: tuple[ProviderArgument, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name or ":" in self.name or "/" in self.name:
@@ -290,23 +371,50 @@ class ProviderGap:
     missing_package: bool
     missing_key: bool
 
+    #: Required constructor arguments with no variable to fill them. A
+    #: **third** wall, kept apart from `missing_key` rather than folded into
+    #: it, because the two send a reader to different places: the key is
+    #: present and correct in the case this field exists for, and a message
+    #: saying "no credential" would send them to check the one thing that is
+    #: already right (providers-and-credentials/18).
+    missing_arguments: tuple[ProviderArgument, ...] = ()
+
+    @property
+    def argument_clause(self) -> str:
+        """Every unfilled argument, named by variable, as one phrase."""
+        return " and ".join(argument.variables for argument in self.missing_arguments)
+
     @property
     def message(self) -> str:
         """One line, naming every fix — never the first one discovered.
 
         The combined form leads with the package, because that is the wall
         that survives setting a variable, and a reader who fixes in that order
-        never sees this message twice.
+        never sees this message twice. The argument clause joins on the same
+        rule: three walls, one sentence, one trip.
         """
         if self.missing_package and self.missing_key:
             return (
                 f'Provider "{self.spec.name}" is not ready — its integration is not '
                 f"installed ({self.spec.install_hint}) and it has no credential "
                 f"(set {self.spec.credential_variables} in .env)."
+                + (
+                    f" It also needs {self.argument_clause} in .env."
+                    if self.missing_arguments
+                    else ""
+                )
             )
         if self.missing_package:
             return self.spec.missing_package_message()
-        return self.spec.missing_key_message()
+        if self.missing_key:
+            return self.spec.missing_key_message()
+        return (
+            f'Provider "{self.spec.name}" has a credential but is not configured — '
+            f"set {self.argument_clause} in .env "
+            "(see `openstategraph env-example`). This is a missing setting rather "
+            "than a missing or wrong credential: without it the provider's own "
+            "client refuses to be built at all."
+        )
 
 
 @dataclass(frozen=True)
@@ -339,11 +447,72 @@ class ProviderEnvironment:
     def _source(self) -> Mapping[str, str]:
         return os.environ if self.env is None else self.env
 
-    def is_configured(self) -> bool:
-        """Whether this provider could be called right now."""
+    def has_credential(self) -> bool:
+        """Whether a variable this provider calls a key holds a value.
+
+        Split out of `is_configured`, which used to be exactly this and is now
+        the conjunction below. The two questions were the same while every
+        provider was reachable on a credential alone; Azure is reachable on a
+        credential **and** three settings, so a single method answering both
+        had to lie about one of them (providers-and-credentials/18).
+
+        This is the half `credential_source`, `/api/providers`'
+        `configured_by` and `missing_key_message` are about — *is there a key*
+        — and it must stay narrow, or a machine with a perfectly good key
+        would be told to go and find one.
+        """
         if not self.spec.requires_key:
             return True
         return any(str(self._source.get(name) or "").strip() for name in self.spec.env_vars)
+
+    def argument_values(self) -> dict[str, str]:
+        """The `init_chat_model` keywords this environment can supply.
+
+        Precedence is tuple order, read rather than restated — the same rule
+        `_endpoint_source` follows. An argument nothing supplies is **absent
+        from the dict** rather than present and empty: passing `api_version=""`
+        would defeat the vendor's own default and turn an optional argument
+        into a broken one.
+        """
+        resolved: dict[str, str] = {}
+        for argument in self.spec.constructor_args:
+            for name in argument.env_vars:
+                value = str(self._source.get(name) or "").strip()
+                if value:
+                    resolved[argument.keyword] = value
+                    break
+        return resolved
+
+    def _missing_arguments(self) -> tuple[ProviderArgument, ...]:
+        """Required constructor arguments no variable here fills.
+
+        Private, and that is the public-surface ceiling doing its job rather
+        than a name chosen to duck it: `readiness()` is how anything outside
+        asks, and the answer it hands back carries the very same tuple on
+        `ProviderGap.missing_arguments`. A second public spelling of one fact
+        would have taken this class to eleven members for nothing.
+        """
+        supplied = self.argument_values()
+        return tuple(
+            argument
+            for argument in self.spec.constructor_args
+            if argument.required and argument.keyword not in supplied
+        )
+
+    def is_configured(self) -> bool:
+        """Whether this provider could be called right now.
+
+        **Both halves, because both are walls.** A credential with an unfilled
+        required argument is the shape that produced a 500 with a pydantic
+        traceback: the key was set, every readiness surface said so, and the
+        vendor's constructor refused before a request was ever sent. Reporting
+        that as configured is `providers-and-credentials/12`'s defect one field
+        along — a surface claiming more than it measured.
+
+        Unchanged for every provider that declares no arguments, which is
+        every provider that existed before this line.
+        """
+        return self.has_credential() and not self._missing_arguments()
 
     def is_installed(self) -> bool:
         """Whether this provider's integration package is importable.
@@ -507,9 +676,13 @@ class ProviderEnvironment:
         gap = ProviderGap(
             spec=self.spec,
             missing_package=not self.is_installed(),
-            missing_key=self.spec.requires_key and not self.is_configured(),
+            # `has_credential`, not `is_configured` — the latter is now the
+            # conjunction, so asking it here would report a missing key on a
+            # machine whose key is present and whose api-version is not.
+            missing_key=self.spec.requires_key and not self.has_credential(),
+            missing_arguments=self._missing_arguments(),
         )
-        return gap if gap.missing_package or gap.missing_key else None
+        return gap if gap.missing_package or gap.missing_key or gap.missing_arguments else None
 
 
 @dataclass(frozen=True)
@@ -658,7 +831,7 @@ class ProviderCatalogue:
         return ProviderDefault(
             spec=elected,
             model=here[elected.name].model_string(),
-            reason=_default_reason(candidates, ready, elected),
+            reason=_default_reason(candidates, ready, elected, here[elected.name]),
             configured=any(spec is elected for spec in ready),
         )
 
@@ -667,6 +840,7 @@ def _default_reason(
     candidates: list[ProviderSpec],
     ready: list[ProviderSpec],
     elected: ProviderSpec,
+    here: "ProviderEnvironment",
 ) -> str:
     """Why that provider, in one clause a person can act on.
 
@@ -687,7 +861,17 @@ def _default_reason(
     installed = len(candidates)
     configured = any(spec is elected for spec in ready)
     if not configured:
-        variables = elected.credential_variables or "its credential"
+        # **What is actually missing, not what is usually missing.** A provider
+        # can be unconfigured with its key set and correct — Azure needs an
+        # endpoint and an api-version too — and telling that reader to set the
+        # key sends them to check the one thing already right. The gap knows
+        # which wall this is; this line reads it rather than assuming
+        # (providers-and-credentials/18).
+        gap = here.readiness()
+        if gap is not None and not gap.missing_key and gap.missing_arguments:
+            variables = gap.argument_clause
+        else:
+            variables = elected.credential_variables or "its credential"
         if installed == 1:
             return f"the only provider integration installed; set {variables} to use it"
         return (
@@ -710,11 +894,20 @@ def _default_reason(
 
 
 def builtin_specs() -> tuple[ProviderSpec, ...]:
-    """The bundled three — plain specs, no privileged type or field.
+    """The bundled set — plain specs, no privileged type or field.
 
     Registration order is the historical default order and is preserved
     deliberately: a developer with both an Anthropic and an OpenAI key keeps
     getting Anthropic, exactly as before this module existed.
+
+    **Azure is appended rather than filed beside OpenAI**, for that same
+    reason and for no other. Order is the election tiebreak, so inserting a
+    fourth vendor between two existing ones changes which provider a machine
+    configured for both of them elects — a behaviour change nobody asked for,
+    smuggled in with one that was. Last costs nothing: a machine configured
+    only for Azure elects Azure whatever the position, because a configured
+    key-requiring provider beats an unconfigured one before order is consulted
+    at all.
     """
     return (
         ProviderSpec(
@@ -733,7 +926,17 @@ def builtin_specs() -> tuple[ProviderSpec, ...]:
             extra="openai",
             integration_module="langchain_openai",
             env_vars=("OPENAI_API_KEY",),
-            aliases=("azure_openai",),
+            # `aliases=("azure_openai",)` used to sit here, and removing it is
+            # the fix rather than a breaking change. An alias means *another
+            # spelling of this provider*, and it was never that: it resolved
+            # `azure_openai:` to a spec whose credential is `OPENAI_API_KEY`
+            # and whose constructor is `ChatOpenAI`, so a service configured
+            # for Azure was answered by the wrong class reading the wrong
+            # variable. The **word survives** — `azure_openai` is a registered
+            # provider below, `for_prefix` finds it by name before it looks at
+            # anybody's aliases, and every string anyone typed keeps working.
+            # What changed is that it now means what it says
+            # (providers-and-credentials/18).
         ),
         ProviderSpec(
             name="ollama",
@@ -767,6 +970,57 @@ def builtin_specs() -> tuple[ProviderSpec, ...]:
             # violated by omission rather than by decision.
             endpoint_env=("OLLAMA_HOST", "OLLAMA_ENDPOINT"),
             default_endpoint="https://ollama.com",
+        ),
+        ProviderSpec(
+            name="azure_openai",
+            label="Azure OpenAI",
+            # OpenAI models, deployed into somebody's own tenancy. The
+            # `default_model` is the model *name*; what actually selects the
+            # thing being called is `azure_deployment`, which is a customer's
+            # own string and so can only come from their environment.
+            default_model="gpt-4.1-mini",
+            # Ships inside `langchain-openai` — `AzureChatOpenAI` is a sibling
+            # of `ChatOpenAI` in the same package — so this is not a fourth
+            # extra and an `[openai]` install already has it.
+            extra="openai",
+            integration_module="langchain_openai",
+            # **Its own credential vocabulary.** `AZURE_OPENAI_API_KEY` is the
+            # name the Azure portal prints and the name a person can rotate
+            # there; `OPENAI_API_KEY` is a different vendor's key for a
+            # different endpoint, and the two are not interchangeable however
+            # much the SDK will accept either.
+            env_vars=("AZURE_OPENAI_API_KEY",),
+            # **The key is not among these, and that is deliberate.** Azure's
+            # own client reads `AZURE_OPENAI_API_KEY` from the environment,
+            # so declaring it here would put a secret into a keyword dict for
+            # no gain. It stays in `env_vars`, where it is masked, where
+            # `credential_source` names it, and where the request allow-list
+            # governs it.
+            #
+            # Endpoint and deployment are declared even though the SDK would
+            # read the first itself: an ambient read is a value nothing can
+            # report as missing, which is the omission the Ollama correction
+            # in CLAUDE.md is about. Declared, they are named in the gap.
+            constructor_args=(
+                ProviderArgument("azure_endpoint", ("AZURE_OPENAI_ENDPOINT",)),
+                ProviderArgument(
+                    "api_version",
+                    # This tuple *is* the reported defect. The vendor reads
+                    # only the second; a person setting Azure up writes the
+                    # first, and had to duplicate it under a name belonging to
+                    # another vendor to be heard.
+                    ("AZURE_OPENAI_API_VERSION", "OPENAI_API_VERSION"),
+                ),
+                ProviderArgument(
+                    "azure_deployment",
+                    ("AZURE_OPENAI_DEPLOYMENT", "AZURE_OPENAI_DEPLOYMENT_NAME"),
+                    # Optional, and checked rather than assumed: a resource
+                    # addressed at its non-deployment endpoint is a real setup
+                    # and requiring this would refuse it. An absent deployment
+                    # is omitted from the call, not passed empty.
+                    required=False,
+                ),
+            ),
         ),
     )
 
@@ -895,6 +1149,25 @@ def env_example_section(catalogue: "ProviderCatalogue | None" = None) -> str:
                 continue
             lines.append(f"# Optional for {spec.name}; accepted from a run request.")
             lines.append(f"{name}=")
+        # A constructor argument is the third kind of variable this file has to
+        # name, and the reason the whole ticket exists: a value the vendor's
+        # client cannot be built without, which nothing here had ever printed,
+        # so the only way to discover it was a 500 (providers-and-credentials/18).
+        # Every alternative is listed, most significant first, and only the
+        # first is left uncommented — a file offering four `NAME=` lines for one
+        # setting invites somebody to fill in two of them and wonder which won.
+        for argument in spec.constructor_args:
+            need = "Required" if argument.required else "Optional"
+            alternatives = (
+                f" Also read from {' then '.join(argument.env_vars[1:])}."
+                if len(argument.env_vars) > 1
+                else ""
+            )
+            lines.append(
+                f"# {need} for {spec.name}: supplies the {argument.keyword!r} "
+                f"argument its client is built with.{alternatives}"
+            )
+            lines.append(f"{argument.env_vars[0]}=")
         lines.append(
             f"# Overrides the default model ({spec.default_model}) for {spec.name}."
         )
@@ -960,6 +1233,7 @@ __all__ = [
     "ENV_EXAMPLE_END",
     "OPTIONAL_ENV_VARS",
     "PROVIDERS_GROUP",
+    "ProviderArgument",
     "ProviderCatalogue",
     "ProviderDefault",
     "ProviderEnvironment",

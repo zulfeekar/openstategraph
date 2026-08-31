@@ -463,6 +463,7 @@ providers:
             "default_endpoint",
             "label",
             "integration_module",
+            "constructor_args",
         }
         declared = {field.name for field in dataclasses.fields(ProviderSpec)}
         assert declared == carried, (
@@ -734,7 +735,14 @@ class TestEnvExampleParity:
         from openstategraph.providers import env_example_section
 
         section = env_example_section()
-        ollama = section[section.index("--- Ollama ---") :]
+        # Bounded at the next provider heading, not at the end of the file.
+        # Slicing to the end was right only while Ollama happened to be the
+        # last provider registered, and it stopped being right the moment a
+        # fourth was added — this assertion then read a *different* provider's
+        # "Required" line and failed on it (providers-and-credentials/18).
+        after = section[section.index("--- Ollama ---") :]
+        cut = after.find("# --- ", 1)
+        ollama = after if cut == -1 else after[:cut]
         assert "set one of OLLAMA_API_KEY or OLLAMA_HOST" in ollama
         # Not once per variable, and never the bare singular claim.
         assert "without it this provider is skipped" not in ollama
