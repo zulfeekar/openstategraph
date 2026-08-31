@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.3.0rc10 — 2026-08-31
+
+Everything under *Unreleased* above this line at the time of the cut. The
+pre-release that first carries a provider able to declare a constructor
+argument — so Azure OpenAI is a row of data with its own credential
+vocabulary rather than an alias that half-works — and the one verb a
+developer points at a folder.
+
 ### Added
 - **Azure OpenAI is a provider, not a nickname** (`providers-and-credentials`
   18). A service configured for Azure — `AZURE_OPENAI_API_KEY`,

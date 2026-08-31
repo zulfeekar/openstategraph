@@ -8,7 +8,7 @@ anywhere Python runs, with or without this package's editor.
 ```bash
 pip install --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple/ \
-            "openstategraph[ollama]==0.3.0rc9"
+            "openstategraph[ollama]==0.3.0rc10"
 ```
 
 That is the line that works today, and the two flags are both load-bearing.
