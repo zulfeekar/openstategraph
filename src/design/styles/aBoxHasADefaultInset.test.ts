@@ -194,6 +194,12 @@ const SCANNED: ReadonlyMap<string, string> = new Map([
   ['.inspector__log', 'a node’s captured log lines, monospace'],
   ['.node__live-input', 'the value that arrived on a port, shown on the card'],
   ['.workflow-manager__item', 'one row of the workflow list — a row, not a card'],
+  [
+    '.arrival__row',
+    'one row of the arrival offer — a name, where it lives, how long ago; scanned ' +
+      'down a column, and at the wider inset a column of them reads as cards',
+  ],
+  ['.start-panel__row', 'the same row, on the blank canvas’s Recent list'],
 ]);
 
 /**

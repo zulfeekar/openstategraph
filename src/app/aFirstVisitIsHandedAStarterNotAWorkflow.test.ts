@@ -397,7 +397,12 @@ describe('the wiring, read from the source', () => {
       join(fileURLToPath(new URL('.', import.meta.url)), 'WorkbenchContext.tsx'),
       'utf8',
     );
-    expect(source).toMatch(/if \(\s*shouldPlaceStarter\(\{/);
+    // The answer is **named** before it is acted on, rather than tested
+    // inline: `install-experience` 28 has to know whether *this* load handed
+    // over the starter, and `hasPlacedStarter` cannot say — it is true forever
+    // afterwards. What this still pins is that nothing places without asking.
+    expect(source).toMatch(/const placedStarter = shouldPlaceStarter\(\{/);
+    expect(source).toMatch(/if \(placedStarter\) \{/);
     expect(source).toMatch(/alreadyPlaced: hasPlacedStarter\(localStorage\)/);
     expect(source).toMatch(/placeFirstRunStarter\(workbench, localStorage\)/);
     // Read once, before anything below it can write — otherwise a browser that

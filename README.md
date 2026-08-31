@@ -226,13 +226,21 @@ gate. The same thing from Python is `load_workflow("./workflows/my-thing")` —
 see [Using OpenStateGraph in your project](docs/adoption.md).
 
 Opens on a **blank canvas**: an address that names no workflow opens no
-workflow, whoever last used this browser (`install-experience` 23). The one
-exception is the **first** visit in a browser that has never held any work,
-which is handed a starter — Input → Agent → Output, wired, with a note saying
-what it is (`install-experience` 24). It is unsaved and called `Untitled`,
-nobody else's document, and deleting it is permanent: it is offered once.
-Otherwise open one from **Workflows**, start from a template, or copy an
-example — the shipped
+workflow, whoever last used this browser (`install-experience` 23). Blank is
+not the same as silent, though — the canvas **offers the workflows this project
+holds**, most recently opened or edited first, in a dialog you can dismiss
+(`install-experience` 28). Dismissing selects nothing, and the canvas behind it
+carries the same list under **Start** and **Recent**. `?w=<slug>` still wins:
+it opens that workflow and shows no dialog, so a link a colleague sends lands
+where it says.
+
+The one exception is the **first** visit in a browser that has never held any
+work, which is handed a starter — Input → Agent → Output, wired, with a note
+saying what it is (`install-experience` 24), and is not also asked to pick.
+It is unsaved and called `Untitled`, nobody else's document, and deleting it is
+permanent: it is offered once.
+Otherwise open one from the arrival list or from **Workflows**, start from a
+template, or copy an example — the shipped
 `chinook-assistant` **runs with no credentials** on the canvas preview, where
 the default model is `Mock · Offline`, a deterministic simulator. The real backend, once running, defaults to **Ollama cloud**, which
 needs `OLLAMA_API_KEY` (or `OLLAMA_HOST` for a daemon you run);

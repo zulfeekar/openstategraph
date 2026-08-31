@@ -96,6 +96,15 @@ EXAMPLES shelf in the Workflows drawer. An address that names no workflow opens
 no workflow — not the last thing this browser was editing, and not a demo
 document (`install-experience` 23).
 
+**It does say what there is, though** (`install-experience` 28). Arriving with
+no `?w=` offers the project's workflows in a dialog, most recently *opened or
+edited* first — two clocks, because `workflow.json` moving on disk and your
+having opened a package are different facts, and the row tells you which one
+put it where it is. Dismiss it and nothing is selected; the blank canvas then
+carries **Start** (New workflow, Open…) and **Recent**, each row naming the
+directory the package lives in. A project with nothing saved says so, and
+offers to start one.
+
 The **first** visit in a browser is the one exception, and a deliberate one
 (`install-experience` 24): a browser holding no draft at all has never opened
 this editor, and it is handed a starter rather than an empty grid — Input →

@@ -262,15 +262,24 @@ export function useHistoryState(): { canUndo: boolean; canRedo: boolean } {
 export function useWorkflowSession(report: (message: string) => void = () => {}): {
   restore: DraftRestoreReport;
   workflowId: string | null;
+  /**
+   * Whether *this* load handed over ticket 24's starter — not whether the
+   * marker is set, which is true forever afterwards. The arrival offer
+   * (`install-experience` 28) stands aside on exactly the one visit 24 owns,
+   * and only this effect can tell that visit from every later one.
+   */
+  placedStarter: boolean;
 } {
   const controller = useController();
   const workbench = useWorkbench();
   const [state, setState] = useState<{
     restore: DraftRestoreReport;
     workflowId: string | null;
+    placedStarter: boolean;
   }>({
     restore: { restored: false },
     workflowId: null,
+    placedStarter: false,
   });
   // StrictMode mounts effects twice; restoring twice would be visible.
   const done = useRef(false);
@@ -377,21 +386,20 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     // nothing, this tab restored nothing, and nobody's draft is in this
     // browser. What goes on is nobody's — four nodes composed here — unsaved,
     // `Untitled`, one undo away and one delete away, and never offered twice.
-    if (
-      shouldPlaceStarter({
-        opening: request.action,
-        restored: restore.restored,
-        nodeCount: workbench.model.nodeCount,
-        mostRecentId,
-        alreadyPlaced: hasPlacedStarter(localStorage),
-      })
-    ) {
+    const placedStarter = shouldPlaceStarter({
+      opening: request.action,
+      restored: restore.restored,
+      nodeCount: workbench.model.nodeCount,
+      mostRecentId,
+      alreadyPlaced: hasPlacedStarter(localStorage),
+    });
+    if (placedStarter) {
       placeFirstRunStarter(workbench, localStorage);
     }
 
     sessionStorage.setItem(DRAFT_SESSION_KEY, session.id);
     claimSession(localStorage, session.id, writer);
-    setState({ restore, workflowId: session.id });
+    setState({ restore, workflowId: session.id, placedStarter });
   }, [controller, workbench]);
 
   // The autosave key follows the open workflow for the rest of the session.
