@@ -204,14 +204,14 @@ the shares add up rather than being sampled:
 
 <!-- wheel-footprint:begin — generated; see scripts/measure_wheel_footprint.py -->
 ```
-openstategraph-0.3.0rc10-py3-none-any.whl  —  4.61 MB, measured 2026-08-31
+openstategraph-0.3.0rc11-py3-none-any.whl  —  4.61 MB, measured 2026-08-31
 
-     1,580 KiB   110 files   the built canvas
+     1,582 KiB   110 files   the built canvas
        952 KiB     1 files   vendored Mermaid, for /chat's flow view
-       116 KiB     5 files   the served HTML shells
-     1,205 KiB   208 files   our own Python
+       117 KiB     5 files   the served HTML shells
+     1,206 KiB   208 files   our own Python
        530 KiB    63 files   the shipped gallery
-        23 KiB     5 files   wheel metadata
+        24 KiB     5 files   wheel metadata
         23 KiB    12 files   the rest of the package data
 
   the browser payload is 59% of the download

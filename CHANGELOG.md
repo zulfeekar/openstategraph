@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.3.0rc11 — 2026-08-31
+
+Everything under *Unreleased* above this line at the time of the cut. The
+pre-release that first offers a project's workflows on arrival, and the one in
+which the panel that offers them can be clicked: two absolutely-positioned
+siblings had no `z-index` between them, so paint order fell to whichever
+mounted last.
+
 ## 0.3.0rc10 — 2026-08-31
 
 Everything under *Unreleased* above this line at the time of the cut. The

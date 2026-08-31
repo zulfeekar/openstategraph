@@ -103,7 +103,7 @@ been clicked, and this file will not print a command that silently fails.
 A release candidate **is** on TestPyPI now and installs in ~13 s (timing
 measured 2026-08-23, without the `ollama` extra below): `pip install
 --index-url https://test.pypi.org/simple/ --extra-index-url
-https://pypi.org/simple/ "openstategraph[server,ollama]==0.3.0rc10"` — the
+https://pypi.org/simple/ "openstategraph[server,ollama]==0.3.0rc11"` — the
 version is pinned in full because pip excludes pre-releases from an unpinned
 requirement, and `backend/tests/test_the_first_command_a_stranger_copies.py`
 fails the day it stops naming the shipped one. The `--extra-index-url` is mandatory,
