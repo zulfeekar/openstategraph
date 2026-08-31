@@ -265,7 +265,7 @@ announced, and it will apply going forward rather than retroactively.
 
 If your pull request changes anything a user can observe — behaviour, a CLI
 flag, a public symbol, an install footprint — add an entry to the
-`## X.Y.Z — unreleased` section at the top of `CHANGELOG.md`, in the same pull
+`## Unreleased` section at the top of `CHANGELOG.md`, in the same pull
 request. Create that section if there isn't one.
 
 Write prose, not a commit subject. The existing entries are the format: what
