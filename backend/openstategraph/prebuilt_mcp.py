@@ -219,6 +219,17 @@ class McpAuth:
     kind: str = AUTH_NONE
     #: `header` only. The vendor's own header name, e.g. `LANGSMITH-API-KEY` —
     #: real, and the reason bearer alone would not have been enough.
+    #:
+    #: **Exactly one, and that is a gap rather than a sufficiency**
+    #: (`scale-and-adopt/22`). The same vendor this example names documents
+    #: `LANGSMITH-WORKSPACE-ID` and `LANGSMITH-ENDPOINT` beside its key, and a
+    #: gateway wanting an API key and a tenant id is ordinary. Neither can be
+    #: expressed here or in `mcp_servers:`, and the limitation is written down
+    #: in `docs/mcp.md` §8 with what to do instead. When it becomes a list it
+    #: is a list of header-name → **variable-name** pairs, never of
+    #: name → value pairs, and it lands with `launch-readiness/198` rather than
+    #: before it: the variable a row names is resolved against nothing today,
+    #: and N entries multiply that by N.
     header_name: str = ""
     token_env: str = ""
 

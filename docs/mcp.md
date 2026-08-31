@@ -578,6 +578,43 @@ from* — names only, so nothing derived from a credential is ever in a key, a
 log line or a traceback. Two cards naming the same server with the same
 variable still share one session, which is what the pool is for.
 
+**Auth is one header, and `mcp_servers:` is not a way around it.** The three
+choices are *None*, *Bearer token* and *Custom header*. Under the first two,
+`Header name` is read by nothing and an empty box is correct — which is what it
+looks like on a card nobody has configured. Under *Custom header* an empty box
+is a row that binds no tools, and the editor cannot tell you while you type: a
+field's validator is handed its own value and nothing else, so it cannot say
+*required when the auth type is this one*. The row's **Check** button can, and
+does; so do the run's warnings.
+
+What it will not tell you is that there is only ever one:
+
+> Custom-header authentication carries exactly one header. A row set to it with the header name empty binds no tools; the Check button and the run’s warnings both say so, but nothing does while you type. One header is also all that mcp_servers: in the project config can express, so a server that wants two — a key and a tenant id, or a key beside a workspace header — cannot be named from here at all. Put an endpoint of your own in front of it that adds the rest, and point this row at that.
+
+That is `MCP_ONE_HEADER_LIMIT` in `src/nodes/tools/mcpServerFields.ts`, quoted
+here rather than restated so the two copies cannot drift
+(`src/nodes/tools/mcpDocsGuide.test.ts` pins the quote).
+
+The limit is not a reading of the MCP specification, which defines exactly one
+credential header — `Authorization: Bearer …`, issued by an OAuth 2.1 flow this
+build does not implement — and says nothing at all about the others. Every
+multi-header server is out-of-spec vendor practice, and it is ordinary: the
+LangSmith MCP server's own HTTP deployment documents `LANGSMITH-API-KEY`
+alongside `LANGSMITH-WORKSPACE-ID` and `LANGSMITH-ENDPOINT`, and gateways
+commonly want an API key beside a tenant or routing header. So the honest
+statement is that this is a real gap rather than a considered sufficiency.
+
+It stays one header for now for a reason worth knowing: the variable a row
+names is resolved against nothing, so a document can already name any
+environment variable and have its value sent to whatever URL that document
+names. A list of header entries multiplies that by its length, so the list
+lands with that fix and not before. When it does, it will be a list of
+**header name → variable name** pairs and never of header name → value pairs —
+a value box is one whose honest contents are sometimes a literal like a tenant
+id and sometimes a credential, and nothing can tell those two apart by shape,
+which is precisely what the *name, never a value* rule exists to avoid having
+to do.
+
 **A rotated credential is picked up on the next run, not mid-run.** Sessions
 are held open for the life of the process, so the value a session opened with
 is the one it keeps using. Compiling a document re-reads the environment — the

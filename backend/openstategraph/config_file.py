@@ -235,6 +235,9 @@ class McpAuthConfig(BaseModel):
     #: code in a document. It is a fourth value later, with no format change.
     kind: str = "none"
     #: `header` only — the vendor's own header, e.g. `LANGSMITH-API-KEY`.
+    #: **One**, which a project cannot widen here either: this file is not a
+    #: way around the card's single header. See `McpAuth.header_name` and
+    #: `docs/mcp.md` §8 (`scale-and-adopt/22`).
     header_name: str | None = None
     #: **The name, never the value.** That is the entire point of this field.
     token_env: str | None = None
