@@ -159,6 +159,58 @@ export const validateEnvVarName = (value: FieldValue): string | null => {
 };
 
 /**
+ * The narrowness of `header` auth, said out loud on the card that has it.
+ *
+ * `scale-and-adopt/22`. The owner opened the node, found `Header name` and
+ * `Credential variable` empty, and asked two questions the product could not
+ * answer anywhere a reader would look.
+ *
+ * **Empty is correct in two of the three branches and a defect in the third.**
+ * Under `none` and under `bearer` neither box is read at all. Under `header` a
+ * blank header name is a row that binds nothing — `resolve_auth_headers`
+ * refuses it and the run degrades to a capability warning. The editor cannot
+ * say so while you type, and that is structural rather than careless: a
+ * field's `validate` is handed its own value and nothing else, and `required`
+ * is a static boolean, so neither can express *required when `authKind` is
+ * `header`*. The row's Check button can — it is handed the whole row — and it
+ * does. So the fix here is that the field says which branch needs it.
+ *
+ * **One header is the limit, and it is the limit everywhere.** `McpAuth`
+ * carries a single `header_name`, `McpAuthConfig` carries a single
+ * `header_name`, and `McpAuthPayload` publishes a single `headerName`, so
+ * `mcp_servers:` is not a way around the card. That is fewer than real servers
+ * ask for: LangSmith's own HTTP deployment documents `LANGSMITH-API-KEY`
+ * *beside* `LANGSMITH-WORKSPACE-ID` and `LANGSMITH-ENDPOINT` — the vendor in
+ * this field's own placeholder — and gateways routinely want a key and a
+ * tenant id together. The MCP specification defines exactly one credential
+ * header (`Authorization: Bearer …`, under an OAuth 2.1 flow this build does
+ * not implement) and says nothing about the rest, so every multi-header server
+ * is out-of-spec vendor practice — real, common, and not something a
+ * spec-shaped field set was ever going to cover.
+ *
+ * It stays one for now, and the argument is `launch-readiness/198`: the
+ * variable a row names is resolved against nothing, so a document can already
+ * name any environment variable and have its value sent to a URL the same
+ * document names. A list of entries multiplies that hazard by its length. The
+ * eventual shape is a list of **name → variable-name** pairs, never a list of
+ * name → value pairs: the second would put a box on the screen whose honest
+ * contents are sometimes a literal (`x-tenant-id: acme-prod`) and sometimes a
+ * credential, and those two are shape-indistinguishable — which is exactly the
+ * refusal `validateEnvVarName` and the config loader exist to make possible.
+ *
+ * Until then the limitation is stated rather than implied. "It cannot" is an
+ * acceptable answer only where it is written down beside what to do instead.
+ */
+export const MCP_ONE_HEADER_LIMIT =
+  'Custom-header authentication carries exactly one header. A row set to it ' +
+  'with the header name empty binds no tools; the Check button and the run’s ' +
+  'warnings both say so, but nothing does while you type. One header is also ' +
+  'all that mcp_servers: in the project config can express, so a server that ' +
+  'wants two — a key and a tenant id, or a key beside a workspace header — ' +
+  'cannot be named from here at all. Put an endpoint of your own in front of ' +
+  'it that adds the rest, and point this row at that.';
+
+/**
  * What the machinery already does, shown read-only beside what you own.
  *
  * Not a pre-filled editable box — that was the original `RouterNode` bug. The
@@ -181,7 +233,8 @@ export const MCP_LOCKED_NOTE =
   'value never is. A server that is unreachable, that rejects the credential, ' +
   'or that does not speak MCP costs this agent its tools and says so in the ' +
   'run’s warnings; it never fails the compile. The connection is opened once ' +
-  'and held open, so a call costs what the server takes and no handshake.';
+  'and held open, so a call costs what the server takes and no handshake. ' +
+  MCP_ONE_HEADER_LIMIT;
 
 /**
  * The one sentence a developer needs before adding a second row, on the card
@@ -317,7 +370,7 @@ export function mcpServerFields(options: McpFieldSetOptions = {}): readonly Fiel
       mono: true,
       defaultValue: '',
       placeholder: 'LANGSMITH-API-KEY',
-      hint: 'Custom-header authentication only — the header the vendor documents.',
+      hint: 'Custom-header authentication only, and required by it — the header the vendor documents. Exactly one; see the note below if your server wants two.',
       onCard: false,
       advanced: true,
       group,
