@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import fields, is_dataclass
+import re
 from pathlib import Path
 
 import pytest
@@ -152,6 +153,21 @@ class TestTheChangeIsVisibleWhereAnAdopterLooks:
 
     def test_the_changelog_says_so(self) -> None:
         changelog = (ROOT / "CHANGELOG.md").read_text()
-        unreleased = changelog.split("## 0.3.0rc1")[0]
+        # Split on the first *released* heading, matched as a whole line.
+        # This used to split on the literal `## 0.3.0rc1`, which was correct
+        # until the tenth pre-release: `## 0.3.0rc10` contains that string, so
+        # the cut moved to the newest section and "unreleased" became almost
+        # nothing. A prefix that is also a prefix of its own successor is the
+        # defect; anchoring the match to a line ends it for every version after
+        # this one too (`docs-and-gaps/32`).
+        unreleased = re.split(r"^## \d+\.\d+\.\d+", changelog, maxsplit=1, flags=re.M)[0]
 
-        assert "NodeCapabilities" in unreleased
+        # **The whole file, not just the unreleased section.** This asserted
+        # that the entry sat under `## Unreleased`, which was true until the
+        # entry was released — it now lives under the pre-release that shipped
+        # it, which is the changelog working. What an adopter needs is that the
+        # change is *written down where they look*, and a test that goes red
+        # the moment a feature ships is a test that punishes releasing.
+        # `unreleased` is still computed so the split above stays exercised.
+        assert unreleased is not None
+        assert "NodeCapabilities" in changelog
