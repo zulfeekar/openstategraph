@@ -737,7 +737,7 @@ A git worktree of this repo must NOT install its own dependencies — each
 copy costs ~420M (`node_modules` 183M + a venv 235M) for nothing. Instead:
 
 ```bash
-ln -s "$(dirname "$(git rev-parse --git-common-dir)")/node_modules" node_modules
+ln -s "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/node_modules" node_modules
 ```
 
 **Derived rather than typed**, because the absolute path written here was a
