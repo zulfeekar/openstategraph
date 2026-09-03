@@ -56,16 +56,34 @@ import json
 import logging
 import os
 import uuid
+from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from openstategraph.api.audience import deployment_audience
 from openstategraph.api.diagram import workflow_mermaid
 from openstategraph.api.services import WorkflowServices
 from openstategraph.errors import DocumentError as _DocumentError
+from openstategraph.principal import IPrincipals
 from openstategraph.run_doors import invoke_run
 from openstategraph.schema import normalize_document as _normalize_document
 from openstategraph.step_budget import resolve_step_budget
+
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import Context as _MCPContext
+else:  # the `[mcp]` extra. An installation without it never builds a server,
+    # but must still be able to import this module.
+    try:
+        from mcp.server.fastmcp import Context as _MCPContext
+    except ModuleNotFoundError:  # pragma: no cover - the extra-less install
+        _MCPContext = None
+
+#: The `ctx` parameters below are annotated with the **bare** generic on
+#: purpose: FastMCP finds the parameter to inject the request context into
+#: with `inspect.isclass` over the resolved type hints, and a subscripted
+#: `Context[Any, Any, Any]` is an alias rather than a class, so subscripting
+#: to satisfy mypy's `type-arg` would silently stop the injection and take
+#: `kanban-patrol/29` with it. Hence the two `type: ignore[type-arg]`s.
 
 logger = logging.getLogger(__name__)
 
@@ -1074,6 +1092,66 @@ The loop, in order:
 """
 
 
+def _actor_on_the_card(principals: IPrincipals, ctx: Any, claimed: str) -> str:
+    """Who a kanban write is recorded as — `kanban-patrol/29`.
+
+    `principal.py`'s standing rule is that identity is the server's to
+    determine, never the caller's to assert, and over MCP the caller filling
+    in `actor` is a *model*. So when this deployment can identify the person
+    behind the request, that principal **is** the actor and a differing
+    `actor` argument is dropped, never merged — the same `IPrincipals` the
+    HTTP door resolves through (`api/deps.py`), not a second identity scheme.
+
+    When nothing resolves, the caller's `actor` stands, exactly as before.
+    That is `kanban-patrol/20`'s own argument carried over: the transport's
+    token gate is the trust bar, and refusing here would make the kanban
+    tools unusable on every `streamable-http` deployment with no proxy in
+    front — which is the documented default. Nothing resolves in three
+    distinct cases and all three are this one: stdio, which has no HTTP
+    request at all; a request with no identity header; and a request
+    carrying one with no proxy signature beside it, which `principal.py`
+    treats as carrying nothing because a header a client can also set is not
+    identity.
+    """
+    headers = _request_headers(ctx)
+    who = principals.resolve(headers) if headers is not None else None
+    if who is None:
+        return claimed
+    name = who.label or who.id
+    if claimed.strip() and claimed.strip() != name:
+        # Info, not a warning: a client model naming itself is the ordinary
+        # case, not an attack, and this line exists so a reader of the logs
+        # can see why the card says a name the client did not send.
+        logger.info(
+            "kanban: recording %r as the actor, not the %r the caller passed "
+            "— this deployment identifies its callers.",
+            name,
+            claimed,
+        )
+    return name
+
+
+def _request_headers(ctx: Any) -> Mapping[str, str] | None:
+    """The HTTP headers this tool call arrived on, or `None` when it did not
+    arrive on one.
+
+    `kanban-patrol/28` found the seam: the streamable-HTTP transport puts the
+    Starlette request on the `RequestContext` it dispatches under, so a tool
+    declaring a `Context` parameter can read it. Under stdio there is no
+    request and `Context.request_context` itself raises outside one, so every
+    way of having no headers is folded into `None` here rather than at three
+    call sites.
+    """
+    if ctx is None:
+        return None
+    try:
+        request = ctx.request_context.request
+    except (ValueError, LookupError, AttributeError):  # pragma: no cover - defensive
+        return None
+    headers = getattr(request, "headers", None)
+    return headers if isinstance(headers, Mapping) else None
+
+
 def build_mcp_server(
     services: WorkflowServices | None = None, *, allow_runs: bool = True
 ) -> Any:
@@ -1207,7 +1285,11 @@ def build_mcp_server(
         return library.save_draft(slug, name, document)
 
     @server.tool(name="kanban_attend_card")
-    def kanban_attend_card(task_id: str, actor: str) -> dict[str, Any]:
+    def kanban_attend_card(
+        task_id: str,
+        actor: str,
+        ctx: _MCPContext | None = None,  # type: ignore[type-arg]
+    ) -> dict[str, Any]:
         """Claim a patrol-board card, exclusively — `kanban-patrol/16`/`19`.
 
         First caller wins. A second call on an already-attended card returns
@@ -1218,12 +1300,23 @@ def build_mcp_server(
         from openstategraph.kanban_store import Stage, kanban_store_path, set_stage
 
         db = kanban_store_path(services.store.root)
-        result = set_stage(db, task_id, Stage.ATTENDED, actor=actor)
+        result = set_stage(
+            db,
+            task_id,
+            Stage.ATTENDED,
+            actor=_actor_on_the_card(services.principals, ctx, actor),
+        )
         return {"ok": result.ok, "reason": result.reason}
 
     @server.tool(name="kanban_set_stage")
     def kanban_set_stage(
-        task_id: str, stage: str, actor: str, test_id: str = "", reason: str = "", commit: str = ""
+        task_id: str,
+        stage: str,
+        actor: str,
+        test_id: str = "",
+        reason: str = "",
+        commit: str = "",
+        ctx: _MCPContext | None = None,  # type: ignore[type-arg]
     ) -> dict[str, Any]:
         """Advance a claimed card one stage: `red`, `green`, or `finished`.
 
@@ -1253,7 +1346,13 @@ def build_mcp_server(
             return {"ok": False, "reason": f"stage must be one of {', '.join(s.value for s in Stage)}"}
         try:
             result = set_stage(
-                db, task_id, target, actor=actor, test_id=test_id, reason=reason, commit=commit
+                db,
+                task_id,
+                target,
+                actor=_actor_on_the_card(services.principals, ctx, actor),
+                test_id=test_id,
+                reason=reason,
+                commit=commit,
             )
         except (StageOrderError, MissingEvidenceError) as exc:
             return {"ok": False, "reason": str(exc)}

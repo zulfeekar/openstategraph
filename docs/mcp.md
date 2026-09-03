@@ -482,6 +482,35 @@ resolved card again, and staleness names an abandoned claim, not a
 discharged one. A successful release resets stage, actor, heartbeat,
 and every evidence field back to a fresh, unattended row.
 
+### Which name lands on the card
+
+`actor` is a parameter a *model* fills in, and this project's standing rule
+is that identity is the server's to determine, never the caller's to assert.
+So `kanban_attend_card` and `kanban_set_stage` resolve the caller first, and
+what they resolve wins (`kanban-patrol/29`):
+
+- **If this deployment identifies its callers** — `OPENSTATEGRAPH_PRINCIPAL_HEADER`
+  names the header your reverse proxy stamps, and the request also carries
+  `X-OpenStateGraph-Proxy`, the one header every proxy config in `deploy/`
+  sets — then that principal **is** the actor. An `actor` argument that says
+  something else is dropped, never merged, and the substitution is logged at
+  info so a reader of the logs can see why the card names somebody the client
+  did not send. This is the same `IPrincipals` seam `/api/runs` resolves
+  through; there is no second identity scheme here.
+- **Otherwise the caller's `actor` is written exactly as passed** — which is
+  the documented default, since a bare `streamable-http` listener with no
+  proxy in front identifies nobody. The transport's own token gate is the
+  trust bar there. Refusing instead would make the four tools unusable on
+  every deployment without a proxy, which is most of them.
+- **The identity header alone is not identity.** Without
+  `X-OpenStateGraph-Proxy` beside it, it is whatever the client typed, so it
+  resolves nobody and the caller's `actor` stands. Same for stdio, which has
+  no HTTP request at all.
+
+The `actor` a card can never hold is a blank one: `kanban-patrol/20`'s floor —
+"already attended by ____" with nothing in the blank — is refused at the
+store, on both doors.
+
 ---
 
 ## 6. The trust boundary, in one list

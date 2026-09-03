@@ -606,6 +606,20 @@ defaulting to the hour this ticket locked, one call to `kanban_store
 lives there entirely; this turns its `SetStageResult` into the same
 `{"ok": ..., "reason": ...}` shape every other kanban tool already answers
 with.
+
+**755 -> 808** (`kanban-patrol/29`, 2026-09-03). The two kanban tools that
+*write* stop taking the caller's word for who is writing. Fifty-three lines,
+and none of it a second identity scheme: `_actor_on_the_card` calls the same
+`IPrincipals.resolve` `api/deps.py` already calls, and `_request_headers`
+folds the three ways a call can carry no headers — stdio, no identity header,
+an identity header with no proxy signature — into one `None` so the decision
+is made at one call site rather than at two tool bodies. The rest is the
+import of `Context` (guarded, because the transport is an extra), the two
+`ctx` parameters, and the comment recording why that annotation must stay
+bare. A private module for two functions was priced and rejected: they read
+`services.principals` and are called only from tool bodies, so the file that
+holds the door is the file that should hold the doorkeeper.
+
 """
 
 ROUTES_WORKFLOWS = """
@@ -779,7 +793,7 @@ RECORDED: dict[str, Recorded] = {
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(755, MCP_SERVER),
+    "mcp_server.py": Recorded(808, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(661, RUN_SINKS),
 }

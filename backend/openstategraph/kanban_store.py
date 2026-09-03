@@ -349,13 +349,17 @@ def set_stage(
     `StageOrderError` — it is the caller's own mistake, not a race.
     """
     if not actor.strip():
-        # `kanban-patrol/20`: not full identity — the CLI's trust boundary
-        # is the shell it runs in (a deliberate, stated decision, not an
-        # oversight), and the installed MCP library exposes no request
-        # context a tool function could read one from at all (checked, not
-        # assumed). But "already attended by " with nothing in the blank is
-        # meaningless to a human reading the card, so this is the floor: an
-        # actor must be a real, non-blank string.
+        # `kanban-patrol/20`: the floor, not full identity. The CLI's trust
+        # boundary is the shell it runs in — a deliberate, stated decision,
+        # not an oversight. The MCP door is no longer in the same position:
+        # `29` resolves the caller through `IPrincipals` before this is
+        # called, so on a deployment that identifies its callers the string
+        # arriving here is the server's own finding rather than the model's
+        # claim. (This comment said the installed library exposed no request
+        # context at all; `28` found that it does, at
+        # `RequestContext.request`.) Either way "already attended by " with
+        # nothing in the blank is meaningless to a human reading the card,
+        # so the floor stands: an actor must be a real, non-blank string.
         raise MissingEvidenceError(f"{task_id}: actor must be a real, non-blank name")
 
     current = read_card(db_path, task_id)

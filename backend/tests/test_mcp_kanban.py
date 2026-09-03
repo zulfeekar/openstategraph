@@ -11,7 +11,9 @@ owns those).
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -184,3 +186,159 @@ class TestReleaseCard:
 
         assert result.get("ok") is False
         assert "not stale" in result.get("reason", "")
+
+
+class TestActorIsTheServersToDetermine:
+    """`kanban-patrol/29`: identity is the server's to determine, never the
+    caller's to assert — `principal.py`'s standing rule, re-asserted at the
+    MCP door.
+
+    `28` established the mechanism: the streamable-HTTP transport puts the
+    Starlette request on the tool's `RequestContext`, so a deployment behind
+    a proxy that stamps a verified identity has the same headers
+    `/api/runs` already resolves through `IPrincipals`. These tests drive
+    that seam the way the transport does — by setting the request context
+    the tool reads — rather than calling a private closure.
+    """
+
+    HEADER = "x-forwarded-email"
+
+    @staticmethod
+    @contextmanager
+    def _arriving_with(headers: dict[str, str] | None):
+        """One request, carrying `headers` — or, with `None`, a stdio call,
+        which has no HTTP request at all and must be handled as such."""
+        from mcp.server.lowlevel.server import request_ctx
+        from mcp.shared.context import RequestContext
+
+        request = SimpleNamespace(headers=headers) if headers is not None else None
+        token = request_ctx.set(
+            RequestContext(
+                request_id="1",
+                meta=None,
+                session=None,
+                lifespan_context=None,
+                request=request,
+            )
+        )
+        try:
+            yield
+        finally:
+            request_ctx.reset(token)
+
+    def _services(self, tmp_path: Path) -> WorkflowServices:
+        from openstategraph.principal import TrustedHeaderPrincipals
+
+        root = tmp_path / "workflows"
+        root.mkdir()
+        return WorkflowServices(
+            workflows_root=root, principals=TrustedHeaderPrincipals(self.HEADER)
+        )
+
+    def _actor(self, services: WorkflowServices) -> str | None:
+        from openstategraph.kanban_store import kanban_store_path, read_card
+
+        return read_card(kanban_store_path(services.store.root), "proj-a:thread-1").actor
+
+    def test_a_vouched_principal_is_the_actor_whatever_the_model_passed(
+        self, tmp_path: Path
+    ) -> None:
+        services = self._services(tmp_path)
+        _filed(services)
+        server = build_mcp_server(services)
+
+        with self._arriving_with({self.HEADER: "alice@example.com", "X-OpenStateGraph-Proxy": "1"}):
+            result = _call(
+                server, "kanban_attend_card", {"task_id": "proj-a:thread-1", "actor": "claude"}
+            )
+
+        assert result.get("ok") is True
+        assert self._actor(services) == "alice@example.com"
+
+    def test_set_stage_records_the_principal_not_the_passed_name(self, tmp_path: Path) -> None:
+        services = self._services(tmp_path)
+        _filed(services)
+        server = build_mcp_server(services)
+        headers = {self.HEADER: "alice@example.com", "X-OpenStateGraph-Proxy": "1"}
+
+        with self._arriving_with(headers):
+            _call(server, "kanban_attend_card", {"task_id": "proj-a:thread-1", "actor": "claude"})
+            result = _call(
+                server,
+                "kanban_set_stage",
+                {
+                    "task_id": "proj-a:thread-1",
+                    "stage": "red",
+                    "actor": "mallory",
+                    "test_id": "tests/test_x.py::test_y",
+                    "reason": "boom",
+                },
+            )
+
+        assert result.get("ok") is True
+        assert self._actor(services) == "alice@example.com"
+
+    def test_a_request_with_no_headers_keeps_the_callers_actor(self, tmp_path: Path) -> None:
+        services = self._services(tmp_path)
+        _filed(services)
+        server = build_mcp_server(services)
+
+        with self._arriving_with({}):
+            result = _call(
+                server, "kanban_attend_card", {"task_id": "proj-a:thread-1", "actor": "claude"}
+            )
+
+        assert result.get("ok") is True
+        assert self._actor(services) == "claude"
+
+    def test_stdio_has_no_request_and_keeps_the_callers_actor(self, tmp_path: Path) -> None:
+        services = self._services(tmp_path)
+        _filed(services)
+        server = build_mcp_server(services)
+
+        with self._arriving_with(None):
+            result = _call(
+                server, "kanban_attend_card", {"task_id": "proj-a:thread-1", "actor": "claude"}
+            )
+
+        assert result.get("ok") is True
+        assert self._actor(services) == "claude"
+
+    def test_an_identity_header_with_no_proxy_signature_resolves_nobody(
+        self, tmp_path: Path
+    ) -> None:
+        """`principal.py`'s own rule, asserted at this door rather than
+        assumed: the identity header is only trusted beside the one header
+        whose name this project owns and every shipped proxy config
+        overwrites. Alone, it is whatever the client typed."""
+        services = self._services(tmp_path)
+        _filed(services)
+        server = build_mcp_server(services)
+
+        with self._arriving_with({self.HEADER: "alice@example.com"}):
+            result = _call(
+                server, "kanban_attend_card", {"task_id": "proj-a:thread-1", "actor": "claude"}
+            )
+
+        assert result.get("ok") is True
+        assert self._actor(services) == "claude"
+
+    def test_the_request_context_is_never_a_tool_argument(self, tmp_path: Path) -> None:
+        """The parameter carrying the request must stay invisible on the
+        wire. A `ctx` a client could fill in would be identity asserted by
+        the caller wearing the server's clothes — the exact thing this
+        ticket removes."""
+        services = self._services(tmp_path)
+        server = build_mcp_server(services)
+
+        tools = {t.name: sorted(t.inputSchema.get("properties", {})) for t in asyncio.run(server.list_tools())}
+
+        assert tools["kanban_attend_card"] == ["actor", "task_id"]
+        assert tools["kanban_set_stage"] == [
+            "actor",
+            "commit",
+            "reason",
+            "stage",
+            "task_id",
+            "test_id",
+        ]
