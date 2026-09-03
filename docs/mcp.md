@@ -505,11 +505,13 @@ is owned once, in `src/view/board/cardStage.ts`:
 claim: `17`'s evidence gate is the only thing that moves a card into the
 Resolved column.
 
-`kanban-patrol/17`+`21`: `stage` is evidence-gated. `red` needs `test_id` and
-`reason`; `green` needs the matching `test_id`; `finished` needs both already
-recorded on the card — a missing or mismatched piece returns the same
-structured `{"ok": false, "reason": "..."}` a skipped stage already does,
-never a fresh claim accepted without proof.
+`kanban-patrol/17`+`21`+`33`: `stage` is evidence-gated. `red` needs `test_id`
+and `reason`; `green` needs `test_id` and it must match the one recorded at
+`red`; `finished` needs red and green already recorded and `test_id` is
+optional there, but a supplied one is refused, row unchanged, when it
+disagrees with the recorded id — a missing or mismatched piece returns the
+same structured `{"ok": false, "reason": "..."}` a skipped stage already
+does, never a fresh claim accepted without proof.
 
 `kanban_release_card` is the human's explicit press on a card the system has
 already flagged stale — "flag, never auto-release" — refused the same

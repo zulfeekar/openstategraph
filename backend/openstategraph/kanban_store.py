@@ -388,6 +388,21 @@ def _required_previous(stage: Stage) -> Stage:
     return _STAGE_SEQUENCE[_ORDER[stage] - 1]
 
 
+def _require_matching_test_id(
+    task_id: str, stage_word: str, test_id: str, recorded: str
+) -> None:
+    """The one sentence `green` and `finished` both need when a supplied
+    `test_id` disagrees with the one recorded at `red` — `kanban-patrol/33`
+    found `finished` reading this same parameter and silently ignoring it.
+    A blank `test_id` is not a mismatch here; callers that require one
+    non-blank (`green`) check that separately before calling this."""
+    if test_id and test_id != recorded:
+        raise MissingEvidenceError(
+            f"{task_id}: {stage_word} test_id {test_id!r} does not match the "
+            f"red test_id {recorded!r} recorded on this card"
+        )
+
+
 def set_stage(
     db_path: Path,
     task_id: str,
@@ -494,13 +509,15 @@ def set_stage(
     elif stage == Stage.GREEN:
         if not test_id:
             raise MissingEvidenceError(f"{task_id}: green requires test_id")
-        if test_id != current.evidence_test_id:
-            raise MissingEvidenceError(
-                f"{task_id}: green test_id {test_id!r} does not match the "
-                f"red test_id {current.evidence_test_id!r} recorded on this card"
-            )
+        _require_matching_test_id(task_id, "green", test_id, current.evidence_test_id)
         evidence_green = True
     elif stage == Stage.FINISHED:
+        # `kanban-patrol/33`: `test_id` is optional at `finished` — the
+        # recorded id from `red`/`green` is the evidence — but when an
+        # agent does supply one it is checked against that recorded id with
+        # the same wording `green` uses, rather than being read for
+        # `commit` alone and silently dropped.
+        _require_matching_test_id(task_id, "finished", test_id, current.evidence_test_id)
         # `kanban-patrol/17`'s own bar names four things, not three — "the
         # commit or diff that carries the work" is the fourth, and it was
         # optional here until this fix let a card reach Resolved without

@@ -561,6 +561,50 @@ class TestEvidenceGate:
         assert result.ok
         assert read_card(db, "proj-a:thread-1").stage is Stage.FINISHED
 
+    def test_finished_with_a_different_test_id_is_refused(self, tmp_path: Path) -> None:
+        """`kanban-patrol/33`: `finished` used to read only `commit` off this
+        parameter and drop `test_id` without a word. It must be refused with
+        the same wording shape `green` uses, and the row must stay unchanged."""
+        db = self._attended(tmp_path)
+        set_stage(db, "proj-a:thread-1", Stage.RED, actor="alice", test_id="tests/test_x.py::test_y", reason="boom")
+        set_stage(db, "proj-a:thread-1", Stage.GREEN, actor="alice", test_id="tests/test_x.py::test_y")
+
+        try:
+            set_stage(
+                db, "proj-a:thread-1", Stage.FINISHED, actor="alice",
+                test_id="tests/other.py::t", commit="abc1234",
+            )
+            assert False, "a mismatched test id at finished must raise"
+        except MissingEvidenceError as exc:
+            assert "does not match" in str(exc)
+
+        card = read_card(db, "proj-a:thread-1")
+        assert card.stage is Stage.GREEN
+        assert card.evidence_test_id == "tests/test_x.py::test_y"
+
+    def test_finished_with_no_test_id_still_succeeds(self, tmp_path: Path) -> None:
+        db = self._attended(tmp_path)
+        set_stage(db, "proj-a:thread-1", Stage.RED, actor="alice", test_id="tests/test_x.py::test_y", reason="boom")
+        set_stage(db, "proj-a:thread-1", Stage.GREEN, actor="alice", test_id="tests/test_x.py::test_y")
+
+        result = set_stage(db, "proj-a:thread-1", Stage.FINISHED, actor="alice", commit="deadbeef")
+
+        assert result.ok
+        assert read_card(db, "proj-a:thread-1").stage is Stage.FINISHED
+
+    def test_finished_with_the_matching_test_id_succeeds(self, tmp_path: Path) -> None:
+        db = self._attended(tmp_path)
+        set_stage(db, "proj-a:thread-1", Stage.RED, actor="alice", test_id="tests/test_x.py::test_y", reason="boom")
+        set_stage(db, "proj-a:thread-1", Stage.GREEN, actor="alice", test_id="tests/test_x.py::test_y")
+
+        result = set_stage(
+            db, "proj-a:thread-1", Stage.FINISHED, actor="alice",
+            test_id="tests/test_x.py::test_y", commit="deadbeef",
+        )
+
+        assert result.ok
+        assert read_card(db, "proj-a:thread-1").stage is Stage.FINISHED
+
     def test_a_ratchet_that_matches_nothing_guards_nothing__test_id_cannot_be_blank_at_green(
         self, tmp_path: Path
     ) -> None:

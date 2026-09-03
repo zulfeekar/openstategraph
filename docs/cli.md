@@ -372,12 +372,13 @@ is owned once, in `src/view/board/cardStage.ts`:
 claim: `17`'s evidence gate is the only thing that moves a card into the
 Resolved column.
 
-`kanban-patrol/17`+`21`: `stage` is evidence-gated, not trust-gated. Moving to
-`red` requires `--test-id` and `--reason` both non-empty; moving to `green`
-requires `--test-id` to *match* the one recorded at `red`; moving to
-`finished` requires red and green already durably on the card — no evidence
-argument reaches `finished` because there is nothing left to assert, only
-what already happened. A caller missing any of this exits non-zero with the
+`kanban-patrol/17`+`21`+`33`: `stage` is evidence-gated, not trust-gated.
+Moving to `red` requires `--test-id` and `--reason` both non-empty; moving to
+`green` requires `--test-id` and it must *match* the one recorded at `red`;
+moving to `finished` requires red and green already durably on the card and
+`--test-id` is optional there — the recorded id is the evidence — but if one
+is given it is refused, with the row unchanged, when it disagrees with the
+one already recorded. A caller missing any of this exits non-zero with the
 gap named plainly, the same way a skipped stage already does.
 
 `release` is the human's explicit press on a card the system has already
