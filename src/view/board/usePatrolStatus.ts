@@ -4,10 +4,10 @@ import {
   type PatrolStatus,
   type PatrolStreamEvent,
 } from '@core/runtime/RuntimeClient';
-import { patrolStatusLine } from './patrolStatusLine';
 
 /**
- * The board's live patrol line — kanban-patrol/07.
+ * The live patrol status this app is subscribed to — kanban-patrol/07,
+ * widened to a second reader by kanban-patrol/10.
  *
  * The React glue only: refetch on mount (`catalogue_events.py`'s own rule,
  * applied to the sibling stream — the registry is the source of truth, an
@@ -20,8 +20,16 @@ import { patrolStatusLine } from './patrolStatusLine';
  * from one tab and finished while the board was closed is still true, and
  * `07`'s whole point is that the board must not have had to stay open to
  * know it.
+ *
+ * **It returns the status, not a sentence.** It did return
+ * `patrolStatusLine(status)` while the board was the only reader; `10` added
+ * the toolbar's job chip, which asks a different question of the same fact
+ * (*is something running*, rather than *what happened*). Two callers, two
+ * pure decision modules — `patrolStatusLine.ts` and
+ * `topbar/patrolJobNotice.ts` — and **one** subscription, because a second
+ * `EventSource` for one fact is a second thing that can disagree.
  */
-export function usePatrolStatus(onCardsMayHaveChanged: () => void): string | null {
+export function usePatrolStatus(onCardsMayHaveChanged: () => void): PatrolStatus | null {
   const clientRef = useRef<RuntimeClient | null>(null);
   if (!clientRef.current) clientRef.current = new RuntimeClient();
   const [status, setStatus] = useState<PatrolStatus | null>(null);
@@ -88,5 +96,5 @@ export function usePatrolStatus(onCardsMayHaveChanged: () => void): string | nul
     };
   }, [onCardsMayHaveChanged]);
 
-  return patrolStatusLine(status);
+  return status;
 }

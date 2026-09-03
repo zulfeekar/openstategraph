@@ -23,6 +23,7 @@ import { PatrolBoard } from './board/PatrolBoard';
 import { mapKanbanCardToBoardCard } from './board/kanbanCardMapping';
 import type { BoardCard } from './board/patrolBoardModel';
 import { usePatrolStatus } from './board/usePatrolStatus';
+import { patrolStatusLine } from './board/patrolStatusLine';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
 import { WorkflowManager } from './workflow/WorkflowManager';
@@ -221,7 +222,7 @@ export function AppShell() {
    * refetch inside the hook is what recovers that, not this tab having
    * been listening.
    */
-  const patrolStatusLine = usePatrolStatus(refreshKanbanCards);
+  const patrolStatus = usePatrolStatus(refreshKanbanCards);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
   /** The stored-runs picker (`memory-and-replay` 73), hung off its own control. */
   const [storedRunsOpen, setStoredRunsOpen] = useState(false);
@@ -686,6 +687,7 @@ export function AppShell() {
         onOpenMcpServers={() => setMcpServersOpen(true)}
         onOpenPatrolBoard={() => setPatrolBoardOpen(true)}
         patrolBoardOpen={patrolBoardOpen}
+        patrolStatus={patrolStatus}
         onNotify={onNotify}
         onNewWorkflow={() => void startNewWorkflow()}
         onSave={() => void saveOpenWorkflow()}
@@ -903,7 +905,7 @@ export function AppShell() {
       {patrolBoardOpen ? (
         <PatrolBoard
           cards={kanbanCards ?? undefined}
-          statusLine={patrolStatusLine}
+          statusLine={patrolStatusLine(patrolStatus)}
           onRefresh={refreshKanbanCards}
           onClose={() => setPatrolBoardOpen(false)}
           onAct={(card) =>

@@ -52,6 +52,8 @@ import { ExamplesHint } from '@view/overlays/ExamplesHint';
 import { rememberExamplesShelf } from '@view/workflow/examplesShelf';
 import { RuntimeHealthDot } from './RuntimeHealthDot';
 import { EditorFreshnessChip } from './EditorFreshnessChip';
+import { PatrolJobChip } from './PatrolJobChip';
+import type { PatrolStatus } from '@core/runtime/RuntimeClient';
 import { useEntryQuestion } from './useEntryQuestion';
 import { runIntent } from './runIntent';
 import { subscribeOpenSlug } from '@app/openWorkflow';
@@ -90,6 +92,13 @@ interface TopBarProps {
    */
   onOpenPatrolBoard: () => void;
   patrolBoardOpen: boolean;
+  /**
+   * The live patrol status, for the background-job chip (`kanban-patrol/10`).
+   *
+   * Passed down rather than subscribed to here: `AppShell` already holds one
+   * `usePatrolStatus`, and one fact deserves one stream.
+   */
+  patrolStatus: PatrolStatus | null;
   onNotify: (message: string) => void;
   /**
    * Start a new workflow (ticket 06).
@@ -179,6 +188,7 @@ export function TopBar({
   onOpenMcpServers,
   onOpenPatrolBoard,
   patrolBoardOpen,
+  patrolStatus,
   onNotify,
   onNewWorkflow,
   onSave,
@@ -359,6 +369,11 @@ export function TopBar({
               (`the-cost-of-one-more/16`). Renders nothing unless the served
               bundle is actually stale. */}
           <EditorFreshnessChip />
+          {/* The one background job that outlives its dialog
+              (`kanban-patrol/10`). Silent unless a patrol is actually
+              running — including after one fails, which is the path that
+              otherwise leaves a chip spinning forever. */}
+          <PatrolJobChip status={patrolStatus} />
           {/* **The document's identity, and whether it has one yet**
               (`say-it-on-the-surface/09`). The slot answers "what is this
               called"; the dot on Save answers "is there a folder", and the
