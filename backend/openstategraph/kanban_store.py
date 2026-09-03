@@ -136,6 +136,82 @@ class Card:
     evidence_commit: str
 
 
+#: `kanban-patrol/19`'s explicit Release lease, in seconds — one hour. Owned
+#: here, beside `flagged_stale`, because the HTTP route and the MCP door both
+#: ask this module the same question and a threshold spelled at each door is a
+#: threshold that can differ between them.
+STALE_THRESHOLD_SECONDS = 3600
+
+#: The board's four columns, in board order — the ids
+#: `src/view/board/patrolBoardModel.ts` declares. `test_kanban_store.py` pins
+#: this tuple against that file: two spellings of one vocabulary in two
+#: languages is exactly the drift that would surface as a filter reporting
+#: "no such column" for a column a user is looking straight at.
+BOARD_COLUMNS: tuple[str, ...] = ("detected", "needsYou", "inProgress", "resolved")
+
+#: `src/view/board/cardPriority.ts`'s two unions, same pin.
+BOARD_AREAS: tuple[str, ...] = ("ui", "ux", "frontend", "backend", "test", "docs")
+BOARD_PRIORITIES: tuple[str, ...] = ("high", "med", "low")
+
+#: The kinds that end in a judgement only a person may make —
+#: `cardKind.ts`'s own `HUMAN_DECISION`, and the whole of what puts a card in
+#: Needs You rather than Detected.
+_HUMAN_DECISION_KINDS = frozenset({"prototype", "grilling", "decision"})
+
+
+def column_for(card: Card) -> str:
+    """Which of `BOARD_COLUMNS` this card is in.
+
+    **Derived, never stored** — `kanban-patrol/18`'s rule, kept: a stored
+    column could disagree with the kind, and the disagreement would put a
+    judgement in the column an agent pulls work from.
+
+    Lifecycle outranks kind, and that ordering is the design. A claimed
+    `decision` leaves Needs You, because somebody is already answering it and
+    leaving it there would invite a second person to answer it too. Only an
+    unattended card is placed by its kind.
+
+    This is the same function as `cardKind.ts`'s `columnForCard`, in the
+    language the MCP door speaks. The board keeps its own because it maps a
+    row it already has in the browser; nothing crosses the wire twice.
+    """
+    if card.stage is Stage.FINISHED:
+        return "resolved"
+    if card.stage is not Stage.UNATTENDED:
+        return "inProgress"
+    return "needsYou" if card.kind in _HUMAN_DECISION_KINDS else "detected"
+
+
+def card_row(card: Card, *, stale: bool) -> dict[str, Any]:
+    """One card as the flat row every read door publishes.
+
+    One function rather than one per door: `GET /api/kanban/cards` builds its
+    `KanbanCardResponse` from this, and the MCP `kanban_list_cards` /
+    `kanban_show_card` answer with it directly (plus the derived `column`).
+    Before it existed the route listed sixteen fields and the MCP door listed
+    eight of them, so an agent and the board were reading two different cards
+    with nothing to say which fields the smaller one had dropped.
+    """
+    return {
+        "task_id": card.task_id,
+        "board": card.board,
+        "kind": card.kind,
+        "category": card.category,
+        "title": card.title,
+        "stage": card.stage.value,
+        "actor": card.actor,
+        "priority": card.priority,
+        "area": card.area,
+        "priority_reason": card.priority_reason,
+        "filed_at": card.filed_at,
+        "evidence_test_id": card.evidence_test_id,
+        "evidence_red_reason": card.evidence_red_reason,
+        "evidence_green": card.evidence_green,
+        "evidence_commit": card.evidence_commit,
+        "stale": stale,
+    }
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 

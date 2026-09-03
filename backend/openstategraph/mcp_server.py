@@ -64,13 +64,18 @@ from openstategraph.api.audience import deployment_audience
 from openstategraph.api.diagram import workflow_mermaid
 from openstategraph.api.services import WorkflowServices
 from openstategraph.errors import DocumentError as _DocumentError
+from openstategraph.kanban_store import STALE_THRESHOLD_SECONDS as _STALE_THRESHOLD_SECONDS
 from openstategraph.principal import IPrincipals
 from openstategraph.run_doors import invoke_run
 from openstategraph.schema import normalize_document as _normalize_document
 from openstategraph.step_budget import resolve_step_budget
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from mcp.server.fastmcp import Context as _MCPContext
+
+    from openstategraph.kanban_store import Card
 else:  # the `[mcp]` extra. An installation without it never builds a server,
     # but must still be able to import this module.
     try:
@@ -102,6 +107,7 @@ EXPOSED_TOOLS: tuple[str, ...] = (
     "run_workflow",
     "kanban_attend_card",
     "kanban_set_stage",
+    "kanban_list_cards",
     "kanban_show_card",
     "kanban_release_card",
 )
@@ -1092,6 +1098,23 @@ The loop, in order:
 """
 
 
+def _card_payload(db: "Path", card: "Card") -> dict[str, Any]:
+    """One card, as both kanban read tools answer with it — `kanban-patrol/16`.
+
+    `card_row` is the same function `GET /api/kanban/cards` builds its rows
+    from, so an agent reading the board over MCP and a person reading it in a
+    browser are reading one shape. The one field added here is `column`,
+    which the browser derives for itself in TypeScript and a client of this
+    server cannot.
+    """
+    from openstategraph.kanban_store import card_row, column_for, flagged_stale
+
+    stale = card.task_id in set(
+        flagged_stale(db, threshold_seconds=_STALE_THRESHOLD_SECONDS)
+    )
+    return {**card_row(card, stale=stale), "column": column_for(card)}
+
+
 def _actor_on_the_card(principals: IPrincipals, ctx: Any, claimed: str) -> str:
     """Who a kanban write is recorded as — `kanban-patrol/29`.
 
@@ -1370,19 +1393,94 @@ def build_mcp_server(
             card = read_card(db, task_id)
         except KeyError:
             return {"ok": False, "reason": f"no card {task_id!r}"}
-        return {
-            "task_id": card.task_id,
-            "title": card.title,
-            "kind": card.kind,
-            "category": card.category,
-            "stage": card.stage.value,
-            "actor": card.actor,
-            "priority": card.priority,
-            "priority_reason": card.priority_reason,
+        return _card_payload(db, card)
+
+    @server.tool(name="kanban_list_cards")
+    def kanban_list_cards(
+        board: str = "",
+        column: str = "",
+        area: str = "",
+        priority: str = "",
+    ) -> dict[str, Any]:
+        """Every card on this project's board, newest filing included — the
+        one tool here that does not need a `task_id` you already know.
+
+        Each row is the board's own row plus `column`, the board's four
+        columns being `detected`, `needsYou`, `inProgress` and `resolved`.
+        The column is **derived** from stage and kind rather than stored, so
+        it cannot disagree with the card: a claimed card is `inProgress`
+        whatever its kind, a card carrying evidence of red-then-green is
+        `resolved`, and only an unattended one is placed by its kind. Take
+        work from `detected`; `needsYou` is a judgement that is the owner's
+        to make, not an agent's.
+
+        Every filter is an exact, case-insensitive match, and they combine.
+        A value outside the accepted set answers `ok: false` with an empty
+        `cards` and a `reason` naming what is accepted — never an exception
+        over the transport, and never a bare empty list, which would read as
+        "the board is empty" and be a different, wrong fact.
+
+        A board nothing has ever been filed to is `ok: true` and no cards.
+        A patrol that ran and found nothing, and a patrol that never ran,
+        look the same from here — ask `kanban_show_card` about a specific
+        card if you need to tell them apart.
+        """
+        from openstategraph.kanban_store import (
+            BOARD_AREAS,
+            BOARD_COLUMNS,
+            BOARD_PRIORITIES,
+            column_for,
+            kanban_store_path,
+            list_cards,
+        )
+
+        wanted: dict[str, tuple[str, tuple[str, ...] | None]] = {
+            "column": (column, BOARD_COLUMNS),
+            "area": (area, BOARD_AREAS),
+            "priority": (priority, BOARD_PRIORITIES),
+            # A board name is whatever a project called one, so there is no
+            # accepted set to check against — an unmatched one is genuinely
+            # "no cards there", not a typo this door can recognise.
+            "board": (board, None),
         }
+        resolved: dict[str, str] = {}
+        for field, (value, accepted) in wanted.items():
+            if not value.strip():
+                continue
+            folded = value.strip().casefold()
+            if accepted is None:
+                resolved[field] = folded
+                continue
+            match = [name for name in accepted if name.casefold() == folded]
+            if not match:
+                return {
+                    "ok": False,
+                    "cards": [],
+                    "reason": (
+                        f"no {field} {value!r} — accepted values are "
+                        + ", ".join(accepted)
+                    ),
+                }
+            resolved[field] = match[0].casefold()
+
+        db = kanban_store_path(services.store.root)
+        cards = []
+        for card in list_cards(db):
+            against = {
+                "column": column_for(card),
+                "area": card.area,
+                "priority": card.priority,
+                "board": card.board,
+            }
+            if any(against[field].casefold() != value for field, value in resolved.items()):
+                continue
+            cards.append(_card_payload(db, card))
+        return {"ok": True, "cards": cards}
 
     @server.tool(name="kanban_release_card")
-    def kanban_release_card(task_id: str, threshold_seconds: int = 3600) -> dict[str, Any]:
+    def kanban_release_card(
+        task_id: str, threshold_seconds: int = _STALE_THRESHOLD_SECONDS
+    ) -> dict[str, Any]:
         """Press the explicit Release on a card the system has already
         flagged stale — `kanban-patrol/19`'s "flag, never auto-release",
         made concrete: a human (or the agent acting on their word) can only

@@ -46,16 +46,24 @@ from openstategraph.api.schemas import (
 )
 from openstategraph.api.sse_contract import sse_responses
 from openstategraph.api.streaming import _sse, stop_when_client_leaves_async
-from openstategraph.kanban_store import flagged_stale, kanban_store_path, list_cards, release_card
+from openstategraph.kanban_store import (
+    STALE_THRESHOLD_SECONDS,
+    card_row,
+    flagged_stale,
+    kanban_store_path,
+    list_cards,
+    release_card,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-#: `kanban-patrol/19`'s explicit Release. One hour, matching the CLI/MCP
-#: doors' own default and the ticket's own locked decision — not a config
-#: knob yet, because nothing has asked for a different threshold.
-STALE_THRESHOLD_SECONDS = 3600
+#: Re-exported rather than declared — `kanban-patrol/16`. The hour
+#: `kanban-patrol/19` locked now lives on `kanban_store`, beside the
+#: `flagged_stale` that answers with it, so this route and the MCP door read
+#: one number instead of each spelling their own.
+__all__ = ["router", "STALE_THRESHOLD_SECONDS"]
 
 #: A reference to every patrol task currently in flight, kept for one reason
 #: only: `asyncio.create_task`'s own documentation warns that a task with no
@@ -150,24 +158,10 @@ def list_kanban_cards(services: Services) -> list[KanbanCardResponse]:
     db = kanban_store_path(services.store.root)
     stale_ids = set(flagged_stale(db, threshold_seconds=STALE_THRESHOLD_SECONDS))
     return [
-        KanbanCardResponse(
-            task_id=card.task_id,
-            board=card.board,
-            kind=card.kind,
-            category=card.category,
-            title=card.title,
-            stage=card.stage.value,
-            actor=card.actor,
-            priority=card.priority,
-            area=card.area,
-            priority_reason=card.priority_reason,
-            filed_at=card.filed_at,
-            evidence_test_id=card.evidence_test_id,
-            evidence_red_reason=card.evidence_red_reason,
-            evidence_green=card.evidence_green,
-            evidence_commit=card.evidence_commit,
-            stale=card.task_id in stale_ids,
-        )
+        # One row shape, built once — `kanban-patrol/16`. `card_row` is the
+        # same function the MCP `kanban_list_cards` answers with, so a board
+        # and an agent cannot come to read different cards.
+        KanbanCardResponse(**card_row(card, stale=card.task_id in stale_ids))
         for card in list_cards(db)
     ]
 

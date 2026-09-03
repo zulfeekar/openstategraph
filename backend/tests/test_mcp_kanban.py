@@ -342,3 +342,132 @@ class TestActorIsTheServersToDetermine:
             "task_id",
             "test_id",
         ]
+
+
+class TestListCards:
+    """`kanban-patrol/16`'s read tool. An agent that is not the one which
+    filed a card has to find it somehow; every other tool here takes a
+    `task_id` it must already know."""
+
+    def _two_cards(self, services: WorkflowServices) -> Path:
+        db = kanban_store_path(services.store.root)
+        ensure_schema(db)
+        file_card(db, task_id="proj-a:one", board="workflows", kind="bug",
+                  category="bug", title="A tool call with no timeout",
+                  priority="high", area="backend")
+        file_card(db, task_id="proj-a:two", board="workflows", kind="decision",
+                  category="decision", title="Which model grades this",
+                  priority="low", area="ux")
+        return db
+
+    def test_the_tool_is_declared(self) -> None:
+        assert "kanban_list_cards" in EXPOSED_TOOLS
+
+    def test_every_card_is_listed(self, services: WorkflowServices) -> None:
+        self._two_cards(services)
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_list_cards", {})
+
+        assert result["ok"] is True
+        assert {c["task_id"] for c in result["cards"]} == {"proj-a:one", "proj-a:two"}
+
+    def test_a_row_carries_what_the_board_reads_plus_its_column(
+        self, services: WorkflowServices
+    ) -> None:
+        """The same fields `GET /api/kanban/cards` sends, so a client of this
+        tool and the board are reading one row shape rather than two that can
+        drift — plus the derived `column`, which the board computes for
+        itself in TypeScript and an MCP client cannot."""
+        from openstategraph.api.schemas import KanbanCardResponse
+
+        self._two_cards(services)
+        server = build_mcp_server(services)
+
+        row = _call(server, "kanban_list_cards", {})["cards"][0]
+
+        assert set(row) == set(KanbanCardResponse.model_fields) | {"column"}
+
+    def test_a_column_filter_selects_only_that_column(
+        self, services: WorkflowServices
+    ) -> None:
+        self._two_cards(services)
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_list_cards", {"column": "needsYou"})
+
+        assert [c["task_id"] for c in result["cards"]] == ["proj-a:two"]
+
+    def test_the_column_filter_ignores_case(self, services: WorkflowServices) -> None:
+        self._two_cards(services)
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_list_cards", {"column": "NEEDSYOU"})
+
+        assert [c["task_id"] for c in result["cards"]] == ["proj-a:two"]
+
+    def test_an_unknown_column_names_the_accepted_values(
+        self, services: WorkflowServices
+    ) -> None:
+        """Never an exception over the transport, and never a bare empty list
+        either — an empty answer with no reason reads as "the board is empty",
+        which is a different and wrong fact."""
+        self._two_cards(services)
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_list_cards", {"column": "backlog"})
+
+        assert result["ok"] is False
+        assert result["cards"] == []
+        for accepted in ("detected", "needsYou", "inProgress", "resolved"):
+            assert accepted in result["reason"]
+
+    def test_an_unknown_area_names_the_accepted_values(
+        self, services: WorkflowServices
+    ) -> None:
+        self._two_cards(services)
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_list_cards", {"area": "kitchen"})
+
+        assert result["ok"] is False
+        assert result["cards"] == []
+        assert "backend" in result["reason"]
+
+    def test_board_area_and_priority_filter_exactly(
+        self, services: WorkflowServices
+    ) -> None:
+        self._two_cards(services)
+        server = build_mcp_server(services)
+
+        assert [c["task_id"] for c in _call(
+            server, "kanban_list_cards", {"priority": "HIGH"}
+        )["cards"]] == ["proj-a:one"]
+        assert [c["task_id"] for c in _call(
+            server, "kanban_list_cards", {"area": "ux"}
+        )["cards"]] == ["proj-a:two"]
+        assert _call(server, "kanban_list_cards", {"board": "nothing-here"})["cards"] == []
+
+    def test_a_store_that_does_not_exist_yet_lists_nothing(
+        self, services: WorkflowServices
+    ) -> None:
+        """No patrol has ever run here. That is an empty board, not a
+        failure — the same answer `list_cards` and `GET /api/kanban/cards`
+        already give."""
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_list_cards", {})
+
+        assert result["ok"] is True
+        assert result["cards"] == []
+
+    def test_a_claimed_card_reports_the_in_progress_column(
+        self, services: WorkflowServices
+    ) -> None:
+        self._two_cards(services)
+        server = build_mcp_server(services)
+        _call(server, "kanban_attend_card", {"task_id": "proj-a:two", "actor": "alice"})
+
+        result = _call(server, "kanban_list_cards", {"column": "inProgress"})
+
+        assert [c["task_id"] for c in result["cards"]] == ["proj-a:two"]

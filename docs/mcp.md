@@ -448,8 +448,9 @@ replaces it; name a slug only to update a package you saved earlier.
 
 ---
 
-## 5a. The kanban door — one card, four tools
+## 5a. The kanban door — the board, and one card on it
 
+`kanban_list_cards(board, column, area, priority)`,
 `kanban_attend_card(task_id, actor)`, `kanban_set_stage(task_id, stage, actor,
 test_id, reason, commit)`, `kanban_show_card(task_id)`,
 `kanban_release_card(task_id, threshold_seconds)` — the MCP half of
@@ -458,6 +459,29 @@ attend|stage|show|release`) for an agent that is not MCP-attached to this
 project's server. Both wrap the identical function; there is no second
 implementation of the claim or ordering logic to drift out of sync with this
 one.
+
+`kanban_list_cards` is where an agent arriving cold starts: every other tool
+here takes a `task_id` you must already know. It answers `{"ok": true,
+"cards": [...]}`, each row carrying exactly the fields
+`GET /api/kanban/cards` sends the board — one shape, built by one function,
+so an agent and a person are never reading two different cards — plus the
+derived `column`.
+
+The four columns are `detected`, `needsYou`, `inProgress` and `resolved`, and
+the column is **derived from stage and kind, never stored**, so it cannot
+disagree with the card it describes: a claimed card is `inProgress` whatever
+its kind, a card that carried a test from red to green is `resolved`, and only
+an unattended card is placed by its kind. **Take work from `detected`.** A
+card in `needsYou` is a judgement — a `prototype`, a `grilling`, a `decision`
+— and is the owner's to settle, not an agent's.
+
+All four filters are exact, case-insensitive, and combine. A value outside the
+accepted set answers `{"ok": false, "cards": [], "reason": "..."}` naming what
+is accepted — never an exception over the transport, and never a bare empty
+list, which would read as "the board is empty" and be a different, wrong fact.
+`board` is the one filter with no accepted set to check against, because a
+board name is whatever a project called one. A project where nothing has ever
+been filed answers `ok: true` with no cards.
 
 `kanban_attend_card` is the exclusive claim — first caller wins. A second
 call on an already-attended card returns `{"ok": false, "reason": "..."}`
@@ -515,7 +539,7 @@ what they resolve wins (`kanban-patrol/29`):
 - **Otherwise the caller's `actor` is written exactly as passed** — which is
   the documented default, since a bare `streamable-http` listener with no
   proxy in front identifies nobody. The transport's own token gate is the
-  trust bar there. Refusing instead would make the four tools unusable on
+  trust bar there. Refusing instead would make the two writing tools unusable on
   every deployment without a proxy, which is most of them.
 - **The identity header alone is not identity.** Without
   `X-OpenStateGraph-Proxy` beside it, it is whatever the client typed, so it

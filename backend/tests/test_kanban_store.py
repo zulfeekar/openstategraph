@@ -11,13 +11,19 @@ atomic — first-wins, loser told, never silently overwritten.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
 from openstategraph.kanban_store import (
+    BOARD_AREAS,
+    BOARD_COLUMNS,
+    BOARD_PRIORITIES,
+    Card,
     MissingEvidenceError,
     Stage,
     StageOrderError,
+    column_for,
     ensure_schema,
     file_card,
     flagged_stale,
@@ -675,3 +681,71 @@ class TestCommitIsNowRequiredEvidence:
 
         assert result.ok
         assert read_card(db, "proj-a:thread-1").evidence_commit == "deadbeef"
+
+
+class TestTheColumnACardIsIn:
+    """`kanban-patrol/16`'s list door needs a column, and a column is derived
+    — never stored. The frontend already derives it (`cardKind.ts`,
+    `kanbanCardMapping.ts`); this is that same rule on the backend, so an MCP
+    client and the board cannot disagree about where a card sits.
+
+    Lifecycle outranks kind, and the ordering is the design: a claimed
+    `decision` leaves Needs You, because somebody is already answering it.
+    """
+
+    def _card(self, tmp_path: Path, kind: str, stage: Stage | None = None) -> Card:
+        db = tmp_path / "kanban.sqlite"
+        ensure_schema(db)
+        file_card(db, task_id="t", board="b", kind=kind, category=kind, title="x")
+        if stage is not None:
+            for step in (Stage.ATTENDED, Stage.RED, Stage.GREEN, Stage.FINISHED):
+                set_stage(
+                    db, "t", step, actor="alice",
+                    test_id="tests/test_x.py::t", reason="it was red", commit="deadbeef",
+                )
+                if step is stage:
+                    break
+        return read_card(db, "t")
+
+    def test_an_unattended_task_is_detected(self, tmp_path: Path) -> None:
+        assert column_for(self._card(tmp_path, "bug")) == "detected"
+
+    def test_an_unattended_judgement_needs_you(self, tmp_path: Path) -> None:
+        assert column_for(self._card(tmp_path, "decision")) == "needsYou"
+
+    def test_a_claimed_judgement_leaves_needs_you(self, tmp_path: Path) -> None:
+        assert column_for(self._card(tmp_path, "decision", Stage.ATTENDED)) == "inProgress"
+
+    def test_a_finished_card_is_resolved(self, tmp_path: Path) -> None:
+        assert column_for(self._card(tmp_path, "bug", Stage.FINISHED)) == "resolved"
+
+    def test_every_answer_is_one_of_the_declared_columns(self, tmp_path: Path) -> None:
+        for kind in ("research", "task", "bug", "prototype", "grilling", "decision"):
+            assert column_for(self._card(tmp_path, kind)) in BOARD_COLUMNS
+
+
+class TestTheVocabularyIsNotSpeltTwice:
+    """`BOARD_COLUMNS`, `BOARD_AREAS` and `BOARD_PRIORITIES` restate unions
+    the frontend declares. A restatement with no way to fail is a story
+    (CLAUDE.md), and this one would fail *quietly*: a seventh area added in
+    TypeScript would make `kanban_list_cards` refuse a filter for a column a
+    user is looking straight at, and name a set of accepted values that is
+    simply out of date. So the tuples are read back off the source of truth.
+    """
+
+    ROOT = Path(__file__).resolve().parents[2] / "src" / "view" / "board"
+
+    def _union(self, file_name: str, type_name: str) -> tuple[str, ...]:
+        source = (self.ROOT / file_name).read_text()
+        match = re.search(rf"export type {type_name} =([^;]+);", source)
+        assert match, f"no `export type {type_name}` in {file_name}"
+        return tuple(re.findall(r"'([^']+)'", match.group(1)))
+
+    def test_the_columns_match_the_board(self) -> None:
+        assert BOARD_COLUMNS == self._union("patrolBoardModel.ts", "BoardColumnId")
+
+    def test_the_areas_match_the_board(self) -> None:
+        assert BOARD_AREAS == self._union("cardPriority.ts", "BoardArea")
+
+    def test_the_priorities_match_the_board(self) -> None:
+        assert BOARD_PRIORITIES == self._union("cardPriority.ts", "BoardPriority")

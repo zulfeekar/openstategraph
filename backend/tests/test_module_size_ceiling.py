@@ -607,6 +607,18 @@ lives there entirely; this turns its `SetStageResult` into the same
 `{"ok": ..., "reason": ...}` shape every other kanban tool already answers
 with.
 
+**808 -> 864** (`kanban-patrol/16`, 2026-09-03). The board's fifth tool,
+`kanban_list_cards` — the only kanban tool that does not take a `task_id` the
+caller must already know, and therefore the one an agent arriving cold needs
+first. Fifty-six lines, and the shape is deliberate: the filter loop is one
+table of `(value, accepted)` pairs walked once, not four `if` blocks, because
+"unknown value answers with the accepted set" is one rule and four spellings
+of it would drift into three. `_card_payload` is a *net* reduction pushed up
+to module scope — `kanban_show_card` listed eight fields inline and now shares
+it, and the row itself is `kanban_store.card_row`, the same function
+`GET /api/kanban/cards` builds its `KanbanCardResponse` from. No column logic
+landed here: `column_for` lives in `kanban_store.py` beside the stage it reads.
+
 **755 -> 808** (`kanban-patrol/29`, 2026-09-03). The two kanban tools that
 *write* stop taking the caller's word for who is writing. Fifty-three lines,
 and none of it a second identity scheme: `_actor_on_the_card` calls the same
@@ -793,7 +805,7 @@ RECORDED: dict[str, Recorded] = {
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(808, MCP_SERVER),
+    "mcp_server.py": Recorded(864, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(661, RUN_SINKS),
 }
