@@ -89,7 +89,15 @@
   --osg-node-initial: transparent; /* hollow, ink ring */
   --osg-node-initial-ring: var(--osg-text);
   --osg-node-active: var(--osg-text);
-  --osg-node-idle: var(--osg-neutral-300);
+  /* `kanban-patrol/04`: was `var(--osg-neutral-300)`, the authored value for
+     an idle node's *hollow ring* on the graph canvas — the only consumer of
+     this token today is `--color-status-idle`, a small *filled* dot on a
+     card, which nobody had measured against that surface: 1.43:1 on a white
+     card, against a 3:1 floor. Re-pointed to `--neutral-500`, a step of the
+     same derived-luminance grey ramp — still an idle grey, just the shade
+     of it that clears the floor (4.19:1 against both a white and a
+     near-black card, so one value now covers both themes). */
+  --osg-node-idle: var(--neutral-500);
   --osg-node-terminal: var(--osg-accent);
   --osg-node-error: var(--osg-accent-700);
   --osg-edge: var(--osg-text);
@@ -620,7 +628,12 @@
   --osg-accent: #f4715c;
   --osg-accent-700: #f9b3a6;
   --osg-node-active: #f3f2f2;
-  --osg-node-idle: #4a4746;
+  /* `kanban-patrol/04`: was the authored `#4a4746` — 1.91:1 as a filled card
+     dot against this theme's near-black card, against a 3:1 floor. Repointed
+     to the same `--neutral-500` the light block now uses, so the light and
+     dark blocks state one intent (`04`'s "the same colour, more of it")
+     rather than two literals that happen to agree with nothing. */
+  --osg-node-idle: var(--neutral-500);
   --osg-node-initial-ring: #f3f2f2;
   --osg-edge: #f3f2f2;
 }

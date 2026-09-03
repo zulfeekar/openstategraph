@@ -71,6 +71,8 @@ class WorkflowServices:
         principals: IPrincipals | None = None,
     ) -> None:
         from openstategraph.api.catalogue_events import CatalogueBroadcaster
+        from openstategraph.api.patrol_events import PatrolBroadcaster
+        from openstategraph.api.patrol_registry import PatrolJobRegistry
 
         self.store = WorkflowStore(root=workflows_root)
         #: Live catalogue changes — the fan-out behind `GET /api/events`, so an
@@ -81,6 +83,20 @@ class WorkflowServices:
         #: it reaches this worker only — which is the documented ceiling
         #: anyway (see `catalogue_events` for the limits and the upgrade path).
         self.events = CatalogueBroadcaster()
+        #: Live patrol progress — the fan-out behind
+        #: `GET /api/kanban/patrol/events` (kanban-patrol/07). A sibling of
+        #: `self.events` rather than a reuse of it — see `patrol_events`'s own
+        #: docstring for why a patrol event is not a catalogue change — built
+        #: here for the same reason: this is the one assembly point every
+        #: transport shares, and it must outlive any one request the way
+        #: `self.events` already does.
+        self.patrol_events = PatrolBroadcaster()
+        #: What the one patrol this process can run is doing right now
+        #: (kanban-patrol/07). Lives beside its broadcaster for the same
+        #: reason the broadcaster lives here: a client opening the board mid
+        #: -patrol asks this, not the stream, because the stream has no
+        #: replay — see `patrol_registry`'s own docstring.
+        self.patrol_jobs = PatrolJobRegistry()
         #: Long-term memory, process-wide (ticket 65): one Store shared by
         #: every run, namespaced per user inside the tools themselves.
         #: Injectable, because its sibling the checkpointer always was: a

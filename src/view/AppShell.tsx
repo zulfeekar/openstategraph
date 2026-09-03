@@ -19,6 +19,10 @@ import { Minimap } from './minimap/Minimap';
 import { ShortcutsDrawer } from './overlays/ShortcutsDrawer';
 import { CredentialsDialog } from './overlays/CredentialsDialog';
 import { McpServersDialog } from './overlays/McpServersDialog';
+import { PatrolBoard } from './board/PatrolBoard';
+import { mapKanbanCardToBoardCard } from './board/kanbanCardMapping';
+import type { BoardCard } from './board/patrolBoardModel';
+import { usePatrolStatus } from './board/usePatrolStatus';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
 import { Toaster, useToaster } from './overlays/Toaster';
 import { WorkflowManager } from './workflow/WorkflowManager';
@@ -182,6 +186,42 @@ export function AppShell() {
   const askStreams = useMemo(() => new OpenStreams(), []);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [mcpServersOpen, setMcpServersOpen] = useState(false);
+  /**
+   * The patrol board (`kanban-patrol/10`), beside the key and the plug.
+   *
+   * A property of the *project* rather than of the document on the canvas,
+   * which is the rule the right-hand toolbar group already states about those
+   * two — so it joins them rather than starting a fourth grouping.
+   */
+  const [patrolBoardOpen, setPatrolBoardOpen] = useState(false);
+  /**
+   * Real rows, `kanban-patrol/19` — not live yet, only read-on-open plus a
+   * manual Refresh (`onRefresh` on `PatrolBoard`): push rides `07`'s SSE fan
+   * -out, which does not exist. `null` until the first read returns, so the
+   * board can tell "hasn't asked yet" from "asked, found nothing" — the same
+   * three-state honesty `19` already applies to a card's own absent fields.
+   */
+  const [kanbanCards, setKanbanCards] = useState<readonly BoardCard[] | null>(null);
+  const refreshKanbanCards = useCallback(() => {
+    const client = new RuntimeClient();
+    void client.kanbanCards().then((result) => {
+      if (!result.ok) return; // stays whatever it last was — an unreachable
+      // backend is not evidence the board is empty.
+      setKanbanCards(result.value.map((row) => mapKanbanCardToBoardCard(row, Date.now())));
+    });
+  }, []);
+  useEffect(() => {
+    if (patrolBoardOpen) refreshKanbanCards();
+  }, [patrolBoardOpen, refreshKanbanCards]);
+  /**
+   * The board's live line — kanban-patrol/07. Mounted unconditionally
+   * (not gated on `patrolBoardOpen`) because a patrol started from an
+   * earlier open must still be knowable the moment the board opens again,
+   * even if this tab never saw a single event while it was closed — the
+   * refetch inside the hook is what recovers that, not this tab having
+   * been listening.
+   */
+  const patrolStatusLine = usePatrolStatus(refreshKanbanCards);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
   /** The stored-runs picker (`memory-and-replay` 73), hung off its own control. */
   const [storedRunsOpen, setStoredRunsOpen] = useState(false);
@@ -526,6 +566,46 @@ export function AppShell() {
   }, [workbench, notify]);
 
   const onNotify = useCallback((message: string) => notify(message), [notify]);
+  /**
+   * The explicit Release — `kanban-patrol/19`. A human's own press, never
+   * automatic: `PatrolCard` only renders the button on a card the backend
+   * already reported `stale`, and this only ever fires from that click. A
+   * refusal (the card resumed between the read and the press) is an
+   * ordinary notification, the same channel every other failure here uses
+   * — never a silent no-op. Success re-reads the store the same way
+   * `onRefresh` already does, so the board reflects the reset row rather
+   * than an optimistic guess at it.
+   */
+  const releaseKanbanCard = useCallback(
+    (card: BoardCard) => {
+      const client = new RuntimeClient();
+      void client.releaseCard(card.id).then((result) => {
+        if (!result.ok) {
+          onNotify(result.error);
+          return;
+        }
+        refreshKanbanCards();
+      });
+    },
+    [onNotify, refreshKanbanCards],
+  );
+  const runPatrol = useCallback(() => {
+    const client = new RuntimeClient();
+    // `07`: the door now answers the instant the patrol is launched in the
+    // background, not once it finishes — so success here means "started",
+    // never "filed N cards". The outcome arrives through `usePatrolStatus`'s
+    // subscription, which is what shows the board its own progress and
+    // triggers the refetch. A `409` ("A patrol is already running.") is an
+    // ordinary `Err` and is handled by the same branch as any other failure
+    // — the backend's own words are the clean refusal `07` asks for.
+    void client.runPatrol().then((result) => {
+      if (!result.ok) {
+        onNotify(result.error);
+        return;
+      }
+      onNotify('Patrol started — watch the board for progress.');
+    });
+  }, [onNotify]);
 
   /**
    * The toolbar's **New** (ticket 06).
@@ -604,6 +684,8 @@ export function AppShell() {
         onInspectorToggle={() => setInspectorOpen((value) => !value)}
         onOpenCredentials={() => setCredentialsOpen(true)}
         onOpenMcpServers={() => setMcpServersOpen(true)}
+        onOpenPatrolBoard={() => setPatrolBoardOpen(true)}
+        patrolBoardOpen={patrolBoardOpen}
         onNotify={onNotify}
         onNewWorkflow={() => void startNewWorkflow()}
         onSave={() => void saveOpenWorkflow()}
@@ -818,6 +900,22 @@ export function AppShell() {
       ) : null}
       {credentialsOpen ? <CredentialsDialog onClose={() => setCredentialsOpen(false)} /> : null}
       {mcpServersOpen ? <McpServersDialog onClose={() => setMcpServersOpen(false)} /> : null}
+      {patrolBoardOpen ? (
+        <PatrolBoard
+          cards={kanbanCards ?? undefined}
+          statusLine={patrolStatusLine}
+          onRefresh={refreshKanbanCards}
+          onClose={() => setPatrolBoardOpen(false)}
+          onAct={(card) =>
+            // `attend` no longer reaches here — `PatrolCard` handles it
+            // directly (copy-to-clipboard, `kanban-patrol/19`). Only
+            // `answer` still arrives, and it is still honestly unbuilt.
+            onNotify(`Answer "${card.title}" — the decision channel is kanban-patrol/15.`)
+          }
+          onRelease={releaseKanbanCard}
+          onPatrol={runPatrol}
+        />
+      ) : null}
       <Toaster toasts={toasts} onDismiss={dismiss} />
     </div>
   );

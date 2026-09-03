@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RuntimeClient, isCancelled, type FetchLike, type RunStreamEvent } from './RuntimeClient';
+import {
+  RuntimeClient,
+  isCancelled,
+  type FetchLike,
+  type RunStreamEvent,
+  type PatrolStreamEvent,
+} from './RuntimeClient';
+import type { EventSourceLike } from './WorkflowFileClient';
 
 /**
  * The editor's route to the runtime.
@@ -1577,5 +1584,339 @@ describe('RuntimeClient.providers', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.rows[0]!.defaultModel).toBe('');
+  });
+});
+
+describe('RuntimeClient.kanbanCards', () => {
+  const jsonOf = (body: unknown): Response =>
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  it('reads the rows GET /api/kanban/cards returns', async () => {
+    const client = new RuntimeClient(
+      'http://rt',
+      () =>
+        Promise.resolve(
+          jsonOf([
+            {
+              task_id: 'proj-a:thread-1',
+              board: 'workflows',
+              kind: 'bug',
+              category: 'bug',
+              title: 'A tool call with no timeout',
+              stage: 'unattended',
+              actor: null,
+              priority: 'high',
+              area: 'backend',
+              priority_reason: '',
+              filed_at: '2026-09-01T00:00:00Z',
+            },
+          ]),
+        ) as Promise<Response>,
+    );
+
+    const result = await client.kanbanCards();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]?.task_id).toBe('proj-a:thread-1');
+  });
+
+  it('is an honest error, not an empty list, when the backend cannot be reached', async () => {
+    // Kanban-patrol/19's own rule one layer up: "no store yet" and "store,
+    // no rows" both render as `[]`, but "could not ask" is a third state and
+    // must never be silently folded into either.
+    const client = new RuntimeClient(
+      'http://rt',
+      () => Promise.reject(new Error('network down')) as Promise<Response>,
+    );
+
+    const result = await client.kanbanCards();
+
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('RuntimeClient.runPatrol', () => {
+  const jsonOf = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  it('posts to the patrol door and confirms it started — kanban-patrol/07', async () => {
+    let calledMethod = '';
+    const client = new RuntimeClient('http://rt', (_url, init) => {
+      calledMethod = init?.method ?? '';
+      return Promise.resolve(jsonOf({ status: 'started' }, 202)) as Promise<Response>;
+    });
+
+    const result = await client.runPatrol();
+
+    expect(calledMethod).toBe('POST');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe('started');
+  });
+
+  it('a project with no project_id is a named error, not a silent no-op', async () => {
+    const client = new RuntimeClient(
+      'http://rt',
+      () =>
+        Promise.resolve(
+          new Response(JSON.stringify({ detail: "no project_id in this project's config" }), {
+            status: 400,
+          }),
+        ) as Promise<Response>,
+    );
+
+    const result = await client.runPatrol();
+
+    expect(result.ok).toBe(false);
+  });
+
+  it('a patrol already running is an ordinary Err carrying the backend detail', async () => {
+    const client = new RuntimeClient(
+      'http://rt',
+      () =>
+        Promise.resolve(
+          new Response(JSON.stringify({ detail: 'A patrol is already running.' }), {
+            status: 409,
+          }),
+        ) as Promise<Response>,
+    );
+
+    const result = await client.runPatrol();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('A patrol is already running.');
+  });
+});
+
+describe('RuntimeClient.releaseCard', () => {
+  it('posts to the release door for the given task id — kanban-patrol/19', async () => {
+    let calledUrl = '';
+    let calledMethod = '';
+    const client = new RuntimeClient('http://rt', (url, init) => {
+      calledUrl = String(url);
+      calledMethod = init?.method ?? '';
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      ) as Promise<Response>;
+    });
+
+    const result = await client.releaseCard('proj-a:thread-1');
+
+    expect(calledUrl).toBe('http://rt/api/kanban/cards/proj-a%3Athread-1/release');
+    expect(calledMethod).toBe('POST');
+    expect(result.ok).toBe(true);
+  });
+
+  it('an active card is refused with the backend detail, not a silent success', async () => {
+    const client = new RuntimeClient(
+      'http://rt',
+      () =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              detail:
+                'proj-a:thread-1: not stale — a card can only be released once it has been flagged',
+            }),
+            {
+              status: 400,
+            },
+          ),
+        ) as Promise<Response>,
+    );
+
+    const result = await client.releaseCard('proj-a:thread-1');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('not stale');
+  });
+
+  it('an unreachable backend is an honest Err', async () => {
+    const client = new RuntimeClient(
+      'http://rt',
+      () => Promise.reject(new Error('network down')) as Promise<Response>,
+    );
+
+    const result = await client.releaseCard('proj-a:thread-1');
+
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('RuntimeClient.patrolStatus', () => {
+  it('reads the current job state, refetch-on-open — kanban-patrol/07', async () => {
+    const client = new RuntimeClient(
+      'http://rt',
+      () =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              status: 'running',
+              started_at: '2026-09-02T00:00:00Z',
+              finished_at: '',
+              error: '',
+              filed: 0,
+              skipped: 0,
+              total_findings: 0,
+            }),
+            { status: 200 },
+          ),
+        ) as Promise<Response>,
+    );
+
+    const result = await client.patrolStatus();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe('running');
+    expect(result.value.startedAt).toBe('2026-09-02T00:00:00Z');
+  });
+
+  it('is an honest error when the backend cannot be reached', async () => {
+    const client = new RuntimeClient(
+      'http://rt',
+      () => Promise.reject(new Error('network down')) as Promise<Response>,
+    );
+
+    const result = await client.patrolStatus();
+
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('RuntimeClient.watchPatrolEvents', () => {
+  /** A stand-in for `EventSource` — Vitest's node environment has none,
+   * same reason `WorkflowFileClient.test.ts`'s own `fakeSource` exists. */
+  const fakeSource = () => {
+    const listeners = new Map<string, (event: MessageEvent) => void>();
+    let closed = false;
+    const source: EventSourceLike = {
+      addEventListener: (type, listener) => listeners.set(type, listener),
+      close: () => {
+        closed = true;
+      },
+    };
+    return {
+      factory: (url: string) => {
+        urls.push(url);
+        return source;
+      },
+      emit: (data: string) => listeners.get('patrol.status')?.({ data } as MessageEvent),
+      isClosed: () => closed,
+      listens: () => [...listeners.keys()],
+    };
+  };
+  const urls: string[] = [];
+
+  it('subscribes to the patrol event stream', () => {
+    const fake = fakeSource();
+    urls.length = 0;
+
+    new RuntimeClient(
+      'http://rt',
+      () => Promise.reject(new Error('unused')),
+      () => '',
+      fake.factory,
+    ).watchPatrolEvents(() => {});
+
+    expect(urls).toEqual(['http://rt/api/kanban/patrol/events']);
+    expect(fake.listens()).toEqual(['patrol.status']);
+  });
+
+  it('maps a progressed frame to an event', () => {
+    const fake = fakeSource();
+    const seen: PatrolStreamEvent[] = [];
+    new RuntimeClient(
+      'http://rt',
+      () => Promise.reject(new Error('unused')),
+      () => '',
+      fake.factory,
+    ).watchPatrolEvents((event) => seen.push(event));
+
+    fake.emit(
+      JSON.stringify({
+        kind: 'progressed',
+        task_id: 'proj-a:thread-1',
+        title: 'A bug',
+        filed: 0,
+        skipped: 0,
+        total_findings: 0,
+        reason: '',
+      }),
+    );
+
+    expect(seen).toEqual([
+      {
+        kind: 'progressed',
+        taskId: 'proj-a:thread-1',
+        title: 'A bug',
+        filed: 0,
+        skipped: 0,
+        totalFindings: 0,
+        reason: '',
+      },
+    ]);
+  });
+
+  it('survives a frame it cannot parse rather than tearing the stream down', () => {
+    const fake = fakeSource();
+    const seen: PatrolStreamEvent[] = [];
+    new RuntimeClient(
+      'http://rt',
+      () => Promise.reject(new Error('unused')),
+      () => '',
+      fake.factory,
+    ).watchPatrolEvents((event) => seen.push(event));
+
+    fake.emit('not json');
+    fake.emit(
+      JSON.stringify({
+        kind: 'finished',
+        task_id: '',
+        title: '',
+        filed: 2,
+        skipped: 1,
+        total_findings: 3,
+        reason: '',
+      }),
+    );
+
+    expect(seen).toHaveLength(1);
+    expect(fake.isClosed()).toBe(false);
+  });
+
+  it('closes the connection when the caller unsubscribes', () => {
+    const fake = fakeSource();
+    const stop = new RuntimeClient(
+      'http://rt',
+      () => Promise.reject(new Error('unused')),
+      () => '',
+      fake.factory,
+    ).watchPatrolEvents(() => {});
+
+    expect(fake.isClosed()).toBe(false);
+    stop();
+    expect(fake.isClosed()).toBe(true);
+  });
+
+  it('degrades to a no-op where EventSource does not exist', () => {
+    const stop = new RuntimeClient(
+      'http://rt',
+      () => Promise.reject(new Error('unused')),
+      () => '',
+      null,
+    ).watchPatrolEvents(() => {
+      throw new Error('nothing can arrive');
+    });
+
+    expect(() => stop()).not.toThrow();
   });
 });

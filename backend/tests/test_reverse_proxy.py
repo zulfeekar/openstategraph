@@ -33,7 +33,12 @@ NGINX = REPO / "deploy" / "nginx.conf"
 
 #: The endpoints that return `text/event-stream`. Derived from the app below,
 #: not trusted as a literal — this list is the thing most likely to grow.
-EXPECTED_SSE = {"/api/events", "/api/runs/stream", "/api/runs/resume"}
+EXPECTED_SSE = {
+    "/api/events",
+    "/api/runs/stream",
+    "/api/runs/resume",
+    "/api/kanban/patrol/events",
+}
 
 
 def sse_paths_of_the_app() -> set[str]:

@@ -282,6 +282,12 @@ class OpenStateGraphConfig(BaseModel):
 
     #: Schema version. Present so a future change can migrate rather than guess.
     version: int = SUPPORTED_VERSION
+    #: This project's stable identity — kanban-patrol/03. Minted once by
+    #: `init_project`, paired at mint time with a gitignored companion marker
+    #: (`state_dir/project_identity`) so a config copied into a second
+    #: project (clone, `cp -r`, template) is distinguishable from the
+    #: checkout that actually minted it. See `project_identity.py`.
+    project_id: str | None = None
     #: The fallback `provider:model` when the environment names no provider.
     default_model: str | None = None
     #: Where `<slug>/workflow.json` packages live, when it is not `./workflows`.
@@ -595,7 +601,10 @@ def apply_prepend_sys_path(start: Path | str | None = None) -> list[Path]:
 
 
 def render_config_file(
-    *, workflows_dir: str = "workflows", default_model: str | None = None
+    *,
+    workflows_dir: str = "workflows",
+    default_model: str | None = None,
+    project_id: str | None = None,
 ) -> str:
     """The `openstategraph.yaml` `openstategraph init` writes (T6).
 
@@ -638,6 +647,11 @@ def render_config_file(
 # git root, so it still applies from inside {workflows_dir}/<slug>/.
 
 version: 1
+
+# This project's identity — kanban-patrol/03. Minted once, never by hand:
+# every kanban card is permanently keyed to this value, so it must never be
+# edited or copied from another project's file.
+project_id: {project_id}
 
 # The model used when nothing more specific asked for one.
 #

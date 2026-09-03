@@ -471,6 +471,18 @@ describe('the client and the published contract', () => {
     // out of an address it already holds, so reading the echo back would be
     // the client learning its own argument.
     mount_path: 'the address the client sent — reading the echo teaches it nothing',
+    // `kanban-patrol/13`. The raw checkpoint namespace, verbatim, instance id
+    // and all — added so `run_findings.py` can count how many distinct
+    // namespaces a repeated call's checkpoints came from (`distinct_namespaces`
+    // on `RunFinding`, which is not itself part of this contract — no route
+    // returns a `RunFinding`, only the patrol machinery that classifies one
+    // into a kanban card). `ThreadStep.namespace` already carries the display
+    // form a thread reader renders (merged, instance id dropped on purpose);
+    // this field exists for a backend detector to tell nineteen fan-out
+    // workers apart from one worker called nineteen times, and no frontend
+    // surface has a reason to show a raw namespace string a person cannot
+    // act on.
+    checkpoint_ns: 'the raw namespace identity a backend detector reads, never rendered',
     // `findings` used to sit here carrying two arguments, and only one of them
     // was about a field this census could see. It read as one name over two
     // schemas — `ValidateResponse`'s document validation, which the editor

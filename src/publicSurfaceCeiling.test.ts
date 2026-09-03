@@ -375,13 +375,52 @@ const SUBJECTS: readonly Subject[] = [
       'onChange' and 'dispose'. No queries, no mutators, no constants: the
       design is intact and the sentence describing it was not.
 
-      That is the defect the audit called stale-claim, in the file that warns
-      about stale claims — a number in prose has no way to fail. CLAUDE.md now
-      says eleven and names the eleventh; this pin is what makes the next drift
-      a red test instead of a paragraph. Taking it back to ten means asking
-      whether 'model' should be reached through the controller at all, which is
-      a question about the layering rule and not about a member count, so it is
-      deliberately not answered by trimming.`,
+       That is the defect the audit called stale-claim, in the file that warns
+       about stale claims — a number in prose has no way to fail. CLAUDE.md now
+       says eleven and names the eleventh; this pin is what makes the next drift
+       a red test instead of a paragraph. Taking it back to ten means asking
+       whether 'model' should be reached through the controller at all, which is
+       a question about the layering rule and not about a member count, so it is
+       deliberately not answered by trimming.`,
+  },
+  {
+    file: './core/runtime/RuntimeClient.ts',
+    className: 'RuntimeClient',
+    members: 14,
+    exception: `One thin method per backend door, same shape as every member already
+      here — 'run', 'runStream', 'resume', 'health', 'pastRuns', 'pastRun',
+      'providers', 'verifyProvider', 'kanbanCards', and now 'runPatrol'
+      (kanban-patrol/27) — a POST to the door the board's "Run Patrol" button
+      calls instead of the placeholder toast it used to show. The class
+      itself is not growing a new *kind* of responsibility; it is growing by
+      exactly the count of endpoints this backend exposes, which is the
+      argument the module's own docstring already makes for why it stays
+      thin in code-line terms while wide in member-count terms.
+
+      Ten was never a claim that eleven doors is one too many — it is the
+      point past which a width has to be a decision rather than an accident,
+      and this is that decision, made once, here. The next door
+      ('kanban_list_cards', 'kanban_answer_card' — both still open tickets)
+      would need this exception's number updated honestly rather than
+      silently widened, which is exactly what this test exists to force.
+
+      **Eleven -> thirteen** (kanban-patrol/07). Two more, both the read
+      half of the same door 'runPatrol' now only starts: 'patrolStatus'
+      (the refetch-on-open half of "refetch plus subscribe") and
+      'watchPatrolEvents' (the push half, one 'EventSource' subscription on
+      the sibling stream). Not a new kind of member — 'kanbanCards' is
+      already a thin GET, and 'watchPatrolEvents' is the same shape
+      'WorkflowFileClient.watchCatalogue' already carries, on a class that
+      already imports its 'EventSourceFactory' type rather than declaring a
+      second one. The next door still needs this number updated honestly,
+      unchanged from the paragraph above.
+
+      **Thirteen -> fourteen** (kanban-patrol/19). 'releaseCard', the human's
+      explicit press on a card the system has already flagged stale — one
+      more thin door, same shape as every member already here: a POST, an
+      'Err' reading the backend's own refusal message. Not a new kind of
+      member, and the same rule still applies: the next door still needs
+      this number updated honestly rather than silently widened.`,
   },
 ];
 

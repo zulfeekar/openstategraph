@@ -698,6 +698,7 @@ def _step(
         },
         namespace=namespace,
         node=namespace[-1] if namespace else "",
+        checkpoint_ns=_channel_key(tuple_),
         wrote=[
             str(channel)
             for channel in visible_channel_names(

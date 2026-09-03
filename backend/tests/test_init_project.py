@@ -612,3 +612,67 @@ class TestAnExistingGitignoreIsReadRatherThanAssumed:
 
         assert "already covers it" in printed
         assert "does not ignore" not in printed
+
+
+class TestProjectIdentity:
+    """kanban-patrol/03: a fresh `init` mints `project_id`, once, paired with
+    a gitignored companion marker (`project_identity`) that lets a later run
+    tell this checkout apart from a copy of it."""
+
+    def test_a_fresh_project_gets_a_project_id(self, tmp_path: Path) -> None:
+        result = init_project(tmp_path / "my_demo")
+
+        config = load_config(result.config)
+        assert config.project_id is not None
+
+    def test_two_fresh_projects_never_share_one(self, tmp_path: Path) -> None:
+        a = init_project(tmp_path / "a")
+        b = init_project(tmp_path / "b")
+
+        assert load_config(a.config).project_id != load_config(b.config).project_id
+
+    def test_the_companion_marker_is_written_and_gitignored(self, tmp_path: Path) -> None:
+        result = init_project(tmp_path / "my_demo")
+        config = load_config(result.config)
+        marker = result.directory / ".openstategraph" / "project_identity"
+
+        assert marker.read_text().strip() == config.project_id
+        assert "**/.openstategraph/" in result.gitignore.read_text()
+        assert list(result.workflows.iterdir()) == [result.starter], (
+            "the companion belongs at the project root, not inside the "
+            "workflows root two other tests pin as holding only packages"
+        )
+
+    def test_a_second_init_on_the_same_project_never_remints(self, tmp_path: Path) -> None:
+        first = init_project(tmp_path / "my_demo")
+        first_id = load_config(first.config).project_id
+
+        second = init_project(tmp_path / "my_demo", force=True)
+
+        assert load_config(second.config).project_id == first_id
+
+
+class TestBundledSkillsInstallOnInit:
+    """`kanban-patrol/24`. `atom-forge` and `kanban-patrol` are OpenStateGraph's
+    own skills — installed the same way `AGENTS.md` is, project-locally, in
+    both directories a coding agent might scan."""
+
+    def test_a_fresh_project_gets_both_skills_in_both_roots(self, tmp_path: Path) -> None:
+        from openstategraph.bundled_skills import BUNDLED_SKILLS, SKILL_ROOTS
+
+        result = init_project(tmp_path / "my_demo")
+
+        for root in SKILL_ROOTS:
+            for name in BUNDLED_SKILLS:
+                assert (result.directory / root / name / "SKILL.md").is_file()
+
+    def test_a_second_init_does_not_rewrite_unchanged_skills(self, tmp_path: Path) -> None:
+        from openstategraph.bundled_skills import SKILL_ROOTS
+
+        init_project(tmp_path / "my_demo")
+        marker = tmp_path / "my_demo" / SKILL_ROOTS[0] / "atom-forge" / "SKILL.md"
+        before = marker.stat().st_mtime_ns
+
+        init_project(tmp_path / "my_demo", force=True)
+
+        assert marker.stat().st_mtime_ns == before

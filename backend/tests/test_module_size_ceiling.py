@@ -342,6 +342,44 @@ which one is the shape of the 500 that ticket came from. The fifth widens two
 column padding literals so a fourth provider does not shunt the model column
 out of line. No knowledge moved here: `ProviderGap` composes the sentence and
 this reads it.
+
+**1243 -> 1306** (`kanban-patrol/19`). A new `kanban` subcommand — `attend`,
+`stage`, `show` — 63 lines across three thin handlers, a subparser block, and
+nothing else. No new logic: every handler wraps `kanban_store.set_stage` /
+`read_card`, built as its own module precisely so the claim and stage-order
+rules exist exactly once and this file stays three declarations calling one
+seam, same shape as every other command here.
+
+**1306 -> 1312** (`kanban-patrol/24`). Six lines printing which skills
+`install_bundled_skills` wrote and where — the same "report every artifact by
+name" the `AGENTS.md` line above it already does. No new logic: the
+installer lives in its own module (`bundled_skills.py`), this only formats
+what it returned.
+
+**1312 -> 1315** (`kanban-patrol/25`). Three lines in `kanban show`, printing
+`priority` and, when the classifier gave one, `priority_reason` — the same
+field `read_card` already carries.
+
+**1315 -> 1345** (`kanban-patrol/07`). A new `patrol` subcommand — one verb,
+`run` — 30 lines: a subparser block and one thin handler wrapping
+`patrol.run_patrol`. No new logic here either: the read-classify-file loop
+and the deterministic classifier both live in `patrol.py`; this only reads
+`project_id` off the active config and prints what the loop returned.
+
+**1345 -> 1362** (`kanban-patrol/17`+`21`). `kanban stage` grows three flags —
+`--test-id`, `--reason`, `--commit` — and `cmd_kanban_stage` catches
+`MissingEvidenceError` beside `StageOrderError` it already caught. No new
+logic: `kanban_store.set_stage` owns the evidence gate entirely; this only
+threads the three new strings through and reports the same clean non-zero
+exit a skipped stage already gets.
+
+**1362 -> 1381** (`kanban-patrol/19`, the explicit Release). A fourth
+`kanban` verb, `release` — a subparser block with one new flag
+(`--threshold-seconds`, defaulting to the hour this ticket's own locked
+decision named) and one nine-line handler. No new logic: `kanban_store
+.release_card` owns the "already flagged, then atomic reset" rule entirely;
+this only reads the exit code out of `SetStageResult` and prints the same
+clean non-zero refusal every other `kanban` verb already does.
 """
 
 WORKFLOW_COMPILER = """
@@ -542,6 +580,32 @@ went. Nothing was reimplemented — every one of those is an import from
 and they are the part that stops the next reader restoring the raw payload. The
 alternative, a private helper hiding the sequence, would put a fifth spelling of
 the boundary in the module the ticket found by reading it.
+
+**698 -> 736** (`kanban-patrol/16`). Three tools — `kanban_attend_card`,
+`kanban_set_stage`, `kanban_show_card` — 38 lines, each a thin wrapper over
+`kanban_store.set_stage`/`read_card`. No new logic: `StageOrderError` and a
+lost claim are both turned into `{"ok": false, "reason": ...}` here, the same
+translation the CLI door (`kanban-patrol/19`) already makes at its own
+boundary, not a second claim implementation.
+
+**736 -> 738** (`kanban-patrol/25`). Two fields in `kanban_show_card`'s
+response — `priority`, `priority_reason` — the same two `read_card` already
+returns to the CLI door.
+
+**738 -> 748** (`kanban-patrol/17`+`21`). `kanban_set_stage` grows three
+string parameters — `test_id`, `reason`, `commit` — and catches
+`MissingEvidenceError` beside `StageOrderError` it already caught, ten lines.
+No new logic: `kanban_store.set_stage` owns the evidence gate itself; this
+only threads the three strings through and turns the new exception into the
+same `{"ok": false, "reason": ...}` shape a lost claim already gets.
+
+**748 -> 755** (`kanban-patrol/19`, the explicit Release). A fourth tool,
+`kanban_release_card` — seven lines, one `threshold_seconds` parameter
+defaulting to the hour this ticket locked, one call to `kanban_store
+.release_card`. No new logic: the "already flagged, then atomic reset" rule
+lives there entirely; this turns its `SetStageResult` into the same
+`{"ok": ..., "reason": ...}` shape every other kanban tool already answers
+with.
 """
 
 ROUTES_WORKFLOWS = """
@@ -711,11 +775,11 @@ and the reader read.
 #: worried about.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1243, CLI),
+    "cli.py": Recorded(1381, CLI),
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(698, MCP_SERVER),
+    "mcp_server.py": Recorded(755, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(661, RUN_SINKS),
 }

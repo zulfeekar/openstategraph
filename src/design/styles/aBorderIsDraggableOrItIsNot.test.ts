@@ -376,7 +376,6 @@ describe('a border is drawn by what it means, and there are two weights', () => 
     ['--color-group-border', "a container node's own identity tint"],
     ['--color-note-border', "a note node's own identity tint"],
     ['--accent-solid', "the slider thumb's own node-family accent"],
-    ['--color-text-secondary', "the slider thumb's accent fallback, sharing the slot above"],
     ['currentColor', 'inherits the surrounding text colour on purpose'],
     ['transparent', 'a reserved slot with no line drawn (a tab underline, a focus ring, a reset)'],
     ['--amber-100', 'a warning-toned suggestion box in the ask panel'],
@@ -450,6 +449,10 @@ describe('a border is drawn by what it means, and there are two weights', () => 
       '0 0 0 1px var(--color-border-emphasis), 0 2px 0 rgba(0, 0, 0, 0.55)',
     ],
     ['view/ask/AskPanel.css', 'var(--color-border-emphasis)'],
+    // A patrol card's `:hover`/`:focus-within` ring — interaction state, and
+    // the resting ring one line above it in that file is `--color-border`,
+    // which is the split this list exists to keep honest.
+    ['view/board/PatrolBoard.css', 'inset 0 0 0 1px var(--color-border-emphasis)'],
     ['view/nodes/CompositionBody.css', 'var(--color-border-emphasis)'],
     ['view/nodes/NodeCard.css', 'var(--color-border-emphasis)'],
     ['view/palette/Palette.css', 'inset 0 0 0 1px var(--color-border-emphasis), var(--shadow-sm)'],

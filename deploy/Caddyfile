@@ -86,7 +86,7 @@ osg.example.com {
 	#     been abandoned is a lost turn.
 	#
 	# `encode` is deliberately NOT applied here: a compressor is a buffer.
-	@sse path /api/events /api/runs/stream /api/runs/resume
+	@sse path /api/events /api/runs/stream /api/runs/resume /api/kanban/patrol/events
 	handle @sse {
 		reverse_proxy 127.0.0.1:8000 {
 			header_up X-OpenStateGraph-Proxy 1

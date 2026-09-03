@@ -2,6 +2,7 @@ import { Err, Ok, type Result } from '@core/kernel/Result';
 import { browserSessionId } from './browserSession';
 import { McpRegistryClient } from './McpRegistryClient';
 import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
+import type { EventSourceFactory } from './WorkflowFileClient';
 
 /**
  * The editor's only route to a runtime.
@@ -1111,6 +1112,83 @@ export interface PastRunQuery {
   readonly limit?: number;
 }
 
+/**
+ * `GET /api/kanban/cards`'s row shape, mirrored — `kanban-patrol/19`.
+ */
+/**
+ * `POST /api/kanban/patrol/run`'s `202` reply — kanban-patrol/07.
+ *
+ * Used to be `PatrolRunResult` (`filed`/`skipped`/`total_findings`),
+ * answered once the loop had already finished (`kanban-patrol/27`) — the
+ * very thing this ticket ends: the route now returns the instant the
+ * background task is launched, so there is no result to carry yet. The
+ * result arrives on `patrolStatus()` (poll) or `watchPatrolEvents()` (push).
+ */
+export interface PatrolStartedResult {
+  readonly status: string;
+}
+
+/**
+ * `GET /api/kanban/patrol/status`'s reply — kanban-patrol/07.
+ *
+ * The refetch half of "refetch plus subscribe": a client that opens the
+ * board mid-patrol, or was never subscribed when one started, asks this
+ * once and learns "one is running" without having seen a single event —
+ * `watchCatalogue`'s own rule, applied to the sibling stream: the store
+ * (this response) is the source of truth, an event is a hint to go and
+ * look.
+ */
+export interface PatrolStatus {
+  readonly status: 'idle' | 'running' | 'finished' | 'failed';
+  readonly startedAt: string;
+  readonly finishedAt: string;
+  readonly error: string;
+  readonly filed: number;
+  readonly skipped: number;
+  readonly totalFindings: number;
+}
+
+/**
+ * One frame of `GET /api/kanban/patrol/events` — kanban-patrol/07.
+ *
+ * Mirrors `patrol_events.PatrolEvent` on the backend: one shape for all four
+ * kinds, `kind` saying which fields to read. `started` and `finished`/
+ * `failed` bracket a run; `progressed` is a card just filed — the backend's
+ * own module docstring explains why there is no separate "card created"
+ * event in this patrol's actual shape.
+ */
+export interface PatrolStreamEvent {
+  readonly kind: 'started' | 'progressed' | 'finished' | 'failed';
+  readonly taskId: string;
+  readonly title: string;
+  readonly filed: number;
+  readonly skipped: number;
+  readonly totalFindings: number;
+  readonly reason: string;
+}
+
+export interface KanbanCardRow {
+  readonly task_id: string;
+  readonly board: string;
+  readonly kind: string;
+  readonly category: string;
+  readonly title: string;
+  readonly stage: string;
+  readonly actor: string | null;
+  readonly priority: string;
+  readonly area: string;
+  readonly priority_reason: string;
+  readonly filed_at: string;
+  readonly evidence_test_id: string;
+  readonly evidence_red_reason: string;
+  readonly evidence_green: boolean;
+  readonly evidence_commit: string;
+  //: `kanban-patrol/19`'s explicit Release — whether this card's claim has
+  //: gone past the hour-long lease with no heartbeat. Computed by the
+  //: backend at read time, never stored.
+  readonly stale: boolean;
+}
+
 export interface IRuntimeClient {
   run(request: RunRequest): Promise<Result<RunResult, string>>;
   /**
@@ -1255,6 +1333,17 @@ export class RuntimeClient implements IRuntimeClient {
      * storage was reachable is not stuck at empty for the tab's lifetime.
      */
     private readonly sessionId: () => string = browserSessionId,
+    /**
+     * Injected exactly as `WorkflowFileClient`'s own `eventSourceImpl` is,
+     * and for the same reason: Vitest's node environment has no
+     * `EventSource`. `null` (an old browser, a unit test) makes
+     * `watchPatrolEvents` a no-op that returns a no-op unsubscribe —
+     * `07`'s stream is an improvement, never a dependency, exactly as
+     * `watchCatalogue`'s own default already treats its own stream.
+     */
+    private readonly eventSourceImpl: EventSourceFactory | null = typeof EventSource === 'undefined'
+      ? null
+      : (url) => new EventSource(url),
   ) {
     this.mcp = new McpRegistryClient(baseUrl, fetchImpl);
   }
@@ -1809,6 +1898,149 @@ export class RuntimeClient implements IRuntimeClient {
     } catch {
       return Err('Could not reach the runtime');
     }
+  }
+
+  /**
+   * Every card in this project's kanban store — `kanban-patrol/19`. Reads
+   * only; nothing here writes a stage, that is the CLI and MCP doors' job.
+   *
+   * A network failure is `Err`, never `Ok([])` — `kanban-patrol/19`'s own
+   * rule one layer up: "no store yet" and "store, no rows" both render as
+   * an honest empty board, but "could not ask" is a third state and folding
+   * it into the other two would show a false all-clear.
+   */
+  async kanbanCards(): Promise<Result<readonly KanbanCardRow[], string>> {
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/api/kanban/cards`);
+      if (!response.ok) return Err(`Could not read kanban cards (${response.status})`);
+      const rows = (await response.json()) as KanbanCardRow[];
+      return Ok(rows);
+    } catch {
+      return Err('Could not reach the runtime');
+    }
+  }
+
+  /**
+   * Press the explicit Release on a card the system has already flagged
+   * stale — `kanban-patrol/19`'s "a human presses Release themselves", made
+   * real. A thin POST, same shape as `runPatrol()` beside it.
+   *
+   * **A refusal (the card was not actually stale) is an ordinary `Err`,**
+   * reading the backend's own `detail` message — `runPatrol()`'s own rule
+   * for its `409`, applied here to the route's `400`: one shape for every
+   * failure this client reports, never a second one invented per route.
+   */
+  async releaseCard(taskId: string): Promise<Result<void, string>> {
+    try {
+      const response = await this.fetchImpl(
+        `${this.baseUrl}/api/kanban/cards/${encodeURIComponent(taskId)}/release`,
+        { method: 'POST' },
+      );
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { detail?: string };
+        return Err(body.detail || `Could not release the card (${response.status})`);
+      }
+      return Ok(undefined);
+    } catch {
+      return Err('Could not reach the runtime');
+    }
+  }
+
+  /**
+   * Start the in-built patrol — `kanban-patrol/27`, made durable by
+   * `kanban-patrol/07`. Wraps the same `patrol.run_patrol` the CLI calls; no
+   * second implementation.
+   *
+   * **Does not wait for it to finish.** The route answers `202` the instant
+   * the background task is launched — this method used to return the
+   * patrol's own filed/skipped counts because the route used to block on
+   * them, and it no longer does. A caller learns the outcome from
+   * `patrolStatus()` or `watchPatrolEvents()`, not from this call's return
+   * value.
+   *
+   * **`409` — a patrol is already running — is an ordinary `Err`, not a
+   * distinct code.** The backend's `detail` already says as much in plain
+   * words ("A patrol is already running."), and `Err(message)` is exactly
+   * what every other failure here already is; a caller does not need a
+   * second shape to show it.
+   */
+  async runPatrol(): Promise<Result<PatrolStartedResult, string>> {
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/api/kanban/patrol/run`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { detail?: string };
+        return Err(body.detail || `Could not start the patrol (${response.status})`);
+      }
+      return Ok((await response.json()) as PatrolStartedResult);
+    } catch {
+      return Err('Could not reach the runtime');
+    }
+  }
+
+  /**
+   * The refetch half of "refetch plus subscribe" — kanban-patrol/07. A
+   * board opened mid-patrol calls this once, on open, exactly as
+   * `workflowCatalogue.syncFrom` refetches `list()` before it ever
+   * subscribes.
+   */
+  async patrolStatus(): Promise<Result<PatrolStatus, string>> {
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/api/kanban/patrol/status`);
+      if (!response.ok) return Err(`Could not read patrol status (${response.status})`);
+      const payload = (await response.json()) as Record<string, unknown>;
+      return Ok({
+        status: asString(payload['status']) as PatrolStatus['status'],
+        startedAt: asString(payload['started_at']),
+        finishedAt: asString(payload['finished_at']),
+        error: asString(payload['error']),
+        filed: typeof payload['filed'] === 'number' ? payload['filed'] : 0,
+        skipped: typeof payload['skipped'] === 'number' ? payload['skipped'] : 0,
+        totalFindings:
+          typeof payload['total_findings'] === 'number' ? payload['total_findings'] : 0,
+      });
+    } catch {
+      return Err('Could not reach the runtime');
+    }
+  }
+
+  /**
+   * Patrol progress as it happens, over `GET /api/kanban/patrol/events` —
+   * kanban-patrol/07. The same `EventSource` wiring `WorkflowFileClient
+   * .watchCatalogue` already uses against its own stream: one
+   * `addEventListener` for the one event name the backend sends
+   * (`patrol.status`, `kind` inside the payload), a no-op where
+   * `EventSource` is unavailable, and a returned unsubscribe that closes
+   * the connection rather than waiting on a socket timeout.
+   *
+   * **No replay**, inherited from the backend without a word added here: a
+   * caller that opens this after `patrol.started` already went out learns
+   * nothing about it from this stream — `patrolStatus()` is how it catches
+   * up.
+   */
+  watchPatrolEvents(onEvent: (event: PatrolStreamEvent) => void): () => void {
+    if (!this.eventSourceImpl) return () => {};
+    const source = this.eventSourceImpl(`${this.baseUrl}/api/kanban/patrol/events`);
+    source.addEventListener('patrol.status', (event) => {
+      try {
+        const record = JSON.parse(event.data as string) as Record<string, unknown>;
+        onEvent({
+          kind: asString(record['kind']) as PatrolStreamEvent['kind'],
+          taskId: asString(record['task_id']),
+          title: asString(record['title']),
+          filed: typeof record['filed'] === 'number' ? record['filed'] : 0,
+          skipped: typeof record['skipped'] === 'number' ? record['skipped'] : 0,
+          totalFindings:
+            typeof record['total_findings'] === 'number' ? record['total_findings'] : 0,
+          reason: asString(record['reason']),
+        });
+      } catch {
+        // One unparseable frame is not a reason to tear the stream down —
+        // `watchCatalogue`'s own rule.
+      }
+    });
+    return () => source.close();
   }
 
   async health(): Promise<Result<RuntimeHealth, string>> {

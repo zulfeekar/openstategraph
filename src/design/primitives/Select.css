@@ -106,7 +106,7 @@
   display: flex;
   flex: none;
   padding-left: var(--select-padding-x);
-  color: var(--accent-on-tint, var(--color-text-tertiary));
+  color: var(--accent-on-tint);
 }
 
 .select__leading + .select__control {

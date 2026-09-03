@@ -55,6 +55,23 @@ it, and asking again is the same waste — and the finding carries
 `thread_tool_calls`, named for the thread rather than for the run, so nobody
 reads a conversation's total as a turn's.
 
+**And the read is bounded, so the finding says which of the two it is.**
+`run_findings` takes a `limit` and hands it to `read_thread`, which keeps the
+newest that many checkpoints. On a real 346-checkpoint thread in this
+checkout, the default of 200 saw 89 of the 133 tool calls, emitted 8 findings
+instead of 9, and quoted `thread_tool_calls=89` — a third of the evidence
+invisible, one finding lost outright, and the only cost figure a card could
+have quoted understated by 44. The read *reported* the bound all along, on its
+response; the finding never repeated it, so a fifth of a conversation and all
+of it arrived at a consumer identically shaped (`kanban-patrol/11`). Now
+`RunFinding.truncation` carries the read's own `ThreadTruncation` — whether,
+and at what limit — and while it is set `calls` and `thread_tool_calls` are
+floors rather than exact figures.
+
+The number itself is untouched, deliberately. Raising the default trades one
+silent wrongness for a slower read, and the defect here was never the bound;
+it was that the bound's consequence went unsaid.
+
 ## What counts as the same call, and what that misses
 
 **Normalised arguments**: parsed as JSON and re-emitted with sorted keys and no
@@ -133,13 +150,15 @@ from typing import Any, Iterable, Sequence
 from pydantic import BaseModel, Field
 
 from openstategraph.api.audience import Audience
-from openstategraph.api.schemas import ThreadHistoryResponse
+from openstategraph.api.schemas import ThreadHistoryResponse, ThreadTruncation
 from openstategraph.api.threads import read_thread
+from openstategraph.compile.workflow_compiler import parse_failure_marker
 from openstategraph.run_sinks import RunRecord
 
 __all__ = [
     "REDUNDANT_TOOL_CALL",
     "UNSTABLE_TOOL_RESULT",
+    "NODE_FAILURE",
     "FindingRun",
     "RunFinding",
     "grouping_key",
@@ -152,6 +171,12 @@ REDUNDANT_TOOL_CALL = "redundant-tool-call"
 
 #: B — the same call, answered differently. Information.
 UNSTABLE_TOOL_RESULT = "unstable-tool-result"
+
+#: C — a node failed. `kanban-patrol/22`: already sitting in the checkpointer,
+#: in `outputs[node_id]`, via the same marker `node_failure_warnings` decodes
+#: for a live run. Fires on **one** occurrence, not two — unlike A and B, a
+#: repeat is not what makes a failure worth reporting.
+NODE_FAILURE = "node-failure"
 
 #: The tail `api.threads._cap` appends to a value it had to cut short.
 #:
@@ -215,7 +240,38 @@ class RunFinding(BaseModel):
     #: Every tool call on the conversation, not on one turn — see the module
     #: docstring on why the unit is the thread.
     thread_tool_calls: int = 0
+    #: How many distinct `ThreadStep.checkpoint_ns` values the grouped calls
+    #: came from — `kanban-patrol/13`. `calls=19` alone cannot tell a reader
+    #: whether that was one node called nineteen times in sequence (`1`) or
+    #: nineteen parallel fan-out workers each called once (`19`, equal to
+    #: `calls`), and the two have different remedies: a tool note for the
+    #: first, a shared lookup *across* workers for the second. Pooling itself
+    #: is unchanged — a finding still counts what the run paid for
+    #: (`run_findings.py:99`'s own recorded decision) — this only adds the
+    #: shape a reader needs to tell the two apart.
+    distinct_namespaces: int = 0
     runs: list[FindingRun] = Field(default_factory=list)
+    #: What the read this finding was assembled from left behind, or `None`
+    #: when it left nothing behind (`kanban-patrol/11`).
+    #:
+    #: `run_findings` takes a `limit` and hands it to `read_thread`, which
+    #: keeps the newest that many checkpoints. Until this field existed, a
+    #: finding built from a window was shaped exactly like one built from a
+    #: whole conversation: on a real 346-checkpoint thread here, the default
+    #: of 200 saw 89 of 133 tool calls, emitted 8 findings of 9, and every one
+    #: of the 8 quoted `thread_tool_calls=89` with nothing to mark it.
+    #:
+    #: So `calls` and `thread_tool_calls` are counts over what was *read*, and
+    #: whenever this field is set they are floors rather than figures anybody
+    #: may publish as exact. A `REDUNDANT_TOOL_CALL` saying `calls=10` when the
+    #: true figure is 15 is not a rounding error, it is a false statement.
+    #:
+    #: **It is the read's own verdict, carried, and never a second opinion
+    #: assembled here.** `read_thread` reads one row past its own bound to
+    #: decide this; a copy computed from `len(steps)` against `limit` would be
+    #: a second answer to a question that has one, and that is how two
+    #: computations of one fact come to disagree.
+    truncation: ThreadTruncation | None = None
 
 
 def normalised_arguments(text: str) -> str:
@@ -318,11 +374,45 @@ def run_findings(
     return found
 
 
+def _node_failures(history: ThreadHistoryResponse) -> dict[tuple[str, str], list[str]]:
+    """`{(node, reason): [checkpoint_id, ...]}` — `kanban-patrol/22`.
+
+    Reads `outputs[node_id]` at every step, same channel
+    `node_failure_warnings` reads for a live run's own report. `values`
+    renders a dict channel as capped JSON (`api/threads._cap`) — a wide
+    `outputs` map can truncate mid-object, so a parse failure is skipped, not
+    raised: the same "cannot say anything about this" rule `grouping_key`
+    already follows for a call this module cannot group.
+    """
+    failures: dict[tuple[str, str], list[str]] = {}
+    for step in history.steps:
+        raw = step.values.get("outputs")
+        if not raw:
+            continue
+        try:
+            outputs = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(outputs, dict):
+            continue
+        for node, value in outputs.items():
+            reason = parse_failure_marker(str(value or ""))
+            if reason is None:
+                continue
+            failures.setdefault((str(node), reason), []).append(step.checkpoint_id)
+    return failures
+
+
 def _findings_in(
     history: ThreadHistoryResponse, thread_id: str, rows: Sequence[RunRecord]
 ) -> list[RunFinding]:
     """The findings in one conversation, grouped by the call that was made."""
-    groups: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    # `checkpoint_ns` alongside the checkpoint id and result — `kanban-patrol/13`.
+    # It's `step.checkpoint_ns`, the raw namespace, and deliberately not
+    # `step.namespace`: that field merges a fan-out's sibling instances into
+    # one display name on purpose, which is exactly the shape this needs to
+    # keep apart.
+    groups: dict[tuple[str, str], list[tuple[str, str, str]]] = {}
     total = 0
     for step in history.steps:
         for call in step.tool_calls or []:
@@ -334,7 +424,9 @@ def _findings_in(
                 # The call is still counted: `thread_tool_calls` is what the
                 # conversation cost, not what was groupable.
                 continue
-            groups.setdefault(key, []).append((step.checkpoint_id, call.result))
+            groups.setdefault(key, []).append(
+                (step.checkpoint_id, step.checkpoint_ns, call.result)
+            )
 
     runs = [
         FindingRun(
@@ -347,13 +439,16 @@ def _findings_in(
         for row in rows
     ]
     slug = next((row.workflow_slug for row in rows if row.workflow_slug), "")
+    # Read once, reused below — `test_the_finding_repeats_the_read_s_verdict`
+    # pins this at one call site so a second one is never the stale one.
+    truncation = history.truncation
 
     found: list[RunFinding] = []
     for (tool, arguments), seen in groups.items():
         if len(seen) < 2:
             continue
         digests: list[str] = []
-        for _, result in seen:
+        for _, _, result in seen:
             digest = _digest(result)
             if digest not in digests:
                 digests.append(digest)
@@ -367,9 +462,32 @@ def _findings_in(
                 calls=len(seen),
                 distinct_results=len(digests),
                 result_digests=digests,
-                checkpoints=[checkpoint for checkpoint, _ in seen],
+                checkpoints=[checkpoint for checkpoint, _, _ in seen],
+                distinct_namespaces=len({namespace for _, namespace, _ in seen}),
                 thread_tool_calls=total,
                 runs=runs,
+                truncation=truncation,
+            )
+        )
+
+    # C — a node failure. Fires on one occurrence, not two: unlike A/B, a
+    # single failure is already real information, not waste that only
+    # matters once repeated.
+    for (node, reason), checkpoints in _node_failures(history).items():
+        found.append(
+            RunFinding(
+                name=NODE_FAILURE,
+                thread_id=thread_id,
+                workflow_slug=slug,
+                tool=node,
+                arguments=reason,
+                calls=len(checkpoints),
+                distinct_results=1,
+                result_digests=[_digest(reason)],
+                checkpoints=checkpoints,
+                thread_tool_calls=total,
+                runs=runs,
+                truncation=truncation,
             )
         )
     return found

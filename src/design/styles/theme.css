@@ -322,7 +322,13 @@
   --color-primary-subtle: rgba(69, 159, 96, 0.14);
   --color-primary-text: #ffffff;
 
-  --color-status-idle: #4a4746; /* authored dark `--osg-node-idle` */
+  /* `kanban-patrol/04`: was the authored dark `--osg-node-idle` literal,
+     `#4a4746` — 1.91:1 as a filled in-card status dot against this theme's
+     near-black card, against SC 1.4.11's 3:1 floor. Read through the
+     re-pointed `--osg-node-idle` (`tokens.css`) rather than restated here,
+     so the two files cannot drift back apart the way this literal already
+     had from its own primitive. */
+  --color-status-idle: var(--osg-node-idle);
   --color-status-ready: #2dd4bf;
   --color-status-running: #60a5fa;
   --color-status-success: #34d399;
@@ -381,7 +387,26 @@
  * A node family declares `data-accent="blue"` once; every child reads
  * the four resolved slots below. Adding a family means adding a block
  * here — no component changes.
+ *
+ * **`:root` carries the untinted default — kanban-patrol/14.** Every one
+ * of these four slots used to exist only under `[data-accent]`, an
+ * attribute set per-element on node cards and palette rows, never on the
+ * root. So `Badge tone="accent"` (and the two call sites that already
+ * used it before the kanban board did — `TopBar.tsx`'s token counter,
+ * `Palette.tsx`'s scoped count) computed a transparent background and
+ * inherited text colour anywhere outside that subtree. The values below
+ * are identical to `[data-accent]`'s own neutral default, so nothing
+ * inside a `[data-accent]` subtree changes — that rule still wins on
+ * specificity where it applies, and a coloured family
+ * (`[data-accent='blue']` etc, below) still overrides both.
  * ------------------------------------------------------------------ */
+
+:root {
+  --accent-solid: var(--neutral-500);
+  --accent-strong: var(--neutral-600);
+  --accent-tint: var(--neutral-100);
+  --accent-on-tint: var(--neutral-700);
+}
 
 [data-accent] {
   --accent-solid: var(--neutral-500);

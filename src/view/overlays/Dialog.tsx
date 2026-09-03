@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Icon, IconButton, IconTile } from '@design/primitives';
+import { dialogClassName, type DialogSize } from './dialogSize';
 import './overlays.css';
 
 interface DialogProps {
@@ -11,6 +12,20 @@ interface DialogProps {
   icon?: LucideIcon;
   onClose: () => void;
   footer?: ReactNode;
+  /**
+   * How wide the panel is. Defaults to the 520px every modal in the product
+   * was drawn against; `large` is 90% of the viewport in both dimensions.
+   *
+   * `kanban-patrol/06`. A board of four columns cannot be read at 520px, and
+   * the two ways to answer that were a size variant here or a one-off panel
+   * for the board alone. This is the first, because the three things below —
+   * Escape, the focus trap, and the press-and-release backdrop rule — are the
+   * reason this component exists and a one-off would have to re-earn all
+   * three. It is a **layout** prop: it mints no token and changes no existing
+   * caller's rendering, which is what makes it permissible under the owner's
+   * non-negotiable about the look.
+   */
+  size?: DialogSize;
   children: ReactNode;
 }
 
@@ -22,7 +37,15 @@ interface DialogProps {
  * backdrop only closes on a click that both started *and* ended on it — so
  * releasing a text selection over the backdrop doesn't discard the dialog.
  */
-export function Dialog({ title, subtitle, icon, onClose, footer, children }: DialogProps) {
+export function Dialog({
+  title,
+  subtitle,
+  icon,
+  onClose,
+  footer,
+  size = 'default',
+  children,
+}: DialogProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const backdropMouseDown = useRef(false);
 
@@ -73,7 +96,7 @@ export function Dialog({ title, subtitle, icon, onClose, footer, children }: Dia
     >
       <div
         ref={panelRef}
-        className="dialog"
+        className={dialogClassName(size)}
         role="dialog"
         aria-modal="true"
         aria-label={title}

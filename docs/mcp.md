@@ -448,6 +448,39 @@ replaces it; name a slug only to update a package you saved earlier.
 
 ---
 
+## 5a. The kanban door — one card, four tools
+
+`kanban_attend_card(task_id, actor)`, `kanban_set_stage(task_id, stage, actor,
+test_id, reason, commit)`, `kanban_show_card(task_id)`,
+`kanban_release_card(task_id, threshold_seconds)` — the MCP half of
+`kanban-patrol/19`'s card lifecycle, beside a CLI door (`openstategraph kanban
+attend|stage|show|release`) for an agent that is not MCP-attached to this
+project's server. Both wrap the identical function; there is no second
+implementation of the claim or ordering logic to drift out of sync with this
+one.
+
+`kanban_attend_card` is the exclusive claim — first caller wins. A second
+call on an already-attended card returns `{"ok": false, "reason": "..."}`
+naming who has it; it never raises and never silently overwrites. `stage` is
+one of `red`, `green`, `finished`, and only ever advances one step at a
+time — skipping a stage is reported the same way, as a structured refusal a
+client's model can read, not a stack trace over the transport.
+
+`kanban-patrol/17`+`21`: `stage` is evidence-gated. `red` needs `test_id` and
+`reason`; `green` needs the matching `test_id`; `finished` needs both already
+recorded on the card — a missing or mismatched piece returns the same
+structured `{"ok": false, "reason": "..."}` a skipped stage already does,
+never a fresh claim accepted without proof.
+
+`kanban_release_card` is the human's explicit press on a card the system has
+already flagged stale — "flag, never auto-release" — refused the same
+structured way for any card not currently past `threshold_seconds` (default
+3600, one hour): an active claim, or one nobody has attended, is never
+releasable by accident. A successful release resets stage, actor, heartbeat,
+and every evidence field back to a fresh, unattended row.
+
+---
+
 ## 6. The trust boundary, in one list
 
 Enforced in code, pinned by a test that asserts the registered tool names equal

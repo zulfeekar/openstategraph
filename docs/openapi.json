@@ -292,6 +292,113 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "KanbanCardResponse": {
+        "description": "One row of the kanban board (`kanban-patrol/19`), as the frontend\nreads it. Named rather than a bare `dict` so a generated client has a\ntype to bind \u2014 `test_openapi_contract.py`'s own rule against an\nanonymous JSON shape.",
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "area": {
+            "title": "Area",
+            "type": "string"
+          },
+          "board": {
+            "title": "Board",
+            "type": "string"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "evidence_commit": {
+            "default": "",
+            "title": "Evidence Commit",
+            "type": "string"
+          },
+          "evidence_green": {
+            "default": false,
+            "title": "Evidence Green",
+            "type": "boolean"
+          },
+          "evidence_red_reason": {
+            "default": "",
+            "title": "Evidence Red Reason",
+            "type": "string"
+          },
+          "evidence_test_id": {
+            "default": "",
+            "title": "Evidence Test Id",
+            "type": "string"
+          },
+          "filed_at": {
+            "title": "Filed At",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "priority_reason": {
+            "default": "",
+            "title": "Priority Reason",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "board",
+          "kind",
+          "category",
+          "title",
+          "stage",
+          "priority",
+          "area",
+          "filed_at"
+        ],
+        "title": "KanbanCardResponse",
+        "type": "object"
+      },
+      "KanbanReleaseResponse": {
+        "description": "`POST /api/kanban/cards/{task_id}/release`'s reply \u2014 kanban-patrol/19.\n\nAlways `ok: true` on a 200; a refusal (the card was not actually stale)\nis a `400` with `detail` naming why, not a `200` carrying `ok: false` \u2014\nmatching `run_patrol_once`'s own refusal shape (`409`) rather than\ninventing a second convention for the same idea on a sibling route.",
+        "properties": {
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "title": "KanbanReleaseResponse",
+        "type": "object"
+      },
       "KnowledgeBuildRequest": {
         "additionalProperties": false,
         "description": "POST /api/workflows/{slug}/knowledge/build \u2014 everything optional.\n\n`model`/`credentials` follow the run endpoints' resolution chain; `source`\nnames one registered builder (default: every builder that finds topics).",
@@ -776,6 +883,62 @@
           "contract"
         ],
         "title": "NodeContractResponse",
+        "type": "object"
+      },
+      "PatrolRunAcceptedResponse": {
+        "description": "`POST /api/kanban/patrol/run`'s 202 reply \u2014 kanban-patrol/07.\n\nUsed to be `PatrolRunResponse`, returned once the loop had already\nfinished (`kanban-patrol/27`) \u2014 the very thing this ticket ends: the\nroute now launches the patrol in the background and returns the instant\nit has, so this carries no result at all, only the confirmation that one\nwas started. The result arrives on `GET /api/kanban/patrol/status`\n(poll) or `GET /api/kanban/patrol/events` (push, no replay).",
+        "properties": {
+          "status": {
+            "default": "started",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "PatrolRunAcceptedResponse",
+        "type": "object"
+      },
+      "PatrolStatusResponse": {
+        "description": "`GET /api/kanban/patrol/status`'s reply \u2014 kanban-patrol/07.\n\nThe refetch half of \"refetch plus subscribe\": a client that opens the\nboard mid-patrol, or that was never subscribed to\n`GET /api/kanban/patrol/events` when a patrol started, asks this once and\nlearns \"one is running\" without having seen a single event \u2014 the same\nrule `catalogue_events.py` states for its own stream: the store is the\nsource of truth, an event is a hint to go and look.",
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "filed": {
+            "title": "Filed",
+            "type": "integer"
+          },
+          "finished_at": {
+            "title": "Finished At",
+            "type": "string"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "total_findings": {
+            "title": "Total Findings",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "started_at",
+          "finished_at",
+          "error",
+          "filed",
+          "skipped",
+          "total_findings"
+        ],
+        "title": "PatrolStatusResponse",
         "type": "object"
       },
       "PluginExportResponse": {
@@ -1769,6 +1932,11 @@
             "title": "Checkpoint Id",
             "type": "string"
           },
+          "checkpoint_ns": {
+            "default": "",
+            "title": "Checkpoint Ns",
+            "type": "string"
+          },
           "duration_ms": {
             "anyOf": [
               {
@@ -2355,6 +2523,143 @@
         "summary": "Liveness, and whether a model name can be resolved",
         "tags": [
           "Operations"
+        ]
+      }
+    },
+    "/api/kanban/cards": {
+      "get": {
+        "description": "An empty list, never an error, when nothing has been filed yet \u2014\n`kanban-patrol/19`'s own rule for an unattended-nothing board: a patrol\nthat ran and found nothing is a different claim from a patrol that\ncannot run, and this route only ever makes the first one.\n\n**Independently correct regardless of event history** (`kanban-patrol\n/07`'s own \"done when\"): this is a plain SQL read of the store, with no\nmemory of which SSE frames were sent or missed. A client that connects\nmid-patrol, refetches here, and sees a card the patrol filed while it was\ndisconnected \u2014 that is this route doing exactly what it always did,\nwhich is the whole reason \"refetch plus subscribe\" is a correct answer\nand not a workaround.",
+        "operationId": "list_kanban_cards_api_kanban_cards_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/KanbanCardResponse"
+                  },
+                  "title": "Response List Kanban Cards Api Kanban Cards Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Every card in this project's kanban store, current stage included",
+        "tags": [
+          "Kanban"
+        ]
+      }
+    },
+    "/api/kanban/cards/{task_id}/release": {
+      "post": {
+        "description": "The board's Release button \u2014 `kanban-patrol/19`'s \"a human presses an\nexplicit Release themselves\", made real.\n\nA thin door onto `kanban_store.release_card`, which does the only two\nthings that matter: refuses any card not already named by `flagged_stale`\n(an active claim, or one nobody has attended, is never releasable by\naccident), and otherwise resets the row to a fresh, unattended state.\nA refusal is a clean `400` naming why \u2014 same pattern this route already\nuses for `run_patrol_once`'s own refusal, never a 200 with a false claim\nof success inside it.",
+        "operationId": "release_kanban_card_api_kanban_cards__task_id__release_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KanbanReleaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release an abandoned claim \u2014 refuses unless the card is already flagged stale",
+        "tags": [
+          "Kanban"
+        ]
+      }
+    },
+    "/api/kanban/patrol/events": {
+      "get": {
+        "description": "Patrol progress, live \u2014 `event: patrol.status`, `kind` inside it.\n\nThe same shape as `GET /api/events`, on a sibling broadcaster rather than\nthat endpoint's own \u2014 see `patrol_events.py`'s module docstring for why a\npatrol event does not ride the catalogue's fan-out. Framed by `_sse`, the\none framer this codebase has; no second SSE format is introduced here.\n\n**No replay**, exactly as `/api/events` has none: a subscriber sees what\nhappens while connected. `GET /api/kanban/patrol/status` is how a late\nsubscriber learns what it missed.",
+        "operationId": "patrol_events_stream_api_kanban_patrol_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "`event: <name>` and `data: <json>` lines, blank-line separated. See `docs/api.md`.",
+                  "title": "Server-sent event frames",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "One frame per patrol event.\n\nA `text/event-stream`. Event names: `patrol.status`. The guarantee that every stream ends with one of `done`, `interrupt`, `error` is in `docs/api.md` \u2014 OpenAPI cannot express it."
+          }
+        },
+        "summary": "Patrol progress, live (SSE)",
+        "tags": [
+          "Kanban"
+        ]
+      }
+    },
+    "/api/kanban/patrol/run": {
+      "post": {
+        "description": "The door the board's \"Run Patrol\" button calls \u2014 `kanban-patrol/27`,\nmade durable by `kanban-patrol/07`.\n\n**No longer waits for the loop.** It claims the one job slot\n(`services.patrol_jobs.try_start()`), publishes `patrol.started` to every\nconnected subscriber, launches `patrol.run_patrol` on a background task,\nand returns `202` \u2014 the loop keeps running after this response is sent\nand after the tab that sent the request closes.\n\n**`409`, not a queue, when one is already running.** `07` asks for a\nclean refusal specifically so a second click cannot start a second\npatrol racing the first over the same sqlite rows; `try_start` makes the\ncheck-and-claim atomic, so this is a refusal on a genuine race, not a\nbest-effort guess.\n\n`project_id` comes from the project's own committed config, same source\nthe CLI reads; a project made before that field existed is a clear 400,\nnever a silent no-op or a crash \u2014 unchanged from `27`.",
+        "operationId": "run_patrol_once_api_kanban_patrol_run_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatrolRunAcceptedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Start the in-built patrol in the background \u2014 refuses if one is already running",
+        "tags": [
+          "Kanban"
+        ]
+      }
+    },
+    "/api/kanban/patrol/status": {
+      "get": {
+        "description": "The refetch half of \"refetch plus subscribe\" \u2014 kanban-patrol/07.\n\nA client that opens the board mid-patrol, or that connects to\n`GET /api/kanban/patrol/events` after `patrol.started` already went out,\nasks this once on open and learns \"one is running\" without having seen a\nsingle event \u2014 `catalogue_events.py`'s own rule, applied here: the\nregistry is the source of truth, an event is a hint to go and look.",
+        "operationId": "patrol_status_api_kanban_patrol_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatrolStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "What the one patrol this process can run is doing right now",
+        "tags": [
+          "Kanban"
         ]
       }
     },

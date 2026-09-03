@@ -37,3 +37,8 @@
 version: 1
 
 default_model: ollama:gpt-oss:120b-cloud
+
+# Minted manually — this file predates kanban-patrol/03 and was never
+# re-inited. kanban-patrol/23 (open) owns the real upgrade path for a config
+# like this one; this line unblocks exercising the skill loop today.
+project_id: ebda6da4-5bb8-48b1-b369-6b39ccb4ffd1

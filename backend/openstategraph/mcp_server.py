@@ -82,6 +82,10 @@ EXPOSED_TOOLS: tuple[str, ...] = (
     "export_plugin",
     "save_workflow_draft",
     "run_workflow",
+    "kanban_attend_card",
+    "kanban_set_stage",
+    "kanban_show_card",
+    "kanban_release_card",
 )
 
 
@@ -1201,6 +1205,101 @@ def build_mcp_server(
         handing in a bare document that never went through `compile_workflow`.
         """
         return library.save_draft(slug, name, document)
+
+    @server.tool(name="kanban_attend_card")
+    def kanban_attend_card(task_id: str, actor: str) -> dict[str, Any]:
+        """Claim a patrol-board card, exclusively — `kanban-patrol/16`/`19`.
+
+        First caller wins. A second call on an already-attended card returns
+        `{"ok": false, "reason": "..."}` naming who has it — never an
+        exception, and never a silent overwrite. Same guarantee, same
+        function, as the `openstategraph kanban attend` CLI door.
+        """
+        from openstategraph.kanban_store import Stage, kanban_store_path, set_stage
+
+        db = kanban_store_path(services.store.root)
+        result = set_stage(db, task_id, Stage.ATTENDED, actor=actor)
+        return {"ok": result.ok, "reason": result.reason}
+
+    @server.tool(name="kanban_set_stage")
+    def kanban_set_stage(
+        task_id: str, stage: str, actor: str, test_id: str = "", reason: str = "", commit: str = ""
+    ) -> dict[str, Any]:
+        """Advance a claimed card one stage: `red`, `green`, or `finished`.
+
+        Stage only ever advances one step at a time. Skipping a stage or
+        moving backward is reported as `{"ok": false, "reason": "..."}`
+        rather than raised over the transport — a client's model reads a
+        structured refusal far more reliably than a stack trace.
+
+        `kanban-patrol/17`+`21`: the same evidence gate the CLI enforces.
+        `red` needs `test_id` and `reason`; `green` needs the matching
+        `test_id`; `finished` needs both already recorded — a missing or
+        mismatched piece of evidence is refused the same structured way as a
+        skipped stage, never a fresh assertion accepted at the end.
+        """
+        from openstategraph.kanban_store import (
+            MissingEvidenceError,
+            Stage,
+            StageOrderError,
+            kanban_store_path,
+            set_stage,
+        )
+
+        db = kanban_store_path(services.store.root)
+        try:
+            target = Stage(stage)
+        except ValueError:
+            return {"ok": False, "reason": f"stage must be one of {', '.join(s.value for s in Stage)}"}
+        try:
+            result = set_stage(
+                db, task_id, target, actor=actor, test_id=test_id, reason=reason, commit=commit
+            )
+        except (StageOrderError, MissingEvidenceError) as exc:
+            return {"ok": False, "reason": str(exc)}
+        return {"ok": result.ok, "reason": result.reason}
+
+    @server.tool(name="kanban_show_card")
+    def kanban_show_card(task_id: str) -> dict[str, Any]:
+        """The card's self-contained instruction — the same text the board's
+        own "Copy instruction" button copies, for a client with no clipboard
+        of its own to read from."""
+        from openstategraph.kanban_store import kanban_store_path, read_card
+
+        db = kanban_store_path(services.store.root)
+        try:
+            card = read_card(db, task_id)
+        except KeyError:
+            return {"ok": False, "reason": f"no card {task_id!r}"}
+        return {
+            "task_id": card.task_id,
+            "title": card.title,
+            "kind": card.kind,
+            "category": card.category,
+            "stage": card.stage.value,
+            "actor": card.actor,
+            "priority": card.priority,
+            "priority_reason": card.priority_reason,
+        }
+
+    @server.tool(name="kanban_release_card")
+    def kanban_release_card(task_id: str, threshold_seconds: int = 3600) -> dict[str, Any]:
+        """Press the explicit Release on a card the system has already
+        flagged stale — `kanban-patrol/19`'s "flag, never auto-release",
+        made concrete: a human (or the agent acting on their word) can only
+        release a card `flagged_stale` already named, never an arbitrary
+        active one. Refused (`ok: false`) the same structured way a lost
+        attend or a skipped stage already is — never a stack trace.
+
+        A successful release resets the row to a fresh, unattended state —
+        stage, actor, heartbeat, and every evidence field — so the next
+        attend starts clean, with nothing left over from the abandoned one.
+        """
+        from openstategraph.kanban_store import kanban_store_path, release_card
+
+        db = kanban_store_path(services.store.root)
+        result = release_card(db, task_id, threshold_seconds=threshold_seconds)
+        return {"ok": result.ok, "reason": result.reason}
 
     if allow_runs:
 

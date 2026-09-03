@@ -229,6 +229,13 @@ const REGIONS: ReadonlyMap<string, string> = new Map([
     'one child, `.minimap__surface`, is a render of the whole canvas — an ' +
       'inset would crop it away from the frame it is a miniature of',
   ],
+  [
+    '.patrol-column',
+    'the same shape as `.dialog`, one surface along (`kanban-patrol/06`): a ' +
+      'sticky head and a card list, each carrying its own inset, and the head ' +
+      'draws a rule to the column’s edge that a padded parent would inset — ' +
+      'which would also leave it floating off the corners it sticks to',
+  ],
 ]);
 
 describe('a box has a default inset', () => {

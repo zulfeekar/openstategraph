@@ -115,6 +115,88 @@ class NodeContractResponse(BaseModel):
     default_rules: str = ""
 
 
+class KanbanCardResponse(BaseModel):
+    """One row of the kanban board (`kanban-patrol/19`), as the frontend
+    reads it. Named rather than a bare `dict` so a generated client has a
+    type to bind — `test_openapi_contract.py`'s own rule against an
+    anonymous JSON shape."""
+
+    task_id: str
+    board: str
+    kind: str
+    category: str
+    title: str
+    stage: str
+    actor: str | None = None
+    priority: str
+    area: str
+    #: The plain-English why, kanban-patrol/25 — empty when the classifier
+    #: gave none.
+    priority_reason: str = ""
+    #: ISO-8601, so the frontend computes its own relative phrase rather
+    #: than being handed a stale worded guess — `BoardCard.when`'s own rule.
+    filed_at: str
+    #: `kanban-patrol/17`+`21`'s evidence gate — recorded at the actual
+    #: red/green transitions, empty/false when none has been recorded yet.
+    evidence_test_id: str = ""
+    evidence_red_reason: str = ""
+    evidence_green: bool = False
+    evidence_commit: str = ""
+    #: `kanban-patrol/19`'s explicit Release — whether this card's claim has
+    #: gone past the hour-long lease with no heartbeat. Computed by
+    #: `flagged_stale` at read time, never stored: the same "flag, never
+    #: auto-release" honesty one layer up, so the board can render "attended,
+    #: nothing new in over an hour" and a Release control without a human
+    #: reading raw timestamps to work it out themselves.
+    stale: bool = False
+
+
+class KanbanReleaseResponse(BaseModel):
+    """`POST /api/kanban/cards/{task_id}/release`'s reply — kanban-patrol/19.
+
+    Always `ok: true` on a 200; a refusal (the card was not actually stale)
+    is a `400` with `detail` naming why, not a `200` carrying `ok: false` —
+    matching `run_patrol_once`'s own refusal shape (`409`) rather than
+    inventing a second convention for the same idea on a sibling route.
+    """
+
+    ok: bool = True
+
+
+class PatrolRunAcceptedResponse(BaseModel):
+    """`POST /api/kanban/patrol/run`'s 202 reply — kanban-patrol/07.
+
+    Used to be `PatrolRunResponse`, returned once the loop had already
+    finished (`kanban-patrol/27`) — the very thing this ticket ends: the
+    route now launches the patrol in the background and returns the instant
+    it has, so this carries no result at all, only the confirmation that one
+    was started. The result arrives on `GET /api/kanban/patrol/status`
+    (poll) or `GET /api/kanban/patrol/events` (push, no replay).
+    """
+
+    status: str = "started"
+
+
+class PatrolStatusResponse(BaseModel):
+    """`GET /api/kanban/patrol/status`'s reply — kanban-patrol/07.
+
+    The refetch half of "refetch plus subscribe": a client that opens the
+    board mid-patrol, or that was never subscribed to
+    `GET /api/kanban/patrol/events` when a patrol started, asks this once and
+    learns "one is running" without having seen a single event — the same
+    rule `catalogue_events.py` states for its own stream: the store is the
+    source of truth, an event is a hint to go and look.
+    """
+
+    status: str
+    started_at: str
+    finished_at: str
+    error: str
+    filed: int
+    skipped: int
+    total_findings: int
+
+
 class CompiledGraphResponse(BaseModel):
     """`GET /api/workflows/{slug}/graph` — the compiled topology as Mermaid.
 
@@ -1192,6 +1274,17 @@ class ThreadStep(BaseModel):
     #: `morning-brief` sends two subtasks to one `worker_web`, and those are
     #: one node that ran twice, not two nodes.
     node: str = ""
+    #: LangGraph's checkpoint namespace, **verbatim** — `api/threads._channel_key`'s
+    #: identity, not `namespace`'s display name. `namespace` drops the
+    #: dispatched-instance id on purpose, because a panel grouping by node
+    #: should say *"worker_web ran twice"* rather than list two graphs. That is
+    #: the right call for display and the wrong one for telling nineteen
+    #: parallel fan-out workers of one node apart from one worker called
+    #: nineteen times in sequence — both read as `namespace=['worker_web']`,
+    #: identically, and only the instance id in this field still differs
+    #: (`kanban-patrol/13`). `""` for the workflow's own root namespace, same
+    #: as `_channel_key` returns for it.
+    checkpoint_ns: str = ""
     #: The channels this superstep wrote. The other half of what a row is for
     #: — `values` says what the state *was*, this says what *happened*. Same
     #: exclusions as `values`, for the same reason.

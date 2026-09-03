@@ -78,7 +78,15 @@
 
 .badge--success {
   background: var(--color-primary-subtle);
-  color: var(--color-primary);
+  /* `kanban-patrol/04`: was `--color-primary` — the same token tuned as a
+     *fill* under white text (the Run button), reused here as this badge's
+     own *ink* and never measured that way: 2.38:1 in dark mode against a
+     4.5:1 floor, on `--color-primary-subtle`'s dark tint. `--color-text-success`
+     already exists for exactly this fill-vs-ink split (see its own comment
+     in `theme.css`) and is `--green-600` in light mode — the same value
+     `--color-primary` already is there — so light is unchanged (4.93:1
+     still) and dark moves to `--color-status-success`'s bright end. */
+  color: var(--color-text-success);
 }
 
 .badge--danger {

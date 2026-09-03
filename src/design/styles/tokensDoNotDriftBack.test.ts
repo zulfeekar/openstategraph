@@ -810,11 +810,17 @@ describe('a fallback behind a name that always resolves is dead code', () => {
   };
 
   it('finds both kinds, so neither assertion below is vacuous', () => {
+    // `--accent-*` was this test's own example of a conditional name until
+    // kanban-patrol/14 gave it a `:root` default — every var() fallback
+    // that named it became dead code as a direct consequence, which is
+    // exactly the ratchet below, working. `--font-mono` is not declared
+    // conditionally anywhere in this codebase and stands in as the
+    // "always in scope" example instead.
     const always = unconditional();
     expect(always.has('--color-border')).toBe(true);
-    expect(always.has('--color-text-quaternary')).toBe(true);
-    expect(always.has('--accent-solid')).toBe(false);
-    expect(always.has('--accent-on-tint')).toBe(false);
+    expect(always.has('--font-mono')).toBe(true);
+    expect(always.has('--textarea-max-rows')).toBe(false);
+    expect(always.has('--canvas-empty-inset-left')).toBe(false);
   });
 
   const fallbacks = (): Array<{ site: string; token: string }> => {
@@ -850,12 +856,11 @@ describe('a fallback behind a name that always resolves is dead code', () => {
       .filter((f) => !always.has(f.token))
       .map((f) => `${f.site} ${f.token}`);
 
-    // The five `var(--accent-*, …)` fallbacks `10` was written to spare. Named
-    // by count rather than asserted as "every survivor", because widening to
-    // literals brought in a second legitimate kind — a property set inline on
-    // one element — and a rule saying only accents may fall through would now
-    // be condemning `Field.css` and `canvas.css` for working code.
-    expect(live.filter((s) => s.includes('--accent-')).length).toBe(5);
+    // The five `var(--accent-*, …)` fallbacks `10` was written to spare are
+    // gone — kanban-patrol/14 gave `--accent-*` a `:root` default, which
+    // made every one of them dead code by this same test's own rule, and
+    // they were deleted rather than kept as a now-false exemption.
+    expect(live.filter((s) => s.includes('--accent-')).length).toBe(0);
 
     // The other kind, by name: a custom property a component publishes onto
     // one element from TypeScript is out of scope everywhere else, so its

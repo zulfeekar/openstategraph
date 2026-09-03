@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### Added
+- **A board that reads the runs nobody read** (`kanban-patrol`, tickets 01–27).
+  The editor's top bar gains a radar button; behind it is a four-column
+  board — *Detected*, *Needs You*, *In Progress*, *Resolved* — of cards the
+  in-built patrol files from a project's own recorded runs. The patrol is
+  deterministic and calls no model: it reads `run_findings` (repeated tool
+  calls, unstable results, failed nodes), tells a fan-out apart from a real
+  repetition, files one card per thread keyed on a project identity, and
+  never touches a card it has already filed. A card hands a developer an
+  instruction and a task id to paste into whichever coding agent they run;
+  that agent reports back over a CLI door (`openstategraph kanban attend |
+  stage | show | release`, `openstategraph patrol run`) or an MCP one
+  (`kanban_attend_card`, `kanban_set_stage`, `kanban_show_card`,
+  `kanban_release_card`), both thin adapters over one stage machine. *Resolved*
+  is evidence-gated — a test id, a reason, a matching green and a commit —
+  and a card nobody has written to for an hour is flagged, never released on
+  the system's own schedule. A patrol outlives the board that started it and
+  reports over the existing SSE fan-out; a second run while one is live is a
+  `409`.
+- **`project_id`** — minted once into `openstategraph.yaml` by `init`, paired
+  with a gitignored companion marker so a copied config does not carry a
+  second project into the first one's bucket.
+- **Two bundled skills, `atom-forge` and `kanban-patrol`**, installed into
+  `.claude/skills/` and `.agents/skills/` by `openstategraph init`, so a
+  coding agent on a fresh project can run the patrol and write a well-formed
+  card without this repository's own tooling.
+
+### Changed
+- **Two design tokens retuned** so all eight column-by-theme cells on the
+  board pass WCAG AA, measured rather than asserted; the accent badge has a
+  colour off the canvas.
+- **Docs**: `docs/cli.md` and `docs/mcp.md` carry the two doors;
+  `docs/openapi.json` regenerated.
+
 ## 0.3.0rc11 — 2026-08-31
 
 Everything under *Unreleased* above this line at the time of the cut. The

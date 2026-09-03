@@ -31,7 +31,7 @@ import hashlib
 import json
 import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -429,6 +429,10 @@ class InitResult:
     #: `--adopt` inert in a fresh directory rather than a second, quieter
     #: `init` that skips the starter.
     adopted: tuple[FoundPackage, ...] = ()
+    #: `{(root, skill_name): state}` for `atom-forge`/`kanban-patrol` —
+    #: kanban-patrol/24. Carried so `init`'s printed report can say what
+    #: happened per file, same as it does for `AGENTS.md`.
+    skills_installed: dict[tuple[str, str], str] = field(default_factory=dict)
 
 
 def _existing_directory_refusal(target: Path, label: str) -> str | None:
@@ -696,8 +700,29 @@ def init_project(
     created: list[Path] = []
     config = target / CONFIG_FILENAMES[0]
     if not config.exists():
+        from openstategraph.project_identity import ensure_project_identity
+
+        # Minted before the file is written, never after: `render_config_file`
+        # needs the value in hand, and this is the one call site where
+        # `project_id=None` is the correct argument — a config that does not
+        # exist yet cannot have one. kanban-patrol/03.
+        #
+        # `target / ".openstategraph"`, not `state_dir(target / workflows_dir)`
+        # — the latter lives *inside* the workflows root, which two existing
+        # tests pin as holding nothing but packages right after `init`
+        # (`TestWhatItWrites::test_empty_skips_the_starter`, and the adopt
+        # review). The project root's own `.openstategraph/` is a sibling
+        # directory, already covered by the existing `**/.openstategraph/`
+        # gitignore rule, so nothing else needs to change to keep it ignored.
+        identity = ensure_project_identity(project_id=None, state_dir=target / ".openstategraph")
         elected = _elected_model()
-        config.write_text(render_config_file(workflows_dir=workflows_dir, default_model=elected))
+        config.write_text(
+            render_config_file(
+                workflows_dir=workflows_dir,
+                default_model=elected,
+                project_id=identity.project_id,
+            )
+        )
         created.append(config)
 
     gitignore = target / ".gitignore"
@@ -714,6 +739,20 @@ def init_project(
     agents_md, agents_md_action = agent_brief.write_into(target)
     if agents_md_action == agent_brief.CREATED:
         created.append(agents_md)
+
+    # OpenStateGraph's own skills, installed project-locally — kanban-patrol/24.
+    # Same reasoning as the brief above: a wheel cannot write into a user's
+    # repository by itself, so `init` is the door. Unlike `AGENTS.md`, a
+    # skill file is not shared with the user's own notes, so a `created`
+    # state is the only one that adds to `created` below — `refreshed` means
+    # something was already there and this project owns overwriting it.
+    from openstategraph.bundled_skills import CREATED as SKILL_CREATED
+    from openstategraph.bundled_skills import install_bundled_skills
+
+    skills_installed = install_bundled_skills(target)
+    for (skill_root, name), state in skills_installed.items():
+        if state == SKILL_CREATED:
+            created.append(target / skill_root / name / "SKILL.md")
 
     root = target / workflows_dir
     root.mkdir(parents=True, exist_ok=True)
@@ -741,6 +780,7 @@ def init_project(
         existing_project_warning=existing_project_warning,
         gitignore_gaps=ignore_gaps,
         adopted=adopted,
+        skills_installed=skills_installed,
     )
 
 

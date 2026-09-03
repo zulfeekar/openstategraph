@@ -759,8 +759,32 @@ RUN_RESULT = (
     "and that no door published, so one match and three read the same."
 )
 
+WORKFLOW_SERVICES = """A recorded exception rather than a split, for the reason the class's own
+    docstring gives: it is "the assembly point every transport already
+    shares" — HTTP and MCP alike — so its width is one collaborator per kind
+    of shared state (`store`, `events`, `memory_store`, `checkpointer`,
+    `principals`, `runtime_for`...), not one class doing several jobs. Ten
+    was the count the moment somebody last measured it; eleven is
+    `kanban-patrol/07`'s `patrol_events` (the sibling broadcaster for live
+    patrol progress) and `patrol_jobs` (the one-slot job registry), both
+    landing at once because a background patrol's HTTP route needs both to
+    answer "did I start", "what happened", and "tell everyone watching" —
+    and both belong here for the same reason `events` already does: this is
+    the one place both transports would otherwise have to construct their
+    own copy of, which is exactly the bug ticket 15 closed for the run
+    seam. Splitting them into a second parameter object was considered and
+    set aside: they are two views of one fact (one patrol, for the one
+    project this process serves), constructed together, read together by
+    the same route, and a second grouping object here would be one more
+    name to import for two fields that already live beside their closest
+    relative, `events`, which is the same in-process, single-worker,
+    per-app-instance shape. The next collaborator that lands here needs
+    this exception's number updated honestly, the same discipline
+    `CLAUDE.md` already asks of every other entry in this table."""
+
 RECORDED: dict[str, Recorded] = {
     "compile.diagnostics.Finding": Recorded(21, FINDING_KINDS),
+    "api.services.WorkflowServices": Recorded(11, WORKFLOW_SERVICES),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.DeepAgentNode": Recorded(13, NARRATE_TOGGLE),

@@ -141,6 +141,27 @@
   }
 }
 
+/* The large size — `kanban-patrol/06`. 90% of the viewport in both
+   dimensions, which is the board's requirement: four columns cannot be read
+   at 520px.
+
+   A rule of its own rather than an edit to `.dialog` above, and that is the
+   whole design of the variant. Five modals already render `.dialog` and none
+   of them passes a size, so none of them enters this block and none of them
+   moved. `aDialogSizeIsOptInOnly.test.ts` fails if the default width or the
+   opt-in census ever changes.
+
+   `height` as well as `max-height`: `.dialog` sizes to its content under a
+   cap, which is right for a form and wrong for a board — a column needs a
+   fixed height to scroll inside. `min(…, 100%)` keeps both bounded by the
+   backdrop's padded content box on a small viewport, the way the default
+   width already is. */
+.dialog--large {
+  width: min(90vw, 100%);
+  height: min(90vh, 100%);
+  max-height: min(90vh, 100%);
+}
+
 .dialog__header {
   display: flex;
   align-items: flex-start;

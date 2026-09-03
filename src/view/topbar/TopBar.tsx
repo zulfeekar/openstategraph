@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore, type Ref } from 'react';
 import {
   Download,
-  FileJson,
   FileText,
-  Image as ImageIcon,
   KeyRound,
   MessageSquareText,
   Moon,
@@ -14,13 +12,13 @@ import {
   Play,
   Plug,
   Plus,
+  Radar,
   Grid2x2,
   Redo2,
   Save,
   Square,
   Sun,
   Undo2,
-  Upload,
   GitBranch,
   ChartGantt,
   History,
@@ -37,7 +35,6 @@ import {
   Tooltip,
   useMenu,
   shortcutText,
-  type MenuEntry,
 } from '@design/primitives';
 import { Mark } from '@design/brand/Mark';
 import type { Theme } from '@design/tokens';
@@ -48,14 +45,7 @@ import {
   usePaperController,
   useWorkbench,
 } from '@app/WorkbenchContext';
-import {
-  download,
-  exportJSON,
-  exportPNG,
-  exportSVG,
-  importJSON,
-  slugify,
-} from '@view/export/exportWorkflow';
+import { exportMenuEntries } from './exportMenuEntries';
 import { GraphPreview } from '@view/overlays/GraphPreview';
 import { OnboardingHint } from '@view/overlays/OnboardingHint';
 import { ExamplesHint } from '@view/overlays/ExamplesHint';
@@ -90,6 +80,16 @@ interface TopBarProps {
    * *project* have available, as opposed to what does this document say.
    */
   onOpenMcpServers: () => void;
+  /**
+   * The patrol board (`kanban-patrol/10`).
+   *
+   * A third peer of the key and the plug: all three answer *what does this
+   * project have*, as opposed to what does this document say. The board is
+   * per-project — its cards come from every workflow package in it — so it
+   * belongs in that group and not beside Save.
+   */
+  onOpenPatrolBoard: () => void;
+  patrolBoardOpen: boolean;
   onNotify: (message: string) => void;
   /**
    * Start a new workflow (ticket 06).
@@ -177,6 +177,8 @@ export function TopBar({
   onInspectorToggle,
   onOpenCredentials,
   onOpenMcpServers,
+  onOpenPatrolBoard,
+  patrolBoardOpen,
   onNotify,
   onNewWorkflow,
   onSave,
@@ -335,59 +337,7 @@ export function TopBar({
     onNotify(action === 'publish' ? publishedMessage(name, outcome) : unpublishedMessage(name));
   }, [publish, workbench, onNotify]);
 
-  const exportEntries: MenuEntry[] = [
-    {
-      id: 'json',
-      label: 'Workflow JSON',
-      icon: FileJson,
-      onSelect: () => exportJSON(controller),
-    },
-    {
-      id: 'svg',
-      label: 'Canvas as SVG',
-      icon: ImageIcon,
-      onSelect: () => {
-        if (!paper) return;
-        const svg = exportSVG(paper);
-        if (!svg.ok) {
-          onNotify(svg.error);
-          return;
-        }
-        download(
-          new Blob([svg.value], { type: 'image/svg+xml' }),
-          `${slugify(workbench.model.name)}.svg`,
-        );
-      },
-    },
-    {
-      id: 'png',
-      label: 'Canvas as PNG',
-      icon: ImageIcon,
-      onSelect: () => {
-        if (!paper) return;
-        void exportPNG(paper).then((result) => {
-          if (!result.ok) {
-            onNotify(result.error);
-            return;
-          }
-          download(result.value, `${slugify(workbench.model.name)}.png`);
-        });
-      },
-    },
-    { kind: 'separator', id: 'sep' },
-    {
-      id: 'import',
-      label: 'Import JSON…',
-      icon: Upload,
-      onSelect: () =>
-        // No fit here: replacing the document is framed by the canvas's own
-        // `FrameOnLoadFeature`, which is why drilling into a mount — a path
-        // that had no such hand-written call — used to lose the view.
-        importJSON(controller, (outcome) => {
-          if (outcome.message) onNotify(outcome.message);
-        }),
-    },
-  ];
+  const exportEntries = exportMenuEntries({ controller, paper, workbench, onNotify });
 
   return (
     <>
@@ -717,6 +667,21 @@ export function TopBar({
               label="MCP servers"
               icon={<Icon glyph={Plug} size="md" />}
               onClick={onOpenMcpServers}
+            />
+          </Tooltip>
+
+          {/* The third of the project-scoped trio. What the runs this project
+              has already recorded are telling it — gaps, defects, blockers —
+              as a board. `kanban-patrol/10`. */}
+          <Tooltip
+            content="Patrol board — what this project's recorded runs are telling it"
+            multiline
+          >
+            <IconButton
+              label="Patrol board"
+              active={patrolBoardOpen}
+              icon={<Icon glyph={Radar} size="md" />}
+              onClick={onOpenPatrolBoard}
             />
           </Tooltip>
 

@@ -333,6 +333,63 @@ store and must not be truncated against.
 `threads` and `runs` are complements, not alternatives: one holds what was
 said, the other what it cost and what executed.
 
+### `kanban`
+
+```
+openstategraph kanban attend <task-id> --actor NAME [--workflows-root DIR]
+openstategraph kanban stage <task-id> {red,green,finished} --actor NAME
+                            [--test-id ID] [--reason TEXT] [--commit SHA]
+                            [--workflows-root DIR]
+openstategraph kanban show <task-id> [--workflows-root DIR]
+openstategraph kanban release <task-id> [--threshold-seconds N] [--workflows-root DIR]
+```
+
+The CLI door onto one card of the patrol board (`kanban-patrol/19`), beside
+the MCP one (`kanban-patrol/16`) — for a coding agent that can shell out but
+is not attached to this project's MCP server. Both doors call the identical
+`kanban_store.set_stage`, never two implementations of the claim logic.
+
+`attend` is the exclusive, atomic claim: the first caller wins, a second
+caller on an already-attended card exits non-zero and is told exactly who has
+it, never a silent overwrite. `stage` advances one step at a time — skipping
+a stage or moving backward exits non-zero with the reason, rather than being
+recorded. `show` prints the card's instruction, the same self-contained text
+the board's own "Copy instruction" button copies, for pasting into a coding
+agent that has no CLI or MCP access at all.
+
+`kanban-patrol/17`+`21`: `stage` is evidence-gated, not trust-gated. Moving to
+`red` requires `--test-id` and `--reason` both non-empty; moving to `green`
+requires `--test-id` to *match* the one recorded at `red`; moving to
+`finished` requires red and green already durably on the card — no evidence
+argument reaches `finished` because there is nothing left to assert, only
+what already happened. A caller missing any of this exits non-zero with the
+gap named plainly, the same way a skipped stage already does.
+
+`release` is the human's explicit press on a card the system has already
+flagged stale (past `--threshold-seconds`, default 3600 — one hour, no
+separate ping tool, every `stage` write is the heartbeat). It refuses,
+non-zero, for any card not currently flagged — an active claim, or one
+nobody has attended, is never releasable by accident. A successful release
+resets the row to a fresh, unattended state: stage, actor, heartbeat, and
+all four evidence fields, so the next attend starts clean.
+
+### `patrol`
+
+```
+openstategraph patrol run [--workflows-root DIR]
+```
+
+The in-built patrol (`kanban-patrol/07`'s missing prerequisite): reads every
+recorded finding (`REDUNDANT_TOOL_CALL`, `UNSTABLE_TOOL_RESULT`,
+`NODE_FAILURE`), classifies each one deterministically — no model, `05`'s
+richer classifier is a separate open question — and files whatever card
+does not already exist. A card whose stage has already left `unattended` is
+never touched again on a later run, even if the same finding reappears.
+
+Needs the running project's own `project_id` (in its committed
+`openstategraph.yaml`); a project made before that field existed prints an
+error naming `kanban-patrol/23` rather than inventing one.
+
 ## Knowing what is configured
 
 ### `providers`

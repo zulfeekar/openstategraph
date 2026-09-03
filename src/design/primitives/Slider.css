@@ -27,7 +27,7 @@
   border-radius: var(--radius-full);
   background: linear-gradient(
     to right,
-    var(--accent-solid, var(--color-text-secondary)) 0 var(--slider-fill),
+    var(--accent-solid) 0 var(--slider-fill),
     var(--color-border) var(--slider-fill) 100%
   );
 }
@@ -56,7 +56,7 @@
   height: var(--slider-thumb-size);
   border-radius: var(--radius-full);
   background: var(--color-bg-surface);
-  border: 1.5px solid var(--accent-solid, var(--color-text-secondary));
+  border: 1.5px solid var(--accent-solid);
   box-shadow: var(--shadow-xs);
   transition:
     transform var(--duration-fast) var(--ease-out),
@@ -68,7 +68,7 @@
   height: var(--slider-thumb-size);
   border-radius: var(--radius-full);
   background: var(--color-bg-surface);
-  border: 1.5px solid var(--accent-solid, var(--color-text-secondary));
+  border: 1.5px solid var(--accent-solid);
   box-shadow: var(--shadow-xs);
 }
 

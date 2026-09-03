@@ -182,7 +182,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       reason to change, and the transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 730,
+    lines: 821,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -253,6 +253,32 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       cannot be derived here, because the reply often streams from inside a
       mounted document judged by a grader no client has heard of.
 
+      **730 -> 747** (\`kanban-patrol/19\`). \`kanbanCards()\` and the
+      \`KanbanCardRow\` interface it returns — the board's read door onto
+      \`GET /api/kanban/cards\`, same shape as \`providers()\` beside it: a thin
+      method, a declared row type mirroring the wire, an \`Err\` on an
+      unreachable backend rather than a false empty list. Seventeen lines,
+      and the same bill this entry has taken every time: a declared member
+      per wire field, and one line of actual behaviour.
+
+      **747 -> 748** (\`kanban-patrol/25\`). One declared member,
+      \`priority_reason\`, on \`KanbanCardRow\` — the plain-English why a
+      classifier gave a card its priority, mirrored from the same route.
+
+      **748 -> 760** (\`kanban-patrol/27\`). \`runPatrol()\` and the
+      \`PatrolRunResult\` interface it returns — the door the board's own
+      "Run Patrol" button now calls, replacing a placeholder toast. Same
+      shape as every method beside it: a thin POST, a declared response
+      type, an \`Err\` that reads the server's own \`detail\` message rather
+      than inventing one.
+
+      **760 -> 764** (\`kanban-patrol/17\`+\`21\`). Four declared members on
+      \`KanbanCardRow\` — \`evidence_test_id\`, \`evidence_red_reason\`,
+      \`evidence_green\`, \`evidence_commit\` — the evidence gate's own fields,
+      mirrored from the same route. The same bill this entry has taken
+      every time a field joins that response: one line per member, no new
+      behaviour.
+
       Then **723 -> 728** (\`the-cost-of-one-more/17\`). \`PastRun.pause\` — what a
       parked run is waiting to be told — plus \`asPausePayload\`, a four-line
       reader beside \`asTokens\` and \`asTruncation\`. Same shape as the two
@@ -260,7 +286,31 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       mapper, and a guard that refuses an array because \`Object.entries\` would
       otherwise render one as numeric keys at a person. No behaviour — the
       judgement about what the payload *says* is \`pastRunView.pauseLines\`,
-      which is where the rules in this seam belong.`,
+      which is where the rules in this seam belong.
+
+      **764 -> 811** (\`kanban-patrol/07\`). The patrol became durable: three
+      declared response shapes (\`PatrolStartedResult\`, \`PatrolStatus\`,
+      \`PatrolStreamEvent\` — replacing \`PatrolRunResult\`, one member net
+      gain) and two methods, \`patrolStatus()\` and \`watchPatrolEvents()\`.
+      The first is \`kanbanCards()\`'s own shape, one GET and a coercion per
+      field; the second is \`watchCatalogue()\`'s own shape, copied rather
+      than re-derived — one \`EventSource\` subscription, one
+      \`addEventListener\`, a parse that survives a bad frame. Both bills are
+      the ones this entry has already argued for: declared members mirroring
+      a wire shape, and a thin method wrapping one browser API this codebase
+      already uses exactly once elsewhere. The constructor also grew an
+      injected \`eventSourceImpl\`, the same seam \`WorkflowFileClient\`
+      already carries, for the same reason: Vitest's node environment has no
+      \`EventSource\`.
+
+      **811 -> 821** (\`kanban-patrol/19\`). \`releaseCard()\`, the human's
+      explicit press on a card the system has already flagged stale — a
+      thin POST, same shape as \`runPatrol()\` beside it: one method, one
+      \`fetch\`, an \`Err\` reading the backend's own \`detail\` on a refusal
+      (the card was not actually stale) rather than inventing a second
+      failure shape. Ten lines, no declared response type needed at all —
+      the door answers \`{"ok": true}\` on success and nothing this class
+      reads beyond the boolean \`Result\` already carries.`,
   },
 };
 

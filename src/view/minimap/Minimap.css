@@ -42,7 +42,7 @@
 .minimap__node {
   position: absolute;
   border-radius: var(--radius-xs);
-  background: var(--accent-solid, var(--color-text-quaternary));
+  background: var(--accent-solid);
   opacity: 0.7;
 }
 

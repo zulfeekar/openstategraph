@@ -850,6 +850,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     It is also where story one is first *shown* — the extra chose the vendor,
     the key is the only thing left, and the message names it.
     """
+    from openstategraph.bundled_skills import BUNDLED_SKILLS
     from openstategraph.config_file import reset_active_config
     from openstategraph.providers import provider_catalogue
     from openstategraph.scaffold import ScaffoldError, init_project
@@ -912,6 +913,14 @@ def cmd_init(args: argparse.Namespace) -> int:
     # markers, so the four states below are all truthful and none of them
     # touches a word the user wrote.
     print(f"  {'AGENTS.md':<22}  {_AGENTS_MD_STATE[result.agents_md_action]}")
+    # kanban-patrol/24: OpenStateGraph's own skills, installed the same way —
+    # project-local, in both directories a coding agent might scan. One line
+    # per root so a reader sees both rather than inferring the second.
+    skill_names = ", ".join(sorted({name for _, name in result.skills_installed}))
+    for root in dict.fromkeys(r for r, _ in result.skills_installed):
+        states = {result.skills_installed[(root, name)] for name in BUNDLED_SKILLS}
+        summary = states.pop() if len(states) == 1 else "mixed"
+        print(f"  {root + '/':<22}  {skill_names} — {summary}")
     print()
 
     # The generated config was written before this process had any chance to
@@ -1359,6 +1368,129 @@ def cmd_runs_path(args: argparse.Namespace) -> int:
         print("memory")
         return EXIT_OK
     print(path)
+    return EXIT_OK
+
+
+def cmd_kanban_attend(args: argparse.Namespace) -> int:
+    """The first-wins claim. Exits nonzero and prints who already has it
+    rather than silently overwriting — `kanban-patrol/19`."""
+    from openstategraph.kanban_store import Stage, kanban_store_path, set_stage
+
+    db = kanban_store_path(getattr(args, "workflows_root", None))
+    result = set_stage(db, args.task_id, Stage.ATTENDED, actor=args.actor)
+    if not result.ok:
+        return _error(result.reason)
+    print(f"attended {args.task_id} as {args.actor}")
+    return EXIT_OK
+
+
+def cmd_kanban_stage(args: argparse.Namespace) -> int:
+    """Advance one stage. `kanban-patrol/19`: only the actor already holding
+    the card calls this, so a skipped or backward stage is this caller's own
+    mistake, reported and refused, never silently recorded.
+
+    `kanban-patrol/17`+`21`: the evidence gate. `--test-id`/`--reason`/
+    `--commit` are the CLI's only way to write the evidence a `red`/`green`/
+    `finished` transition requires — a caller with none of these words to
+    say gets `MissingEvidenceError`, reported the same clean non-zero-exit
+    way `StageOrderError` already is, never a stack trace.
+    """
+    from openstategraph.kanban_store import (
+        MissingEvidenceError,
+        Stage,
+        StageOrderError,
+        kanban_store_path,
+        set_stage,
+    )
+
+    db = kanban_store_path(getattr(args, "workflows_root", None))
+    try:
+        target = Stage(args.stage)
+    except ValueError:
+        return _usage(f"stage must be one of {', '.join(s.value for s in Stage)}")
+    try:
+        result = set_stage(
+            db,
+            args.task_id,
+            target,
+            actor=args.actor,
+            test_id=getattr(args, "test_id", "") or "",
+            reason=getattr(args, "reason", "") or "",
+            commit=getattr(args, "commit", "") or "",
+        )
+    except (StageOrderError, MissingEvidenceError) as exc:
+        return _error(str(exc))
+    if not result.ok:
+        return _error(result.reason)
+    print(f"{args.task_id} -> {target.value}")
+    return EXIT_OK
+
+
+def cmd_kanban_release(args: argparse.Namespace) -> int:
+    """The human half of "flag, never auto-release" — `kanban-patrol/19`.
+    Refuses (nonzero, plain reason) unless the card is already flagged by
+    `flagged_stale`; never releases a card by mere request."""
+    from openstategraph.kanban_store import kanban_store_path, release_card
+
+    db = kanban_store_path(getattr(args, "workflows_root", None))
+    result = release_card(db, args.task_id, threshold_seconds=args.threshold_seconds)
+    if not result.ok:
+        return _error(result.reason)
+    print(f"released {args.task_id}")
+    return EXIT_OK
+
+
+def cmd_kanban_show(args: argparse.Namespace) -> int:
+    """The self-contained instruction — `kanban-patrol/19`'s "Copy
+    instruction" affordance, from the CLI door: a coding agent (or a human
+    pasting on its behalf) reads the same row the board's Copy buttons read."""
+    from openstategraph.kanban_store import kanban_store_path, read_card
+
+    db = kanban_store_path(getattr(args, "workflows_root", None))
+    try:
+        card = read_card(db, args.task_id)
+    except KeyError:
+        return _error(f"no card {args.task_id!r} in {db}")
+    print(f"task_id: {card.task_id}")
+    print(f"title: {card.title}")
+    print(f"kind: {card.kind}   category: {card.category}   stage: {card.stage.value}")
+    print(f"priority: {card.priority}")
+    if card.priority_reason:
+        print(f"  why: {card.priority_reason}")
+    if card.actor:
+        print(f"actor: {card.actor}")
+    return EXIT_OK
+
+
+def cmd_patrol_run(args: argparse.Namespace) -> int:
+    """Read every recorded finding, file what's new, skip what's already
+    claimed — kanban-patrol/07's synchronous door. No model, deterministic:
+    `05`'s richer classifier, if it lands, replaces the judgement inside
+    `patrol.classify_finding`, never this command.
+
+    `project_id` comes from the project's own committed config — the same
+    identity every card is keyed to — never invented here.
+    """
+    from openstategraph.config_file import active_config
+    from openstategraph.patrol import run_patrol
+    from openstategraph.workflows_root import workflows_root as resolve_workflows_root
+
+    root = Path(getattr(args, "workflows_root", None) or resolve_workflows_root())
+    config = active_config()
+    project_id = config.project_id if config else None
+    if not project_id:
+        return _error(
+            "no project_id in this project's config — kanban-patrol/23 owns projects made "
+            "before this field existed. Run `openstategraph init --force` here to check for one."
+        )
+
+    result = run_patrol(project_id=project_id, workflows_root=root)
+    print(f"{result.total_findings} finding(s) read")
+    print(f"{len(result.filed)} card(s) filed")
+    for task_id in result.filed:
+        print(f"  + {task_id}")
+    if result.skipped:
+        print(f"{len(result.skipped)} already filed, left untouched")
     return EXIT_OK
 
 
@@ -2031,6 +2163,64 @@ def build_parser() -> argparse.ArgumentParser:
         "--out", help="where to write the bundle (default: ./<the package's folder name>)"
     )
     export_plugin_cmd.set_defaults(handler=cmd_export_plugin)
+
+    kanban = subparsers.add_parser(
+        "kanban",
+        help="attend and advance a kanban-board card (kanban-patrol/19) — the CLI door, "
+        "beside the MCP one, for a coding agent that is not attached to this project's server",
+    )
+    kanban_commands = kanban.add_subparsers(dest="kanban_command", required=True)
+
+    kanban_attend = kanban_commands.add_parser(
+        "attend", help="claim a card, exclusively — first caller wins, the second is told who has it"
+    )
+    kanban_attend.add_argument("task_id")
+    kanban_attend.add_argument("--actor", required=True, help="who is attending — kanban-patrol/20")
+    kanban_attend.add_argument("--workflows-root", dest="workflows_root")
+    kanban_attend.set_defaults(handler=cmd_kanban_attend)
+
+    kanban_stage = kanban_commands.add_parser(
+        "stage", help="advance a claimed card one stage — red, green, or finished"
+    )
+    kanban_stage.add_argument("task_id")
+    kanban_stage.add_argument("stage", choices=["red", "green", "finished"])
+    kanban_stage.add_argument("--actor", required=True)
+    kanban_stage.add_argument("--test-id", dest="test_id", default="", help="kanban-patrol/17+21 evidence: the test identifier")
+    kanban_stage.add_argument("--reason", default="", help="kanban-patrol/17+21 evidence: why the test failed, required at red")
+    kanban_stage.add_argument("--commit", default="", help="kanban-patrol/17+21 evidence: the commit/diff carrying the work — required at finished")
+    kanban_stage.add_argument("--workflows-root", dest="workflows_root")
+    kanban_stage.set_defaults(handler=cmd_kanban_stage)
+
+    kanban_show = kanban_commands.add_parser(
+        "show", help="print a card's instruction — the self-contained text to paste into a coding agent"
+    )
+    kanban_show.add_argument("task_id")
+    kanban_show.add_argument("--workflows-root", dest="workflows_root")
+    kanban_show.set_defaults(handler=cmd_kanban_show)
+
+    kanban_release = kanban_commands.add_parser(
+        "release",
+        help="press the explicit Release on a card the system has already flagged stale (kanban-patrol/19)",
+    )
+    kanban_release.add_argument("task_id")
+    kanban_release.add_argument(
+        "--threshold-seconds", dest="threshold_seconds", type=int, default=3600,
+        help="how old a heartbeat must be to count as stale (default: 3600, one hour)",
+    )
+    kanban_release.add_argument("--workflows-root", dest="workflows_root")
+    kanban_release.set_defaults(handler=cmd_kanban_release)
+
+    patrol = subparsers.add_parser(
+        "patrol",
+        help="the in-built patrol — read findings, file new kanban cards (kanban-patrol/07)",
+    )
+    patrol_commands = patrol.add_subparsers(dest="patrol_command", required=True)
+
+    patrol_run = patrol_commands.add_parser(
+        "run", help="one pass: read every finding, file what's new, skip what's already claimed"
+    )
+    patrol_run.add_argument("--workflows-root", dest="workflows_root")
+    patrol_run.set_defaults(handler=cmd_patrol_run)
 
     threads = subparsers.add_parser("threads", help="past runs stored by the checkpointer")
     thread_commands = threads.add_subparsers(dest="threads_command", required=True)
