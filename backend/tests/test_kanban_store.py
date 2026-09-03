@@ -185,6 +185,62 @@ class TestUnattendedNeverFlagged:
         assert flagged_stale(db, threshold_seconds=0) == []
 
 
+class TestFinishedNeverFlagged:
+    """`kanban-patrol/32`: staleness is about an abandoned *claim*, and
+    `finished` is not an abandoned claim — it is a finished one. Nobody
+    writes to a resolved card again, so its heartbeat is old by design and
+    passes the threshold within the hour. Flagging it offered `release_card`
+    — the one control on the board that empties all four evidence fields —
+    on the one column that is read-only, so a verified resolution was one
+    misread click from a fresh Detected card with no history.
+
+    Excluded at the store, where the fact is computed, so every door (the
+    API row's `stale`, `openstategraph kanban release`, `kanban_release_card`)
+    stops asserting it at once rather than each remembering the rule.
+    """
+
+    def _finished(self, db: Path, task_id: str = "proj-a:thread-1") -> None:
+        set_stage(db, task_id, Stage.ATTENDED, actor="alice")
+        set_stage(
+            db, task_id, Stage.RED, actor="alice",
+            test_id="tests/test_x.py::test_y", reason="boom",
+        )
+        set_stage(db, task_id, Stage.GREEN, actor="alice", test_id="tests/test_x.py::test_y")
+        set_stage(db, task_id, Stage.FINISHED, actor="alice", commit="deadbeef")
+
+    def test_a_finished_card_past_the_threshold_is_not_stale(self, tmp_path: Path) -> None:
+        db = _db(tmp_path)
+        _filed(db)
+        self._finished(db)
+
+        assert flagged_stale(db, threshold_seconds=0) == []
+
+    def test_an_attended_card_past_the_threshold_still_is(self, tmp_path: Path) -> None:
+        """The narrowing must not turn the flag off for the case it exists
+        for — an abandoned live claim is still named."""
+        db = _db(tmp_path)
+        _filed(db, "proj-a:thread-2")
+        set_stage(db, "proj-a:thread-2", Stage.ATTENDED, actor="alice")
+
+        assert flagged_stale(db, threshold_seconds=0) == ["proj-a:thread-2"]
+
+    def test_releasing_a_finished_card_is_refused(self, tmp_path: Path) -> None:
+        """The evidence survives the refusal — that is the whole harm this
+        ticket names, asserted rather than implied."""
+        db = _db(tmp_path)
+        _filed(db)
+        self._finished(db)
+
+        result = release_card(db, "proj-a:thread-1", threshold_seconds=0)
+
+        assert not result.ok
+        assert "not stale" in result.reason
+        card = read_card(db, "proj-a:thread-1")
+        assert card.stage is Stage.FINISHED
+        assert card.evidence_test_id == "tests/test_x.py::test_y"
+        assert card.evidence_commit == "deadbeef"
+
+
 class TestFlaggedStaleWithNoStoreYet:
     """`kanban-patrol/19`: `flagged_stale` had zero callers outside this test
     file until the API route and `release_card` both needed it — and neither

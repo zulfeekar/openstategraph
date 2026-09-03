@@ -1,7 +1,7 @@
 import { Badge, Button, StatusDot, Tooltip } from '@design/primitives';
 import { type BoardCard, type BoardColumn } from './patrolBoardModel';
 import { PRIORITY_MARKS } from './cardPriority';
-import { ACTION_COPY, actionForCard } from './cardAction';
+import { ACTION_COPY, actionForCard, offersRelease } from './cardAction';
 import { instructionForCard } from './cardInstruction';
 
 export interface PatrolCardProps {
@@ -106,8 +106,11 @@ export function PatrolCard({ card, column, onAct, onRelease }: PatrolCardProps) 
           the card says so honestly, and a human reads it and presses the
           button themselves. Only present once the lease has actually gone
           past the hour-long threshold; the system never releases anything
-          on its own schedule. */}
-      {card.stale ? (
+          on its own schedule. Routed through `offersRelease` rather than
+          read from `card.stale` — `kanban-patrol/32`: the column decides
+          this affordance too, so Resolved cannot draw the one control that
+          empties a card's evidence. */}
+      {offersRelease(card) ? (
         <span className="patrol-card__stale">
           attended, nothing new in over an hour
           {onRelease ? (

@@ -33,6 +33,12 @@ export const CARD_ACTIONS: readonly CardAction[] = ['attend', 'answer'];
 interface ActionableCard {
   readonly kind: CardKind;
   readonly lifecycle: CardLifecycle;
+  /**
+   * Whether the API flagged this card's claim as abandoned. Optional
+   * because it is absent on every card that is not — the same
+   * absent-not-false rule the mapping applies on the wire.
+   */
+  readonly stale?: boolean;
 }
 
 /**
@@ -76,3 +82,24 @@ export const ACTION_COPY: Readonly<Record<CardAction, { label: string; hint: str
       'waiting on a decision rather than on work.',
   },
 };
+
+/**
+ * Whether this card offers **Release** — `kanban-patrol/32`.
+ *
+ * Release is not one of `CardAction`'s two, because it is not derived from
+ * the kind and it is not an action on the work: it is the human half of
+ * "flag, never auto-release", and it can fire from any claimed card. But it
+ * *is* an affordance, and until this function existed it was the one
+ * affordance the column never got to decide — `PatrolCard` rendered it
+ * straight from `card.stale`, so the rule that Resolved offers nothing was
+ * green while a Resolved card drew the only control on this board that
+ * destroys data (Release empties all four evidence fields).
+ *
+ * The store is the fact and is fixed there — a `finished` card is never
+ * flagged, so this never fires on a row from a current backend. This is the
+ * second line: a stale-looking row from an older API, a cached response, or
+ * a future stage that collapses onto `resolved` still gets no button.
+ */
+export function offersRelease(card: ActionableCard): boolean {
+  return card.stale === true && columnForCard(card) !== 'resolved';
+}

@@ -566,9 +566,20 @@ def flagged_stale(db_path: Path, *, threshold_seconds: int) -> list[str]:
     flags, never releases. `kanban-patrol/19`: a human presses Release
     themselves; this function must never change a row, only report on it.
 
-    An `unattended` card is excluded by construction (`WHERE stage != ?`) —
-    staleness is about an abandoned *claim*, and a card nobody has attended
-    has no claim to abandon.
+    Two stages are excluded by construction (`WHERE stage NOT IN (...)`),
+    and for the same reason at both ends of the lifecycle: staleness is
+    about an abandoned *claim*.
+
+    - An `unattended` card has no claim to abandon.
+    - A `finished` card's claim was not abandoned, it was *discharged*
+      (`kanban-patrol/32`). Nobody writes to a resolved card again, which
+      is what resolved means, so its heartbeat is older than any threshold
+      within the hour — and flagging it offered `release_card`, the one
+      control here that empties all four evidence fields, on the one column
+      that is read-only. Excluded here rather than at the card because this
+      is where the fact is computed: the API row's `stale`, the CLI's
+      `kanban release` and the MCP `kanban_release_card` all read it, and a
+      rule spelled at one door is a rule the other two do not have.
 
     **No store yet is an empty answer, never a crash** — the same guard
     `read_card`/`list_cards` already carry, missing here until
@@ -585,8 +596,9 @@ def flagged_stale(db_path: Path, *, threshold_seconds: int) -> list[str]:
     conn = sqlite3.connect(db_path)
     try:
         rows = conn.execute(
-            "SELECT task_id, last_heartbeat_at FROM cards WHERE stage != ?",
-            (Stage.UNATTENDED.value,),
+            "SELECT task_id, last_heartbeat_at FROM cards "
+            "WHERE stage NOT IN (?, ?)",
+            (Stage.UNATTENDED.value, Stage.FINISHED.value),
         ).fetchall()
     finally:
         conn.close()

@@ -368,8 +368,11 @@ gap named plainly, the same way a skipped stage already does.
 `release` is the human's explicit press on a card the system has already
 flagged stale (past `--threshold-seconds`, default 3600 — one hour, no
 separate ping tool, every `stage` write is the heartbeat). It refuses,
-non-zero, for any card not currently flagged — an active claim, or one
-nobody has attended, is never releasable by accident. A successful release
+non-zero, for any card not currently flagged — an active claim, one nobody
+has attended, or one already `finished`, is never releasable by accident. A
+`finished` card is **never** stale (`kanban-patrol/32`): nobody writes to a
+resolved card again, so its heartbeat is old by design, and staleness is
+about an abandoned claim rather than a discharged one. A successful release
 resets the row to a fresh, unattended state: stage, actor, heartbeat, and
 all four evidence fields, so the next attend starts clean.
 

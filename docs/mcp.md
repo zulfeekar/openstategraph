@@ -475,8 +475,11 @@ never a fresh claim accepted without proof.
 `kanban_release_card` is the human's explicit press on a card the system has
 already flagged stale — "flag, never auto-release" — refused the same
 structured way for any card not currently past `threshold_seconds` (default
-3600, one hour): an active claim, or one nobody has attended, is never
-releasable by accident. A successful release resets stage, actor, heartbeat,
+3600, one hour): an active claim, one nobody has attended, or one already
+`finished`, is never releasable by accident. A `finished` card is **never**
+stale (`kanban-patrol/32`) — its heartbeat is old because nobody writes to a
+resolved card again, and staleness names an abandoned claim, not a
+discharged one. A successful release resets stage, actor, heartbeat,
 and every evidence field back to a fresh, unattended row.
 
 ---

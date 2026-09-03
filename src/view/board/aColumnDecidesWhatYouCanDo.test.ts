@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BOARD_COLUMNS } from './patrolBoardModel';
 import { CARD_KINDS, columnForCard } from './cardKind';
-import { ACTION_COPY, CARD_ACTIONS, actionForCard } from './cardAction';
+import { ACTION_COPY, CARD_ACTIONS, actionForCard, offersRelease } from './cardAction';
 
 /**
  * `kanban-patrol/15`. The four columns are not four states of one interaction
@@ -80,6 +80,42 @@ describe('what a card lets you do depends on the column it is in', () => {
     const decided = new Set(EVERY_CARD.map((card) => columnForCard(card)));
     for (const column of BOARD_COLUMNS) {
       expect(decided, `${column.id} has cards that can reach it`).toContain(column.id);
+    }
+  });
+});
+
+describe('Release is an affordance too, and the column decides it as well', () => {
+  /**
+   * `kanban-patrol/32`. The rule above — *Resolved offers nothing* — was
+   * green the whole time a Resolved card drew a **Release** button, because
+   * `stale` was rendered outside `actionForCard`'s vocabulary: a second
+   * affordance the column never got to decide. Release is the only control
+   * on this board that destroys data (it empties all four evidence fields),
+   * so it is the last one that may sit outside the rule.
+   *
+   * The store is the fact and is fixed there — a `finished` card is never
+   * flagged. This is the second line, and it is cheap: the board must not
+   * offer the button even if a row arrives claiming `stale: true`.
+   */
+  it('never offers Release on Resolved, even on a row the API called stale', () => {
+    const done = EVERY_CARD.filter((c) => columnForCard(c) === 'resolved');
+    expect(done.length).toBeGreaterThan(0);
+    for (const card of done) {
+      expect(offersRelease({ ...card, stale: true }), `${card.kind}/${card.lifecycle}`).toBe(false);
+    }
+  });
+
+  it('still offers Release on an abandoned claim, which is what it is for', () => {
+    const claimed = EVERY_CARD.filter((c) => columnForCard(c) === 'inProgress');
+    expect(claimed.length).toBeGreaterThan(0);
+    for (const card of claimed) {
+      expect(offersRelease({ ...card, stale: true }), `${card.kind}/${card.lifecycle}`).toBe(true);
+    }
+  });
+
+  it('offers Release on nothing that is not stale', () => {
+    for (const card of EVERY_CARD) {
+      expect(offersRelease(card), `${card.kind}/${card.lifecycle}`).toBe(false);
     }
   });
 });
