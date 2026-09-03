@@ -262,6 +262,47 @@ class TestRunPatrolEndToEnd:
         assert card.stage is Stage.ATTENDED
         assert card.actor == "alice"
 
+    def test_a_thread_whose_card_is_finished_is_excluded_from_the_next_patrol(
+        self, tmp_path: Path
+    ) -> None:
+        """`kanban-patrol/22`: a card worked to `finished` leaves its own
+        resolution work sitting in the same thread. The next patrol still
+        *reads* that thread's finding — `total_findings` counts it — but
+        files nothing, because the thread's `task_id` is already taken.
+
+        The narrower `attended` case above is not this one: a resolved card
+        is the end of the ladder, and it is the stage a re-file would be
+        most damaging at.
+        """
+        from openstategraph.kanban_store import Stage, set_stage
+
+        root = tmp_path / "workflows"
+        run_patrol(project_id="proj-x", workflows_root=root, savers=[_Saver(_redundant_thread())], records=[_run_record()])
+        db = kanban_store_path(root)
+        task_id = f"proj-x:{THREAD}"
+        set_stage(db, task_id, Stage.ATTENDED, actor="alice")
+        set_stage(db, task_id, Stage.RED, actor="alice", test_id="tests/test_x.py::test_y", reason="reproduced")
+        set_stage(db, task_id, Stage.GREEN, actor="alice", test_id="tests/test_x.py::test_y")
+        set_stage(db, task_id, Stage.FINISHED, actor="alice", commit="deadbee")
+        assert read_card(db, task_id).stage is Stage.FINISHED
+
+        second = run_patrol(
+            project_id="proj-x",
+            workflows_root=root,
+            savers=[_Saver(_redundant_thread())],
+            records=[_run_record()],
+        )
+
+        assert second.filed == []
+        assert second.skipped == [task_id]
+        # The finding is still read and counted — the exclusion is about
+        # filing, never about pretending the thread produced nothing.
+        assert second.total_findings == 1
+
+        card = read_card(db, task_id)
+        assert card.stage is Stage.FINISHED
+        assert card.actor == "alice"
+
     def test_no_findings_is_an_empty_result_not_an_error(self, tmp_path: Path) -> None:
         result = run_patrol(project_id="proj-x", workflows_root=tmp_path / "workflows", savers=[_Saver([])], records=[])
 
