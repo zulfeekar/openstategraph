@@ -45,9 +45,12 @@ def _frame_fields_sentence(
     `CLAUDE.md` names. `PATROL_FRAME_FIELDS` is derived from `as_dict()`
     itself; a caller that hand-types a tuple here has re-opened the defect.
 
-    Still empty for an endpoint that supplies neither — `GET /api/events`
-    carries one catalogue hint and has no table on either side, and that gap
-    is `kanban-patrol/34` rather than something to paper over here.
+    Still empty for an endpoint that supplies neither. `GET /api/events` used
+    to be that endpoint — it carried one catalogue hint and no table on either
+    side — until `kanban-patrol/34` found the identical gap `kanban-patrol/31`
+    fixed on the patrol stream and gave it the same fix:
+    `catalogue_events.CATALOGUE_FRAME_FIELDS`, derived from
+    `CatalogueEvent.as_dict()`.
     """
     known: dict[str, tuple[str, ...]] = {**FRAME_FIELDS, **(frame_fields or {})}
     described = [name for name in events if name in known]

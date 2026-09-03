@@ -102,6 +102,21 @@ class CatalogueEvent:
         }
 
 
+#: What every frame of `GET /api/events` carries, published into
+#: `docs/openapi.json` by `sse_contract.sse_responses` — `kanban-patrol/34`.
+#:
+#: Derived from `as_dict()` itself rather than typed here, for the reason
+#: `patrol_events.PATROL_FRAME_FIELDS` gives: this endpoint used to publish its
+#: event *name* and stop, so renaming `surface_visible` changed not one byte of
+#: the contract while `WorkflowFileClient.watchCatalogue` went on reading a
+#: wire key nobody sent. A hand-typed tuple would have been a third spelling of
+#: one fact and would have drifted the same way; this one cannot say anything
+#: the dataclass does not.
+CATALOGUE_FRAME_FIELDS: tuple[str, ...] = tuple(
+    CatalogueEvent(reason="saved", slug="", surface_visible=False).as_dict()
+)
+
+
 #: How many unread events a subscriber may bank before it is dropped.
 #:
 #: The bound exists to detect a **dead** subscriber, not to save memory — each

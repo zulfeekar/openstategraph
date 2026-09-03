@@ -15,7 +15,11 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from openstategraph.api.catalogue_events import CATALOGUE_EVENT, KEEPALIVE_SECONDS
+from openstategraph.api.catalogue_events import (
+    CATALOGUE_EVENT,
+    CATALOGUE_FRAME_FIELDS,
+    KEEPALIVE_SECONDS,
+)
 from openstategraph.api.deps import Services
 from openstategraph.api.schemas import (
     HealthResponse,
@@ -86,7 +90,14 @@ def node_contracts() -> dict[str, NodeContractResponse]:
     "/api/events",
     summary="Catalogue changes, live (SSE)",
     response_class=StreamingResponse,
-    responses=sse_responses((CATALOGUE_EVENT,), "One frame per catalogue change."),
+    responses=sse_responses(
+        (CATALOGUE_EVENT,),
+        "One frame per catalogue change.",
+        # The fields as well as the name — `kanban-patrol/34`. Passed rather
+        # than typed, so the published contract cannot disagree with what
+        # `CatalogueEvent.as_dict()` puts on the wire.
+        {CATALOGUE_EVENT: CATALOGUE_FRAME_FIELDS},
+    ),
     tags=["Catalogue"],
 )
 async def catalogue_events(http: Request, services: Services) -> StreamingResponse:

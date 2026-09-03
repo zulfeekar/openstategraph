@@ -467,6 +467,57 @@ describe('the client and the published contract', () => {
   });
 
   /**
+   * The **third** SSE stream this client parses, and the sibling gap
+   * `kanban-patrol/31` named but did not fix — filed as `kanban-patrol/34`.
+   *
+   * `GET /api/events` published its event *name* and stopped there, exactly
+   * like the patrol stream before it: renaming `CatalogueEvent.surface_visible`
+   * and regenerating `docs/openapi.json` changed not one byte, while
+   * `WorkflowFileClient.watchCatalogue` went on reading `reason`, `slug` and
+   * `surface_visible` off a `workflows.changed` frame the contract never
+   * described. Fixed the same way — `catalogue_events.CATALOGUE_FRAME_FIELDS`
+   * derived from `CatalogueEvent.as_dict()`, passed into `sse_responses` —
+   * and read back out of the artifact here rather than trusted.
+   */
+  describe('the catalogue stream', () => {
+    const CATALOGUE = '/api/events';
+
+    it('is a door this client actually opens', () => {
+      // Anti-vacuity: every assertion below is about a contract for an
+      // endpoint nobody calls unless this holds.
+      expect(pathsCalledByTheClient()).toContain(CATALOGUE);
+    });
+
+    it('declares its one event name, and the client listens for it', () => {
+      expect(eventNamesDeclaredFor(CATALOGUE, 'get')).toEqual(['workflows.changed']);
+      expect(client, 'WorkflowFileClient no longer listens for `workflows.changed`').toContain(
+        "'workflows.changed'",
+      );
+    });
+
+    it('is parsed field for field by the hand-written client', () => {
+      const declared = frameFieldsDeclaredFor(CATALOGUE, 'get');
+
+      // Anti-vacuity: an extractor that matched nothing would make the loop
+      // below a statement about no frames and no fields — which is exactly
+      // the state this endpoint was in before the ticket.
+      expect(Object.keys(declared)).toEqual(['workflows.changed']);
+      expect(declared['workflows.changed']).toContain('surface_visible');
+      expect(declared['workflows.changed']?.length).toBeGreaterThan(2);
+
+      const missing = (declared['workflows.changed'] as string[]).filter(
+        (field) => !clientReads(field),
+      );
+
+      expect(
+        missing,
+        `WorkflowFileClient never reads ${missing.join(', ')} off a \`workflows.changed\` frame — ` +
+          `the backend emits it, the contract publishes it, and the panel cannot see it.`,
+      ).toEqual([]);
+    });
+  });
+
+  /**
    * The *response* half, which nothing here watched.
    *
    * Every assertion above is about what the client **sends** — endpoints,

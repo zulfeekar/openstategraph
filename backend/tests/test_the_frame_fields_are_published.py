@@ -122,11 +122,18 @@ class TestTheContractPublishesThem:
             "\n\n", 1
         )[1]
 
-    def test_an_endpoint_with_no_run_frames_publishes_no_field_list(self) -> None:
-        """`GET /api/events` carries one catalogue hint. Inventing an entry so
-        the sentence is never blank would be the mirror this removes."""
+    def test_an_endpoint_with_no_run_frames_still_publishes_its_own_table(self) -> None:
+        """`GET /api/events` carries one catalogue hint, not a run frame — so it
+        is outside `FRAME_FIELDS` and this file's other assertions, which are
+        about the run vocabulary specifically. It is not outside the contract:
+        `sse_responses` also accepts a per-stream table for a caller with no
+        run frames to declare, and `catalogue_events.CATALOGUE_FRAME_FIELDS`
+        is one, derived from `CatalogueEvent.as_dict()` (`kanban-patrol/34`).
+        Before that fix this assertion read the opposite way — the endpoint
+        published its event name and nothing else, which is the gap
+        `kanban-patrol/31` found on the sibling patrol stream."""
         document = json.loads((ROOT / "docs" / "openapi.json").read_text())
+        description = document["paths"]["/api/events"]["get"]["responses"]["200"]["description"]
 
-        assert "Frame fields:" not in document["paths"]["/api/events"]["get"]["responses"]["200"][
-            "description"
-        ]
+        assert "Frame fields:" in description
+        assert "surface_visible" in description
