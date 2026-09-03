@@ -30,6 +30,11 @@ the output leaves:
 - **The output runs without the editor.** Import it from a script, exercise it
   with `pytest`, deploy it wherever Python runs. Delete this repository and your
   workflow still runs.
+- **The editor reads your runs back.** A radar in the top bar opens the
+  [patrol board](docs/the-patrol-board.md): four columns of cards a scan filed
+  from what your own recorded runs revealed — a repeated tool call, an unstable
+  answer, a node that failed — each one claimable by a coding agent through the
+  CLI or MCP, and admitted to `Resolved` only with a red-then-green test on it.
 
 ### Why not LangGraph directly
 

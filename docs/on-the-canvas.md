@@ -597,6 +597,27 @@ table the editor dispatches from, so it cannot fall behind.
 
 ---
 
+## 8. The top bar's radar — what your own runs are telling you
+
+Beside the timeline's control in the top bar there is a **radar** icon, and it
+opens the **patrol board**: four columns of cards about runs you have already
+made, filed by a pass over the findings this project recorded while those runs
+happened. Nothing on it is about the document you are drawing — it is about
+what actually ran.
+
+A card is one finding: a tool asked the same question several times, a tool
+that answered differently each time, a node that failed after its retries. The
+board's job is to say what each one needs **next**, which is why the columns
+are `Detected`, `Needs You`, `In Progress` and `Resolved` rather than a list of
+severities. `Needs You` is the one to know: it is a judgement the patrol
+deliberately did not make, and it is yours to settle.
+
+[The patrol board](the-patrol-board.md) is the whole of it — how a patrol
+starts, what each column allows, what a card copies onto your clipboard, and
+the evidence a card carries before it is allowed to be `Resolved`.
+
+---
+
 ## Glossary
 
 The words this product uses, and what each one must not be mistaken for.
@@ -632,3 +653,5 @@ The words this product uses, and what each one must not be mistaken for.
   refuses a connection
 - [Building an atom](building-an-atom.md) — when you want a node that does not
   exist yet
+- [The patrol board](the-patrol-board.md) — the radar in the top bar: what a
+  patrol is, the four columns, and the evidence a card carries
