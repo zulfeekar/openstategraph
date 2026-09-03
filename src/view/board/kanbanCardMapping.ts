@@ -1,5 +1,6 @@
 import { relativeTime } from '@core/runtime/pastRunView';
 import type { CardKind, CardLifecycle } from './cardKind';
+import type { CardStage } from './cardStage';
 import type { BoardArea, BoardPriority } from './cardPriority';
 import type { BoardCard } from './patrolBoardModel';
 
@@ -85,5 +86,10 @@ export function mapKanbanCardToBoardCard(row: KanbanCardResponse, now: number): 
     // no label and no Release button, rather than a prop that is `false`
     // on every unclaimed and every fresh card alike.
     stale: row.stale ? true : undefined,
+    // Carried through rather than collapsed away — `kanban-patrol/19`. The
+    // lifecycle above answers *which column*; the stage answers *how far*,
+    // and until this line existed the second question had no answer past
+    // this seam even though the row had always carried it.
+    stage: row.stage as CardStage,
   };
 }

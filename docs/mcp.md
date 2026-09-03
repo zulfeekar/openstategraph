@@ -466,6 +466,21 @@ one of `red`, `green`, `finished`, and only ever advances one step at a
 time — skipping a stage is reported the same way, as a structured refusal a
 client's model can read, not a stack trace over the transport.
 
+Each stage is also a sentence on the board (`kanban-patrol/19`), so a reader
+sees how far a card has got rather than only that somebody has it — the copy
+is owned once, in `src/view/board/cardStage.ts`:
+
+| stage | what the card says |
+| --- | --- |
+| `attended` | Queued |
+| `red` | In progress — test written |
+| `green` | In progress — test passing |
+| `finished` | Awaiting review |
+
+`finished` reads "Awaiting review" rather than Resolved because it is a
+claim: `17`'s evidence gate is the only thing that moves a card into the
+Resolved column.
+
 `kanban-patrol/17`+`21`: `stage` is evidence-gated. `red` needs `test_id` and
 `reason`; `green` needs the matching `test_id`; `finished` needs both already
 recorded on the card — a missing or mismatched piece returns the same

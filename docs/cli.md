@@ -357,6 +357,21 @@ recorded. `show` prints the card's instruction, the same self-contained text
 the board's own "Copy instruction" button copies, for pasting into a coding
 agent that has no CLI or MCP access at all.
 
+Each stage is also a sentence on the board (`kanban-patrol/19`), so a reader
+sees how far a card has got rather than only that somebody has it — the copy
+is owned once, in `src/view/board/cardStage.ts`:
+
+| stage | what the card says |
+| --- | --- |
+| `attended` | Queued |
+| `red` | In progress — test written |
+| `green` | In progress — test passing |
+| `finished` | Awaiting review |
+
+`finished` reads "Awaiting review" rather than Resolved because it is a
+claim: `17`'s evidence gate is the only thing that moves a card into the
+Resolved column.
+
 `kanban-patrol/17`+`21`: `stage` is evidence-gated, not trust-gated. Moving to
 `red` requires `--test-id` and `--reason` both non-empty; moving to `green`
 requires `--test-id` to *match* the one recorded at `red`; moving to

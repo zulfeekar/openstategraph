@@ -3,6 +3,7 @@ import type { Badge, StatusTone } from '@design/primitives';
 // Runtime import in one direction only: `cardKind` imports nothing from here
 // but a type, which is erased — so there is no cycle at runtime.
 import { columnForCard, type CardKind, type CardLifecycle } from './cardKind';
+import type { CardStage } from './cardStage';
 import type { BoardArea, BoardPriority } from './cardPriority';
 
 /**
@@ -152,6 +153,16 @@ export interface BoardCard {
    * every other card.
    */
   readonly stale?: boolean;
+  /**
+   * How far the actor holding this card has got — `kanban-patrol/19`'s stage
+   * table. Read by `statusTextForCard`, which is the only thing that turns it
+   * into words; the card renders no stage of its own.
+   *
+   * Optional for the same reason `filedOn` is: a fixture card that never went
+   * near the store is still a card, and a missing stage falls back to the
+   * column's label rather than to a blank status line.
+   */
+  readonly stage?: CardStage;
 }
 
 /**

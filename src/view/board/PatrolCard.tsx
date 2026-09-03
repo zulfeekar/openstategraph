@@ -3,6 +3,7 @@ import { type BoardCard, type BoardColumn } from './patrolBoardModel';
 import { PRIORITY_MARKS } from './cardPriority';
 import { ACTION_COPY, actionForCard, offersRelease } from './cardAction';
 import { instructionForCard } from './cardInstruction';
+import { statusTextForCard } from './cardStage';
 
 export interface PatrolCardProps {
   readonly card: BoardCard;
@@ -82,7 +83,12 @@ export function PatrolCard({ card, column, onAct, onRelease }: PatrolCardProps) 
 
       <span className="patrol-card__status">
         <StatusDot tone={column.dot} />
-        {column.label}
+        {/* `kanban-patrol/19`: the column's label is the right word in three
+            columns and the wrong one in In Progress, where every claimed card
+            read the same sentence whatever the actor had actually reported.
+            The stage table is owned in `cardStage.ts`; nothing here spells a
+            status word, exactly as nothing here spells a tone. */}
+        {statusTextForCard(card, column.label)}
         <span className="patrol-card__when">
           {card.when}
           {card.filedOn ? ` · ${card.filedOn}` : ''}
