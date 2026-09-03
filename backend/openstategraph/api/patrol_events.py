@@ -122,6 +122,18 @@ class PatrolEvent:
         }
 
 
+#: What every frame of `GET /api/kanban/patrol/events` carries, published into
+#: `docs/openapi.json` by `sse_contract.sse_responses` — `kanban-patrol/31`.
+#:
+#: Derived from `as_dict()` itself rather than typed here, and that is the
+#: whole point: the endpoint used to publish its event *name* and stop, so
+#: renaming `task_id` changed not one byte of the contract while the editor
+#: went on reading a key nobody sent. A hand-typed tuple would have been a
+#: third spelling of one fact and would have drifted the same way; this one
+#: cannot say anything the serialiser does not.
+PATROL_FRAME_FIELDS: tuple[str, ...] = tuple(PatrolEvent(kind="started").as_dict())
+
+
 #: Same bound, same reasoning as `catalogue_events.SUBSCRIBER_BACKLOG_LIMIT`:
 #: a patrol fires a handful of events per run (one per card, plus the two
 #: brackets), so a subscriber banking 32 unread patrol events is not slow,

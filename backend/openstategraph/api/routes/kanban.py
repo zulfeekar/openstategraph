@@ -33,6 +33,7 @@ from openstategraph.api.deps import Services
 from openstategraph.api.patrol_events import (
     KEEPALIVE_SECONDS,
     PATROL_EVENT,
+    PATROL_FRAME_FIELDS,
     PatrolBroadcaster,
     PatrolEvent,
 )
@@ -284,7 +285,14 @@ def patrol_status(services: Services) -> PatrolStatusResponse:
     "/api/kanban/patrol/events",
     summary="Patrol progress, live (SSE)",
     response_class=StreamingResponse,
-    responses=sse_responses((PATROL_EVENT,), "One frame per patrol event."),
+    responses=sse_responses(
+        (PATROL_EVENT,),
+        "One frame per patrol event.",
+        # The fields as well as the name — `kanban-patrol/31`. Passed rather
+        # than typed, so the published contract cannot disagree with what
+        # `PatrolEvent.as_dict()` puts on the wire.
+        {PATROL_EVENT: PATROL_FRAME_FIELDS},
+    ),
     tags=["Kanban"],
 )
 async def patrol_events_stream(http: Request, services: Services) -> StreamingResponse:

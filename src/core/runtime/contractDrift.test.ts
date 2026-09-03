@@ -211,8 +211,14 @@ const normalise = (path: string): string => path.replace(/\{[^}]*\}/g, '{}');
  */
 function eventNamesDeclaredFor(path: string, method: string): string[] {
   const description: string = openapi.paths[path]?.[method]?.responses?.['200']?.description ?? '';
-  const names = description.match(/Event names: ([^.]*)\./)?.[1] ?? '';
-  return [...names.matchAll(/`([a-z]+)`/g)].map((match) => match[1] as string);
+  // Not `[^.]*`, and not `[a-z]+` for a name: `patrol.status` has a dot in
+  // the middle of it (`patrol_events.PATROL_EVENT`), so the sentence matcher
+  // used to stop inside the only name it had to read and the name matcher
+  // used to see `patrol` and `status` as two events that do not exist
+  // (`kanban-patrol/31`). A name ends at a backtick; the sentence ends at a
+  // full stop followed by whitespace.
+  const names = description.match(/Event names: (.*?)\.\s/s)?.[1] ?? '';
+  return [...names.matchAll(/`([a-z.]+)`/g)].map((match) => match[1] as string);
 }
 
 /**
@@ -229,8 +235,13 @@ function frameFieldsDeclaredFor(path: string, method: string): Record<string, st
   const description: string = openapi.paths[path]?.[method]?.responses?.['200']?.description ?? '';
   const sentence = description.match(/Frame fields: (.*?)\. /s)?.[1] ?? '';
   const found: Record<string, string[]> = {};
-  for (const match of sentence.matchAll(/`([a-z]+)`: ([^;]+)/g)) {
-    found[match[1] as string] = [...(match[2] as string).matchAll(/`([A-Za-z]+)`/g)].map(
+  // Dots in a frame name and underscores in a field name, for the reason
+  // above: the run stream's frames are single words carrying camelCase
+  // fields, and the patrol stream's one frame is `patrol.status` carrying
+  // `task_id` and `total_findings` — the wire spelling, which is the thing a
+  // published contract is for.
+  for (const match of sentence.matchAll(/`([a-z.]+)`: ([^;]+)/g)) {
+    found[match[1] as string] = [...(match[2] as string).matchAll(/`([A-Za-z_]+)`/g)].map(
       (field) => field[1] as string,
     );
   }
@@ -391,6 +402,67 @@ describe('the client and the published contract', () => {
       expect(eventNamesDeclaredFor('/api/runs/resume', 'post')).toEqual(
         eventNamesDeclaredFor('/api/runs/stream', 'post'),
       );
+    });
+  });
+
+  /**
+   * The **second** SSE stream this client parses, and the one nothing watched.
+   *
+   * `kanban-patrol/31` asked which of three hand-mirrored kanban wire types
+   * were pinned, and the answer was measured before anything was written.
+   * Rename `KanbanCardResponse.priority_reason`, regenerate
+   * `docs/openapi.json`, and `reads every field the endpoints it calls can
+   * send back` goes red; rename `PatrolStatusResponse.total_findings` and it
+   * goes red again. Both are response bodies of endpoints this client calls,
+   * so the census above already covers them and there is nothing here to add.
+   *
+   * `PatrolStreamEvent` is neither. It is an SSE frame, and renaming
+   * `patrol_events.PatrolEvent.task_id` changed **not one byte** of
+   * `docs/openapi.json` — the patrol endpoint published its event *name* and
+   * stopped there, so seven wire fields the editor reads by hand were outside
+   * the contract entirely. That is the same one-level-short shape
+   * framework-packaging ticket 10 found on the run stream, on the sibling
+   * stream, and it is fixed the same way: `sse_responses` writes the fields
+   * into the description, derived from `PatrolEvent.as_dict()` rather than
+   * typed a second time, and this reads them back out of the artifact.
+   */
+  describe('the patrol stream', () => {
+    const PATROL = '/api/kanban/patrol/events';
+
+    it('is a door this client actually opens', () => {
+      // Anti-vacuity: every assertion below is about a contract for an
+      // endpoint nobody calls unless this holds.
+      expect(pathsCalledByTheClient()).toContain(PATROL);
+    });
+
+    it('declares its one event name, and the client listens for it', () => {
+      // One name with a `kind` inside it, deliberately — `patrol_events.py`
+      // says why. The dot is the part the matchers above had to learn.
+      expect(eventNamesDeclaredFor(PATROL, 'get')).toEqual(['patrol.status']);
+      expect(client, 'RuntimeClient no longer listens for `patrol.status`').toContain(
+        "'patrol.status'",
+      );
+    });
+
+    it('is parsed field for field by the hand-written client', () => {
+      const declared = frameFieldsDeclaredFor(PATROL, 'get');
+
+      // Anti-vacuity: an extractor that matched nothing would make the loop
+      // below a statement about no frames and no fields — which is exactly
+      // the state this endpoint was in before the ticket.
+      expect(Object.keys(declared)).toEqual(['patrol.status']);
+      expect(declared['patrol.status']).toContain('task_id');
+      expect(declared['patrol.status']?.length).toBeGreaterThan(5);
+
+      const missing = (declared['patrol.status'] as string[]).filter(
+        (field) => !clientReads(field),
+      );
+
+      expect(
+        missing,
+        `RuntimeClient never reads ${missing.join(', ')} off a \`patrol.status\` frame — ` +
+          `the backend emits it, the contract publishes it, and the board cannot see it.`,
+      ).toEqual([]);
     });
   });
 

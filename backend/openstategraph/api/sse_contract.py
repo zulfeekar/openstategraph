@@ -12,6 +12,7 @@ event names, exactly one of which is last".
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from openstategraph.api.streaming import FRAME_FIELDS, TERMINAL_EVENTS
@@ -21,7 +22,9 @@ from openstategraph.api.streaming import FRAME_FIELDS, TERMINAL_EVENTS
 STREAM_GUIDE = "docs/api.md"
 
 
-def _frame_fields_sentence(events: tuple[str, ...]) -> str:
+def _frame_fields_sentence(
+    events: tuple[str, ...], frame_fields: Mapping[str, tuple[str, ...]] | None
+) -> str:
     """What each named frame carries, in a grammar a pin can read.
 
     OpenAPI cannot type a sequence of frames, but it can be told the
@@ -31,21 +34,36 @@ def _frame_fields_sentence(events: tuple[str, ...]) -> str:
     `src/core/runtime/contractDrift.test.ts` reads it from the artifact rather
     than from a second list somebody keeps in step by attention.
 
-    Empty for an endpoint whose events are not run frames — `GET /api/events`
-    carries one catalogue hint and has no entry, and inventing one so this
-    sentence is never blank would be the mirror this exists to remove.
+    A stream whose frames are not run frames brings its own table through
+    `frame_fields`, and the rule that mattered is unchanged rather than
+    relaxed: the argument this docstring used to make was against **inventing**
+    a table so the sentence is never blank, not against publishing one a
+    serialiser already declares. `kanban-patrol/31` measured the difference —
+    renaming a field on `patrol_events.PatrolEvent` changed not one byte of
+    `docs/openapi.json`, so seven wire fields the editor reads by hand were
+    outside the contract entirely, which is the mirror-without-a-pin
+    `CLAUDE.md` names. `PATROL_FRAME_FIELDS` is derived from `as_dict()`
+    itself; a caller that hand-types a tuple here has re-opened the defect.
+
+    Still empty for an endpoint that supplies neither — `GET /api/events`
+    carries one catalogue hint and has no table on either side, and that gap
+    is `kanban-patrol/34` rather than something to paper over here.
     """
-    described = [name for name in events if name in FRAME_FIELDS]
+    known: dict[str, tuple[str, ...]] = {**FRAME_FIELDS, **(frame_fields or {})}
+    described = [name for name in events if name in known]
     if not described:
         return ""
     per_frame = "; ".join(
-        f"`{name}`: " + ", ".join(f"`{field}`" for field in FRAME_FIELDS[name])
-        for name in described
+        f"`{name}`: " + ", ".join(f"`{field}`" for field in known[name]) for name in described
     )
     return f"Frame fields: {per_frame}. "
 
 
-def sse_responses(events: tuple[str, ...], summary: str) -> dict[int | str, Any]:
+def sse_responses(
+    events: tuple[str, ...],
+    summary: str,
+    frame_fields: Mapping[str, tuple[str, ...]] | None = None,
+) -> dict[int | str, Any]:
     """The OpenAPI `responses` entry for an endpoint that returns SSE.
 
     OpenAPI 3.1 has no way to describe "an unbounded sequence of frames, each
@@ -59,7 +77,7 @@ def sse_responses(events: tuple[str, ...], summary: str) -> dict[int | str, Any]
         200: {
             "description": (
                 f"{summary}\n\nA `text/event-stream`. Event names: {names}. "
-                f"{_frame_fields_sentence(events)}"
+                f"{_frame_fields_sentence(events, frame_fields)}"
                 f"The guarantee that every stream ends with one of "
                 f"{', '.join(f'`{n}`' for n in TERMINAL_EVENTS)} is in "
                 f"`{STREAM_GUIDE}` — OpenAPI cannot express it."

@@ -2615,7 +2615,7 @@
                 }
               }
             },
-            "description": "One frame per patrol event.\n\nA `text/event-stream`. Event names: `patrol.status`. The guarantee that every stream ends with one of `done`, `interrupt`, `error` is in `docs/api.md` \u2014 OpenAPI cannot express it."
+            "description": "One frame per patrol event.\n\nA `text/event-stream`. Event names: `patrol.status`. Frame fields: `patrol.status`: `kind`, `task_id`, `title`, `filed`, `skipped`, `total_findings`, `reason`. The guarantee that every stream ends with one of `done`, `interrupt`, `error` is in `docs/api.md` \u2014 OpenAPI cannot express it."
           }
         },
         "summary": "Patrol progress, live (SSE)",
