@@ -1992,6 +1992,11 @@
             "title": "Values",
             "type": "object"
           },
+          "workflow_slug": {
+            "default": "",
+            "title": "Workflow Slug",
+            "type": "string"
+          },
           "wrote": {
             "items": {
               "type": "string"

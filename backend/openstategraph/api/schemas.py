@@ -1285,6 +1285,16 @@ class ThreadStep(BaseModel):
     #: (`kanban-patrol/13`). `""` for the workflow's own root namespace, same
     #: as `_channel_key` returns for it.
     checkpoint_ns: str = ""
+    #: The package that made this checkpoint, off LangGraph's own metadata —
+    #: `kanban-patrol/12`. A thread is not one workflow: a mount runs under its
+    #: own namespace and writes its **own** `workflow_slug` into the
+    #: checkpoints it makes, so 115 of 495 threads in this checkout's store
+    #: carry two of them. `ThreadSummary.workflow_slug` answers *which
+    #: workflow was this conversation started from*; this answers *which
+    #: package made this step*, and on a thread that mounts anything those are
+    #: two different questions. `""` when the metadata recorded none, which is
+    #: a real recorded value rather than missing data.
+    workflow_slug: str = ""
     #: The channels this superstep wrote. The other half of what a row is for
     #: — `values` says what the state *was*, this says what *happened*. Same
     #: exclusions as `values`, for the same reason.

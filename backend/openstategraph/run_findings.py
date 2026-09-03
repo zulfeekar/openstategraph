@@ -224,6 +224,17 @@ class RunFinding(BaseModel):
     #: must skip it rather than fail to parse the list.
     name: str
     thread_id: str = ""
+    #: The package whose namespaces made these calls — `kanban-patrol/12`, and
+    #: **never** the thread's first run row. A run row has no namespace column
+    #: (`run_sinks.RunRecord`), so it cannot be asked where a call happened; a
+    #: checkpoint can, because LangGraph's metadata carries the
+    #: `workflow_slug` of whichever graph wrote it.
+    #:
+    #: `""` when the calls came from namespaces that resolve to more than one
+    #: package, and it means *this finding does not claim a package* rather
+    #: than *nobody recorded one*. A reader renders it as nothing either way
+    #: (`kanban-patrol/02`); 6 of 20 run rows in this checkout carry `""`
+    #: outright, so it was always a value a consumer had to handle.
     workflow_slug: str = ""
     tool: str = ""
     #: The normalised arguments every call in this group shared.
@@ -374,8 +385,14 @@ def run_findings(
     return found
 
 
-def _node_failures(history: ThreadHistoryResponse) -> dict[tuple[str, str], list[str]]:
-    """`{(node, reason): [checkpoint_id, ...]}` — `kanban-patrol/22`.
+def _node_failures(
+    history: ThreadHistoryResponse,
+) -> dict[tuple[str, str], list[tuple[str, str]]]:
+    """`{(node, reason): [(checkpoint_id, checkpoint_ns), ...]}` — `kanban-patrol/22`.
+
+    The namespace rides along for `kanban-patrol/12`: a failure inside a
+    mounted package belongs to that package, and the only thing that can say
+    which package a step came from is the namespace it was checkpointed under.
 
     Reads `outputs[node_id]` at every step, same channel
     `node_failure_warnings` reads for a live run's own report. `values`
@@ -384,7 +401,7 @@ def _node_failures(history: ThreadHistoryResponse) -> dict[tuple[str, str], list
     raised: the same "cannot say anything about this" rule `grouping_key`
     already follows for a call this module cannot group.
     """
-    failures: dict[tuple[str, str], list[str]] = {}
+    failures: dict[tuple[str, str], list[tuple[str, str]]] = {}
     for step in history.steps:
         raw = step.values.get("outputs")
         if not raw:
@@ -399,7 +416,9 @@ def _node_failures(history: ThreadHistoryResponse) -> dict[tuple[str, str], list
             reason = parse_failure_marker(str(value or ""))
             if reason is None:
                 continue
-            failures.setdefault((str(node), reason), []).append(step.checkpoint_id)
+            failures.setdefault((str(node), reason), []).append(
+                (step.checkpoint_id, step.checkpoint_ns)
+            )
     return failures
 
 
@@ -428,6 +447,14 @@ def _findings_in(
                 (step.checkpoint_id, step.checkpoint_ns, call.result)
             )
 
+    # Which package owns each namespace, off the checkpoints' own metadata —
+    # `kanban-patrol/12`. Built from the whole history rather than per group,
+    # because a namespace's package is a property of the namespace.
+    package_of: dict[str, str] = {}
+    for step in history.steps:
+        if step.workflow_slug:
+            package_of.setdefault(step.checkpoint_ns, step.workflow_slug)
+
     runs = [
         FindingRun(
             workflow_slug=row.workflow_slug,
@@ -438,7 +465,13 @@ def _findings_in(
         )
         for row in rows
     ]
-    slug = next((row.workflow_slug for row in rows if row.workflow_slug), "")
+    # The thread's own fallback, used only where the checkpoints named no
+    # package at all: the run rows agree on one, or nobody claims one. This is
+    # deliberately not the old `first non-empty row wins` — that rule is what
+    # `kanban-patrol/12` exists to retire.
+    thread_slugs = {row.workflow_slug for row in rows if row.workflow_slug}
+    thread_slugs |= set(package_of.values())
+    fallback = next(iter(thread_slugs)) if len(thread_slugs) == 1 else ""
     # Read once, reused below — `test_the_finding_repeats_the_read_s_verdict`
     # pins this at one call site so a second one is never the stale one.
     truncation = history.truncation
@@ -456,7 +489,9 @@ def _findings_in(
             RunFinding(
                 name=REDUNDANT_TOOL_CALL if len(digests) == 1 else UNSTABLE_TOOL_RESULT,
                 thread_id=thread_id,
-                workflow_slug=slug,
+                workflow_slug=_attributed_slug(
+                    (namespace for _, namespace, _ in seen), package_of, fallback
+                ),
                 tool=tool,
                 arguments=arguments,
                 calls=len(seen),
@@ -473,24 +508,58 @@ def _findings_in(
     # C — a node failure. Fires on one occurrence, not two: unlike A/B, a
     # single failure is already real information, not waste that only
     # matters once repeated.
-    for (node, reason), checkpoints in _node_failures(history).items():
+    for (node, reason), steps in _node_failures(history).items():
         found.append(
             RunFinding(
                 name=NODE_FAILURE,
                 thread_id=thread_id,
-                workflow_slug=slug,
+                workflow_slug=_attributed_slug(
+                    (namespace for _, namespace in steps), package_of, fallback
+                ),
                 tool=node,
                 arguments=reason,
-                calls=len(checkpoints),
+                calls=len(steps),
                 distinct_results=1,
                 result_digests=[_digest(reason)],
-                checkpoints=checkpoints,
+                checkpoints=[checkpoint for checkpoint, _ in steps],
                 thread_tool_calls=total,
                 runs=runs,
                 truncation=truncation,
             )
         )
     return found
+
+
+def _attributed_slug(
+    namespaces: Iterable[str], package_of: dict[str, str], fallback: str
+) -> str:
+    """The package these namespaces came from, or `""` when they disagree.
+
+    `kanban-patrol/12`. Strict in both directions, and both are the point:
+
+    - Every namespace in the group must be one we hold a package for, and they
+      must all name the **same** package. A group spanning a mount and its
+      parent is two packages' calls pooled into one finding, and no single
+      name is true of it.
+    - A namespace we hold no package for is not assumed to be the parent's.
+      It falls to `fallback`, which is a name only when the whole thread named
+      exactly one package — on a thread that mounts anything, that is `""`.
+
+    A finding that claims nothing routes a developer nowhere, which is worse
+    than useless only if the alternative is right. Claiming the parent when
+    the calls came from the mount routes them to the wrong package, which is
+    worse still: it is a wrong answer wearing a confident one's clothes.
+    """
+    seen = set(namespaces)
+    resolved = {package_of[namespace] for namespace in seen if namespace in package_of}
+    if len(resolved) > 1:
+        return ""
+    candidate = resolved.pop() if resolved else fallback
+    if any(namespace not in package_of for namespace in seen) and candidate != fallback:
+        # A namespace nothing named, on a thread that named more than one
+        # package. It could be either of them, so it is neither.
+        return ""
+    return candidate
 
 
 def _digest(result: str) -> str:

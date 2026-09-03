@@ -699,6 +699,7 @@ def _step(
         namespace=namespace,
         node=namespace[-1] if namespace else "",
         checkpoint_ns=_channel_key(tuple_),
+        workflow_slug=str(metadata.get("workflow_slug") or ""),
         wrote=[
             str(channel)
             for channel in visible_channel_names(

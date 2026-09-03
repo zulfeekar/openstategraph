@@ -43,7 +43,9 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from openstategraph import run_findings as run_findings_module
 from openstategraph.api.audience import Audience
+from openstategraph.api.threads import read_thread
 from openstategraph.run_findings import (
+    NODE_FAILURE,
     REDUNDANT_TOOL_CALL,
     UNSTABLE_TOOL_RESULT,
     RunFinding,
@@ -59,7 +61,14 @@ THREAD = "run-1"
 class _Stub:
     """One stored checkpoint, holding the cumulative message channel."""
 
-    def __init__(self, step: int, messages: list[Any], *, namespace: str = "") -> None:
+    def __init__(
+        self,
+        step: int,
+        messages: list[Any],
+        *,
+        namespace: str = "",
+        slug: str = "stress-deep",
+    ) -> None:
         self.config = {
             "configurable": {"thread_id": THREAD, "checkpoint_ns": namespace}
         }
@@ -69,7 +78,10 @@ class _Stub:
             "channel_values": {"messages": list(messages)},
             "updated_channels": ["messages"],
         }
-        self.metadata = {"step": step, "source": "loop", "workflow_slug": "stress-deep"}
+        # `slug` is per-checkpoint on purpose: a mounted package writes its own
+        # `workflow_slug` into the checkpoints it makes, so one thread holds
+        # two of them — `kanban-patrol/12`.
+        self.metadata = {"step": step, "source": "loop", "workflow_slug": slug}
         self.pending_writes = ()
 
 
@@ -137,6 +149,37 @@ def _fanout_thread(
             step += 1
             messages = [*messages, _answer(call_id, name, result)]
             tuples.append(_Stub(step, messages, namespace=namespace))
+            step += 1
+    return tuples
+
+
+def _mounted_thread(
+    *exchanges: tuple[str, str, dict[str, Any], str, str, str]
+) -> list[Any]:
+    """`_fanout_thread`, but each namespace also names the package that owns it.
+
+    `kanban-patrol/12`. A mounted workflow runs under its own
+    `checkpoint_ns` and writes its **own** `workflow_slug` into every
+    checkpoint it makes, so one thread genuinely holds two packages. This
+    builds that shape: the sixth element of each exchange is the slug the
+    checkpoint metadata carries at that namespace.
+    """
+    by_namespace: dict[str, list[tuple[str, str, dict[str, Any], str, str]]] = {}
+    for call_id, name, args, result, namespace, slug in exchanges:
+        by_namespace.setdefault(namespace, []).append(
+            (call_id, name, args, result, slug)
+        )
+
+    tuples: list[Any] = []
+    step = 0
+    for namespace, calls in by_namespace.items():
+        messages: list[Any] = []
+        for call_id, name, args, result, slug in calls:
+            messages = [*messages, _call(call_id, name, args)]
+            tuples.append(_Stub(step, messages, namespace=namespace, slug=slug))
+            step += 1
+            messages = [*messages, _answer(call_id, name, result)]
+            tuples.append(_Stub(step, messages, namespace=namespace, slug=slug))
             step += 1
     return tuples
 
@@ -880,3 +923,172 @@ class TestACardCannotTellWorkersApartFromRepeats:
 
         assert found[0].calls == 19
         assert found[0].distinct_namespaces == 3
+
+
+class TestAFindingNamesThePackageItsCallsCameFrom:
+    """`kanban-patrol/12`. A finding's `workflow_slug` was
+    `next((row.workflow_slug for row in rows if row.workflow_slug), "")` —
+    the first non-empty **run row** on the thread, which on a thread that
+    mounts anything is the *parent's* slug regardless of where the calls were
+    made. Measured on this checkout's own store: 115 of 495 threads carry more
+    than one `workflow_slug`, and the cause is mounting rather than renaming —
+    `run-4628740240-e2e09441` is `chinook-assistant` at the root namespace and
+    `chinook-nl-to-sql` at `analyst:f08e524d-…`.
+
+    A run row has no namespace column at all (`run_sinks.RunRecord`), so it
+    cannot be asked which package made a call. The checkpoint can: LangGraph's
+    own metadata carries `workflow_slug`, written by whichever graph made the
+    checkpoint, which is why `ThreadStep.workflow_slug` is where the answer
+    comes from now.
+
+    The rule, and both halves matter: **a finding is attributed by the
+    namespaces its calls came from, and when those resolve to two packages it
+    claims neither.** `""` is a value a reader must render as nothing
+    (`kanban-patrol/02`), not as missing data — 6 of 20 run rows in this store
+    carry it outright already.
+    """
+
+    def test_a_call_made_inside_a_mount_is_not_the_parents(self) -> None:
+        """Red before the fix: `concierge`, the parent's run row."""
+        found = _findings(
+            _mounted_thread(
+                *(
+                    (
+                        f"c{i}",
+                        "chinook_list_tables",
+                        {"schema": "main"},
+                        "same-rows",
+                        f"wf_music:{i}",
+                        "chinook-assistant",
+                    )
+                    for i in range(3)
+                )
+            ),
+            [_record(workflow_slug="concierge")],
+        )
+
+        assert [finding.name for finding in found] == [REDUNDANT_TOOL_CALL]
+        assert found[0].workflow_slug == "chinook-assistant"
+
+    def test_calls_spanning_two_packages_claim_neither(self) -> None:
+        """Two mounts asked one tool the same question. No package owns that
+        finding, so it names none rather than picking the alphabetically or
+        chronologically first."""
+        found = _findings(
+            _mounted_thread(
+                (
+                    "c0",
+                    "web_search",
+                    {"q": "rates"},
+                    "same-answer",
+                    "wf_music:1",
+                    "chinook-assistant",
+                ),
+                (
+                    "c1",
+                    "web_search",
+                    {"q": "rates"},
+                    "same-answer",
+                    "wf_architect:1",
+                    "workflow-architect",
+                ),
+            ),
+            [_record(workflow_slug="concierge")],
+        )
+
+        assert [finding.name for finding in found] == [REDUNDANT_TOOL_CALL]
+        assert found[0].distinct_namespaces == 2
+        assert found[0].workflow_slug == ""
+
+    def test_a_thread_that_mounts_nothing_still_names_its_package(self) -> None:
+        """The ordinary case, unchanged: one package on the thread, and the
+        finding says so."""
+        found = _findings(
+            _thread(
+                *(
+                    (f"c{i}", "sql_list_tables", {"schema": "public"}, "same-rows")
+                    for i in range(2)
+                )
+            )
+        )
+
+        assert found[0].workflow_slug == "stress-deep"
+
+    def test_a_thread_whose_checkpoints_name_no_package_names_none(self) -> None:
+        """`""` is a legitimate recorded value, not a signal to go guessing at
+        the run rows: 6 of 20 run rows in this checkout's store carry it."""
+        found = _findings(
+            _mounted_thread(
+                *(
+                    (f"c{i}", "sql_list_tables", {"schema": "public"}, "same-rows", "", "")
+                    for i in range(2)
+                )
+            ),
+            [_record(workflow_slug="")],
+        )
+
+        assert found[0].workflow_slug == ""
+
+    def test_the_runs_a_finding_carries_still_say_what_each_row_said(self) -> None:
+        """Attribution changed; the citation did not. `FindingRun` is the run
+        row verbatim, and the parent's row still names the parent — that is
+        what the row says and this module does not edit it."""
+        found = _findings(
+            _mounted_thread(
+                *(
+                    (
+                        f"c{i}",
+                        "chinook_list_tables",
+                        {"schema": "main"},
+                        "same-rows",
+                        f"wf_music:{i}",
+                        "chinook-assistant",
+                    )
+                    for i in range(2)
+                )
+            ),
+            [_record(workflow_slug="concierge")],
+        )
+
+        assert [run.workflow_slug for run in found[0].runs] == ["concierge"]
+        assert found[0].workflow_slug == "chinook-assistant"
+
+    def test_a_node_failure_is_attributed_the_same_way(self) -> None:
+        """C is a finding like the other two and gets the same rule — a
+        failure inside a mounted package is that package's, not its
+        parent's."""
+        tuples = [
+            _Stub(0, [], namespace="wf_music:1", slug="chinook-assistant")
+        ]
+        tuples[0].checkpoint["channel_values"] = {
+            "messages": [],
+            "outputs": {"agent_sql": "[agent_sql failed after retries: rate limited]"},
+        }
+        tuples[0].checkpoint["updated_channels"] = ["messages", "outputs"]
+        found = _findings(tuples, [_record(workflow_slug="concierge")])
+
+        assert [finding.name for finding in found] == [NODE_FAILURE]
+        assert found[0].workflow_slug == "chinook-assistant"
+
+
+class TestTheStepSaysWhichPackageWroteIt:
+    """The fact the attribution rests on, pinned at the layer it comes from:
+    `read_thread` reports each checkpoint's own recorded `workflow_slug`."""
+
+    def test_each_step_carries_the_slug_its_own_checkpoint_recorded(self) -> None:
+        history = read_thread(
+            [
+                _Saver(
+                    _mounted_thread(
+                        ("c0", "t", {"a": 1}, "r", "", "concierge"),
+                        ("c1", "t", {"a": 2}, "r", "wf_music:1", "chinook-assistant"),
+                    )
+                )
+            ],
+            THREAD,
+            audience=Audience.DEVELOPER,
+        )
+
+        assert history is not None
+        by_namespace = {step.checkpoint_ns: step.workflow_slug for step in history.steps}
+        assert by_namespace == {"": "concierge", "wf_music:1": "chinook-assistant"}
