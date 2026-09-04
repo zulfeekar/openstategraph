@@ -9,7 +9,9 @@ Twelve steps, in order. Every later step assumes an earlier one's answer.
 
 ## 1. Whose project is this?
 
-Answer this first. Two asks, two directories.
+Answer this first, and from the ask itself: a workflow *in* a project is the
+first case below, and only a platform change is worth inspecting a directory
+to settle. Two asks, two directories.
 
 - **A workflow in the developer's project** — the normal case. Work here, in
   the current directory, against the *installed* package.
@@ -22,8 +24,8 @@ package: the next upgrade deletes them and nothing warns anybody.
 
 ## 2. Which door do you have?
 
-Both doors do the same things in the same order; check which you have before
-promising anything.
+Both doors do the same things in the same order; check yours before promising
+anything.
 
 - **MCP.** If the `openstategraph` server is selected in your client, use its
   tools — `openstategraph init` wrote the config your client reads.
@@ -41,13 +43,41 @@ promising anything.
 | file a card | `kanban_file_card` | `openstategraph kanban file` |
 | what to pick up | `kanban_triage`, `kanban_list_cards` | `openstategraph kanban triage` |
 | claim a card | `kanban_attend_card` | `openstategraph kanban attend` |
-| read a card | `kanban_show_card` | `openstategraph kanban show` |
 | advance a card | `kanban_set_stage` | `openstategraph kanban stage` |
-| answer a judgement | `kanban_answer_card` | `openstategraph kanban answer` |
-| unstick a stale card | `kanban_release_card` | `openstategraph kanban release` |
-| run it | `run_workflow` (gated — step 8) | `openstategraph run` |
 
-## 3. Before anything: read the ground rules
+The rest of the board — reading a card, answering a judgement, unsticking a
+stale one, running a workflow — is in `references/build-loop.md`.
+
+## 3. How big is this? Decide it now, before you ask anything
+
+Classify the ask from the words the developer already used, then say the size
+back in one line they can disagree with — *"This is a tweak: I will add
+`maxRetries` to that node, with a test that pins the value."* Follow that row
+and no other. **Size decides the ritual, never the rules.**
+
+Non-negotiable at every size, and this paragraph is the whole of it: read the
+ground rules once per session (step 4); never a node type the registry does
+not know, and when nothing registered fits, extend through the family's base,
+register it, and only then use it; the failing test is written before the code
+that passes it; the card is the one record, because a decision left in the
+conversation is lost at the end of it.
+
+| Size | The ask | The ritual, whole |
+| --- | --- | --- |
+| **tweak** | one setting, one field, one line | one confirming question · no map, no interview, no triage · one card filed from the ask · one failing test · make it pass · commit · `finished` · no break-the-fix |
+| **change** | one node or one tool added, one rule edited | two or three questions (step 5) · one card · the full loop of step 8, break-the-fix included |
+| **feature or slice** | a workflow, several nodes, anything you cannot finish in one sitting | the whole path — the interview, a decision map, a card per decision, triage, then step 8 for each |
+
+A tweak's card is filed and finished in one sitting: no `attend`, no
+`red`/`green` — file it, then stage it `finished` with the commit. A
+**decision map** belongs to a feature or a slice only; it is an index of the
+decisions the concept still owes, not a store, and a decision lives in
+exactly one place.
+
+Unsure between two rows? Take the smaller one and say so: being wrong there
+costs one more question, and guessing larger costs everything in the row.
+
+## 4. Before anything: read the ground rules
 
 Two reads, every time, before the first node exists.
 
@@ -65,7 +95,12 @@ Two reads, every time, before the first node exists.
 `references/engineering-rules.md` is that text, installed beside this sheet as
 a copy of the file the package ships, so the two doors cannot disagree.
 
-## 4. The interview
+## 5. The interview
+
+**How much of this you run was decided in step 3.** A tweak asks one
+confirming question and goes to step 8. A change asks two or three — which
+node or tool, what check settles it, and the one thing the ask left open.
+Only a feature or a slice runs every dimension below.
 
 Say this, then start:
 
@@ -97,22 +132,6 @@ If a dimension's honest answer is *this platform cannot do that yet*, say so
 and file a card for it. That is a correct outcome, not a failed interview.
 
 Long form: `references/interview.md`.
-
-## 5. Sizing — say which one you chose, and why
-
-The interview ends with a size, and the size decides the next move. State the
-one you took in a sentence the developer can disagree with.
-
-- **A single-node change** — one field, one edge, one prompt. Go straight to
-  the gates: file one card, then step 8. A decision map here is ceremony.
-- **A multi-session concept** — several nodes, a new tool, anything you cannot
-  finish in one sitting. **Chart a decision map first.** List the decisions
-  the concept still owes, resolve them one at a time, and do not start
-  building until the ones that block the first card are settled. A decision
-  lives in exactly one place; the map is an index, not a store.
-
-Unsure? Ask once. Do not chart a map for a one-line change; do not start
-typing into a concept with six open decisions.
 
 ## 6. Filing — every decision and every task becomes a card
 
@@ -151,7 +170,8 @@ card, say which rule you are overriding and why.
 
 ## 8. The build loop, once per card
 
-Do this for every card, in this order, with no step merged into another.
+Do this for every card, in this order, with no step merged into another. A
+tweak runs 2, 4, 7 and 8 of it and files its card at 1's place (step 3).
 
 1. **Attend it.** `kanban_attend_card` / `openstategraph kanban attend`. First
    caller wins; if somebody else holds it, take the next card.
@@ -162,7 +182,10 @@ Do this for every card, in this order, with no step merged into another.
 4. **Make it pass.** The smallest change that does it.
 5. **Break the fix on purpose** and watch the test go red again. This is the
    step that tells you the test holds the behaviour rather than merely passing
-   beside it. Restore.
+   beside it. Restore. **Skip it only when the test already discriminates the
+   value** rather than its presence — `maxRetries == 2` is already red on a
+   wrong value, `"maxRetries" in data` is not — and say which of the two you
+   did. Test-first is not weakened either way: the red step stays.
 6. **`set_stage green`.**
 7. **Commit.**
 8. **`set_stage finished`** with the commit.
@@ -212,39 +235,16 @@ compiler will disagree eventually and the reader cannot tell which one lied.
 
 ## 11. Environments
 
-Three starting points, and the tool install is isolated from the project's own
-environment in all of them.
-
-- **A fresh folder.** `openstategraph init` and you are ready.
-- **An existing project.** `init` writes additively — skills, agent config
-  files, the workflows root — and touches no dependency of theirs.
-- **An existing LangGraph codebase.** The developer tool runs from its own
-  environment and shares nothing with the project's pins. The *library*
-  install does share them, and that is where a clash lives: this package
-  requires `langgraph>=1.0,<2`. If their project pins LangGraph 0.x, an
-  install that *states* that pin is refused by the resolver and the refusal is
-  correct — but a bare `pip install` into a built venv is not: it upgrades
-  their LangGraph out from under them. Check after. Tell them:
-
-  > Your project pins LangGraph 0.x and OpenStateGraph requires 1.x, so the
-  > library install cannot honour both. The developer tool is unaffected — it
-  > runs from its own environment — so you can draw, validate and compile
-  > today. Importing a workflow into your service needs the 1.x upgrade first.
-
-  Do not force it with a flag. Do not vendor a copy.
-
-Long form: `references/environments.md`.
+Three starting points — a fresh folder, an existing project, an existing
+LangGraph codebase — and one fact that settles all three: the tool installs into
+its own environment and shares nothing with the project's pins, while the
+*library* shares them completely and requires `langgraph>=1.0,<2`. Read
+`references/environments.md` before promising anything about an install.
 
 ## 12. Where this shape came from
 
-Nothing here is copied, and the names are deliberately absent — a name is a
-file on somebody else's machine. The shapes are credited instead.
-
-Step 4 is the one-question-per-turn design interview, facts the agent's job
-and decisions the developer's. Step 5's map is the practice of planning work
-too big for one sitting as an index of decisions rather than a document, and
-its gates are a published product/architecture/design/slice workflow. Step 8
-is ordinary test-driven development, with the deliberate break made explicit
-because it is the step that gets skipped. Step 9 rests on *a report is
-testimony, the filesystem is evidence* — learned expensively by people running
-many agents unattended.
+Nothing here is copied and no name is given — a name is a file on somebody
+else's machine, and a stranger's agent sent looking for one finds nothing. The
+shapes are credited instead: a one-question-per-turn design interview, planning
+as an index of decisions rather than a document, ordinary test-driven
+development, and *a report is testimony, the filesystem is evidence*.

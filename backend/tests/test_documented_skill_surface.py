@@ -226,3 +226,102 @@ def test_the_readers_page_exists_and_is_indexed() -> None:
     index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
 
     assert "the-openstategraph-skill.md" in index
+
+
+class TestTheSizeGate:
+    """`osg-agent-experience/31`. Measured, not opined: a one-field ask cost
+    8 developer questions and 20 agent calls against this sheet followed
+    literally, 6.7x the same ask with no skill at all
+    (`.scratch/osg-agent-experience/ceremony-measured.md`).
+
+    The cause was **order**. The sizing rule existed and could not fire: the
+    interview ran first and ended with a size, so all eight dimensions were
+    spent before the size that would have exempted them was chosen. So the
+    owner's rule (round 5) is a rule about position — *size first; size
+    decides the ritual, never the rules* — and a rule about position is
+    exactly the kind a test can hold.
+
+    Pinned here: that the size gate precedes the interview, that each of the
+    three sizes names its own ritual, and that the four engineering
+    non-negotiables are stated once **above** the sizes so no size can be read
+    as exempting them. Still not pinned: the wording of any of it.
+    """
+
+    HEADING = re.compile(r"^##\s+\d+\.\s+(.*)$", re.MULTILINE)
+
+    def _headings(self) -> list[str]:
+        return [m.group(1).strip() for m in self.HEADING.finditer(SHEET.read_text(encoding="utf-8"))]
+
+    def _index_of(self, needle: str) -> int:
+        for position, heading in enumerate(self._headings()):
+            if needle in heading.lower():
+                return position
+        raise AssertionError(f"no numbered section of the sheet mentions {needle!r}: {self._headings()}")
+
+    def test_the_size_gate_is_a_step_of_its_own(self) -> None:
+        assert self._index_of("big") >= 0
+
+    def test_the_size_gate_precedes_the_interview(self) -> None:
+        """The whole defect, as one assertion."""
+        assert self._index_of("big") < self._index_of("interview"), (
+            "the interview runs before the size is chosen, which is the ceremony "
+            "defect measured in ticket 31: eight dimensions spent to discover a "
+            "size that would have exempted them"
+        )
+
+    def test_the_size_gate_comes_straight_after_the_routing_check(self) -> None:
+        """Before the ground rules, before the vocabulary, before anything the
+        agent has to read: the size is decided from the ask itself."""
+        assert self._index_of("big") < self._index_of("ground rules")
+
+    def test_each_size_names_the_ritual_it_carries(self) -> None:
+        text = SHEET.read_text(encoding="utf-8")
+        for word in ("**tweak**", "**change**", "**feature or slice**"):
+            assert word in text, f"the sizing table does not name {word}"
+
+        tweak = next(line for line in text.splitlines() if "**tweak**" in line)
+        change = next(line for line in text.splitlines() if "**change**" in line)
+        feature = next(line for line in text.splitlines() if "**feature or slice**" in line)
+
+        assert "one confirming question" in tweak and "no break" in tweak, (
+            f"a tweak's ritual is not stated on its own row: {tweak}"
+        )
+        assert "break" in change, f"a change keeps the deliberate break, and its row must say so: {change}"
+        assert "interview" in feature, f"only a feature or slice buys the interview: {feature}"
+
+    def test_the_non_negotiables_are_stated_once_above_the_sizes(self) -> None:
+        """Size decides the ritual, never the rules — so the rules are stated
+        before the first size word, where no size can appear to exempt them."""
+        text = SHEET.read_text(encoding="utf-8")
+        #: The paragraph, not the line: this sheet is hard-wrapped, so a
+        #: line-at-a-time reading would pin where the author broke a sentence.
+        paragraph = next(
+            (block for block in text.split("\n\n") if "Non-negotiable at every size" in block),
+            None,
+        )
+        assert paragraph is not None, "the sheet never states what holds at every size"
+        assert text.index(paragraph) < text.index("**tweak**"), (
+            "the non-negotiables are stated below the sizes, where a size can be read as exempting them"
+        )
+
+        for named in ("rules", "register", "test", "card"):
+            assert named in paragraph.lower(), (
+                f"the non-negotiables paragraph never names {named!r}: {paragraph}"
+            )
+
+
+@pytest.mark.parametrize("page", sorted(_pages()), ids=lambda p: p.name)
+def test_no_page_asks_for_this_repositorys_own_rituals(page: Path) -> None:
+    """A handoff file and a ticket markdown file are how *this* repository runs
+    unattended sessions. A stranger's agent has neither, and a sheet that asks
+    for one sends it to write a file nobody will ever read
+    (`osg-agent-experience/31`, the owner's rule)."""
+    offenders = [
+        line.strip()
+        for line in page.read_text(encoding="utf-8").splitlines()
+        if re.search(r"handoff|\.scratch|ticket (?:file|markdown)", line, re.IGNORECASE)
+    ]
+
+    assert not offenders, (
+        f"{page.name} asks a stranger's agent for one of this repository's own rituals: {offenders}"
+    )

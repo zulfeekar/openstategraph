@@ -1,7 +1,15 @@
 # The build loop — long form
 
 Read this when step 8 of `SKILL.md` is the step you are on. One card at a
-time, start to finish, before the next card is attended.
+time, start to finish, before the next card is attended. A **tweak** (step 3)
+runs a short form of this page: the failing test, the fix, the commit, and
+`finished` — no attend, no `red`/`green`, no deliberate break.
+
+Two doors this page owns because step 2's table no longer lists them: a
+judgement card is answered with `kanban_answer_card` /
+`openstategraph kanban answer`, and a workflow is run — only when runs are
+enabled and the developer has said so — with `run_workflow` /
+`openstategraph run`.
 
 ## 1. Attend
 

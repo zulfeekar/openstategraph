@@ -1,6 +1,7 @@
 # The interview — long form
 
-Read this when step 4 of `SKILL.md` is the step you are on.
+Read this when step 5 of `SKILL.md` is the step you are on, and only for a
+feature or a slice — step 3 decides how much of it you run.
 
 ## The rule that makes it work
 
@@ -45,7 +46,7 @@ another step needs a shape somebody has to parse.
 
 ### Steps — which node type carries each step
 
-**Name the types, from the vocabulary you read in step 3.** This is the
+**Name the types, from the vocabulary you read in step 4.** This is the
 dimension that goes wrong silently: a plan written as "then it decides which
 department" and never mapped onto a real type produces a document naming a
 type nothing resolves.
@@ -109,7 +110,7 @@ Say, in a few lines:
 
 1. What you understood, in the developer's own words where you have them.
 2. Every accepted gap, listed, so none of them is silent.
-3. The size you judged it (step 5) and why.
+3. The size you judged it (step 3) and why, if it has changed since.
 4. The cards you are about to file.
 
 Then wait. The interview is not finished until they have seen that summary.
