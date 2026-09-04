@@ -875,11 +875,13 @@ carries `kind`, `task_id`, `title`, `filed`, `skipped`, `total_findings` and
 `reason`; `docs/openapi.json` publishes that list, derived from the
 serialiser rather than typed beside it.
 
-**The `done` / `interrupt` / `error` guarantee below is a promise of the
-run streams only.** This stream and `GET /api/events` each end when the
-connection does, and neither emits a terminal frame — the generated OpenAPI
-description says otherwise for all four endpoints, which is a defect in the
-generator rather than a second contract.
+**The `done` / `interrupt` / `error` guarantee is a promise of the run
+streams only.** This stream and `GET /api/events` each end when the
+connection does, and neither emits a terminal frame. `docs/openapi.json`
+says so on each of them, decided from the endpoint's own event names rather
+than asserted for all four (`stable-beta-public/20`); the sentence a
+non-terminal stream carries is *"This stream sends no terminal frame: it
+ends when the connection closes."*
 
 Same two limits as the catalogue stream, for the same reasons: the fan-out is
 in-process, so it covers one worker; and there is **no replay** — a client

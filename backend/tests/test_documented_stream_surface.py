@@ -27,14 +27,15 @@ generated, committed and already gated both ways
 (`test_openapi_contract.py`, CI's `generated-openapi`), so reading it here
 adds no third description of the route table.
 
-## What is not pinned, and is recorded instead
+## What this file does not pin, and where that went
 
-`sse_responses` appends the `done`/`interrupt`/`error` terminal-frame
-sentence to **all four** endpoints, and the catalogue and patrol streams emit
-none of those names — they end when the connection does. That is an
-over-promise in the generator, not in the page, so the page now says so and
-the fix belongs in `api/sse_contract.py` with a regenerated
-`docs/openapi.json`. Filed as `stable-beta-public/19`.
+`sse_responses` used to append the `done`/`interrupt`/`error` terminal-frame
+sentence to **all four** endpoints, while the catalogue and patrol streams
+emit none of those names — they end when the connection does. That was an
+over-promise in the generator rather than in the page; it is fixed
+(`stable-beta-public/20`, filed here as 19 before the renumber) and pinned by
+`test_a_stream_says_how_it_ends.py`, which decides from `TERMINAL_EVENTS`
+what each published description is allowed to claim.
 """
 
 from __future__ import annotations

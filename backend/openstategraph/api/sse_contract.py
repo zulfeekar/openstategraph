@@ -62,6 +62,46 @@ def _frame_fields_sentence(
     return f"Frame fields: {per_frame}. "
 
 
+def _ending_sentence(events: tuple[str, ...]) -> str:
+    """How this stream ends — decided from its own event names.
+
+    Until `stable-beta-public/20` this was one unconditional sentence,
+    appended to all four streaming endpoints: *the guarantee that every
+    stream ends with one of `done`, `interrupt`, `error`*. It is true of
+    `POST /api/runs/stream` and `POST /api/runs/resume` and has never been
+    true of the other two. `GET /api/events` emits exactly one name,
+    `workflows.changed`; `GET /api/kanban/patrol/events` emits exactly one,
+    `patrol.status`. Neither has ever sent a terminal frame — each ends when
+    the connection does — so the published contract told a client to wait for
+    something that never arrives, on the two endpoints where waiting is the
+    whole idiom.
+
+    The fix is the mechanism `kanban-patrol/31` and `/34` built for frame
+    fields rather than a second contract: the decision is taken from `events`,
+    which the caller already declares, so a new stream cannot acquire the
+    promise by inheriting a sentence nobody read. A stream that ends with a
+    frame names the terminal frames **it** declares — not `TERMINAL_EVENTS`
+    entire, which would over-promise again the moment an endpoint carries
+    some of them.
+
+    What the other branch says is deliberately short of `docs/api.md`'s
+    account: it states that the stream ends with the connection, and stops.
+    Replay is a per-stream property (neither of these two has any), and this
+    function knows only the names.
+    """
+    ending = tuple(name for name in events if name in TERMINAL_EVENTS)
+    if not ending:
+        return (
+            "This stream sends no terminal frame: it ends when the "
+            f"connection closes — see `{STREAM_GUIDE}`."
+        )
+    return (
+        "The guarantee that every stream ends with one of "
+        f"{', '.join(f'`{name}`' for name in ending)} is in "
+        f"`{STREAM_GUIDE}` — OpenAPI cannot express it."
+    )
+
+
 def sse_responses(
     events: tuple[str, ...],
     summary: str,
@@ -81,9 +121,7 @@ def sse_responses(
             "description": (
                 f"{summary}\n\nA `text/event-stream`. Event names: {names}. "
                 f"{_frame_fields_sentence(events, frame_fields)}"
-                f"The guarantee that every stream ends with one of "
-                f"{', '.join(f'`{n}`' for n in TERMINAL_EVENTS)} is in "
-                f"`{STREAM_GUIDE}` — OpenAPI cannot express it."
+                f"{_ending_sentence(events)}"
             ),
             "content": {
                 "text/event-stream": {

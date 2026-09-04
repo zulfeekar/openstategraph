@@ -2658,7 +2658,7 @@
                 }
               }
             },
-            "description": "One frame per catalogue change.\n\nA `text/event-stream`. Event names: `workflows.changed`. Frame fields: `workflows.changed`: `reason`, `slug`, `surface_visible`. The guarantee that every stream ends with one of `done`, `interrupt`, `error` is in `docs/api.md` \u2014 OpenAPI cannot express it."
+            "description": "One frame per catalogue change.\n\nA `text/event-stream`. Event names: `workflows.changed`. Frame fields: `workflows.changed`: `reason`, `slug`, `surface_visible`. This stream sends no terminal frame: it ends when the connection closes \u2014 see `docs/api.md`."
           }
         },
         "summary": "Catalogue changes, live (SSE)",
@@ -2895,7 +2895,7 @@
                 }
               }
             },
-            "description": "One frame per patrol event.\n\nA `text/event-stream`. Event names: `patrol.status`. Frame fields: `patrol.status`: `kind`, `task_id`, `title`, `filed`, `skipped`, `total_findings`, `reason`. The guarantee that every stream ends with one of `done`, `interrupt`, `error` is in `docs/api.md` \u2014 OpenAPI cannot express it."
+            "description": "One frame per patrol event.\n\nA `text/event-stream`. Event names: `patrol.status`. Frame fields: `patrol.status`: `kind`, `task_id`, `title`, `filed`, `skipped`, `total_findings`, `reason`. This stream sends no terminal frame: it ends when the connection closes \u2014 see `docs/api.md`."
           }
         },
         "summary": "Patrol progress, live (SSE)",
