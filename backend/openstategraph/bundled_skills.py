@@ -19,11 +19,18 @@ byte-identical, nothing written).
 and `.agents/skills/` for the same thing; installing to only one leaves the
 skill invisible to whichever agent looks at the other.
 
-**What ships here, and why only these two.** `atom-forge` and `kanban-patrol`
-are OpenStateGraph's own, original text — nothing here is a third party's
-skill with a credit note attached. A credit note does not grant permission to
-redistribute someone else's unlicensed work, and crediting an influence is a
-different act from copying it (`kanban-patrol/24`'s own resolution says why).
+**What ships here, and why only these two.** `ticket-forge` and
+`kanban-patrol` are OpenStateGraph's own, original text — nothing here is a
+third party's skill with a credit note attached. A credit note does not grant
+permission to redistribute someone else's unlicensed work, and crediting an
+influence is a different act from copying it (`kanban-patrol/24`'s own
+resolution says why).
+
+`ticket-forge` was named `atom-forge` until `osg-agent-experience/21`: this
+checkout's own `skills/atom-forge/` (build a new module — route, a
+nine-dimension interview, honesty gates) is a completely different document,
+and `init` installing the bundled one under the same name put both under one
+name in any project that also carries the repo skill — including this one.
 """
 
 from __future__ import annotations
@@ -34,7 +41,7 @@ _HERE = Path(__file__).resolve().parent
 
 #: Package data, beside this module, exactly like `agent_brief.py`'s `BRIEF`.
 BUNDLED_SKILLS: dict[str, Path] = {
-    "atom-forge": _HERE / "atom_forge_skill.md",
+    "ticket-forge": _HERE / "ticket_forge_skill.md",
     "kanban-patrol": _HERE / "kanban_patrol_skill.md",
 }
 

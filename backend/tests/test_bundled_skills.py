@@ -3,7 +3,7 @@
 Same idiom `agent_brief.py` already uses for `AGENTS.md`: the wheel carries
 the material, a console script the user already runs puts it where their
 coding agent looks. The difference here is a skill is a **whole file this
-project fully owns** (nobody else writes into `.claude/skills/atom-forge/
+project fully owns** (nobody else writes into `.claude/skills/ticket-forge/
 SKILL.md`), so there is no user-content marker to preserve — the state is
 simpler: created, refreshed (content differs from what we'd write now), or
 current (already byte-identical).
@@ -15,6 +15,7 @@ skill invisible to whichever agent looks elsewhere.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from openstategraph.bundled_skills import (
@@ -25,6 +26,29 @@ from openstategraph.bundled_skills import (
     SKILL_ROOTS,
     install_bundled_skills,
 )
+
+ROOT = Path(__file__).resolve().parents[2]
+
+#: Every `name:` a `SKILL.md` frontmatter declares, in every directory a
+#: coding agent might actually scan for skills — `skills/` (this repository's
+#: own, agent-agnostic skills) and the bundled files this module installs.
+_NAME = re.compile(r"^name:\s*(\S+)\s*$", re.MULTILINE)
+
+
+def _declared_names() -> dict[str, list[str]]:
+    """`{name: [paths]}` for every `SKILL.md` that declares a frontmatter
+    `name:` — not every one does (some in `skills/` are a bare heading and no
+    frontmatter at all), and a file with no declared name cannot collide with
+    one by that mechanism."""
+    by_name: dict[str, list[str]] = {}
+    sources = [path for path in (ROOT / "skills").glob("*/SKILL.md")]
+    sources += list(BUNDLED_SKILLS.values())
+    for path in sources:
+        match = _NAME.search(path.read_text())
+        if not match:
+            continue
+        by_name.setdefault(match.group(1), []).append(str(path.relative_to(ROOT)))
+    return by_name
 
 
 class TestWhatItInstalls:
@@ -65,13 +89,13 @@ class TestIdempotency:
         on the next install, reported honestly as `refreshed` rather than
         silently kept or silently clobbered without saying so."""
         install_bundled_skills(tmp_path)
-        edited = tmp_path / SKILL_ROOTS[0] / "atom-forge" / "SKILL.md"
+        edited = tmp_path / SKILL_ROOTS[0] / "ticket-forge" / "SKILL.md"
         edited.write_text("someone's local edit")
 
         results = install_bundled_skills(tmp_path)
 
-        assert results[(SKILL_ROOTS[0], "atom-forge")] == REFRESHED
-        assert edited.read_text() == BUNDLED_SKILLS["atom-forge"].read_text()
+        assert results[(SKILL_ROOTS[0], "ticket-forge")] == REFRESHED
+        assert edited.read_text() == BUNDLED_SKILLS["ticket-forge"].read_text()
 
 
 class TestThePatrolSkillStatesTheSelfReferenceTrap:
@@ -103,3 +127,21 @@ class TestThePatrolSkillStatesTheSelfReferenceTrap:
         text = self._skill().lower()
 
         assert "its own" in text or "self-reference" in text
+
+
+class TestNoTwoSkillsShareAName:
+    """osg-agent-experience/21. `skills/atom-forge/SKILL.md` (build a new
+    module — route, nine-dimension interview, honesty gates) and the bundled
+    ticket-authoring sheet were both named `atom-forge`, and `init` installs
+    the bundled one straight into `.claude/skills/atom-forge/`, beside the
+    checkout's own — so a coding agent standing at this repository's root saw
+    one name pointing at two different documents.
+    """
+
+    def test_every_declared_skill_name_is_unique(self) -> None:
+        by_name = _declared_names()
+        collisions = {name: paths for name, paths in by_name.items() if len(paths) > 1}
+
+        assert collisions == {}, (
+            f"two or more skill files declare the same name: {collisions}"
+        )

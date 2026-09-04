@@ -82,10 +82,10 @@ class FindingClassification:
     kind: str
     category: str
     priority: str
-    #: The evidence, in the classifier's own words — `atom-forge`'s rule:
+    #: The evidence, in the classifier's own words — `ticket-forge`'s rule:
     #: cite the finding's own fields, never a plausible elaboration on top.
     reason: str
-    #: The symptom, never the fix — `atom-forge`'s other rule.
+    #: The symptom, never the fix — `ticket-forge`'s other rule.
     title: str
 
 

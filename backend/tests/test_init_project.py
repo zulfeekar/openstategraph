@@ -653,7 +653,7 @@ class TestProjectIdentity:
 
 
 class TestBundledSkillsInstallOnInit:
-    """`kanban-patrol/24`. `atom-forge` and `kanban-patrol` are OpenStateGraph's
+    """`kanban-patrol/24`. `ticket-forge` and `kanban-patrol` are OpenStateGraph's
     own skills — installed the same way `AGENTS.md` is, project-locally, in
     both directories a coding agent might scan."""
 
@@ -670,7 +670,7 @@ class TestBundledSkillsInstallOnInit:
         from openstategraph.bundled_skills import SKILL_ROOTS
 
         init_project(tmp_path / "my_demo")
-        marker = tmp_path / "my_demo" / SKILL_ROOTS[0] / "atom-forge" / "SKILL.md"
+        marker = tmp_path / "my_demo" / SKILL_ROOTS[0] / "ticket-forge" / "SKILL.md"
         before = marker.stat().st_mtime_ns
 
         init_project(tmp_path / "my_demo", force=True)

@@ -429,7 +429,7 @@ class InitResult:
     #: `--adopt` inert in a fresh directory rather than a second, quieter
     #: `init` that skips the starter.
     adopted: tuple[FoundPackage, ...] = ()
-    #: `{(root, skill_name): state}` for `atom-forge`/`kanban-patrol` —
+    #: `{(root, skill_name): state}` for `ticket-forge`/`kanban-patrol` —
     #: kanban-patrol/24. Carried so `init`'s printed report can say what
     #: happened per file, same as it does for `AGENTS.md`.
     skills_installed: dict[tuple[str, str], str] = field(default_factory=dict)

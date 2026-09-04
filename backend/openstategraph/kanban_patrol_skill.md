@@ -31,7 +31,7 @@ invents no new detection of its own — it orchestrates what already exists
    A finding with no clear remedy, or one that changes user-facing
    behaviour, is a `grilling` — a human must weigh it first.
 
-4. **Author.** Hand the finding to `atom-forge` to produce the ticket text.
+4. **Author.** Hand the finding to `ticket-forge` to produce the ticket text.
    Do not write the ticket yourself here — that is a separate skill on
    purpose, so a ticket authored by a patrol reads identically to one
    authored any other way, by anyone.

@@ -1,9 +1,9 @@
 ---
-name: atom-forge
+name: ticket-forge
 description: Turn a raw finding (a title, evidence, a reason) into a well-formed, atomic ticket — a label line, a short story, done-when criteria. Use when authoring a ticket from an error, a code smell, or a patrol finding, so every ticket in a project reads the same way regardless of who or what filed it.
 ---
 
-# atom-forge
+# ticket-forge
 
 OpenStateGraph's own, independent answer to "what makes one ticket well
 -formed" — written in the spirit of gated, ticket-driven engineering practice

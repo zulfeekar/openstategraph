@@ -25,7 +25,7 @@
 - **`project_id`** — minted once into `openstategraph.yaml` by `init`, paired
   with a gitignored companion marker so a copied config does not carry a
   second project into the first one's bucket.
-- **Two bundled skills, `atom-forge` and `kanban-patrol`**, installed into
+- **Two bundled skills, `ticket-forge` and `kanban-patrol`**, installed into
   `.claude/skills/` and `.agents/skills/` by `openstategraph init`, so a
   coding agent on a fresh project can run the patrol and write a well-formed
   card without this repository's own tooling.
@@ -54,6 +54,13 @@
   shape assertion pinning it.
 
 ### Changed
+- **The bundled ticket-authoring skill is `ticket-forge`, not `atom-forge`**
+  (`osg-agent-experience/21`). It collided with this repository's own
+  `skills/atom-forge/` (the module-building interview) — `init` installed
+  the bundled sheet under the same name the repo skill already used, so a
+  coding agent at this checkout's root saw one name pointing at two
+  different documents. `backend/openstategraph/atom_forge_skill.md` →
+  `ticket_forge_skill.md`; every citation moved with it.
 - **The `[server]` extra now pulls in `[mcp]`** (`osg-agent-experience/19`).
   `"openstategraph[server,ollama]"` — the requirement's own documented install
   line — used to leave `openstategraph mcp` answering the missing-extra
