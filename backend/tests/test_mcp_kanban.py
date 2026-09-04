@@ -14,6 +14,7 @@ import asyncio
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -603,3 +604,194 @@ class TestAnswerCard:
 
         assert result.get("ok") is False
         assert "alice" in result.get("reason", "")
+
+
+class TestTwoRealConcurrentCallers:
+    """`kanban-patrol/16`'s own "done when", and the one it left unbuilt:
+    *a concurrency test drives two claimants at one card and asserts exactly
+    one wins and the loser is told.*
+
+    That guarantee was proven twice already and neither proof was this one.
+    `test_kanban_store.py` drives the function; `TestAttend` above drives two
+    **sequential** calls through the tool and shows the refusal survives the
+    call boundary. Neither has ever had two callers in flight at once, which
+    is the only shape that can catch a read-then-write.
+    """
+
+    def _server(self, services: WorkflowServices):
+        _filed(services)
+        return build_mcp_server(services)
+
+    def _attend(self, server, actor: str):
+        async def go() -> Any:
+            result = await server.call_tool(
+                "kanban_attend_card", {"task_id": "proj-a:thread-1", "actor": actor}
+            )
+            return result[1] if isinstance(result, tuple) else result
+
+        return go()
+
+    def test_two_calls_in_flight_at_once_produce_exactly_one_winner(
+        self, services: WorkflowServices
+    ) -> None:
+        server = self._server(services)
+
+        async def both() -> list[Any]:
+            return list(await asyncio.gather(self._attend(server, "alice"), self._attend(server, "bob")))
+
+        results = asyncio.run(both())
+
+        winners = [r for r in results if r.get("ok") is True]
+        losers = [r for r in results if r.get("ok") is False]
+        assert len(winners) == 1
+        assert len(losers) == 1
+        # Told, not guessed at: the loser learns who actually holds the card,
+        # so a polite agent can take the next one instead of retrying.
+        assert losers[0]["reason"]
+        assert "alice" in losers[0]["reason"] or "bob" in losers[0]["reason"]
+
+    def test_a_gather_does_not_interleave_inside_a_tool_body(
+        self, services: WorkflowServices
+    ) -> None:
+        """And here is what the test above does *not* prove, written down
+        rather than assumed — because a test that cannot fail is worse than
+        no test at all.
+
+        These tool bodies are plain synchronous functions, so the server
+        awaits each one inline on the event-loop thread: two `gather`ed calls
+        are dispatched concurrently and then run one after the other. The
+        transport serialises them. So the test above proves the refusal
+        survives real concurrent dispatch, and the *atomicity* is proven by
+        the threaded test below and by `test_kanban_store.py` — never by this
+        one.
+
+        Pinned so the day a kanban tool becomes `async def`, or does its work
+        off the loop, this fails and whoever made that change reads the
+        paragraph they need.
+        """
+        import threading
+
+        from openstategraph import kanban_store
+
+        threads: list[str] = []
+        real = kanban_store.set_stage
+
+        def note(*args: Any, **kwargs: Any) -> Any:
+            threads.append(threading.current_thread().name)
+            return real(*args, **kwargs)
+
+        server = self._server(services)
+        kanban_store.set_stage = note  # type: ignore[assignment]
+        try:
+
+            async def both() -> Any:
+                return await asyncio.gather(self._attend(server, "alice"), self._attend(server, "bob"))
+
+            asyncio.run(both())
+        finally:
+            kanban_store.set_stage = real  # type: ignore[assignment]
+
+        assert threads == ["MainThread", "MainThread"], threads
+
+    def test_two_callers_that_genuinely_overlap_still_produce_one_winner(
+        self, services: WorkflowServices
+    ) -> None:
+        """The atomicity itself, at this door — two threads, each with its own
+        event loop, held at a barrier until **both** have read the card.
+
+        That barrier is the whole test. It manufactures the interleave a
+        `gather` cannot produce here and a sequential call never could: both
+        callers see an unattended card, and only the conditional `UPDATE`
+        decides. A read-then-write passes every other test in this file and
+        records two winners on one card here.
+        """
+        import threading
+
+        from openstategraph import kanban_store
+
+        server = self._server(services)
+        both_have_read = threading.Barrier(2, timeout=5)
+        real_read = kanban_store.read_card
+        once: set[str] = set()
+        guard = threading.Lock()
+
+        def read_then_wait_for_the_other(*args: Any, **kwargs: Any) -> Any:
+            card = real_read(*args, **kwargs)
+            with guard:
+                first_read_by_this_thread = threading.current_thread().name not in once
+                once.add(threading.current_thread().name)
+            if first_read_by_this_thread:
+                both_have_read.wait()
+            return card
+
+        results: list[Any] = []
+        results_lock = threading.Lock()
+
+        def caller(actor: str) -> None:
+            outcome = asyncio.run(self._attend(server, actor))
+            with results_lock:
+                results.append(outcome)
+
+        kanban_store.read_card = read_then_wait_for_the_other  # type: ignore[assignment]
+        try:
+            threads = [
+                threading.Thread(target=caller, args=("alice",)),
+                threading.Thread(target=caller, args=("bob",)),
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=10)
+        finally:
+            kanban_store.read_card = real_read  # type: ignore[assignment]
+
+        assert len(results) == 2, "both callers must return, neither may hang"
+        assert len([r for r in results if r.get("ok") is True]) == 1, results
+        loser = next(r for r in results if r.get("ok") is False)
+        assert "alice" in loser["reason"] or "bob" in loser["reason"]
+        # And the card carries exactly one name — the winner's — rather than
+        # whichever write happened to land last.
+        from openstategraph.kanban_store import kanban_store_path, read_card
+
+        actor = read_card(kanban_store_path(services.store.root), "proj-a:thread-1").actor
+        assert actor in {"alice", "bob"}
+
+
+class TestTheKanbanToolsAreDocumented:
+    """`kanban-patrol/16` recorded this gap in its own resolution and did not
+    close it: *no test enforces the MCP doc surface the way
+    `test_documented_cli_surface.py` does for the CLI*. This is that test,
+    scoped to the tools this ticket owns.
+
+    Scoped by prefix deliberately. `docs/mcp.md` names non-tools in prose
+    (`draw_mermaid_png`, `state_dir`), so a blanket "every name written as a
+    call is a tool" would fail for a correct document — and a check that
+    fails wrongly gets suppressed and then guards nothing.
+    """
+
+    KANBAN = tuple(name for name in EXPOSED_TOOLS if name.startswith("kanban_"))
+
+    def _doc(self) -> str:
+        return (Path(__file__).resolve().parents[2] / "docs" / "mcp.md").read_text()
+
+    def test_there_are_kanban_tools_to_document(self) -> None:
+        # A rule about an empty set is a rule that passes for the wrong reason.
+        assert len(self.KANBAN) >= 5
+
+    def test_every_kanban_tool_is_named_in_the_doc(self) -> None:
+        doc = self._doc()
+        missing = [name for name in self.KANBAN if name not in doc]
+        assert not missing, (
+            f"exposed over MCP and absent from docs/mcp.md: {missing}. An agent "
+            "reads the doc to learn this surface exists; a tool nobody documents "
+            "is a tool nobody calls."
+        )
+
+    def test_the_doc_names_no_kanban_tool_that_does_not_exist(self) -> None:
+        import re
+
+        named = set(re.findall(r"`(kanban_[a-z0-9_]*)\(", self._doc()))
+        assert not named - set(self.KANBAN), (
+            f"docs/mcp.md documents kanban tools that are not registered: "
+            f"{sorted(named - set(self.KANBAN))}"
+        )
