@@ -796,6 +796,25 @@ The other three are `74`: `RunBurst.active_node`, its place in
 by construction — the field, the schema, the writer — which is the shape this
 module chose when it made the column list the one declaration both the writer
 and the reader read.
+
+**661 -> 792**, 2026-09-04 (`stable-beta-public/03`, slice 2 of
+`docs/plans/token-status-bar`). A hundred and thirty-one lines: `spend_summary`
+and the three frozen dataclasses it answers with — the **third reader of the
+runs table**, beside `read_runs` and `read_run_bursts`.
+
+That is the question this pin asks, so it is answered rather than asserted: a
+sum over the rows is not a second reason to change, it is the same one. The
+alternative considered and rejected was a `run_spend.py` that opens its own
+`readonly_connection` to the same file — which would put the store's column
+names, its `CHRONOLOGICAL` sort key and its *"a file this build cannot read is
+not an error"* judgement in two modules, and this module's own docstring is
+about what it costs when one table has two spellings. A reader that must move
+with `_COLUMNS` belongs beside `_COLUMNS`.
+
+What would be a second reason, and is the shape to refuse here: a price table.
+Tokens are what the store kept; money is a per-provider rate card nobody in
+this repository holds, and the moment one arrives it is a module of its own
+with a version and a currency, not another sum next to this one.
 """
 
 #: Nine modules, derived and then argued for one at a time. Nothing in this
@@ -850,7 +869,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(864, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
-    "run_sinks.py": Recorded(661, RUN_SINKS),
+    "run_sinks.py": Recorded(792, RUN_SINKS),
     "api/schemas.py": Recorded(520, SCHEMAS),
 }
 

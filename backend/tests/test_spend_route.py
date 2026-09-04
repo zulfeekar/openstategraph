@@ -27,6 +27,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from openstategraph.api.main import create_app  # noqa: E402
+from openstategraph.run_sinks import RunRecord, SqliteRunSink  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -98,3 +99,53 @@ class TestThePublishedContract:
         model = schemas["ModelSpendResponse"]["properties"]
         for field in ("cached_tokens", "cache_creation_tokens", "reasoning_tokens"):
             assert {"type": "null"} in model[field]["anyOf"], field
+
+
+class TestTheDoorReadsTheStoreBehindIt:
+    """Slice 2: the same door, over rows that exist.
+
+    The fresh-install case above proves the shape and cannot prove the wiring —
+    a route that read nothing at all answers it identically. This one writes
+    two runs through the sink the product writes with, and asks the door what
+    they cost.
+    """
+
+    def test_the_rows_the_sink_wrote_are_the_rows_the_door_counts(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The suite runs with the store switched off (`conftest` sets
+        # `OPENSTATEGRAPH_RUN_STORE_PATH=memory`, so no test writes to the
+        # developer's own runs). This one needs a file, and points the
+        # variable at a throwaway rather than reaching around it — the
+        # variable wins outright, which is what the route resolves through.
+        store = tmp_path / "runs.sqlite"
+        monkeypatch.setenv("OPENSTATEGRAPH_RUN_STORE_PATH", str(store))
+        root = tmp_path / "workflows"
+        root.mkdir()
+        sink = SqliteRunSink(store)
+        for spent, session in ((120, "s-1"), (300, "s-2")):
+            sink.record(
+                RunRecord(
+                    kind="run",
+                    at="2026-09-04T10:00:00+0000",
+                    session_id=session,
+                    usage={
+                        "gpt-oss:120b": {
+                            "input_tokens": spent - 20,
+                            "output_tokens": 20,
+                            "total_tokens": spent,
+                        }
+                    },
+                )
+            )
+        sink.close()
+
+        body = TestClient(create_app(workflows_root=root)).get("/api/runs/spend").json()
+
+        assert body["grand_total"] == 420
+        assert [row["model"] for row in body["by_model"]] == ["gpt-oss:120b"]
+        assert body["by_model"][0]["runs"] == 2
+        assert [row["session_id"] for row in body["sessions"]] == ["s-2", "s-1"]
+        # Still not reported, and still not zero: slice 4 fills these.
+        assert body["by_model"][0]["cached_tokens"] is None
+        assert body["cached_total"] is None

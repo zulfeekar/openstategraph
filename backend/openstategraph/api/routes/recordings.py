@@ -34,9 +34,17 @@ from openstategraph.api.schemas import (
     RecordedRunsResponse,
     RecordedThreadResponse,
     RecordedUsage,
+    ModelSpendResponse,
+    SessionSpendResponse,
     SpendResponse,
 )
-from openstategraph.run_sinks import RunRecord, read_runs, run_store_path
+from openstategraph.run_sinks import (
+    ModelSpend,
+    RunRecord,
+    read_runs,
+    run_store_path,
+    spend_summary,
+)
 
 router = APIRouter()
 
@@ -224,14 +232,55 @@ def spend_endpoint(services: Services, session_id: str | None = None) -> SpendRe
     additive — `run_usage` already owns the boundary — and inventing it now
     would be a switch with one position.
 
-    **Zeros here, on purpose.** Slice 1 of `stable-beta-public/03` lands the
-    door, the published contract and the client that reads it; slice 2 lands
-    `run_sinks.spend_summary` behind it. What is asserted today is the shape —
-    including that *not reported* is `null` and not `0`, which is the one thing
-    a later query cannot add if the wire has already flattened it.
+    **The store is reached the way `/api/runs/recorded` reaches it** —
+    `run_store_path(services.store.root)` — because it is the same file, and a
+    second opinion about where a deployment keeps its runs is how one store
+    becomes two.
+
+    **Three figures are still `null` here, and that is the query's answer
+    rather than the door's.** `cached_tokens`, `cache_creation_tokens` and
+    `reasoning_tokens` are *not reported* until slice 4 of
+    `stable-beta-public/03` reads `input_token_details` /
+    `output_token_details`; the session block waits for slice 3. Nothing about
+    the shape moves when they land.
     """
-    # Both arguments are the door's contract rather than dead weight:
-    # `services` carries the store root slice 2 reads, and `session_id` has
-    # to be accepted from the first slice or no client can be written
-    # against the door until the query behind it exists.
-    return SpendResponse()
+    summary = spend_summary(
+        run_store_path(services.store.root), session_id=session_id
+    )
+    return SpendResponse(
+        grand_total=summary.grand_total,
+        cached_total=summary.cached_total,
+        by_model=[_model_on_the_wire(row) for row in summary.by_model],
+        session_by_model=[_model_on_the_wire(row) for row in summary.session_by_model],
+        session_total=summary.session_total,
+        sessions=[
+            SessionSpendResponse(
+                session_id=sitting.session_id,
+                first_at=sitting.first_at,
+                last_at=sitting.last_at,
+                runs=sitting.runs,
+                total_tokens=sitting.total_tokens,
+            )
+            for sitting in summary.sessions
+        ],
+    )
+
+
+def _model_on_the_wire(row: ModelSpend) -> ModelSpendResponse:
+    """One model's row as the door publishes it.
+
+    Named fields rather than a spread, for the reason `_on_the_wire` gives one
+    screen up: the dataclass is the store's shape and the response is the
+    contract, and a republication of whatever it found would put the next
+    figure on the wire before anybody decided it belonged there.
+    """
+    return ModelSpendResponse(
+        model=row.model,
+        input_tokens=row.input_tokens,
+        output_tokens=row.output_tokens,
+        total_tokens=row.total_tokens,
+        cached_tokens=row.cached_tokens,
+        cache_creation_tokens=row.cache_creation_tokens,
+        reasoning_tokens=row.reasoning_tokens,
+        runs=row.runs,
+    )

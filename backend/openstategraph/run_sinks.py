@@ -152,6 +152,7 @@ import base64
 import sqlite3
 import time
 import zlib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -1456,6 +1457,240 @@ def read_runs(
     finally:
         connection.close()
     return records
+
+
+@dataclass(frozen=True)
+class ModelSpend:
+    """What one model has cost, over however many runs reached for it.
+
+    Keyed by model for the reason `RunRecord.usage` already gives — *which
+    model was expensive* is only answerable while they are apart — and carrying
+    three figures a provider may never report at all.
+
+    **The three details are `int | None`, and the `None` is a fact.** `0` says
+    this model was called and nothing came from cache; `None` says no run for
+    this model carried the key, which is what a provider that does not publish
+    the detail leaves behind. Slice 2 of `stable-beta-public/03` fills the four
+    counted figures and leaves all three details at `None`; slice 4 reads
+    `input_token_details` / `output_token_details` and fills them. Flattening
+    *not reported* into a zero is the one thing a later slice could not undo.
+    """
+
+    model: str
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    cached_tokens: int | None
+    cache_creation_tokens: int | None
+    reasoning_tokens: int | None
+    runs: int
+
+
+@dataclass(frozen=True)
+class SessionSpend:
+    """One sitting, as a row in the list of them.
+
+    `first_at` and `last_at` are the store's own spelling of the two stamps —
+    local wall clock with an offset — and **not** the derived key they are
+    found by. The ordering is the server's (`the-cost-of-one-more/11`); the
+    text is what a person reads.
+    """
+
+    session_id: str
+    first_at: str
+    last_at: str
+    runs: int
+    total_tokens: int
+
+
+@dataclass(frozen=True)
+class SpendSummary:
+    """Everything one status bar and one modal need, in one answer.
+
+    Four questions rather than four calls, because the surface reading it is
+    one strip: a client making four requests would draw four cells measured at
+    four different instants.
+    """
+
+    grand_total: int
+    cached_total: int | None
+    #: All time, largest total first.
+    by_model: tuple[ModelSpend, ...]
+    #: The asked-about sitting. `()` until slice 3 of `stable-beta-public/03`.
+    session_by_model: tuple[ModelSpend, ...]
+    session_total: int
+    #: Every sitting this store knows, newest `last_at` first.
+    sessions: tuple[SessionSpend, ...]
+
+
+#: What a store with nothing to say answers.
+#:
+#: A fresh install has no file, and *no runs* is an answer rather than an
+#: error — the same judgement `read_runs` makes one function up, for the same
+#: reason: the first caller of this is a status bar that paints on every load,
+#: and a raise here would put an error on the screen of every machine that has
+#: not run anything yet. `grand_total` is `0` because a store with no runs
+#: really has spent nothing; `cached_total` is `None` because nobody has said
+#: anything about caching either way.
+_SPENT_NOTHING = SpendSummary(
+    grand_total=0,
+    cached_total=None,
+    by_model=(),
+    session_by_model=(),
+    session_total=0,
+    sessions=(),
+)
+
+#: Every sitting, with its span, its count and its total — one statement.
+#:
+#: **The two stamps are found by the derived key and returned as stored.**
+#: `min(at)` and `max(at)` would be a text comparison over a column that
+#: carries an offset, which is not a comparison of instants
+#: (`the-cost-of-one-more/11`) — so the span is read by a correlated seek
+#: ordered on `CHRONOLOGICAL`, which is exactly the expression
+#: `runs_session_utc` is built on. Sqlite's bare-column rule would have given
+#: the same thing for free with one aggregate; a span needs two, so it does
+#: not apply.
+_SESSION_SPEND = f"""
+SELECT r.session_id,
+       (SELECT s.at FROM runs AS s
+         WHERE s.session_id = r.session_id AND s.kind = 'run'
+         ORDER BY {CHRONOLOGICAL} ASC, s.rowid ASC LIMIT 1),
+       (SELECT s.at FROM runs AS s
+         WHERE s.session_id = r.session_id AND s.kind = 'run'
+         ORDER BY {CHRONOLOGICAL} DESC, s.rowid DESC LIMIT 1),
+       count(*),
+       COALESCE(sum(r.total_tokens), 0)
+  FROM runs AS r
+ WHERE r.kind = 'run'
+ GROUP BY r.session_id
+ ORDER BY max({CHRONOLOGICAL}) DESC, max(r.rowid) DESC
+"""
+
+
+def spend_summary(
+    path: Path | str | None = None, *, session_id: str | None = None
+) -> SpendSummary:
+    """What the runs this store kept have cost, in tokens.
+
+    `stable-beta-public/03`. The third reader of the same table, beside
+    `read_runs` and `read_run_bursts`, and a query over it rather than a view
+    of its own — which is what keeps one store one store.
+
+    Two passes, because the store keeps the answer in two shapes and neither
+    is wrong. The grand total and the sittings are `sum` and `GROUP BY` over
+    the `total_tokens` column, which the sink derives on write; the by-model
+    table is a walk over every row's `usage` JSON, because sqlite cannot group
+    by a key inside a document. That walk is O(runs) and deliberately so: the
+    alternative is a second table of per-model rows, which is a schema for a
+    figure a status bar reads once a minute.
+
+    **A run that reported nothing is a run.** `usage == {}` is *nobody said*,
+    not *nothing was spent*, so it is counted in its sitting and adds no model
+    row — a nameless row in a by-model table would be inventing a model.
+
+    `session_id` is accepted and not yet used: slice 3 of the plan fills
+    `session_by_model` and `session_total`. It is on the signature from here
+    because the route and the client already pass it.
+
+    **A store that cannot be read is not an error either**, for the reason
+    `read_runs` gives: this answer decorates a screen, and a file one build
+    cannot open must not take the screen down with it.
+    """
+    target = Path(path) if path is not None else run_store_path()
+    if target is None or not target.exists():
+        return _SPENT_NOTHING
+    try:
+        connection = readonly_connection(target)
+    except sqlite3.Error as exc:
+        logger.warning("Could not open the run store at %s: %s", target, exc)
+        return _SPENT_NOTHING
+    try:
+        # The same reconciliation `read_runs` makes and for the same reason:
+        # this connection is `mode=ro` and cannot ALTER, so a file one column
+        # behind must answer what it can rather than raise `no such column`.
+        held = _table_columns(connection, "runs")
+        if not {"kind", "at", "session_id", "total_tokens", "usage"} <= set(held):
+            return _SPENT_NOTHING
+        grand_total = int(
+            connection.execute(
+                "SELECT COALESCE(sum(total_tokens), 0) FROM runs WHERE kind = 'run'"
+            ).fetchone()[0]
+            or 0
+        )
+        sessions = tuple(
+            SessionSpend(
+                session_id=str(row[0] or ""),
+                first_at=str(row[1] or ""),
+                last_at=str(row[2] or ""),
+                runs=int(row[3] or 0),
+                total_tokens=int(row[4] or 0),
+            )
+            for row in connection.execute(_SESSION_SPEND)
+        )
+        by_model = _by_model(
+            connection.execute("SELECT usage FROM runs WHERE kind = 'run'")
+        )
+    except sqlite3.Error as exc:
+        logger.warning("Could not read the run store at %s: %s", target, exc)
+        return _SPENT_NOTHING
+    finally:
+        connection.close()
+    return SpendSummary(
+        grand_total=grand_total,
+        cached_total=None,
+        by_model=by_model,
+        session_by_model=(),
+        session_total=0,
+        sessions=sessions,
+    )
+
+
+def _by_model(rows: Any) -> tuple[ModelSpend, ...]:
+    """One pass over the `usage` documents, added up per model, dearest first.
+
+    Read tolerantly and trusted strictly, the way this codebase reads anything
+    a model wrote: a row whose `usage` is not a JSON object, or whose value for
+    a model is not a mapping, is skipped rather than raised on — the column
+    holds whatever the build that wrote it put there, and one unreadable row
+    may not cost the other twenty-four.
+    """
+    totals: dict[str, list[int]] = {}
+    for row in rows:
+        try:
+            usage = json.loads(row[0]) if row[0] else {}
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(usage, dict):
+            continue
+        for model, spent in usage.items():
+            if not isinstance(spent, dict):
+                continue
+            entry = totals.setdefault(str(model), [0, 0, 0, 0])
+            entry[0] += int(spent.get("input_tokens") or 0)
+            entry[1] += int(spent.get("output_tokens") or 0)
+            entry[2] += int(spent.get("total_tokens") or 0)
+            entry[3] += 1
+    return tuple(
+        sorted(
+            (
+                ModelSpend(
+                    model=model,
+                    input_tokens=counted[0],
+                    output_tokens=counted[1],
+                    total_tokens=counted[2],
+                    cached_tokens=None,
+                    cache_creation_tokens=None,
+                    reasoning_tokens=None,
+                    runs=counted[3],
+                )
+                for model, counted in totals.items()
+            ),
+            # Dearest first, and by name where two cost the same — an order a
+            # test can assert without depending on dictionary insertion.
+            key=lambda row: (-row.total_tokens, row.model),
+        )
+    )
 
 
 def _attach_bursts(

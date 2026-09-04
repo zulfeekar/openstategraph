@@ -7,7 +7,7 @@
 
 ## Slices
 - [x] Slice 1 — tracer bullet: route with zeros, client, bar of dashes on screen
-- [ ] Slice 2 — real grand total, by-model, sessions from the store
+- [x] Slice 2 — real grand total, by-model, sessions from the store
 - [ ] Slice 3 — this session's block; refetch on run end and focus
 - [ ] Slice 4 — cached / cache-creation / reasoning tri-state; streaming opt-in test
 - [ ] Slice 5 — the modal
@@ -20,6 +20,25 @@
 - Ticket: `.scratch/stable-beta-public/tickets/03`.
 - Follow `src/design/tokens.ts`; no raw values; flat, Miro-like, borders not
   shadows (map note).
+
+## What slice 2 changed about 03
+- **A sitting's `first_at`/`last_at` are found by the derived key and
+  returned as stored.** 03 asked for one `GROUP BY session_id`, and
+  `min(at)`/`max(at)` over a column carrying an offset is a text comparison
+  (`the-cost-of-one-more/11`). Sqlite's bare-column rule gives the stored
+  spelling for free with *one* min/max and a span needs two, so the two
+  stamps are correlated seeks ordered on `CHRONOLOGICAL` — still one
+  statement, still on `runs_session_utc`.
+- **Every reader filters `kind = 'run'`.** `RunRecord.kind` is the store's
+  extension point and a future row (a human's verdict, `launch-readiness/142`)
+  carries no usage; without the clause it would still have inflated a
+  sitting's run count.
+- **`spend_summary` lives in `run_sinks.py`**, which pushed that module's
+  recorded length from 661 to 792 code lines. The argument is in
+  `test_module_size_ceiling.py`: a third reader of the runs table beside
+  `read_runs` and `read_run_bursts` is the same reason to change, and a
+  separate module would hold a second copy of the column names and the sort
+  key.
 
 ## What slice 1 changed about 03
 - **The wire is snake_case**, as 03's `schemas.py` block writes it
