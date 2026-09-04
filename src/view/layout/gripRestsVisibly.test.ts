@@ -19,10 +19,18 @@ import { describe, expect, it } from 'vitest';
  * separately; `21` split the states — quiet at rest, heavy under a pointer
  * — and moved both into `design/primitives/Grip.css`, because two
  * stylesheets drawing one control is a weight neither can compare with the
- * other, and they had come apart by 2px on screen. The states, the tokens
- * and the fact that no other stylesheet draws one are
- * `design/primitives/gripIsOneControl.test.ts`; this file is the older,
- * narrower question, kept because it is the one the owner asked.
+ * other, and they had come apart by 2px on screen.
+ *
+ * `21`'s "quiet" turned out to mean invisible: it moved the resting bar's
+ * *ink* down to `--color-border`, a 60%-mix hairline that composites under
+ * 2:1 against the panel ground, and the owner reported twice in one day
+ * that they could not find the control (`stable-beta-public/23`). `23`
+ * gave the two states back one ink — `--color-rule`, full strength, at
+ * both rest and hover — and let *width* alone carry the difference:
+ * `--border-width-rule` (2px) at rest, `--grip-weight` (4px) under a
+ * pointer. The states, the tokens and the fact that no other stylesheet
+ * draws one are `design/primitives/gripIsOneControl.test.ts`; this file is
+ * the older, narrower question, kept because it is the one the owner asked.
  */
 const SRC = fileURLToPath(new URL('../../', import.meta.url));
 const read = (path: string): string => readFileSync(join(SRC, path), 'utf8');
@@ -65,16 +73,19 @@ describe('a grip has a resting mark, not just a hover mark', () => {
   });
 
   /**
-   * The half of `19` that `21` inverted, asserted so the inversion is
-   * deliberate rather than a side effect: at rest the bar is the *quiet*
-   * one. A resting mark drawn at the dragging weight is a second border,
-   * which is what the owner's second look at it said.
+   * `21` made the resting bar quieter by moving its *ink* down a weight —
+   * `--color-border`, the same 60%-mix hairline every non-draggable edge
+   * uses. Composited over the panel ground that reads under 2:1, which is
+   * indistinguishable from "not drawn" (`stable-beta-public/23`). So the
+   * bar is quieter at rest by *width* only now, never by ink: both states
+   * share `--color-rule`, and only `--grip-weight` — the hover/focus
+   * stroke — is absent at rest.
    */
-  it('keeps the resting bar quieter than the stroke a pointer brings', () => {
+  it('keeps the resting bar quieter than the stroke a pointer brings, by width alone', () => {
     for (const selector of ['.grip--vertical::before', '.grip--horizontal::before']) {
       const body = ruleBody(css, selector);
-      expect(body).toContain('var(--border-width-hairline)');
-      expect(body).toContain('var(--color-border)');
+      expect(body).toContain('var(--border-width-rule)');
+      expect(body).toContain('var(--color-rule)');
       expect(body).not.toContain('var(--grip-weight)');
     }
   });

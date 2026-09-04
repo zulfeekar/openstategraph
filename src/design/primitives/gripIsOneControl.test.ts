@@ -89,11 +89,11 @@ describe('the grip is one primitive, with both of its states in tokens', () => {
     ['.grip--horizontal', 'border-top', 'width', 'ns-resize'],
   ];
 
-  it.each(ORIENTATIONS)('%s rests quiet: a centred bar at hairline weight', (name, side, along) => {
+  it.each(ORIENTATIONS)('%s rests visible: a centred bar at rule weight', (name, side, along) => {
     const body = ruleBody(at(GRIP_CSS), `${name}::before`);
     expect(body).toMatch(new RegExp(`${along}:\\s*var\\(--grip-length\\);`));
     expect(body).toMatch(
-      new RegExp(`${side}:\\s*var\\(--border-width-hairline\\) solid var\\(--color-border\\);`),
+      new RegExp(`${side}:\\s*var\\(--border-width-rule\\) solid var\\(--color-rule\\);`),
     );
     expect(body).toMatch(/translate[XY]\(-50%\)/);
   });

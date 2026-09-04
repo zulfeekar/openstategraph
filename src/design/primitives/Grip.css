@@ -8,13 +8,17 @@
  * whatever it paints *plus* the border it sits on — the dock's edge came to
  * 4px and the column's to 2px. One control cannot be two stylesheets.
  *
- * Two states, both drawn, neither pickable by a surface:
+ * Two states, both drawn, neither pickable by a surface — `stable-beta-public/23`
+ * corrected the resting one, which shipped invisible: `21` drew it at
+ * `--color-border`, a 60%-mix hairline that measures under 2:1 against a
+ * near-white surface and reads as absent. The owner's own rule (`21`'s
+ * story, restated in `23`) was full ink at rest, quiet only in *width*:
  *
- *   at rest   a `--grip-length` bar, centred on the edge, `--color-border`
- *             at hairline weight — findable without a pointer, quiet
- *             enough not to read as a second border
- *   on hover  the same bar at `--grip-weight` in `--color-rule`, plus the
- *   or focus  resize cursor: the heavy stroke the owner drew
+ *   at rest   a `--grip-length` bar, centred on the edge, `--color-rule`
+ *             at rule weight (`--border-width-rule`, 2px) — findable
+ *             without a pointer, plainly visible against the panel ground
+ *   on hover  the same bar, same ink, at `--grip-weight` (4px) — the
+ *   or focus  heavy stroke the owner drew, plus the resize cursor
  *
  * The bar is drawn with a real border property rather than a background,
  * so the app-wide draggable-weight census in
@@ -63,7 +67,7 @@
   width: 0;
   height: var(--grip-length);
   transform: translateY(-50%);
-  border-left: var(--border-width-hairline) solid var(--color-border);
+  border-left: var(--border-width-rule) solid var(--color-rule);
 }
 
 .grip--vertical:hover::before,
@@ -88,7 +92,7 @@
   height: 0;
   width: var(--grip-length);
   transform: translateX(-50%);
-  border-top: var(--border-width-hairline) solid var(--color-border);
+  border-top: var(--border-width-rule) solid var(--color-rule);
 }
 
 .grip--horizontal:hover::before,

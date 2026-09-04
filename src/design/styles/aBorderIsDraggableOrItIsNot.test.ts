@@ -317,6 +317,15 @@ describe('a border is drawn by what it means, and there are two weights', () => 
    * declaration in each surface stylesheet is a weight neither file can
    * compare with the other, and they had in fact come apart.
    *
+   * **`stable-beta-public/23` put the resting bar back on full ink.** `21`'s
+   * quiet-at-rest read as invisible — `--color-border` composited under
+   * 2:1 against the near-white panel ground, and the owner said twice in
+   * one day that they could not find the control. The two states now share
+   * one ink (`--color-rule`) and differ only in width: `--border-width-rule`
+   * (2px) at rest, `--grip-weight` (4px) on hover/focus. So each grip axis
+   * spends `--color-rule` **twice** — once per state — and the list below
+   * carries each site twice to match.
+   *
    * This replaces `view/run/oneBorderColourTwoWeights.test.ts`, which
    * asserted the same thing about the dock alone against a dock-local
    * token. Two censuses that can disagree is what `16` was filed to end;
@@ -331,8 +340,12 @@ describe('a border is drawn by what it means, and there are two weights', () => 
     // `stable-beta-public/21`'s hover/focus stroke, on both axes: a bar
     // drawn with a real border property (not `background`) so this census
     // still sees it, rather than a filled div that would be invisible to a
-    // scan limited to `BORDER_PROPS`.
+    // scan limited to `BORDER_PROPS`. `stable-beta-public/23` put the
+    // resting bar on the same ink, so each axis now carries the token
+    // twice — once per state — and both sites are listed.
     ['design/primitives/Grip.css', 'border-left'],
+    ['design/primitives/Grip.css', 'border-left'],
+    ['design/primitives/Grip.css', 'border-top'],
     ['design/primitives/Grip.css', 'border-top'],
   ];
 
