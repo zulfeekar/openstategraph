@@ -242,3 +242,68 @@ class TestTheSittings:
         )
 
         assert len(spend_summary(store).sessions) == 3
+
+
+class TestTheAskedAboutSession:
+    """Slice 3: `session_by_model` / `session_total`, filtered by `session_id`.
+
+    The all-time table above answers *what has this store ever cost*; this
+    one answers *what has this tab cost*, and the two must not leak into each
+    other — a session block that quietly summed every session would make the
+    bar's "This tab" cell lie the moment a second tab existed.
+    """
+
+    def test_session_block_is_only_that_session(self, tmp_path: Path) -> None:
+        store = write(
+            tmp_path / "runs.sqlite",
+            run(session_id="s-1", usage=spent("m", inp=100, out=10)),
+            run(session_id="s-1", usage=spent("m", inp=50, out=5)),
+            run(session_id="s-2", usage=spent("m", inp=900, out=90)),
+        )
+
+        summary = spend_summary(store, session_id="s-1")
+
+        assert summary.session_total == 165
+        assert [row.model for row in summary.session_by_model] == ["m"]
+        assert summary.session_by_model[0].total_tokens == 165
+        assert summary.session_by_model[0].runs == 2
+        # And the all-time table is untouched by the filter.
+        assert summary.grand_total == 1155
+
+    def test_unknown_session_is_empty_not_error(self, tmp_path: Path) -> None:
+        store = write(
+            tmp_path / "runs.sqlite",
+            run(session_id="s-1", usage=spent("m", inp=100, out=10)),
+        )
+
+        summary = spend_summary(store, session_id="does-not-exist")
+
+        assert summary.session_by_model == ()
+        assert summary.session_total == 0
+        # Still answers everything else — an unknown session is not a fault.
+        assert summary.grand_total == 110
+
+    def test_no_session_id_is_the_same_empty_answer(self, tmp_path: Path) -> None:
+        store = write(
+            tmp_path / "runs.sqlite",
+            run(session_id="s-1", usage=spent("m", inp=100, out=10)),
+        )
+
+        summary = spend_summary(store, session_id=None)
+
+        assert summary.session_by_model == ()
+        assert summary.session_total == 0
+
+    def test_a_session_run_that_reported_nothing_still_counts_its_run(
+        self, tmp_path: Path
+    ) -> None:
+        store = write(
+            tmp_path / "runs.sqlite",
+            run(session_id="s-1", usage=spent("m", inp=100, out=10)),
+            run(session_id="s-1", usage={}),
+        )
+
+        summary = spend_summary(store, session_id="s-1")
+
+        assert summary.session_total == 110
+        assert summary.session_by_model[0].runs == 1

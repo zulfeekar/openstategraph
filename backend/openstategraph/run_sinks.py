@@ -1631,6 +1631,17 @@ def spend_summary(
         by_model = _by_model(
             connection.execute("SELECT usage FROM runs WHERE kind = 'run'")
         )
+        if session_id:
+            session_by_model = _by_model(
+                connection.execute(
+                    "SELECT usage FROM runs WHERE kind = 'run' AND session_id = ?",
+                    (session_id,),
+                )
+            )
+            session_total = sum(row.total_tokens for row in session_by_model)
+        else:
+            session_by_model = ()
+            session_total = 0
     except sqlite3.Error as exc:
         logger.warning("Could not read the run store at %s: %s", target, exc)
         return _SPENT_NOTHING
@@ -1640,8 +1651,8 @@ def spend_summary(
         grand_total=grand_total,
         cached_total=None,
         by_model=by_model,
-        session_by_model=(),
-        session_total=0,
+        session_by_model=session_by_model,
+        session_total=session_total,
         sessions=sessions,
     )
 

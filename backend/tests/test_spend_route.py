@@ -149,3 +149,41 @@ class TestTheDoorReadsTheStoreBehindIt:
         # Still not reported, and still not zero: slice 4 fills these.
         assert body["by_model"][0]["cached_tokens"] is None
         assert body["cached_total"] is None
+
+    def test_the_session_id_query_param_reaches_the_summary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Slice 3: `?session_id=` is not just accepted (slice 1) — it changes
+        the answer, by reaching `spend_summary(session_id=...)`."""
+        store = tmp_path / "runs.sqlite"
+        monkeypatch.setenv("OPENSTATEGRAPH_RUN_STORE_PATH", str(store))
+        root = tmp_path / "workflows"
+        root.mkdir()
+        sink = SqliteRunSink(store)
+        for spent, session in ((120, "s-1"), (300, "s-2")):
+            sink.record(
+                RunRecord(
+                    kind="run",
+                    at="2026-09-04T10:00:00+0000",
+                    session_id=session,
+                    usage={
+                        "gpt-oss:120b": {
+                            "input_tokens": spent - 20,
+                            "output_tokens": 20,
+                            "total_tokens": spent,
+                        }
+                    },
+                )
+            )
+        sink.close()
+
+        body = (
+            TestClient(create_app(workflows_root=root))
+            .get("/api/runs/spend", params={"session_id": "s-1"})
+            .json()
+        )
+
+        assert body["session_total"] == 120
+        assert [row["model"] for row in body["session_by_model"]] == ["gpt-oss:120b"]
+        # The all-time figures are unaffected by the filter.
+        assert body["grand_total"] == 420

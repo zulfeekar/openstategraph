@@ -811,6 +811,14 @@ not an error"* judgement in two modules, and this module's own docstring is
 about what it costs when one table has two spellings. A reader that must move
 with `_COLUMNS` belongs beside `_COLUMNS`.
 
+**792 -> 803**, 2026-09-04 (`stable-beta-public/03`, slice 3 of
+`docs/plans/token-status-bar`). Eleven lines: `spend_summary` grew the
+`session_id`-filtered branch that fills `session_by_model` and `session_total`
+— the same third reader, the same table, one more `WHERE` on a query it
+already ran unfiltered two lines above. Not a second reason to change: it is
+the *this session's* half of the question `spend_summary`'s own docstring
+already promised slice 3 would answer.
+
 What would be a second reason, and is the shape to refuse here: a price table.
 Tokens are what the store kept; money is a per-provider rate card nobody in
 this repository holds, and the moment one arrives it is a module of its own
@@ -869,7 +877,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(864, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
-    "run_sinks.py": Recorded(792, RUN_SINKS),
+    "run_sinks.py": Recorded(803, RUN_SINKS),
     "api/schemas.py": Recorded(520, SCHEMAS),
 }
 

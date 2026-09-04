@@ -236,13 +236,15 @@ export function AppShell() {
    * bottom of the shell; the modal it opens (slice 5) reads the same answer,
    * so the two surfaces can never disagree about an instant.
    *
-   * `spendRefresh` is the *something happened* signal — slice 3 bumps it on
-   * the run dock's terminal frame and on window focus. Nothing polls: the
-   * numbers move only when a run ends, so a timer would be a request per
-   * interval for an answer that is already on screen.
+   * `spendRefresh` is the *something happened* signal — bumped on the run
+   * dock's terminal frame (`run:finish`, below, on both `ok` and failure: a
+   * failed run still spent whatever tokens it spent before it failed) and on
+   * window focus (`useSpend` itself). Nothing polls: the numbers move only
+   * when a run ends, so a timer would be a request per interval for an
+   * answer that is already on screen.
    */
   const spendClient = useMemo(() => new RuntimeClient(), []);
-  const [spendRefresh] = useState(0);
+  const [spendRefresh, setSpendRefresh] = useState(0);
   const { spend: spendAnswer, error: spendError } = useSpend({
     client: spendClient,
     sessionId: browserSessionId(),
@@ -569,6 +571,10 @@ export function AppShell() {
 
   useEffect(() => {
     const off = workbench.engine.on('run:finish', ({ ok, usage, error, reason }) => {
+      // The status bar refetches on every terminal frame, win or lose — a
+      // failed run can still have spent tokens before it failed, and the
+      // *This tab* cell is only honest if it moves either way.
+      setSpendRefresh((value) => value + 1);
       if (ok) {
         notify(`Run finished · ${usage.totalTokens.toLocaleString()} tokens`);
         return;

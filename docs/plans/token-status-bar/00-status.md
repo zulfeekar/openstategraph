@@ -8,18 +8,43 @@
 ## Slices
 - [x] Slice 1 — tracer bullet: route with zeros, client, bar of dashes on screen
 - [x] Slice 2 — real grand total, by-model, sessions from the store
-- [ ] Slice 3 — this session's block; refetch on run end and focus
+- [x] Slice 3 — this session's block; refetch on run end and focus
 - [ ] Slice 4 — cached / cache-creation / reasoning tri-state; streaming opt-in test
 - [ ] Slice 5 — the modal
 - [ ] Slice 6 — 10k-row measurement, docs, ceilings, closing commit
 
 ## Notes for a fresh session
+- 2026-09-04: the owner delegated slice-boundary approvals ("as you recommend the best way to go"); stop only for a real fork.
 - Owner decisions, 2026-09-04: *session* = the browser tab's session id
   (`sessionStorage`; survives refresh, ends with the tab). The bar sits at
   the bottom of the editor. Clicking it opens a modal with the breakdown.
 - Ticket: `.scratch/stable-beta-public/tickets/03`.
 - Follow `src/design/tokens.ts`; no raw values; flat, Miro-like, borders not
   shadows (map note).
+
+## What slice 3 changed about 03
+- **No renderer for `useSpend.test.ts`.** `vite.config.ts` sets
+  `test.environment: 'node'` deliberately — the view layer is proven in the
+  browser, not simulated — and no DOM library (`jsdom`, `happy-dom`,
+  `@testing-library/react`, `react-test-renderer`) is in `node_modules`. So
+  the hook itself is not rendered in the test; its two behaviours worth
+  pinning were pulled out as plain functions the same way `useFloating.ts`
+  already pulled `placeFloating` out — `nextSpendState` (error keeps the last
+  good value) and `onWindowFocus` (a `FocusTarget` a fake object can drive).
+  *Refetch on `refreshKey` change* is React's own dependency-array mechanism
+  over `[client, sessionId, refreshKey, nonce]` and is proven in this slice's
+  browser step rather than re-simulated.
+- **`spend_summary`'s session branch reused `_by_model`** rather than a new
+  query shape — `SELECT usage FROM runs WHERE kind = 'run' AND session_id = ?`,
+  the same walk the all-time table already does, and `session_total` is the
+  sum of that table's `total_tokens`. Pushed `run_sinks.py` from 792 to 803
+  recorded code lines (`test_module_size_ceiling.py`, argued inline).
+- **Proof used a curl of `/api/runs/spend?session_id=...`** rather than only
+  the browser cell, and a simulated `window` `focus` event to trigger the
+  frontend refetch without a page reload — both because the run in the
+  browser landed with the run store's own timing and the fastest honest way
+  to show the wire moved was to read it directly, then show the cell catch up
+  live.
 
 ## What slice 2 changed about 03
 - **A sitting's `first_at`/`last_at` are found by the derived key and
