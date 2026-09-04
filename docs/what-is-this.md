@@ -163,16 +163,23 @@ refused rather than best-effort compiled. See [stability.md](stability.md).
 ## The dependency picture, measured
 
 Not estimated. These are `pip list` counts from real clean virtualenvs built
-from the shipped wheel — *measured once, on one machine, 2026-08-10. Nothing in
-the repository regenerates them, and several extras have gained dependencies
-since, so read them as the shape of the argument rather than a number you can
-check today.*
+from the shipped wheel — *re-measured 2026-09-04, on one machine, installing
+`0.3.0rc11` from TestPyPI. Nothing in the repository regenerates them, and
+nothing can: the count moves when **our dependencies' own dependencies**
+release, not when we change anything. Read them as the shape of the argument
+rather than a number you can check today.*
 
 | Install | Distributions besides ours |
 | --- | --- |
-| `pip install openstategraph` | **36** |
-| `pip install "openstategraph[ollama]"` | **38** |
+| `pip install openstategraph` | **39** |
+| `pip install "openstategraph[ollama]"` | **41** |
 | the same tree before 0.3.0 | **79** (the figure `backend/pyproject.toml`'s own dependency comment records; this page said 78 until 2026-08-16) |
+
+The first two rows read 36 and 38, measured 2026-08-10 and confirmed
+unchanged 2026-08-31. Three weeks later they are 39 and 41, with no change to
+`pyproject.toml` in between — LangChain's own closure grew. That is the hedge
+above earning itself rather than an erratum: the argument these numbers make
+survives the drift exactly because it was never about the digits.
 
 The core is exactly four declared dependencies — `langgraph`, `langchain`,
 `langchain-core`, `pydantic`. Everything else is behind an extra you ask for by
@@ -194,7 +201,7 @@ name:
 [all]                           everything except [bastion], for a checkout
 ```
 
-Read the list the way a sceptic does: of those 36, essentially all are
+Read the list the way a sceptic does: of those 39, essentially all are
 LangChain's and LangGraph's own closure — which you would have installed anyway,
 because the alternative to using us is writing the `StateGraph` by hand.
 

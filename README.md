@@ -121,9 +121,12 @@ missing. Absent even that, install the
 identical artifact from a checkout: `pip install -e "backend[ollama]"`, or
 build the wheel with `python3 -m build backend`. CI's `clean-install` job
 installs that wheel into an empty virtualenv **outside** this repository and
-runs a workflow there, so the path is verified rather than assumed. Measured
-footprint: **36 distributions** for the
-core, 38 with a provider.
+runs a workflow there, so the path is verified rather than assumed. The
+measured dependency footprint is in
+[`docs/what-is-this.md`](docs/what-is-this.md#the-dependency-picture-measured)
+— stated there once rather than twice, because it is a count of *other
+people's* releases and it moved by three between two sweeps while this file
+carried its own copy of it.
 
 New here and deciding? [**What this is**](docs/what-is-this.md) states plainly
 what the framework owns, what it deliberately does not, and when not to use it.

@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Added
-- **A board that reads the runs nobody read** (`kanban-patrol`, tickets 01–27).
+- **A board that reads the runs nobody read** (`kanban-patrol`, tickets 01–34).
   The editor's top bar gains a radar button; behind it is a four-column
   board — *Detected*, *Needs You*, *In Progress*, *Resolved* — of cards the
   in-built patrol files from a project's own recorded runs. The patrol is
@@ -13,9 +13,10 @@
   never touches a card it has already filed. A card hands a developer an
   instruction and a task id to paste into whichever coding agent they run;
   that agent reports back over a CLI door (`openstategraph kanban attend |
-  stage | show | release`, `openstategraph patrol run`) or an MCP one
-  (`kanban_attend_card`, `kanban_set_stage`, `kanban_show_card`,
-  `kanban_release_card`), both thin adapters over one stage machine. *Resolved*
+  stage | show | answer | release`, `openstategraph patrol run`) or an MCP one
+  (`kanban_attend_card`, `kanban_set_stage`, `kanban_list_cards`,
+  `kanban_show_card`, `kanban_answer_card`, `kanban_release_card`), both thin
+  adapters over one stage machine. *Resolved*
   is evidence-gated — a test id, a reason, a matching green and a commit —
   and a card nobody has written to for an hour is flagged, never released on
   the system's own schedule. A patrol outlives the board that started it and
@@ -64,8 +65,25 @@
 - **Two design tokens retuned** so all eight column-by-theme cells on the
   board pass WCAG AA, measured rather than asserted; the accent badge has a
   colour off the canvas.
-- **Docs**: `docs/cli.md` and `docs/mcp.md` carry the two doors;
-  `docs/openapi.json` regenerated.
+- **The editor's side panels drag to width** (`layout/panelWidth.ts`), the
+  run dock's own mechanism turned ninety degrees. The floor is derived from
+  what the open panels are worth rather than stored, so opening the Inspector
+  beside the chat cannot squeeze either below a usable width.
+- **The chat reads as a conversation** — bubbles on both surfaces from one
+  set of tokens, a composer flush to the panel's own edges, and a markdown
+  answer with a list rhythm sized for a bubble instead of for a page.
+  `--radius-bubble` is a recorded second exception to the flat design system;
+  the **elevation scale itself is retired** (`stable-beta-public/02`), so a
+  surface that used to say "above you" with a shadow now says it with a
+  border.
+- **`openstategraph run --session-id`**, and the `card:<task-id>` session
+  marker it carries. A patrol driver's own runs are recorded like any other,
+  so a patrol reading everything eventually reads its own reflection; a run
+  marked with the card it was working is skipped by the next patrol instead
+  of filed as a finding.
+- **Docs**: `docs/the-patrol-board.md` is the board's own page — the columns,
+  the evidence gate, the copy-instruction flow — with `docs/cli.md` and
+  `docs/mcp.md` carrying the two doors, and `docs/openapi.json` regenerated.
 
 ## 0.3.0rc11 — 2026-08-31
 
