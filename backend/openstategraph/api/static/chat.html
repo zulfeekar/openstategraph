@@ -486,6 +486,35 @@
   .answer li + li { margin-top: var(--chat-list-item-gap); }
   .answer table { border-collapse: collapse; margin: var(--space-2) 0; }
   .answer td, .answer th { border: 1px solid var(--line); padding: var(--space-1) var(--space-2-5); }
+  /* `rich-text--narrow` — a table in ~200px (`stable-beta-public/15`), the
+     same modifier and the same decisions as `src/view/common/RichText.css`,
+     restated here because this page is a standalone asset with no build step
+     (the split `chatBubblesAgree.test.ts` describes). A five-row
+     *Reason | Explanation* answer measured 838px of table behind 187px of
+     bubble, cut mid-word, with nothing saying the rest existed. Two columns
+     stack into rows — the first cell is the label, the second the text, both
+     with the bubble's full width; three or more keep the scroller with a
+     floor under each column, because stacking a wide table would print
+     unlabelled lines. The class is doubled in every selector for the reason
+     the editor stylesheet gives at length: it must out-specify a
+     first-column rule, not merely follow it. */
+  .rich-text--narrow.rich-text--narrow th,
+  .rich-text--narrow.rich-text--narrow td { white-space: normal; word-break: normal; }
+  .rich-text--narrow.rich-text--narrow td:first-child { width: auto; white-space: normal; }
+  .rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) { display: block; width: 100%; overflow-x: visible; border: none; }
+  .rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) thead { display: none; }
+  /* This page's `md()` emits every row as `<td>` and no `<thead>`, so the
+     rule above matches nothing here — and a markdown table always has a
+     header row, so where there is no `<thead>` the first row is it. */
+  .rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))):not(:has(thead)) > tbody > tr:first-child { display: none; }
+  .rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) tbody,
+  .rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) tr { display: block; width: auto; }
+  .rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) tr { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); margin: 0 0 var(--space-1); }
+  .rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) td { display: block; width: auto; border: none; padding: 0; }
+  .rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) td:first-child { font-weight: var(--font-weight-semibold); color: var(--text); }
+  .rich-text--narrow.rich-text--narrow table:has(tr > :nth-child(3)) { display: block; max-width: 100%; overflow-x: auto; }
+  .rich-text--narrow.rich-text--narrow table:has(tr > :nth-child(3)) th,
+  .rich-text--narrow.rich-text--narrow table:has(tr > :nth-child(3)) td { min-width: 5em; }
   .answer code, .answer pre { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: var(--space-px) var(--space-1-5); font-size: var(--font-size-13); }
   /* Wrapped, not scrolled. The Chinook answers' fenced SQL was wider than
      the card and scrolled sideways with no visible scrollbar — so nothing
@@ -1481,7 +1510,7 @@ function turnEl(question) {
     + `<div class="thinking"></div>`
     + `<div class="rejected-banner" hidden><span class="dot"></span>`
     + `<span>The answer below is one our reviewer rejected — we ran out of attempts to improve it.</span></div>`
-    + `<div class="answer" hidden></div></div>`;
+    + `<div class="answer rich-text--narrow" hidden></div></div>`;
   el.querySelector(".q").textContent = question;
   el.querySelector(".who").textContent = workflowName();
   const empty = $("empty");
@@ -2107,7 +2136,7 @@ function offerSave(el, answerText) {
       check: String(d.check || ""),
     }),
   );
-  box.innerHTML = `<p><b>Approval needed:</b> ${esc(d.message || "")}</p><div class="answer">${md(d.candidate || "")}</div>
+  box.innerHTML = `<p><b>Approval needed:</b> ${esc(d.message || "")}</p><div class="answer rich-text--narrow">${md(d.candidate || "")}</div>
     ${verdictLine ? `<p class="hitl__verdict">${verdictLine}</p>` : ""}
     <div class="hitl__actions">
       <button type="button" class="btn-approve" data-d="approve">Approve</button>

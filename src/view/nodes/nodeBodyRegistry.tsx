@@ -108,7 +108,12 @@ function FormattedOutputBody({ node }: NodeBodyProps) {
           onClick={() => setExpanded((value) => !value)}
         />
       </span>
-      <div className="prose">
+      {/* `rich-text--narrow` (`stable-beta-public/15`): a node card is ~216px, and
+          `.prose`'s table rules are written for a grid that fits — an index column
+          at `width: 1%; white-space: nowrap` took 170px of that and left the text
+          beside it 212px tall. Every `.prose` here is a card body, so all three
+          carry it; the wide surfaces keep `RichText.css`'s own rule. */}
+      <div className="prose rich-text--narrow">
         <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>
           {text}
         </Markdown>
@@ -131,7 +136,7 @@ function GroupBody({ node }: NodeBodyProps) {
     <>
       {title ? <div className="node__group-title">{title}</div> : null}
       {notes ? (
-        <div className="prose">
+        <div className="prose rich-text--narrow">
           <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>
             {notes}
           </Markdown>
@@ -170,7 +175,7 @@ function NoteBody({ node }: NodeBodyProps) {
 
   return (
     <div
-      className="prose"
+      className="prose rich-text--narrow"
       role="button"
       tabIndex={0}
       onDoubleClick={() => setEditing(true)}

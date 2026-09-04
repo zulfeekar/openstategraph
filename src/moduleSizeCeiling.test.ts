@@ -86,7 +86,7 @@ interface Recorded {
 
 const RECORDED: Readonly<Record<string, Recorded>> = {
   'view/ask/AskPanel.tsx': {
-    lines: 977,
+    lines: 981,
     reason: `The largest module under \`src/\` and the one the ticket named: the counterpart
       of \`node_runtime.py\` with no split ticket behind it at all. Eight hundred and
       eighty-nine code lines out of 2,237 physical — the rest is JSX structure, imports and
@@ -205,7 +205,15 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       four-line comment on the move recording the measured before-numbers and
       why \`PanelFooter\`'s own padding did not fit. No new reason to change:
       this is the same composer, moved one level up the tree. The transcript
-      seam is still the next one.`,
+      seam is still the next one.
+
+      **977 -> 981** (\`stable-beta-public/15\`). Prettier's reformatting of two
+      \`<RichText>\` tags that gained one class name: the answer bubble and the
+      approval candidate now carry \`rich-text--narrow\`, so a table in a 187px
+      bubble stacks instead of scrolling off the side. Four lines, no new
+      behaviour and no new reason to change — the decision itself is CSS, in
+      \`view/common/RichText.css\`, and which surfaces are narrow is the only
+      part of it this module knows. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
     lines: 881,

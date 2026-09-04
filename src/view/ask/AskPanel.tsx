@@ -2430,7 +2430,9 @@ function ApprovalPrompt({
   return (
     <div className="ask__approval">
       <p className="ask__approval-message">{approval.message}</p>
-      {approval.candidate ? <RichText className="ask__answer" text={approval.candidate} /> : null}
+      {approval.candidate ? (
+        <RichText className="ask__answer rich-text--narrow" text={approval.candidate} />
+      ) : null}
       {/* What the machine that just judged this text thought of it
           (`workflow-gallery` 32). Below the draft and above the note field,
           which is the order the reviewer reads in: the thing being decided,
@@ -2495,7 +2497,10 @@ function Answer({ result }: { result: RunResult }) {
       {/* `result.answer` is already prose: the backend split any suggestion
           fence out of it before the frame left the runtime, so there is no
           second, fence-free copy of the answer to keep in sync here. */}
-      <RichText className="ask__answer" text={result.answer || '_No answer was produced._'} />
+      <RichText
+        className="ask__answer rich-text--narrow"
+        text={result.answer || '_No answer was produced._'}
+      />
 
       {attemptsLine(result) ? (
         // Surfaced because a silent retry hides real cost — but it no longer
