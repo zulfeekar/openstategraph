@@ -52,6 +52,14 @@
     --radius-xl: 12px;
     --radius-2xl: 16px;
     --radius-full: 999px;
+    /* `stable-beta-public/11` — one number, written twice: the editor's
+       `--radius-bubble` (`src/design/styles/tokens.css`) is 10px, derived
+       from 1.25× the bubble's own vertical padding. Restated here by value,
+       same as every other token on this page, so `--chat-bubble-radius`
+       (below) can point at one name on both surfaces instead of at
+       `--radius-lg`, which this page's OWN scale (unlike the editor's flat
+       one) happened to already be 9px — coincidence, not the source. */
+    --radius-bubble: 10px;
 
     --font-size-10: 0.625rem;
     --font-size-11: 0.6875rem;
@@ -137,19 +145,27 @@
    *
    * This file restates the token *values* in its own `:root` above, because
    * it is a standalone asset served straight off the backend with no build
-   * step — so the radii here are the authored 9px/3px rather than the app's
-   * flat zero, and that divergence is old and deliberate. What must not
-   * diverge is the grammar: how round a bubble is, how much room its text
-   * has, how far apart two bubbles from one side sit, and how far apart the
-   * two sides sit. `src/view/ask/chatBubblesAgree.test.ts` reads this file
-   * and `AskPanel.css` as text and fails if the names or the token
-   * expressions drift apart.
+   * step. `--radius-xs` here is still the page's own separately authored
+   * 3px, used for the bubble's squared-off corner — that divergence from the
+   * editor's flat `--radius-xs` (0) is old and deliberate and out of this
+   * ticket's scope. `--chat-bubble-radius` itself no longer divides the two
+   * surfaces at all: `stable-beta-public/11` gave the editor its own rounded
+   * `--radius-bubble` (`src/design/styles/tokens.css`, 10px) rather than
+   * leaving it flat, and this page restates that same number under the same
+   * name, so `var(--radius-lg)` below is not a coincidence any more — it is
+   * a name this page happens not to need for the bubble now that
+   * `--radius-bubble` exists. What must not diverge is the grammar: how
+   * round a bubble is, how much room its text has, how far apart two
+   * bubbles from one side sit, and how far apart the two sides sit.
+   * `src/view/ask/chatBubblesAgree.test.ts` reads this file and
+   * `AskPanel.css` as text and fails if the names or the token expressions
+   * drift apart.
    *
-   * Before this ticket the page had none of them: a question was a small
-   * tinted box on the right and an answer a full-width bordered rectangle —
-   * the same shape as the composer below it. */
+   * Before `10` the page had none of them: a question was a small tinted box
+   * on the right and an answer a full-width bordered rectangle — the same
+   * shape as the composer below it. */
   #log {
-    --chat-bubble-radius: var(--radius-lg);
+    --chat-bubble-radius: var(--radius-bubble);
     --chat-bubble-padding: var(--space-2) var(--space-3);
     --chat-gap-group: var(--space-1);
     --chat-gap-side: var(--space-3);

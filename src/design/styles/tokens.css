@@ -358,6 +358,22 @@
   --radius-xl: var(--osg-radius);
   --radius-2xl: var(--osg-radius);
   --radius-full: 999px;
+  /* `--radius-bubble` — the system's second deliberate exception, and the
+   * only one that IS a corner radius (`--radius-full` above is a circle, not
+   * a rounded rectangle). A chat bubble is a speech shape, not a card, and
+   * `stable-beta-public/11` rounds it on purpose while every other surface
+   * stays flat. The number is derived rather than picked: about 1.25× a
+   * bubble's own vertical padding (`--chat-bubble-padding`'s `--space-2`,
+   * 8px), which is 10px — close to, but not copied from, the customer page's
+   * own long-standing 9px (`chat.html`'s separately authored `--radius-lg`),
+   * which is coincidence corroborating the proportion rather than the
+   * source of it. Consumed only by `--chat-bubble-radius`
+   * (`src/view/ask/AskPanel.css`, `chat.html`'s restated `:root`) — never by
+   * `--radius-lg` or any of the six names above, which stay the authored
+   * zero. `src/design/styles/radiusBubbleIsTheOneException.test.ts` pins
+   * both halves: this is the one radius token that is not `--osg-radius`,
+   * and the other six still are. */
+  --radius-bubble: 10px;
 
   /* ---------- Line weight ----------
    * The authored file ships **two** widths — `--osg-rule: 2px` and

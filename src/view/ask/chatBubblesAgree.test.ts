@@ -37,6 +37,7 @@ const read = (relative: string) =>
 
 const ASK_PANEL_CSS = read('./AskPanel.css');
 const CHAT_HTML = read('../../../backend/openstategraph/api/static/chat.html');
+const TOKENS_CSS = read('../../design/styles/tokens.css');
 
 /**
  * Every `--chat-*` declaration in a file, by name.
@@ -96,5 +97,30 @@ describe('the editor panel and the customer chat page share one conversation gra
         expect(part, `${file}'s ${name} part`).toMatch(/^var\(--[a-z0-9-]+\)$/);
       }
     }
+  });
+});
+
+/**
+ * `stable-beta-public/11` — bubbles round on purpose, everywhere else stays
+ * square. `--chat-bubble-radius` names a token by reference (checked above);
+ * this resolves the reference one level, through `tokens.css`, and asserts
+ * the number behind it is not the flat `0` the rest of the design system
+ * uses. `radiusBubbleIsTheOneException.test.ts` (`src/design/styles/`) is
+ * the fuller pin — this one exists so a reader of *this* file, about the
+ * chat grammar specifically, sees the bubble is actually round without
+ * having to go find the other test.
+ */
+describe('the bubble radius the grammar names is not the flat zero', () => {
+  it('`--chat-bubble-radius` resolves to a token that is not `--osg-radius`', () => {
+    const editor = chatGrammar(ASK_PANEL_CSS);
+    const named = editor['--chat-bubble-radius'];
+    const tokenName = named?.match(/^var\((--[a-z0-9-]+)\)$/)?.[1];
+    expect(tokenName, '--chat-bubble-radius names one var()').toBeDefined();
+
+    const resolved = TOKENS_CSS.match(new RegExp(`${tokenName}:\\s*([^;]+);`))?.[1]?.trim();
+    expect(resolved, `${tokenName} is declared in tokens.css`).toBeDefined();
+    expect(resolved).not.toBe('var(--osg-radius)');
+    expect(resolved).not.toBe('0');
+    expect(resolved).not.toBe('0px');
   });
 });

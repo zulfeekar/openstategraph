@@ -135,6 +135,12 @@ export const NODE = {
    * The authored design system is `--osg-radius: 0px` and describes itself as
    * *"Flat, 0 radius, one accent"*; a card whose CSS corner is square and
    * whose canvas corner is 9 would be two answers to one question.
+   *
+   * `--radius-bubble` (`design/styles/tokens.css`, `stable-beta-public/11`)
+   * is the one recorded exception to that flatness, and it has no twin here
+   * on purpose: it rounds a chat bubble, a DOM element, never a node card —
+   * nothing on the JointJS canvas reads it, so there is nothing for this
+   * constant to mirror. `NODE.cornerRadius` stays 0 unchanged.
    */
   cornerRadius: 0,
 } as const;

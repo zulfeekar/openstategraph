@@ -77,15 +77,17 @@
    * differ, since that divergence is the standalone file's whole reason to
    * exist, and the grammar is not.
    *
-   * `--chat-bubble-radius` resolves to **0** here today, and that is the design
-   * system's answer, not an oversight: every `--radius-*` in this product is
-   * `--osg-radius`, which the authored system sets to zero and describes as
-   * *"Flat, 0 radius, one accent"* (`src/design/styles/tokens.css`). The
-   * grammar is still written in terms of it, corner by corner, so the day
-   * `--osg-radius` moves the bubbles round themselves — and so that the corner
-   * a bubble squares off against its own side is a decision written down
-   * somewhere rather than an accident of a shorthand. */
-  --chat-bubble-radius: var(--radius-lg);
+   * `--chat-bubble-radius` resolved to **0** here until `stable-beta-public/11`
+   * — the design system's honest answer at the time, not an oversight: every
+   * `--radius-*` in this product is `--osg-radius`, which the authored system
+   * sets to zero and describes as *"Flat, 0 radius, one accent"*
+   * (`src/design/styles/tokens.css`). `11` gave chat bubbles the one
+   * deliberate exception to that flatness — `--radius-bubble`, a speech
+   * shape rather than a card — while every other `--radius-*` name stays the
+   * authored zero; `radiusBubbleIsTheOneException.test.ts` pins both halves
+   * of that claim. The squared corner (`--radius-xs` below) is still the
+   * flat zero: only the three rounded corners of each bubble moved. */
+  --chat-bubble-radius: var(--radius-bubble);
   --chat-bubble-padding: var(--space-2) var(--space-3);
   /* Consecutive blocks from the same side — the sender label, the steps box,
      the answer — read as one run of speech. */
