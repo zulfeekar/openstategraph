@@ -43,8 +43,16 @@ export function PanelBody({ className, children }: { className?: string; childre
   return <div className={clsx('panel__body', className)}>{children}</div>;
 }
 
-export function PanelFooter({ className, children }: { className?: string; children: ReactNode }) {
-  return <footer className={clsx('panel__footer', className)}>{children}</footer>;
+export function PanelFooter({
+  className,
+  children,
+  ...rest
+}: React.ComponentPropsWithoutRef<'footer'> & { className?: string; children: ReactNode }) {
+  return (
+    <footer className={clsx('panel__footer', className)} {...rest}>
+      {children}
+    </footer>
+  );
 }
 
 export function PanelSection({

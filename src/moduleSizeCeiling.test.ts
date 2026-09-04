@@ -86,7 +86,7 @@ interface Recorded {
 
 const RECORDED: Readonly<Record<string, Recorded>> = {
   'view/ask/AskPanel.tsx': {
-    lines: 973,
+    lines: 977,
     reason: `The largest module under \`src/\` and the one the ticket named: the counterpart
       of \`node_runtime.py\` with no split ticket behind it at all. Eight hundred and
       eighty-nine code lines out of 2,237 physical — the rest is JSX structure, imports and
@@ -196,7 +196,16 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       own test, for the reason \`draftNotice.ts\` and \`settledThinking.ts\`
       were extracted. No new reason to change: this module already composed
       every block inside that wrapper, and the wrapper only says which side of
-      a conversation they are on. The transcript seam is still the next one.`,
+      a conversation they are on. The transcript seam is still the next one.
+
+      **973 -> 977** (\`stable-beta-public/12\`). The composer moved out of
+      \`PanelBody\` into \`PanelFooter\` so it stops inheriting the padded
+      body's own left/right inset — a footer import, a longer opening tag
+      (\`PanelFooter\` with two props instead of a bare \`<div>\`), and a
+      four-line comment on the move recording the measured before-numbers and
+      why \`PanelFooter\`'s own padding did not fit. No new reason to change:
+      this is the same composer, moved one level up the tree. The transcript
+      seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
     lines: 881,

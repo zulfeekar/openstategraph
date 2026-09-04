@@ -26,6 +26,7 @@ import {
   Icon,
   Panel,
   PanelBody,
+  PanelFooter,
   PanelHeader,
   TextArea,
   ThinkingLine,
@@ -2012,14 +2013,27 @@ export function AskPanel({
             />
           ))}
         </div>
+      </PanelBody>
 
-        {/* One control, not a labelled field plus a detached button: the
-            composer is the panel's primary affordance and should read as a
-            single place to type and send, the way every chat does. The label
-            is carried by the placeholder and `aria-label`, so nothing is lost
-            to a screen reader. */}
-        <div className="ask__composer" data-running={running || undefined} hidden={historyOpen}>
-          {/* Multi-line, and it grows with what is in it
+      {/* One control, not a labelled field plus a detached button: the
+          composer is the panel's primary affordance and should read as a
+          single place to type and send, the way every chat does. The label
+          is carried by the placeholder and `aria-label`, so nothing is lost
+          to a screen reader.
+
+          A footer, not a child of the padded body (`stable-beta-public/12`):
+          it used to inherit the body's own left/right inset meant for the
+          bubbles, plus its own border and shadow on top, so it read as a
+          card floating a few pixels off every edge of the column. `PanelFooter`
+          is the panel's own edge — no inset, a top hairline rule for free —
+          and the composer keeps only the inner padding that keeps its text
+          off that edge. */}
+      <PanelFooter
+        className="ask__composer"
+        data-running={running || undefined}
+        hidden={historyOpen}
+      >
+        {/* Multi-line, and it grows with what is in it
               (`every-workflow-green` 40).
 
               A single-line `<input>` cannot hold a newline: the HTML value
@@ -2037,40 +2051,40 @@ export function AskPanel({
               product already ships one surface away, in `/chat`'s textarea
               composer (`api/static/chat.html`), and the `!event.shiftKey`
               guard below was already written for it. */}
-          <TextArea
-            ref={composerRef}
-            className="ask__composer-input"
-            value={question}
-            aria-label="Message"
-            // One row at rest, so an empty composer looks exactly as it did.
-            // The ceiling keeps a long brief from eating the transcript it is
-            // supposed to be read beside — past it the box scrolls.
-            minRows={1}
-            maxRows={8}
-            // The workflow's own entry question, never a fixed sentence: a
-            // placeholder borrowed from another workflow teaches the wrong
-            // thing about the one in front of you (`every-workflow-green` 04).
-            placeholder={composerPlaceholder(entryQuestion(controller.model))}
-            onChange={(event) => setQuestion(event.target.value)}
-            onKeyDown={(event) => {
-              // Enter sends it; Shift+Enter falls through to the textarea and
-              // types a newline. `preventDefault` is what stops Enter doing
-              // both — sending *and* leaving a blank line in a composer that
-              // is about to be cleared anyway.
-              //
-              // `event.key` is not the only signal a real Return keypress
-              // produces (launch-readiness/36): some input paths deliver a
-              // keydown whose `key`/`code` never get populated, carrying
-              // only `keyCode === 13`. Reading `key` alone silently drops
-              // those — the composer keeps the text and nothing sends.
-              // `/chat`'s textarea composer takes the same fallback.
-              if ((event.key === 'Enter' || event.keyCode === 13) && !event.shiftKey) {
-                event.preventDefault();
-                void send();
-              }
-            }}
-          />
-          {/* One control, two meanings — Send becomes Stop while the turn
+        <TextArea
+          ref={composerRef}
+          className="ask__composer-input"
+          value={question}
+          aria-label="Message"
+          // One row at rest, so an empty composer looks exactly as it did.
+          // The ceiling keeps a long brief from eating the transcript it is
+          // supposed to be read beside — past it the box scrolls.
+          minRows={1}
+          maxRows={8}
+          // The workflow's own entry question, never a fixed sentence: a
+          // placeholder borrowed from another workflow teaches the wrong
+          // thing about the one in front of you (`every-workflow-green` 04).
+          placeholder={composerPlaceholder(entryQuestion(controller.model))}
+          onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={(event) => {
+            // Enter sends it; Shift+Enter falls through to the textarea and
+            // types a newline. `preventDefault` is what stops Enter doing
+            // both — sending *and* leaving a blank line in a composer that
+            // is about to be cleared anyway.
+            //
+            // `event.key` is not the only signal a real Return keypress
+            // produces (launch-readiness/36): some input paths deliver a
+            // keydown whose `key`/`code` never get populated, carrying
+            // only `keyCode === 13`. Reading `key` alone silently drops
+            // those — the composer keeps the text and nothing sends.
+            // `/chat`'s textarea composer takes the same fallback.
+            if ((event.key === 'Enter' || event.keyCode === 13) && !event.shiftKey) {
+              event.preventDefault();
+              void send();
+            }
+          }}
+        />
+        {/* One control, two meanings — Send becomes Stop while the turn
               streams, rather than a disabled "Running…" that leaves the
               developer with nothing to press. Same slot, so the thing to
               click never moves.
@@ -2086,31 +2100,30 @@ export function AskPanel({
               instead, so this stays `disabled` rather than moving to
               Run's "always live, explain on press" shape — only the
               silence around the refusal needed fixing. */}
-          <Tooltip
-            content={
-              running
-                ? 'Stop this run — nothing further is scheduled; steps already dispatched finish and are discarded'
-                : question.trim() === ''
-                  ? 'Type a question above, then press Send or Enter'
-                  : `Send: ${question.trim()}`
-            }
-            multiline
-          >
-            <span className="ask__composer-send-anchor">
-              <Button
-                variant={running ? 'danger-solid' : 'primary'}
-                className="ask__composer-send"
-                icon={<Icon glyph={running ? Square : Send} size="sm" />}
-                disabled={running ? false : question.trim() === ''}
-                aria-label={running ? 'Stop' : 'Send'}
-                onClick={() => (running ? stop() : void send())}
-              >
-                {running ? 'Stop' : 'Send'}
-              </Button>
-            </span>
-          </Tooltip>
-        </div>
-      </PanelBody>
+        <Tooltip
+          content={
+            running
+              ? 'Stop this run — nothing further is scheduled; steps already dispatched finish and are discarded'
+              : question.trim() === ''
+                ? 'Type a question above, then press Send or Enter'
+                : `Send: ${question.trim()}`
+          }
+          multiline
+        >
+          <span className="ask__composer-send-anchor">
+            <Button
+              variant={running ? 'danger-solid' : 'primary'}
+              className="ask__composer-send"
+              icon={<Icon glyph={running ? Square : Send} size="sm" />}
+              disabled={running ? false : question.trim() === ''}
+              aria-label={running ? 'Stop' : 'Send'}
+              onClick={() => (running ? stop() : void send())}
+            >
+              {running ? 'Stop' : 'Send'}
+            </Button>
+          </span>
+        </Tooltip>
+      </PanelFooter>
     </Panel>
   );
 }

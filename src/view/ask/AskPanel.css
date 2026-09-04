@@ -199,6 +199,21 @@
 
 /* ---------- Composer ---------- */
 
+/* The panel's footer, not a card floating inside its padded body
+   (`stable-beta-public/12`). It used to be a child of `.ask .panel__body`,
+   which carries the column's own inset for the bubbles (`09`) — so that
+   inset also pushed the composer in from the edges, on top of a border,
+   radius and shadow of its own. Measured live before the fix: 13px in from
+   the panel's left edge, 12px from the right, 0 below (the body only ever
+   padded the top and sides, never the bottom).
+   `PanelFooter` (`src/design/primitives/Panel.tsx`) is a sibling of the
+   padded body, so it draws flush with the panel's own left, right and
+   bottom edges and supplies the top hairline rule
+   (`.panel__footer`, `Panel.css`) for free. Its own padding
+   (`--space-2-5 --space-3`) does not fit this ticket's ask
+   (`--space-2 --space-3`) exactly, so `.ask__composer` restates padding at
+   higher specificity (`.panel__footer.ask__composer`) below, rather than
+   leaving two rules to disagree by source order. */
 .ask__composer {
   flex-shrink: 0;
   display: flex;
@@ -208,21 +223,20 @@
      ordinary message — the two are identical. */
   align-items: flex-end;
   gap: var(--space-2);
-  padding: var(--space-1-5);
-  background: var(--color-bg-surface);
-  border: var(--border-width-hairline) solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  transition:
-    border-color var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out);
+  padding: var(--space-2) var(--space-3);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.panel__footer.ask__composer {
+  padding: var(--space-2) var(--space-3);
 }
 
 /* The affordance the panel was missing: typing visibly focuses one control,
-   rather than a field and a button lighting up separately. */
+   rather than a field and a button lighting up separately. No border to
+   re-colour any more (the composer draws none of its own), so the tint
+   itself carries the focus. */
 .ask__composer:focus-within {
-  border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus-ring) 18%, transparent);
+  background: var(--color-bg-surface-sunken);
 }
 
 .ask__composer-input {
