@@ -10,7 +10,7 @@
 - [x] Slice 2 — real grand total, by-model, sessions from the store
 - [x] Slice 3 — this session's block; refetch on run end and focus
 - [x] Slice 4 — cached / cache-creation / reasoning tri-state; streaming opt-in test
-- [ ] Slice 5 — the modal
+- [x] Slice 5 — the modal
 - [ ] Slice 6 — 10k-row measurement, docs, ceilings, closing commit
 
 ## Notes for a fresh session
@@ -21,6 +21,50 @@
 - Ticket: `.scratch/stable-beta-public/tickets/03`.
 - Follow `src/design/tokens.ts`; no raw values; flat, Miro-like, borders not
   shadows (map note).
+
+## What slice 5 changed about 03
+
+- **The dialog is two components, and the split is the test's.** `Dialog`
+  renders through `createPortal(…, document.body)` and the suite runs in
+  `node` on purpose (`vite.config.ts`), so `SpendDialog` cannot be rendered
+  in a test at all. `SpendBreakdown` — the three tables, without the frame —
+  is exported beside it and is what
+  `aBreakdownMarksTheTabYouAreIn.test.ts` renders with
+  `react-dom/server`, following slice 4's note.
+- **The grand-total table carries `Reasoning` as well**, which 04's one-line
+  sketch omitted and the mockup did not draw. Slice 4 published the field and
+  the same tri-state rule governs it; a column the wire carries and the modal
+  drops would be the only place the editor knows a figure and does not say
+  it.
+- **The footer row reads `grandTotal`/`cachedTotal` off the wire** rather than
+  re-summing `byModel`. Two sums of one quantity agree the day they are
+  written. Only `input`/`output`/`reasoning`, which the wire does not total,
+  are summed here — `reasoning` under the same none rule (`null` unless some
+  row reported one), never `?? 0`.
+- **`reportedTokens` moved from private to exported in `spendModel.ts`.** The
+  dash rule now has two readers (the bar and the three tables) and one owner;
+  a second spelling of it is the duplication of *knowledge* the DRY rule
+  forbids.
+- **A sitting's span is sliced, never parsed.** `sessionSpan` reads the day
+  and minute out of the stored stamp with a regex; `new Date()` would shift a
+  stamp that carries an offset into the reader's own zone
+  (`the-cost-of-one-more/11` again, one layer up). An unreadable stamp is
+  shown as it arrived.
+- **Three censuses fired and all three were right**:
+  `aDialogSizeIsOptInOnly.test.ts` (a new `Dialog` caller, added to the list
+  at the default size), `badgeExplanations.test.ts` (the *this tab* Badge
+  needed an `explanation`), and `aBorderIsDraggableOrItIsNot.test.ts` —
+  `--color-border-subtle` is a retired token, and `--color-rule` is **not**
+  the lighter weight it sounds like: it is reserved for the three edges a
+  pointer can drag. Row separators are `--color-border`.
+- **One defect the tests could not see, found in the browser**: the number
+  cells' `padding-left` lost on specificity to `.spend-table td`, so every
+  gutter was zero and the header row read `RunsCachedTotal`. Selected as
+  `.spend-table .spend-table__number` now. A markup test asserts text, and
+  this was a cascade.
+- **The modal does not open before the first answer lands** — there would be
+  nothing to tabulate, and a table of dashes is not more honest than no
+  table.
 
 ## What slice 4 changed about 03
 

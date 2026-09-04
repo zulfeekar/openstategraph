@@ -45,6 +45,7 @@ import { runEnded } from './run/runEnded';
 import { runView, type RunView } from './run/runView';
 import { StoredRuns } from './run/StoredRuns';
 import { SpendBar } from './spend/SpendBar';
+import { SpendDialog } from './spend/SpendDialog';
 import { useSpend } from './spend/useSpend';
 import { readDockHeight, rememberDockHeight } from './run/dockHeightMemory';
 import { interruptedRunNotice, takeInterruptedRun } from './ask/interruptedRun';
@@ -258,6 +259,7 @@ export function AppShell() {
    */
   const spendClient = useMemo(() => new RuntimeClient(), []);
   const [spendRefresh, setSpendRefresh] = useState(0);
+  const [spendOpen, setSpendOpen] = useState(false);
   const { spend: spendAnswer, error: spendError } = useSpend({
     client: spendClient,
     sessionId: browserSessionId(),
@@ -1038,14 +1040,18 @@ export function AppShell() {
           28px off the bottom instead of floating over anything. Last child
           rather than last *visible* thing: the dialogs and the toaster above
           are overlays and occupy no row. */}
-      <SpendBar
-        spend={spendAnswer}
-        error={spendError}
-        // Slice 5 opens the breakdown here. Until then the control is present
-        // and does nothing visible, which is honest about a half-built
-        // feature in a way a bar that is not there yet would not be.
-        onOpen={() => onNotify('The spend breakdown is stable-beta-public/03, slice 5.')}
-      />
+      <SpendBar spend={spendAnswer} error={spendError} onOpen={() => setSpendOpen(true)} />
+      {/* The breakdown reads the answer the bar already holds rather than
+          fetching its own, so the strip and the tables can never disagree
+          about an instant. It cannot open before the first answer lands —
+          there would be nothing to tabulate. */}
+      {spendOpen && spendAnswer !== null ? (
+        <SpendDialog
+          spend={spendAnswer}
+          currentSessionId={browserSessionId()}
+          onClose={() => setSpendOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -126,6 +126,10 @@ describe('the callers that were here first', () => {
         'overlays/CredentialsDialog.tsx',
         'overlays/McpServersDialog.tsx',
         'board/PatrolBoard.tsx',
+        // `stable-beta-public/03` slice 5 — the spend breakdown, at the
+        // default: three tables of figures, drawn against the same 520px
+        // every other modal here is.
+        'spend/SpendDialog.tsx',
       ].sort(),
     );
   });

@@ -37,7 +37,7 @@ export function cellsFor(spend: Spend | null): SpendCells {
   }
   return {
     grandTotal: formatTokens(spend.grandTotal),
-    cached: reported(spend.cachedTotal),
+    cached: reportedTokens(spend.cachedTotal),
     session: formatTokens(spend.sessionTotal),
     sessionModels: spend.sessionByModel
       .map((row) => `${row.model} ${formatTokens(row.totalTokens)}`)
@@ -51,8 +51,13 @@ export function cellsFor(spend: Spend | null): SpendCells {
  * The whole tri-state, in one function so there is one place to read it:
  * `null` is *nobody told us* and prints as a dash; `0` is *we were told, and
  * it was nothing* and prints as a zero.
+ *
+ * Exported since slice 5: the breakdown's tables print the same three-valued
+ * figures the bar does, and a second spelling of this rule is exactly the
+ * duplication of *knowledge* the DRY rule forbids — the two would agree on
+ * the day they were written and drift on the first change to either.
  */
-function reported(value: number | null): string {
+export function reportedTokens(value: number | null): string {
   return value === null ? NOTHING_REPORTED : formatTokens(value);
 }
 

@@ -1,0 +1,77 @@
+/* The breakdown's three tables — `stable-beta-public/03`, slice 5.
+ *
+ * Flat, like the bar that opens it: hairline rules and the dialog's own
+ * surface, no shadow and no zebra fill. A row of numbers is separated by a
+ * line in this product, the same weight the panels and the dock use, because
+ * a second idea about what an edge looks like is a second design.
+ *
+ * Tokens only. Every value here is a `--space-*`, a `--color-*`, a
+ * `--type-*` or a `--border-width-*`; there is no raw pixel and no raw
+ * colour, which is the owner's non-negotiable about the look. */
+
+.spend-tables {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.spend-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--type-body-sm);
+  color: var(--color-text-primary);
+}
+
+.spend-table th {
+  text-align: left;
+  font: var(--type-caption);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
+  padding: var(--space-1) 0;
+}
+
+.spend-table td {
+  padding: var(--space-2) 0;
+  /* One weight throughout: `--color-border` is the hairline every panel
+   * edge in this app draws. `--color-rule` is *not* the lighter alternative
+   * it sounds like — `aBorderIsDraggableOrItIsNot.test.ts` reserves it for
+   * the three edges a pointer can take hold of, and a table row is not one.
+   * The footer is set apart by weight instead. */
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
+}
+
+/* The footer states the same quantity as the rows above it, so it is set
+ * apart by weight and a firmer rule rather than by a fill. */
+.spend-table tfoot td {
+  font-weight: var(--font-weight-semibold);
+  border-bottom: 0;
+  border-top: var(--border-width-hairline) solid var(--color-border);
+}
+
+/* A figure is read by comparing it with the one above; right-aligned and
+ * tabular so the digits line up in a column.
+ *
+ * Selected as `.spend-table .spend-table__number` rather than by the class
+ * alone: `.spend-table td` and `.spend-table th` above are a class *and* a
+ * type, so they outrank a bare class and the gutter would be silently zeroed
+ * — which prints `— 28,177` as `—28,177` and runs the headers together. */
+.spend-table .spend-table__number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding-left: var(--space-3);
+  white-space: nowrap;
+}
+
+.spend-table__name {
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.spend-table__mark {
+  margin-left: var(--space-2);
+}
+
+.spend-table__empty {
+  color: var(--color-text-secondary);
+}
