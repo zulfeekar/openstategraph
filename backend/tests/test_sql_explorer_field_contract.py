@@ -66,6 +66,14 @@ READS = {
     "tool.sql-list-tables": {"database"},
     "tool.sql-get-schema": {"database"},
     "tool.sql-query": {"database", "maxRows"},
+    # The T-SQL sibling (`osg-agent-experience/34`). It joins this file rather
+    # than opening its own because it joins the same base class: the guard is
+    # about a family's `configure()`, and there is now one more member of it.
+    # `connection` is the *name* of an environment variable, so a misspelling
+    # here would produce a tool that refuses every query naming a variable
+    # nobody set — the silent-configuration failure this file exists for,
+    # wearing the one disguise that reads as correct behaviour.
+    "tool.mssql-query": {"connection", "allowlist", "maxRows"},
 }
 
 

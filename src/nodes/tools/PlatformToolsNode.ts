@@ -142,6 +142,53 @@ export const PLATFORM_TOOL_NODES = [
       },
     ],
   }),
+  // The same family against a warehouse (`osg-agent-experience/34`). It is a
+  // sibling of `tool.sql-query`, not a variant of it: the dialect and the
+  // connection are the difference, and both of those are visible right here —
+  // no `database` path, because there is no file; a `connection` field that
+  // holds the NAME of an environment variable, because a document is
+  // committed; and an `allowlist`, because a warehouse has no equivalent of
+  // SQLite's `mode=ro` and the tables a query may read have to be pinned by a
+  // human somewhere.
+  backendTool({
+    id: 'tool.mssql-query',
+    label: 'Run T-SQL Query',
+    description:
+      'Runs one read-only T-SQL SELECT against an MSSQL database and returns the rows as a table. Only tables the allowlist pinned may be named.',
+    keywords: ['sql', 'mssql', 'sql server', 't-sql', 'select', 'query', 'warehouse'],
+    fields: [
+      {
+        key: 'connection',
+        label: 'Connection variable',
+        kind: 'text',
+        defaultValue: 'OPENSTATEGRAPH_MSSQL_URL',
+        placeholder: 'OPENSTATEGRAPH_MSSQL_URL',
+        mono: true,
+        hint: 'The name of an environment variable holding the ODBC connection string — never the string itself, because a workflow document is committed. Unset at run time, the tool refuses by name and sends nothing.',
+        required: true,
+      },
+      {
+        key: 'allowlist',
+        label: 'Allowlist YAML',
+        kind: 'text',
+        defaultValue: '',
+        placeholder: 'my-flow/lenses.yaml',
+        mono: true,
+        hint: 'A YAML file inside workflows/ whose resolvers carry “pin:” maps. The pinned values are the only tables a query may name; anything else is refused with the list. Without this the tool refuses every query.',
+        required: true,
+      },
+      {
+        key: 'maxRows',
+        label: 'Max rows',
+        kind: 'text',
+        defaultValue: '',
+        placeholder: '200',
+        // Same reasoning as `tool.sql-query`: `configure` falls back to the
+        // tool's own default, so blank is a legitimate answer.
+        hint: 'Ceiling on rows returned. Leave blank for the tool’s own default.',
+      },
+    ],
+  }),
   backendTool({
     id: 'tool.validate-workflow',
     label: 'Validate Workflow',

@@ -75,6 +75,51 @@ and *we could not tell* (it declares none). And where several sources are
 live and nothing settles which, it chooses **nothing**: that is a question
 for the person asking, not a coin toss.
 
+### Two SQL atoms, and the difference between them is not the dialect
+
+`Tools · atoms` holds two ways to read a database, and picking the wrong one
+is not a small mistake — the fields do not mean the same things.
+
+| | **Run Query** (`tool.sql-query`) | **Run T-SQL Query** (`tool.mssql-query`) |
+| --- | --- | --- |
+| Reads | a `.sqlite` file inside `workflows/` | an MSSQL server |
+| Points at it with | `Database file` — a path | `Connection variable` — the **name** of an environment variable |
+| Read-only comes from | the driver: SQLite opens the file `mode=ro` and refuses every write however it is spelled | a **statement gate** plus an uncommitted transaction — see below |
+| Which tables may be read | every table in the file | only those an **allowlist** pinned |
+
+**Read-only is a weaker word on the second row, and it is written down here
+rather than assumed.** No MSSQL driver offers SQLite's `mode=ro`.
+`ApplicationIntent=ReadOnly`, which is the string most people expect to close
+this, is an availability-group *routing* hint: it chooses which replica you
+talk to, and it refuses nothing. So the T-SQL atom guards with two mechanisms
+of its own — it accepts exactly one statement and only a `SELECT` or a
+`WITH … SELECT`, and it opens its connection without autocommit and rolls it
+back unconditionally. Both are real; neither is the engine refusing a write,
+and a workflow that needs that guarantee should be given a login that cannot
+write.
+
+**The `Connection variable` field holds a name, never a connection string.**
+A workflow document is committed, so a pasted DSN would be a password in a
+repository; the field is refused if you type one, and the refusal does not
+echo it back. The default is `OPENSTATEGRAPH_MSSQL_URL`. With that variable
+unset the tool answers a refusal that names it and sends nothing — which is
+what a workflow built against a warehouse that does not exist yet does on
+every run, on purpose.
+
+**The `Allowlist YAML` field is not optional and is not a convenience.** It
+names a file inside `workflows/` whose `resolvers` each carry a `pin:` map,
+and the **values** of those maps — `dbo.invoice_line_v2`, not `dbo.invoice_line` —
+are the only tables a query may name. A pin is a human's choice of *which
+version* of a logical table is safe to read, so naming the unversioned logical
+name is refused too. Anything unpinned comes back with the whole pin list, so
+the model's next attempt is written against tables that exist. Configure no
+allowlist and the tool refuses every query: the dangerous default is the one
+that reads as configured.
+
+The driver ships as an extra — `pip install 'openstategraph[mssql]'`. The base
+install carries no database driver, and a missing one is a refusal that names
+the extra rather than an import error.
+
 ---
 
 ## 3. A revision loop is two edges

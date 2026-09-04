@@ -2239,6 +2239,88 @@
       ]
     },
     {
+      "type": "tool.mssql-query",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Run T-SQL Query",
+      "description": "Runs one read-only T-SQL SELECT against an MSSQL database and returns the rows as a table. Only tables the allowlist pinned may be named.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "allowlist",
+        "cacheTtlSeconds",
+        "connection",
+        "maxRetries",
+        "maxRows",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "connection",
+          "kind": "text",
+          "label": "Connection variable",
+          "hint": "The name of an environment variable holding the ODBC connection string — never the string itself, because a workflow document is committed. Unset at run time, the tool refuses by name and sends nothing.",
+          "required": true,
+          "defaultValue": "OPENSTATEGRAPH_MSSQL_URL"
+        },
+        {
+          "key": "allowlist",
+          "kind": "text",
+          "label": "Allowlist YAML",
+          "hint": "A YAML file inside workflows/ whose resolvers carry “pin:” maps. The pinned values are the only tables a query may name; anything else is refused with the list. Without this the tool refuses every query.",
+          "required": true,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRows",
+          "kind": "text",
+          "label": "Max rows",
+          "hint": "Ceiling on rows returned. Leave blank for the tool’s own default.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
       "type": "tool.platform-describe-workflow",
       "kind": "standard",
       "category": "tools",

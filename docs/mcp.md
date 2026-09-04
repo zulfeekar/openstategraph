@@ -167,7 +167,8 @@ The gist of what comes back:
     //  Then every bindable tool, which is the half that matters when you are
     //  composing a document an agent can actually run: tool.chinook-execute-sql,
     //  tool.chinook-get-all-tables, tool.chinook-get-schema, tool.email-send,
-    //  tool.knowledge-lookup, tool.mcp, tool.platform-describe-workflow,
+    //  tool.knowledge-lookup, tool.mcp, tool.mssql-query,
+    //  tool.platform-describe-workflow,
     //  tool.platform-grep, tool.platform-list-workflows, tool.platform-ls,
     //  tool.platform-read-file, tool.reddit-search, tool.session-identity,
     //  tool.sql-get-schema,

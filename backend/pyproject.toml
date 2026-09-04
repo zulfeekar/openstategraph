@@ -70,6 +70,14 @@ ollama = ["langchain-ollama>=1.0,<2"]
 # Only a document containing an `agent.deep` node needs this — 52 distributions
 # on its own, including the Google GenAI SDK and cryptography.
 deep = ["deepagents>=0.7,<1"]
+# Only a document containing a `tool.mssql-query` node needs this
+# (`osg-agent-experience/34`). `prebuilt_mssql` imports it lazily at one seam,
+# so the unconfigured path — which is the whole of the first pass, there being
+# no live warehouse yet — needs no driver at all, and the base wheel's four
+# dependencies are unchanged. pyodbc still needs a system ODBC driver
+# (msodbcsql18) to reach a server; that is the vendor's floor, not ours, and
+# the tool's refusal names this extra rather than leaving an ImportError.
+mssql = ["pyodbc>=5.0,<6"]
 # Not an optional feature so much as an undeclared one: `memory.py` imports
 # these inside a try/except, so `settings.checkpointer: "sqlite"` and
 # OPENSTATEGRAPH_MEMORY_PATH degraded to in-memory in every install that
@@ -171,7 +179,7 @@ postgres = [
 # says so in one line rather than failing.
 bastion = ["bastion-prompt-protection>=1.3,<2"]
 all = [
-    "openstategraph[anthropic,openai,ollama,deep,sqlite,server,mcp,postgres]",
+    "openstategraph[anthropic,openai,ollama,deep,sqlite,server,mcp,postgres,mssql]",
 ]
 dev = [
     "pytest>=8",

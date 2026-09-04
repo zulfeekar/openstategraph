@@ -402,6 +402,33 @@ ENGINE_ADAPTERS = """A recorded exception: this is a data class the counting rul
     design."""
 
 #: `BaseTool` is eight; the leaves carry their own manifest.
+MSSQL_QUERY_TOOL = """Two more than `SqlQueryTool`, and the two are the ticket
+    (`osg-agent-experience/34`). `MssqlQueryTool` is that class's fifteen plus
+    `connection` and `allowlist` — the two things that differ between reading a
+    file and reading a warehouse, which is the whole reason it is a sibling and
+    not a copy. Everything else on the count is inherited: `BaseTool`'s eight,
+    the four manifest constants, `configure`, and the family's `database`.
+
+    **`database` is the member worth arguing about, because this leaf does not
+    use it.** It comes from `_SqlExplorerBase`, where it means "a .sqlite path
+    inside workflows/", and an MSSQL connection has no such thing. The base was
+    kept anyway: what the family genuinely shares — the `configure` shape, the
+    row cap, `side_effecting = False`, and the refusal-rather-than-raise habit
+    — is more than the two fields CLAUDE.md's "inheritance must earn itself"
+    line warns about, and the alternative on offer today is a second base class
+    with one member on it.
+
+    That is a decision with a cost, and the cost is written down rather than
+    hidden: `_SqlExplorerBase` now holds one SQLite-shaped field that a quarter
+    of its members ignore, and its `_refusal()` names a `.sqlite` path that
+    could in principle reach an MSSQL node. Nothing calls it there today —
+    `MssqlQueryTool` refuses through its own `_dsn()` and `_pins()` — and the
+    split of the base into "what the family shares" and "what SQLite owns" is
+    filed as `osg-agent-experience/35` rather than done here, because it moves
+    three shipped tools to fix a defect none of them has yet.
+    """
+
+
 PREBUILT_TOOLS = """A recorded exception, with the shape visible in the base they share:
     `BaseTool` is **eight** members, and every tool here clears the ceiling only
     by its own configuration on top of that. `SqlListTablesTool` and
@@ -808,6 +835,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_sql.SqlGetSchemaTool": Recorded(14, PREBUILT_TOOLS),
     "prebuilt_sql.SqlListTablesTool": Recorded(14, PREBUILT_TOOLS),
     "prebuilt_sql.SqlQueryTool": Recorded(15, PREBUILT_TOOLS),
+    "prebuilt_mssql.MssqlQueryTool": Recorded(17, MSSQL_QUERY_TOOL),
     "prebuilt_youtube.YouTubeTranscriptTool": Recorded(17, PREBUILT_TOOLS),
     "prebuilt_mcp.McpTool": Recorded(15, MCP_TOOL),
     "knowledge_explorer.CodeGrepTool": Recorded(13, PREBUILT_TOOLS),

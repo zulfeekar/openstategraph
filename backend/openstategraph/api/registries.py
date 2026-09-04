@@ -76,6 +76,7 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
     from openstategraph.prebuilt_architect import ARCHITECT_TOOLS
     from openstategraph.prebuilt_email import EMAIL_TOOLS
     from openstategraph.prebuilt_mcp import MCP_TOOLS
+    from openstategraph.prebuilt_mssql import MSSQL_TOOLS
     from openstategraph.prebuilt_platform import PLATFORM_TOOLS
     from openstategraph.prebuilt_session import SESSION_TOOLS
     from openstategraph.prebuilt_sql import SQL_EXPLORER_TOOLS
@@ -105,6 +106,11 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
         # Prebuilt SQL Explorer (ticket 66): any workflow can point these at its
         # own .sqlite file — the user's N-tables-with-JOIN-rules case as config.
         SQL_EXPLORER_TOOLS,
+        # The same family against a warehouse (`osg-agent-experience/34`): one
+        # read-only T-SQL SELECT, restricted to the tables a workflow's own
+        # allowlist YAML pinned. It shares `_SqlExplorerBase` with the three
+        # above; the dialect and the connection are the whole difference.
+        MSSQL_TOOLS,
         # Read-only platform introspection (ticket 67, user spec: "no write,
         # everything else") — list/describe workflows, jailed ls/read/grep.
         PLATFORM_TOOLS,

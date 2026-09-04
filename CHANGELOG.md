@@ -3,6 +3,26 @@
 ## Unreleased
 
 ### Added
+- **`tool.mssql-query` — one read-only T-SQL SELECT, against tables somebody
+  pinned** (`osg-agent-experience/34`). The SQL Explorer family had three
+  atoms and all three were SQLite, so a workflow whose data lives in a
+  warehouse had no tool at all — the recorded symptom is a document that put
+  the word `mssql` into a field documented as "a .sqlite file inside
+  workflows/". The new atom is a sibling on the same base, not a copy: the
+  `configure` shape, the row cap, the markdown table and the refusal shape are
+  inherited, and the dialect and the connection are the whole difference.
+  `Connection variable` holds the **name** of an environment variable
+  (`OPENSTATEGRAPH_MSSQL_URL` by default) and never a connection string,
+  because a document is committed; unset, the tool refuses by naming it and
+  sends nothing. `Allowlist YAML` names a file inside `workflows/` whose
+  `resolvers.*.pin` **values** are the only tables a query may name — anything
+  else is refused with the list. Read-only is stated rather than implied: no
+  MSSQL driver offers SQLite's `mode=ro` and `ApplicationIntent=ReadOnly` is a
+  replica-routing hint that refuses nothing, so the guard is a statement gate
+  (one statement, `SELECT` or `WITH … SELECT`) plus a transaction that is
+  never committed. The driver is a new optional extra, `openstategraph[mssql]`
+  (pyodbc); the base wheel's four dependencies are unchanged and a missing
+  driver is a refusal that names the extra.
 - **A board that reads the runs nobody read** (`kanban-patrol`, tickets 01–34).
   The editor's top bar gains a radar button; behind it is a four-column
   board — *Detected*, *Needs You*, *In Progress*, *Resolved* — of cards the
