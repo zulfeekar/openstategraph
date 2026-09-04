@@ -244,9 +244,6 @@ export function TopBar({
   const { canUndo, canRedo } = useHistoryState();
   const exportMenu = useMenu<HTMLButtonElement>();
 
-  const [running, setRunning] = useState(false);
-  const [tokens, setTokens] = useState(0);
-
   /* ---------------- follow the run (ticket 08) ----------------
    *
    * Mirrored into React state rather than read on each render: the follower
@@ -269,25 +266,15 @@ export function TopBar({
     });
   }, [paper, onNotify]);
 
-  useEffect(() => {
-    const { engine } = workbench;
-    const offStart = engine.on('run:start', () => {
-      setRunning(true);
-      setTokens(0);
-    });
-    const offUsage = engine.on('run:usage', ({ usage }) => setTokens(usage.totalTokens));
-    // The `run:finish` listener that stood here — reset the badge, toast the
-    // error, stay silent on a handover to the backend runtime — was removed by
-    // `stable-beta-public/14`: nothing in the shipped app calls `engine.run()`,
-    // so it had never once been invoked. `src/aDeadEventHasNoListeners.test.ts`
-    // is the pin. The two above are the same dead event bus and are left
-    // standing only because removing them is the badge's own question, filed
-    // as `stable-beta-public/15` rather than smuggled in here.
-    return () => {
-      offStart();
-      offUsage();
-    };
-  }, [workbench]);
+  // The token badge that stood here — `running`/`tokens` state fed by
+  // `engine.on('run:start' | 'run:usage', …)` — was removed by
+  // `stable-beta-public/17`. `stable-beta-public/14` had already shown
+  // `engine.run()` has zero shipped callers, so the badge's only readers ran
+  // on an event nothing could fire and it had never once rendered (it guards
+  // on `tokens > 0`). The shell already carries two live counts of the same
+  // fact — the token bar (`03`) and the run dock — so a third that could not
+  // move was noise, not a gap to rebuild on `runView`.
+  // `src/aDeadEventHasNoListeners.test.ts` is the pin.
 
   /**
    * What Run would actually ask. Live — it re-reads on every field edit, so
@@ -651,12 +638,6 @@ export function TopBar({
         <div className="topbar__spacer" />
 
         <div className="topbar__group">
-          {tokens > 0 ? (
-            <Badge numeric tone={running ? 'accent' : 'neutral'}>
-              {tokens.toLocaleString()} tokens
-            </Badge>
-          ) : null}
-
           {/* Anchor for the first-run hint, which points at this exact
               button — so the pointer and the thing it points at cannot drift
               apart when the toolbar is rearranged. */}

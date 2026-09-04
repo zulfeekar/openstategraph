@@ -200,19 +200,22 @@ export function CanvasStage({ shortcuts, showGrid, onNotify, startPanel }: Canva
       paper.follower.setActive(active);
     });
 
-    // A local preview run announces itself, so the follower can clear the
-    // latch: panning during one run must not disable following for every run
-    // after it. A backend-streamed run has no engine, so `AppShell` calls the
-    // same method when its Ask panel reports a stream starting.
-    const offStart = workbench.engine.on('run:start', () => paper.follower.runStarted());
+    // A local preview run used to announce itself here so the follower could
+    // clear its latch — panning during one run must not disable following for
+    // every run after it. `stable-beta-public/14` found `engine.run()` has
+    // zero shipped callers, so this listener never fired in the shipped app;
+    // `AppShell.tsx` already drives the same reset live, from the Ask panel's
+    // own running state (`onRunningChange` → `paper.follower.runStarted()`),
+    // which is how every backend-streamed run — the only kind Run now starts
+    // — reaches the follower. Removed by `stable-beta-public/17`;
+    // `src/aDeadEventHasNoListeners.test.ts` is the pin.
 
     return () => {
       off();
-      offStart();
       markActive(null);
       markPaused(null);
     };
-  }, [paper, controller, workbench]);
+  }, [paper, controller]);
 
   /* ---------------- palette drop ---------------- */
 

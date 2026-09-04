@@ -21,13 +21,22 @@ import { describe, expect, it } from 'vitest';
  * exists. Restoring an `engine.run()` caller makes the listeners legal again
  * on the same run that restores them.
  *
+ * `stable-beta-public/17` joins `run:start` and `run:usage` to the census:
+ * `TopBar.tsx`'s token badge and `CanvasStage.tsx`'s follower reset both
+ * subscribed to the same dead bus, and 14 deliberately left them for this
+ * ticket to decide (badge: delete; follower reset: already driven live from
+ * `AppShell.tsx`'s `onRunningChange`, so its `run:start` listener was as dead
+ * as the badge's). One list rather than three near-identical describe blocks,
+ * so a fourth listener on this bus is a one-line addition rather than a
+ * fourth copy of the machinery.
+ *
  * Read from the AST rather than by regex, because the modules this counts
  * discuss `engine.run()` in their own prose — including the docstring above —
  * and a comment is not a call site.
  */
 const SRC = fileURLToPath(new URL('.', import.meta.url));
 
-const EVENT = 'run:finish';
+const EVENTS = ['run:finish', 'run:start', 'run:usage'] as const;
 
 /** Every shipped module — a test is not the app, and may fake whatever it likes. */
 function shippedModules(): readonly string[] {
@@ -66,19 +75,21 @@ function firstStringArgument(node: ts.CallExpression): string | null {
   return null;
 }
 
+type Event = (typeof EVENTS)[number];
+
 interface Census {
   /** Modules containing a call of the form `…engine.run(…)`. */
   readonly callers: readonly string[];
-  /** Modules subscribing with `…on('run:finish', …)`. */
-  readonly subscribers: readonly string[];
-  /** Modules emitting it — the self-check that this census can see anything at all. */
-  readonly emitters: readonly string[];
+  /** Modules subscribing with `…on(<event>, …)`, keyed by event. */
+  readonly subscribers: ReadonlyMap<Event, readonly string[]>;
+  /** Modules emitting each event — the self-check the census can see anything at all. */
+  readonly emitters: ReadonlyMap<Event, readonly string[]>;
 }
 
 function census(): Census {
   const callers = new Set<string>();
-  const subscribers = new Set<string>();
-  const emitters = new Set<string>();
+  const subscribers = new Map<Event, Set<string>>(EVENTS.map((event) => [event, new Set()]));
+  const emitters = new Map<Event, Set<string>>(EVENTS.map((event) => [event, new Set()]));
   for (const relative of shippedModules()) {
     const text = readFileSync(SRC + relative, 'utf8');
     const source = ts.createSourceFile(relative, text, ts.ScriptTarget.Latest, true);
@@ -86,35 +97,39 @@ function census(): Census {
       const call = methodCalled(node);
       if (call !== null && ts.isCallExpression(node)) {
         if (call.receiver === 'engine' && call.method === 'run') callers.add(relative);
-        if (firstStringArgument(node) === EVENT) {
-          if (call.method === 'on') subscribers.add(relative);
-          if (call.method === 'emit') emitters.add(relative);
+        const argument = firstStringArgument(node);
+        const event = EVENTS.find((candidate) => candidate === argument);
+        if (event !== undefined) {
+          if (call.method === 'on') subscribers.get(event)!.add(relative);
+          if (call.method === 'emit') emitters.get(event)!.add(relative);
         }
       }
       node.forEachChild(walk);
     };
     source.forEachChild(walk);
   }
+  const sorted = (map: Map<Event, Set<string>>) =>
+    new Map(EVENTS.map((event) => [event, [...map.get(event)!].sort()]));
   return {
     callers: [...callers].sort(),
-    subscribers: [...subscribers].sort(),
-    emitters: [...emitters].sort(),
+    subscribers: sorted(subscribers),
+    emitters: sorted(emitters),
   };
 }
 
-describe(`no shipped module listens for ${EVENT} while nothing can fire it`, () => {
+describe('no shipped module listens for a run event while nothing can fire it', () => {
   const counted = census();
 
-  it('can see the event at all — the emitter is still there under this name', () => {
+  it.each(EVENTS)('can see %s at all — the emitter is still there under this name', (event) => {
     // Without this, a renamed event would make the whole census vacuous and
     // the assertion below would pass by matching nothing.
-    expect(counted.emitters).toContain('core/execution/ExecutionEngine.ts');
+    expect(counted.emitters.get(event)).toContain('core/execution/ExecutionEngine.ts');
   });
 
-  it('has no subscriber unless some shipped module calls engine.run()', () => {
+  it.each(EVENTS)('has no %s subscriber unless some shipped module calls engine.run()', (event) => {
     // One assertion either way: with a caller the subscribers are legal and
     // the census names none, without one every subscriber is named.
-    const dead = counted.callers.length > 0 ? [] : counted.subscribers;
+    const dead = counted.callers.length > 0 ? [] : counted.subscribers.get(event);
 
     expect(dead).toEqual([]);
   });
