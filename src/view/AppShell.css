@@ -61,6 +61,49 @@
   display: flex;
   flex: none;
   height: 100%;
+  /* The width is inline, from the shell (`stable-beta-public/16`): it is a
+   * number a user drags, clamped between what the open panels are worth and
+   * half the window. `position: relative` is what the grip on the left edge
+   * is positioned against. */
+  position: relative;
+}
+
+/* Both panels share whatever the column is, instead of each insisting on
+   `--layout-inspector-width`: `flex-basis: 0` is what a flex item is sized
+   by, so their own inline widths stop deciding and stay the fallback for a
+   column that is not sized at all. */
+.app-shell__right-panels > .panel {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The column's own resize handle — the run dock's grip turned ninety
+   degrees, and deliberately the same 7px strip, the same hairline that
+   appears on hover and focus, and no shadow. */
+.app-shell__column-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 7px;
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 1;
+}
+
+.app-shell__column-grip:hover::after,
+.app-shell__column-grip:focus-visible::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: var(--color-primary);
+}
+
+.app-shell__column-grip:focus-visible {
+  outline: none;
 }
 
 /* When the panels would leave no canvas, they overlay it instead of squeezing

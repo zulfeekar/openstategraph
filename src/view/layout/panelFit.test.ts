@@ -118,3 +118,30 @@ describe('leftOverlayWidth', () => {
     expect(leftOverlayWidth(true, { palette: true })).toBe(PANEL_WIDTH.palette);
   });
 });
+
+/**
+ * The right column is a width somebody drags now (`stable-beta-public/16`),
+ * so the two functions above stopped being able to derive it. Both take it as
+ * an optional argument, and both must go on answering without it — every
+ * caller that does not own the drag still asks the table.
+ */
+describe('a right column that has been widened by hand', () => {
+  it('costs the row what it is actually wearing', () => {
+    const open = { palette: true, ask: true };
+    // 1200 - 232 - 300 leaves 668px of canvas: the table says no overlay.
+    expect(panelsMustOverlay(1200, open)).toBe(false);
+    // Dragged to 700, the same row leaves 268px, which is not a canvas.
+    expect(panelsMustOverlay(1200, open, 700)).toBe(true);
+  });
+
+  it('is ignored when no right panel is open, so a stale width costs nothing', () => {
+    expect(panelsMustOverlay(1200, { palette: true }, 700)).toBe(false);
+    expect(rightOverlayWidth(true, {}, 700)).toBe(0);
+  });
+
+  it('covers what it wears when it overlays the canvas', () => {
+    expect(rightOverlayWidth(true, { ask: true }, 700)).toBe(700);
+    expect(rightOverlayWidth(true, { ask: true })).toBe(PANEL_WIDTH.ask);
+    expect(rightOverlayWidth(false, { ask: true }, 700)).toBe(0);
+  });
+});

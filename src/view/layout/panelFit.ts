@@ -60,9 +60,27 @@ export function panelsWidth(open: OpenPanels): number {
   return total;
 }
 
-/** True when the row cannot hold the panels and a usable canvas at once. */
-export function panelsMustOverlay(viewportWidth: number, open: OpenPanels): boolean {
-  return viewportWidth - panelsWidth(open) < MIN_CANVAS_WIDTH;
+/**
+ * True when the row cannot hold the panels and a usable canvas at once.
+ *
+ * `rightColumnWidth` is what the right-hand column is *actually* wearing.
+ * Since `stable-beta-public/16` that is a width a user drags, so it stopped
+ * being derivable from the table above — and a row that costs 300px for a
+ * column somebody widened to 700 is the same blindness this module was
+ * written to end (55.4), one axis later. Omitted, the table still answers,
+ * which is what every caller that does not own the drag wants.
+ */
+export function panelsMustOverlay(
+  viewportWidth: number,
+  open: OpenPanels,
+  rightColumnWidth?: number,
+): boolean {
+  const right =
+    rightColumnWidth === undefined || !(open.ask || open.inspector)
+      ? (open.ask ? PANEL_WIDTH.ask : 0) + (open.inspector ? PANEL_WIDTH.inspector : 0)
+      : rightColumnWidth;
+  const taken = (open.palette ? PANEL_WIDTH.palette : 0) + right;
+  return viewportWidth - taken < MIN_CANVAS_WIDTH;
 }
 
 /**
@@ -81,8 +99,10 @@ export function panelsMustOverlay(viewportWidth: number, open: OpenPanels): bool
 export function rightOverlayWidth(
   overlay: boolean,
   open: Pick<OpenPanels, 'ask' | 'inspector'>,
+  columnWidth?: number,
 ): number {
-  if (!overlay) return 0;
+  if (!overlay || !(open.ask || open.inspector)) return 0;
+  if (columnWidth !== undefined) return columnWidth;
   return (open.ask ? PANEL_WIDTH.ask : 0) + (open.inspector ? PANEL_WIDTH.inspector : 0);
 }
 

@@ -32,6 +32,14 @@ import { leftOverlayWidth, panelsMustOverlay, rightOverlayWidth } from './layout
 import { useViewportWidth } from './layout/useViewportWidth';
 import { observeResize } from './layout/observeResize';
 import { clampDockHeight } from './layout/dockFit';
+import { PanelColumnGrip } from './layout/PanelColumnGrip';
+import {
+  clampPanelColumnWidth,
+  panelColumnMaxWidth,
+  panelColumnMinWidth,
+  readPanelColumnWidth,
+  rememberPanelColumnWidth,
+} from './layout/panelWidth';
 import { RunDock } from './run/RunDock';
 import { runEnded } from './run/runEnded';
 import { runView, type RunView } from './run/runView';
@@ -320,6 +328,14 @@ export function AppShell() {
     setTimelineOpen(true);
   }, []);
   const [dockHeight, setDockHeight] = useState(readDockHeight);
+  /**
+   * How wide this viewer wants the chat-and-inspector column
+   * (`stable-beta-public/16`). `null` is *no preference*: the floor depends
+   * on which panels are open, so the default is decided at render rather
+   * than stored.
+   */
+  const [columnWidth, setColumnWidth] = useState(readPanelColumnWidth);
+  const rightPanelsMin = panelColumnMinWidth({ ask: askOpen, inspector: inspectorOpen });
 
   /**
    * The run on show, from the store rather than from the chat panel.
@@ -379,6 +395,16 @@ export function AppShell() {
     setDockHeight(height);
     rememberDockHeight(height);
   }, []);
+
+  /** A drag's request for the right column, brought inside the window. */
+  const resizeColumn = useCallback(
+    (requested: number) => {
+      const width = clampPanelColumnWidth(requested, viewportWidth, rightPanelsMin);
+      setColumnWidth(width);
+      rememberPanelColumnWidth(width);
+    },
+    [rightPanelsMin, viewportWidth],
+  );
 
   /**
    * Tell whoever asks when the stage's box changed.
@@ -709,11 +735,22 @@ export function AppShell() {
   // decided by what is open rather than by a breakpoint (55.4). Computed once
   // here so both `data-overlay` and the canvas's right-edge inset (76) read
   // the same answer.
-  const mustOverlay = panelsMustOverlay(viewportWidth, {
-    palette: paletteOpen,
-    ask: askOpen,
-    inspector: inspectorOpen,
-  });
+  const rightPanelsWidth = clampPanelColumnWidth(
+    columnWidth ?? rightPanelsMin,
+    viewportWidth,
+    rightPanelsMin,
+  );
+
+  const mustOverlay = panelsMustOverlay(
+    viewportWidth,
+    { palette: paletteOpen, ask: askOpen, inspector: inspectorOpen },
+    // Ticket 16: the right column is draggable, so the width it takes out of
+    // the row is state and no longer a constant. Without this the overlay
+    // arithmetic would go on costing the row 300px for a column the user has
+    // dragged to twice that — the same blindness `panelFit` was written to
+    // fix, one axis later.
+    rightPanelsWidth,
+  );
 
   return (
     <div className="app-shell" ref={shellRef}>
@@ -836,10 +873,11 @@ export function AppShell() {
             // much of its right edge is actually covered.
             style={
               {
-                '--canvas-empty-inset-right': `${rightOverlayWidth(mustOverlay, {
-                  ask: askOpen,
-                  inspector: inspectorOpen,
-                })}px`,
+                '--canvas-empty-inset-right': `${rightOverlayWidth(
+                  mustOverlay,
+                  { ask: askOpen, inspector: inspectorOpen },
+                  rightPanelsWidth,
+                )}px`,
                 // launch-readiness 39: the palette floats over the canvas at
                 // `left: 0` in overlay mode too — the empty-state hint needs
                 // the same inset on the left that Ask/Inspector already get on
@@ -887,7 +925,20 @@ export function AppShell() {
             // both out side by side instead of stacking them at an identical
             // `right: 0`, which made whichever mounted second (Inspector)
             // silently intercept every click meant for the other.
-            <div className="app-shell__right-panels">
+            <div
+              className="app-shell__right-panels"
+              // Ticket 16: the column is no longer fixed. The stored width is
+              // clamped here rather than when it was read, because the floor
+              // is what the *open* panels are worth and the ceiling is half
+              // this window — neither is known to `localStorage`.
+              style={{ width: `${rightPanelsWidth}px` }}
+            >
+              <PanelColumnGrip
+                width={rightPanelsWidth}
+                min={rightPanelsMin}
+                max={panelColumnMaxWidth(viewportWidth, rightPanelsMin)}
+                onWidthChange={resizeColumn}
+              />
               {askOpen ? (
                 <AskPanel
                   notice={askNotice}
