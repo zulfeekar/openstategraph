@@ -17,7 +17,7 @@ This page is the whole contract in two halves:
 | Half | Where | Why there |
 | --- | --- | --- |
 | Requests, responses, status codes | [`openapi.json`](openapi.json), generated and committed | Machine-readable. Generate a client from it. |
-| **The three event streams** | this page, in prose | OpenAPI cannot express them, and they are the part a custom client gets wrong. |
+| **Every event stream** | this page, in prose | OpenAPI cannot express them, and they are the part a custom client gets wrong. |
 
 > The API is **Tier 3** on [the stability contract](stability.md) — a surface we
 > operate, not a library you build on, and it may change in a patch release.
@@ -860,6 +860,31 @@ Two limits, stated rather than discovered: the fan-out is **in-process**, so it
 covers one worker (which is the documented deployment ceiling); and only writes
 **through this API** emit — a `workflow.json` edited on disk or arriving by
 `git pull` produces nothing.
+
+### `GET /api/kanban/patrol/events` — the patrol stream
+
+The fourth stream, and the one a custom **chat** client never opens: it
+belongs to the editor's patrol board, not to running a workflow. It is
+described here anyway because every SSE endpoint's own OpenAPI description
+sends a reader to this page, and until now this one arrived at a page that
+did not mention it.
+
+One event name, `patrol.status`, with a `kind` inside it rather than five
+event names — `started`, `progressed`, `finished`, `failed`. The frame
+carries `kind`, `task_id`, `title`, `filed`, `skipped`, `total_findings` and
+`reason`; `docs/openapi.json` publishes that list, derived from the
+serialiser rather than typed beside it.
+
+**The `done` / `interrupt` / `error` guarantee below is a promise of the
+run streams only.** This stream and `GET /api/events` each end when the
+connection does, and neither emits a terminal frame — the generated OpenAPI
+description says otherwise for all four endpoints, which is a defect in the
+generator rather than a second contract.
+
+Same two limits as the catalogue stream, for the same reasons: the fan-out is
+in-process, so it covers one worker; and there is **no replay** — a client
+that opens the board mid-patrol asks `GET /api/kanban/patrol/status` what it
+missed. [The patrol board](the-patrol-board.md) is what the frames are for.
 
 ---
 

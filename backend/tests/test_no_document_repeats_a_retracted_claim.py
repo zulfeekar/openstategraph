@@ -74,6 +74,16 @@ RETRACTED_CLAIMS = (
     # docs-and-gaps/29 — `openwiki-update.yml` had already run and failed when
     # `docs/releasing.md` wrote this row, and said so forty lines further down.
     "zero runs, ever",
+    # stable-beta-public/04 — three counts of a registered surface, each true
+    # when written and each falsified by the commit that registered one more.
+    # The pages they stood on are pinned by name now
+    # (`test_documented_mcp_tool_surface.py`, `test_documented_stream_surface.py`),
+    # which is the instrument that catches the *next* one; these rows catch a
+    # copy of the retracted sentence landing in a second document, which is
+    # what this file is for and what a per-page pin cannot see.
+    "The nine exposed tools",
+    "The other eight stay fully functional",
+    "The three event streams",
 )
 
 

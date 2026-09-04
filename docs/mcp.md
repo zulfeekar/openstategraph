@@ -53,8 +53,10 @@ install-dependent; dropping the whole block also drops
 spends money.
 
 `OPENSTATEGRAPH_MCP_ALLOW_RUNS=0` removes `run_workflow` from the registry —
-the only tool that reaches a model. The other eight stay fully functional,
-which is the whole point of keeping validate and compile deterministic.
+the only tool that reaches a model. Every other tool stays fully functional,
+which is the whole point of keeping validate and compile deterministic. (No
+count here, for the reason §2's own vocabulary listing gives: a total is the
+half that rots silently. §6 names them.)
 
 For a shared server deployment:
 
@@ -597,9 +599,16 @@ credential, secret or key:
    not iterations*, so an unbounded value from an untrusted client is a
    denial-of-service knob.
 
-The nine exposed tools: `get_node_vocabulary`, `compile_workflow`,
-`validate_workflow`, `list_workflows`, `describe_workflow`, `get_knowledge`,
-`export_plugin`, `save_workflow_draft`, `run_workflow`.
+The exposed tools, in `EXPOSED_TOOLS` order. Authoring a workflow:
+`get_node_vocabulary`, `compile_workflow`, `validate_workflow`,
+`list_workflows`, `describe_workflow`, `get_knowledge`, `export_plugin`,
+`save_workflow_draft`, `run_workflow`. The patrol board (§5a):
+`kanban_attend_card`, `kanban_set_stage`, `kanban_list_cards`,
+`kanban_show_card`, `kanban_release_card`, `kanban_answer_card`. A tool absent
+from that tuple does not exist over MCP — publishing, deleting and anything
+credential-shaped are absent deliberately, and a test asserts it. No total
+here, for §2's reason: the names are the half that matters, and a count is the
+half that rots.
 
 ## 7. Limits worth knowing before you deploy it
 
