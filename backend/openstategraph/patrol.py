@@ -31,6 +31,52 @@ from openstategraph.run_findings import NODE_FAILURE, REDUNDANT_TOOL_CALL, UNSTA
 from openstategraph.run_sinks import read_runs, run_store_path
 
 
+#: **The self-reference marker** — `kanban-patrol/08`.
+#:
+#: A patrol that reads every recorded thread eventually reads the threads its
+#: own work produced. An agent attending card X asks the workflow a question
+#: to reproduce the defect; that question is a run, in a thread, with
+#: findings of its own, and `02`'s dedup key does not save it — the thread is
+#: genuinely new, so the next patrol files a card about the work done on the
+#: last card, and the board fills with its own shadow.
+#:
+#: The rule names such runs by something the run **already records**:
+#: `RunRecord.session_id`, the field that says which *sitting* a run belongs
+#: to. No column, no migration, no new schema. `kind` was the other
+#: candidate and is wrong: a run an agent made while working a card still
+#: cost money and still belongs in `runs list` and in the spend walk, and
+#: `kind` is what decides whether a reader sees the row at all.
+#:
+#: Two prefixes because there are two producers with different lifetimes: a
+#: card's work spans however many threads it takes (`card:<task_id>`), and a
+#: patrol driver's sitting is its own (`patrol:<whatever>`). Both group
+#: several threads, which is the axis `session_id` was settled on — this is
+#: not a per-call mint, it is a caller naming the sitting it is in.
+PATROL_SESSION_PREFIX = "patrol:"
+CARD_SESSION_PREFIX = "card:"
+SELF_REFERENTIAL_SESSION_PREFIXES = (PATROL_SESSION_PREFIX, CARD_SESSION_PREFIX)
+
+
+def card_session_id(task_id: str) -> str:
+    """The `session_id` every run made while working `task_id` must carry.
+
+    One function so the CLI, the MCP door, the board's copied instruction and
+    the bundled skill file all spell it the same way — a marker with two
+    spellings excludes half of what it names.
+    """
+    return f"{CARD_SESSION_PREFIX}{task_id}"
+
+
+def is_patrols_own_work(session_id: str) -> bool:
+    """Was this run produced by the patrol, or by an agent working a card?
+
+    Matched at the **start** of the value, never anywhere in it: a sitting
+    called `wildcard:7` is ordinary traffic, and a substring match would have
+    quietly stopped filing its findings.
+    """
+    return session_id.strip().startswith(SELF_REFERENTIAL_SESSION_PREFIXES)
+
+
 @dataclass(frozen=True)
 class FindingClassification:
     kind: str
@@ -147,6 +193,11 @@ class PatrolResult:
     filed: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     total_findings: int = 0
+    #: Threads dropped before reading, because a run in them was marked as the
+    #: patrol's own work (`kanban-patrol/08`). Reported rather than silent:
+    #: an exclusion nobody can see is indistinguishable from a patrol that
+    #: found nothing.
+    excluded: list[str] = field(default_factory=list)
 
 
 def run_patrol(
@@ -188,6 +239,30 @@ def run_patrol(
         services = WorkflowServices(workflows_root=workflows_root)
         savers = savers_for(services) if savers is None else savers
         records = read_runs(run_store_path(workflows_root)) if records is None else records
+
+    # `kanban-patrol/08`'s self-reference exclusion, applied before the read
+    # rather than after it. A thread is one conversation and the message
+    # channel is cumulative, so a single marked turn makes every call in that
+    # thread part of the same piece of work — a later unmarked turn had the
+    # marked turn's tool results in front of it, and a repeat across the two
+    # is the agent's own. Excluding the whole thread is the conservative
+    # direction: a wrong exclusion costs one card nobody files, a wrong
+    # inclusion costs a board that reports itself.
+    #
+    # Unlike `22`'s already-filed skip, this thread is not read and its
+    # findings are not counted. That skip hides a duplicate of real evidence;
+    # this one hides a reflection, and counting a reflection puts a number on
+    # the board that means nothing.
+    excluded = sorted(
+        {
+            record.thread_id
+            for record in records
+            if record.thread_id and is_patrols_own_work(record.session_id)
+        }
+    )
+    if excluded:
+        records = [record for record in records if record.thread_id not in excluded]
+
     findings = run_findings(savers, records, audience=Audience.DEVELOPER)
 
     by_thread: dict[str, list[RunFinding]] = {}
@@ -232,4 +307,6 @@ def run_patrol(
         if on_card_filed is not None:
             on_card_filed(task_id, classification.title)
 
-    return PatrolResult(filed=filed, skipped=skipped, total_findings=len(findings))
+    return PatrolResult(
+        filed=filed, skipped=skipped, total_findings=len(findings), excluded=excluded
+    )

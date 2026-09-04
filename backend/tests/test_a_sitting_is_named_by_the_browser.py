@@ -25,9 +25,11 @@ more power than a listing label.
 second key beside `DRAFT_SESSION_KEY`, which is the same word on a different
 concept — see `src/app/aSittingIsNotTheOpenWorkflow.test.ts`.
 
-**The MCP door.** Correctly absent, and `TestTheDoorWithNoSitting` below is the
+**The MCP door.** Never *minted*, and `TestTheDoorWithNoSitting` below is the
 positive assertion of that rather than a silence somebody later reads as an
-oversight.
+oversight. Since `kanban-patrol/08` it may be *declared* by the caller, which
+is a different act — see that class's docstring for why the two are not the
+same fact.
 """
 
 from __future__ import annotations
@@ -157,14 +159,14 @@ class TestTheFilterNoLongerMatchesEverything:
 
 
 class TestTheDoorWithNoSitting:
-    """MCP's `""` is correct, and this is the assertion that says so.
+    """MCP mints no sitting, and this is the assertion that says so.
 
     Three reasons, and the third is the one that would be discovered as a bug
     six months after somebody "fixed" the first two:
 
     1. An MCP client is a model, not a person at a tab. There is no sitting to
-       name, which is a different fact from the one next door — `user_email` is
-       empty there for *safety*, this one for *ontology*.
+       *mint*, which is a different fact from the one next door — `user_email`
+       is empty there for *safety*, this one for *ontology*.
     2. Minting one per call would make `session_id` a synonym for `thread_id`,
        which is minted per call on that transport. A session grouping exactly
        one thread groups nothing.
@@ -176,28 +178,62 @@ class TestTheDoorWithNoSitting:
     Empty is still *written*, not omitted, for the reason the door already
     records: the key set is what a reader compares across doors, and an absent
     key cannot be told from a forgotten one.
+
+    ## The narrowing — `kanban-patrol/08`
+
+    This class asserted the literal `""` until 2026-09-04, and the assertion
+    was one word wider than its own argument. All three reasons above are
+    about **minting**: the server inventing a grouping nobody asked for. None
+    of them is an argument against a *caller* naming a sitting it is genuinely
+    in, and a caller doing so satisfies 2 and 3 rather than breaking them — an
+    agent working board card `X` opens several threads while working it, and
+    `card:X` is exactly the several-threads grouping the field is for.
+
+    So the pin is now on the mint, which is what was ever being defended: the
+    only thing this door may write is the caller's own value, defaulting to
+    `""`. A `uuid`, a `thread_id`, or a timestamp reaching this field is the
+    defect, and it is still red.
     """
 
-    def test_the_mcp_door_writes_an_empty_sitting_on_purpose(self) -> None:
+    def _bound_session_values(self) -> list[Any]:
         source = Path(__file__).resolve().parents[1] / "openstategraph" / "mcp_server.py"
         tree = ast.parse(source.read_text())
-
-        bound: list[str | None] = []
+        bound: list[Any] = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Dict):
                 continue
             for key, value in zip(node.keys, node.values):
                 if isinstance(key, ast.Constant) and key.value == "session_id":
-                    bound.append(
-                        value.value if isinstance(value, ast.Constant) else None
-                    )
+                    bound.append(value)
+        return bound
+
+    def test_the_mcp_door_mints_no_sitting(self) -> None:
+        bound = self._bound_session_values()
 
         assert bound, "the MCP door stopped carrying `session_id` at all"
-        assert set(bound) == {""}, (
-            "The MCP door binds a session_id. There is no browser tab behind an "
-            "MCP call, and a minted one would be a synonym for thread_id — see "
-            "this class's docstring before changing it."
-        )
+        for value in bound:
+            rendered = ast.unparse(value)
+            assert rendered == "''" or "session_id" in rendered, (
+                f"The MCP door binds {rendered} as a session_id. It may write the "
+                "caller's own value or an empty string, and nothing else — a "
+                "minted one is a synonym for thread_id. See this class's "
+                "docstring before changing it."
+            )
+
+    def test_an_mcp_caller_that_names_no_sitting_still_gets_an_empty_one(self) -> None:
+        """The default is the old behaviour, unchanged: every caller that is
+        not working the patrol board writes `""`, exactly as before."""
+        import inspect
+
+        from openstategraph.mcp_server import WorkflowRuns
+
+        assert inspect.signature(WorkflowRuns.run).parameters["session_id"].default is None
+        for value in self._bound_session_values():
+            rendered = ast.unparse(value)
+            assert rendered == "''" or rendered.endswith("or '')"), (
+                f"{rendered} does not fall back to an empty string when the "
+                "caller named no sitting."
+            )
 
     def test_the_reason_is_written_where_somebody_would_change_it(self) -> None:
         """A deliberate absence with no argument beside it reads as an omission."""

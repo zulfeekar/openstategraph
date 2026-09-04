@@ -402,6 +402,14 @@ one appended line. What grew here is a command saying what happened —
 for that command's own recorded reason: formatting inside a command is
 formatting no test reaches without binding a socket.
 
+**1448 -> 1465** (`kanban-patrol/08`, 2026-09-04). Seventeen lines, and the
+rule holds: `run` grows a `--session-id` flag it passes straight through to
+`ask()`, and `kanban attend` prints the marker for the card it just claimed.
+No new logic here at all — `patrol.card_session_id` owns the spelling and
+`patrol.is_patrols_own_work` owns the rule; this module is two doors handing
+a value along and one command saying what the actor must now do. A separate
+module for one f-string was not considered.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -662,6 +670,13 @@ import of `Context` (guarded, because the transport is an extra), the two
 bare. A private module for two functions was priced and rejected: they read
 `services.principals` and are called only from tool bodies, so the file that
 holds the door is the file that should hold the doorkeeper.
+
+**887 -> 891** (`kanban-patrol/08`, 2026-09-04). Four lines: `run_workflow`
+and `WorkflowRuns.run` take an optional `session_id` and pass it to the two
+places this door already wrote `""`. It is a caller *declaring* a sitting,
+never the server minting one — `test_a_sitting_is_named_by_the_browser.py`
+still pins that — and it is what lets an agent working a board card over MCP
+mark its runs so the next patrol skips them.
 
 """
 
@@ -924,11 +939,11 @@ principal, and the comment beside it is where that is said on the wire side.
 
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1448, CLI),
+    "cli.py": Recorded(1465, CLI),
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(887, MCP_SERVER),
+    "mcp_server.py": Recorded(891, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(529, SCHEMAS),

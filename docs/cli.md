@@ -237,7 +237,8 @@ needs a provider key.)*
 
 ```
 openstategraph run <package> "<question>" [--model MODEL] [--thread-id ID]
-        [--trace-file FILE] [--knowledge-dir DIR] [--context k=v] [--json]
+        [--session-id ID] [--trace-file FILE] [--knowledge-dir DIR]
+        [--context k=v] [--json]
 ```
 
 Ask a package a question. This is the whole first five minutes: you do not
@@ -247,6 +248,7 @@ have to write a Python file to find out whether a package works.
 | --- | --- |
 | `--model MODEL` | override the model for this run |
 | `--thread-id ID` | continue a conversation instead of starting one |
+| `--session-id ID` | the sitting this run belongs to. A thread is one conversation; a session groups several. Pass `card:<task-id>` while working a patrol-board card, so the next patrol skips this run instead of filing a card about it (`kanban-patrol/08`) |
 | `--trace-file FILE` | write the run's trace as it happens |
 | `--knowledge-dir DIR` | read the second brain from somewhere other than the package |
 | `--context k=v` | supply one declared run-context value; repeatable. It is `key=value`, and JSON is refused with **2**. A key the workflow does not declare is refused with **1** and a sentence naming the workflow |
@@ -353,7 +355,11 @@ is not attached to this project's MCP server. Both doors call the identical
 
 `attend` is the exclusive, atomic claim: the first caller wins, a second
 caller on an already-attended card exits non-zero and is told exactly who has
-it, never a silent overwrite. `stage` advances one step at a time — skipping
+it, never a silent overwrite. It also prints the **session marker** for the
+card it just claimed — `card:<task-id>` — because from that moment the actor
+produces runs, and an unmarked run is read back by the next patrol as fresh
+evidence (`kanban-patrol/08`). Hand it to `run`'s session flag above, or as
+`run_workflow`'s `session_id` over MCP. `stage` advances one step at a time — skipping
 a stage or moving backward exits non-zero with the reason, rather than being
 recorded. `show` prints the card's instruction, the same self-contained text
 the board's own "Copy instruction" button copies, for pasting into a coding

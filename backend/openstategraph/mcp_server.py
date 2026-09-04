@@ -780,6 +780,7 @@ class WorkflowRuns:
         document: Any = None,
         recursion_limit: int | None = None,
         model: str | None = None,
+        session_id: str | None = None,
         *,
         audience: Any,
     ) -> dict[str, Any]:
@@ -907,11 +908,19 @@ class WorkflowRuns:
         # - `session_id` scopes thread *listing*, which is a browser-tab
         #   concept. There is no session here to name. `memory-and-replay/45`
         #   gave that field a writer — the editor mints one per tab — and
-        #   decided this door keeps `""`: a per-call mint would be a synonym
-        #   for `thread_id`, which is minted per call two lines below, and a
-        #   session grouping exactly one thread groups nothing. Pinned, so the
-        #   absence reads as a decision rather than an oversight, by
+        #   decided this door **never mints one**: a per-call mint would be a
+        #   synonym for `thread_id`, which is minted per call two lines below,
+        #   and a session grouping exactly one thread groups nothing. Pinned,
+        #   so the absence reads as a decision rather than an oversight, by
         #   `tests/test_a_sitting_is_named_by_the_browser.py`.
+        #
+        #   **A caller may still declare one** (`kanban-patrol/08`), and that
+        #   is a different act from minting. An agent working board card `X`
+        #   over this transport passes `card:X`, which groups every thread it
+        #   opens while working that card — several threads, which is the axis
+        #   the field was settled on — so a later patrol can tell the board's
+        #   own shadow from ordinary traffic. Unset stays `""`, which is every
+        #   caller that is not working the board.
         #
         # They are still written, as empty strings, rather than omitted: the
         # key set is what a reader compares across doors, and an absent key is
@@ -931,6 +940,7 @@ class WorkflowRuns:
             workflow_slug=str(slug or ""),
             thread_id=thread_id,
             question=question,
+            session_id=str(session_id or ""),
         ) as turn:
             try:
                 graph = compiler.build(
@@ -949,7 +959,7 @@ class WorkflowRuns:
                         "recursion_limit": limit,
                         "configurable": {
                             "thread_id": thread_id,
-                            "session_id": "",
+                            "session_id": str(session_id or ""),
                             "user_email": "",
                             "workflow_slug": str(slug or ""),
                         },
@@ -1549,6 +1559,7 @@ def build_mcp_server(
             document: Any = None,
             recursion_limit: int | None = None,
             model: str | None = None,
+            session_id: str | None = None,
         ) -> dict[str, Any]:
             """Run a workflow once, synchronously, and return its answer.
 
@@ -1566,6 +1577,13 @@ def build_mcp_server(
             `suggestion`. There is deliberately no `audience` argument here:
             the client filling these fields is a model, and a boundary a model
             can name is not a boundary (`the-boundary-nobody-checked/08`).
+
+            **`session_id` names the sitting this run belongs to**, and is for
+            one job: if you are working a card on this project's patrol board,
+            pass `card:<task_id>`. A run marked that way is skipped by the
+            next patrol, so the board never files a card about the work you
+            did on the last one (`kanban-patrol/08`). Leave it unset
+            otherwise — it is not an identity and nothing authenticates it.
             """
             return runs.run(
                 question,
@@ -1573,6 +1591,7 @@ def build_mcp_server(
                 document,
                 recursion_limit,
                 model,
+                session_id,
                 audience=deployment_audience(),
             )
 

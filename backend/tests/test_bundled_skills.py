@@ -72,3 +72,34 @@ class TestIdempotency:
 
         assert results[(SKILL_ROOTS[0], "atom-forge")] == REFRESHED
         assert edited.read_text() == BUNDLED_SKILLS["atom-forge"].read_text()
+
+
+class TestThePatrolSkillStatesTheSelfReferenceTrap:
+    """`kanban-patrol/08`. A patrol that reads every recorded thread reads
+    the threads its own work produced — and the coding agent following this
+    file is the one that produces them, so this file is where it must be told.
+
+    Told is not enough on its own; there is a mechanism (`patrol.py`'s
+    `card_session_id`) and this asserts the file hands the agent the marker
+    rather than describing the hazard and leaving it there.
+    """
+
+    def _skill(self) -> str:
+        return BUNDLED_SKILLS["kanban-patrol"].read_text()
+
+    def test_it_tells_the_agent_to_mark_the_runs_it_makes(self) -> None:
+        text = self._skill()
+
+        assert "card:<task_id>" in text, (
+            "The skill file never gives the agent the marker to set, so every "
+            "run it makes while working a card is read back by the next patrol."
+        )
+        assert "--session-id" in text
+        assert "session_id" in text, "the MCP door's argument is not named"
+
+    def test_it_states_the_trap_itself_not_only_the_remedy(self) -> None:
+        """A rule with no reason beside it is a rule an agent talks itself
+        out of the first time it is inconvenient."""
+        text = self._skill().lower()
+
+        assert "its own" in text or "self-reference" in text

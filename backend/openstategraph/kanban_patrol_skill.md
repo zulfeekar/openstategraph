@@ -51,3 +51,27 @@ invents no new detection of its own — it orchestrates what already exists
   advances one.
 - **Never file the same task id twice.** Idempotency is not optional; check
   before you file, every time.
+
+## The trap: a patrol eventually reads its own reflection
+
+Every run this project records becomes something a later patrol reads. That
+includes the runs **you** make — the question you ask a workflow to reproduce
+a card's defect is a run, in a new thread, with findings of its own. The
+idempotency rule above does not save you from it: that thread is genuinely
+new, so the next patrol files a card about the work you did on the last card,
+and the board slowly fills with its own shadow.
+
+**So mark every run you make while working the board**, and the marker is the
+sitting the run belongs to:
+
+- working card `<task_id>` — pass the session `card:<task_id>`
+- driving a patrol yourself — pass a session beginning `patrol:`
+
+Each door takes it under its own name:
+
+    openstategraph run <package> "<question>" --session-id card:<task_id>
+
+and over MCP, `run_workflow` takes a `session_id` argument that means the
+same thing. A run marked either way is skipped by the next patrol; an
+unmarked run is ordinary traffic and is still read, so the marker is the only
+thing standing between the board and its own reflection. Set it every time.

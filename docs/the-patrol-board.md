@@ -36,6 +36,19 @@ nothing new, and a card whose stage has already left `unattended` is never
 touched again even if the finding reappears. The patrol files new work; it
 never re-litigates work somebody claimed.
 
+**And it skips the work done on the board itself.** Reproducing a card's
+defect means running a workflow, and that run is recorded like any other — so
+a patrol reading everything eventually reads its own reflection and files a
+card about the work done on the last card. The key above does not save it:
+that thread is genuinely new. The rule is a marker on something a run already
+records, the **session** it belongs to: a run made while working card
+`<task-id>` carries the session `card:<task-id>`, a patrol driver's own runs
+carry a session beginning `patrol:`, and both are skipped by the next pass.
+`kanban attend` prints the marker for the card it just claimed, the board's
+copied instruction carries it, and every door takes it — `openstategraph run`
+as a session flag, `run_workflow` as `session_id`. An unmarked run is
+ordinary traffic and is still read (`kanban-patrol/08`).
+
 ### Four ways to start one
 
 - **The board's own button.** An empty board says `No patrol has run yet` and

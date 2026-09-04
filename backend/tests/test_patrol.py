@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import Any
 
 from openstategraph.kanban_store import kanban_store_path, read_card
-from openstategraph.patrol import classify_finding, run_patrol
+from openstategraph import patrol as patrol_module
+from openstategraph.patrol import (
+    PATROL_SESSION_PREFIX,
+    card_session_id,
+    classify_finding,
+    run_patrol,
+)
 from openstategraph.run_findings import NODE_FAILURE, REDUNDANT_TOOL_CALL, UNSTABLE_TOOL_RESULT, RunFinding
 
 
@@ -308,3 +314,211 @@ class TestRunPatrolEndToEnd:
 
         assert result.filed == []
         assert result.total_findings == 0
+
+
+# --- The self-reference exclusion — `kanban-patrol/08` -----------------------
+# A patrol that reads *every* recorded thread eventually reads the threads its
+# own work produced: an agent attending card X asks the workflow a question to
+# reproduce the defect, and that question is a run, in a thread, with findings
+# of its own. `02`'s dedup key does not save it — that thread is genuinely new,
+# so the next patrol files a card about the work done on the last card.
+#
+# The rule names such runs by something the run **already records**: the
+# `session_id` on `RunRecord`. A run made while working a card carries
+# `card:<task_id>`; a run made by a patrol driver carries `patrol:<whatever>`.
+# Nothing about the store changed — no column, no migration — because the field
+# that says *which sitting this run belongs to* is the field that already
+# exists, and an agent working a card is a sitting.
+
+
+class TestTheSelfReferenceExclusion:
+    def test_a_run_marked_as_card_work_is_not_filed(self, tmp_path: Path) -> None:
+        """The whole ticket, in one assertion: the thread an agent produced
+        while working card `proj-x:other` never becomes a card of its own."""
+        marked = _run_record().model_copy(
+            update={"session_id": card_session_id("proj-x:other")}
+        )
+
+        result = run_patrol(
+            project_id="proj-x",
+            workflows_root=tmp_path / "workflows",
+            savers=[_Saver(_redundant_thread())],
+            records=[marked],
+        )
+
+        assert result.filed == []
+        assert result.excluded == [THREAD]
+        # Not read at all, and that is the difference from `22`'s skip: a
+        # filed card's thread is still *read* and counted, because the
+        # evidence is real and only the filing is a duplicate. This thread's
+        # evidence is the patrol's own reflection, so counting it would put a
+        # number on the board that means nothing.
+        assert result.total_findings == 0
+
+    def test_a_run_marked_as_patrol_work_is_not_filed(self, tmp_path: Path) -> None:
+        marked = _run_record().model_copy(
+            update={"session_id": f"{PATROL_SESSION_PREFIX}2026-09-04"}
+        )
+
+        result = run_patrol(
+            project_id="proj-x",
+            workflows_root=tmp_path / "workflows",
+            savers=[_Saver(_redundant_thread())],
+            records=[marked],
+        )
+
+        assert result.filed == []
+        assert result.excluded == [THREAD]
+
+    def test_an_unmarked_run_is_still_filed(self, tmp_path: Path) -> None:
+        """The exclusion is narrow. Ordinary traffic — every run this product
+        has ever recorded, all of which carry an empty or a browser-minted
+        `session_id` — is untouched by it."""
+        result = run_patrol(
+            project_id="proj-x",
+            workflows_root=tmp_path / "workflows",
+            savers=[_Saver(_redundant_thread())],
+            records=[_run_record().model_copy(update={"session_id": "tab-9f2a"})],
+        )
+
+        assert result.filed == [f"proj-x:{THREAD}"]
+        assert result.excluded == []
+
+    def test_one_marked_run_excludes_the_whole_thread(self, tmp_path: Path) -> None:
+        """A thread is one conversation. If any turn in it was made while
+        working a card, the calls in it were made *for* that work — the
+        message channel is cumulative, so a later unmarked turn had the
+        marked turn's tool results in front of it and a `REDUNDANT_TOOL_CALL`
+        across the two is the agent's own repetition. Excluding the thread is
+        the conservative direction: the cost of a wrong exclusion is one card
+        nobody files, the cost of a wrong inclusion is the board filling with
+        its own shadow."""
+        rows = [
+            _run_record().model_copy(update={"session_id": ""}),
+            _run_record().model_copy(update={"session_id": card_session_id("proj-x:other")}),
+        ]
+
+        result = run_patrol(
+            project_id="proj-x",
+            workflows_root=tmp_path / "workflows",
+            savers=[_Saver(_redundant_thread())],
+            records=rows,
+        )
+
+        assert result.filed == []
+        assert result.excluded == [THREAD]
+
+    def test_the_prefix_is_matched_at_the_start_never_anywhere(self, tmp_path: Path) -> None:
+        """A session called `wildcard:7` is not card work, and a substring
+        match would have said it was."""
+        result = run_patrol(
+            project_id="proj-x",
+            workflows_root=tmp_path / "workflows",
+            savers=[_Saver(_redundant_thread())],
+            records=[_run_record().model_copy(update={"session_id": "wildcard:7"})],
+        )
+
+        assert result.filed == [f"proj-x:{THREAD}"]
+
+
+class TestThePatrolRecordsNoRunsOfItsOwn:
+    """One half of the trap is answered by construction, and this pins it
+    rather than leaving it to be rediscovered.
+
+    `run_patrol` reads. It asks no model, opens no run loop, and writes no
+    `RunRecord` — so the patrol's *own* execution leaves nothing for a later
+    patrol to read, and the `patrol:` prefix above exists for a **driver** (a
+    coding agent following the bundled skill file, or `05`'s model-driven
+    classifier if it ever lands) rather than for this function.
+
+    The day `run_patrol` grows a model call, this test goes red and whoever
+    added it has to mark its own runs.
+    """
+
+    def test_a_patrol_writes_no_run_rows(self, tmp_path: Path) -> None:
+        from openstategraph.run_sinks import read_runs, run_store_path
+
+        root = tmp_path / "workflows"
+        run_patrol(
+            project_id="proj-x",
+            workflows_root=root,
+            savers=[_Saver(_redundant_thread())],
+            records=[_run_record()],
+        )
+
+        assert read_runs(run_store_path(root)) == []
+
+    def test_the_module_reaches_no_run_door(self) -> None:
+        text = Path(patrol_module.__file__).read_text()
+
+        for forbidden in ("run_turn", "invoke_run", "RunLoop", "build_chat_model"):
+            assert forbidden not in text, (
+                f"`patrol.py` reached {forbidden!r}. A patrol that executes something "
+                "records a run a later patrol will read — mark it with "
+                "`PATROL_SESSION_PREFIX` and rewrite this test."
+            )
+
+
+class TestEveryDoorCanSetTheMarker:
+    """A marker only one door can set excludes only that door's runs.
+
+    Three producers reach the run store while somebody is working the board:
+    a shell-attached agent running `openstategraph run`, an agent driving this
+    product over MCP, and the editor. The first two are the ones that work
+    cards, so both must be able to name the sitting they are in.
+    """
+
+    def test_the_cli_run_command_accepts_a_session(self) -> None:
+        from openstategraph.cli import build_parser
+
+        args = build_parser().parse_args(
+            ["run", "pkg", "hello", "--session-id", card_session_id("proj-x:t1")]
+        )
+
+        assert args.session_id == "card:proj-x:t1"
+
+    def test_the_cli_hands_it_to_ask(self, monkeypatch: Any) -> None:
+        """Parsed and dropped is the failure mode a parser test cannot see."""
+        import openstategraph.cli as cli
+
+        seen: dict[str, Any] = {}
+
+        class _Workflow:
+            slug = "demo"
+            document: dict[str, Any] = {}
+
+            def ask(self, question: str, **kwargs: Any) -> Any:
+                seen.update(kwargs)
+                raise SystemExit(0)
+
+        monkeypatch.setattr(cli, "_load", lambda args: _Workflow())
+        monkeypatch.setattr(
+            "openstategraph.compile.run_context.coerce_context_flags",
+            lambda document, supplied, slug: {},
+        )
+        args = build = cli.build_parser().parse_args(
+            ["run", "pkg", "hello", "--session-id", "card:proj-x:t1"]
+        )
+        del build
+        try:
+            cli.cmd_run(args)
+        except SystemExit:
+            pass
+
+        assert seen.get("session_id") == "card:proj-x:t1"
+
+    def test_the_mcp_run_door_accepts_a_session(self, tmp_path: Path) -> None:
+        import asyncio
+
+        from openstategraph.api.services import WorkflowServices
+        from openstategraph.mcp_server import build_mcp_server
+
+        server = build_mcp_server(WorkflowServices(workflows_root=tmp_path))
+
+        tools = {tool.name: tool for tool in asyncio.run(server.list_tools())}
+        properties = tools["run_workflow"].inputSchema.get("properties", {})
+
+        assert "session_id" in properties, (
+            "An agent working a card over MCP cannot name the sitting its runs "
+            "belong to, so the exclusion above sees none of them."
+        )

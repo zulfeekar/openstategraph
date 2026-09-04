@@ -231,7 +231,17 @@ def cmd_run(args: argparse.Namespace) -> int:
     # conversation they just had, and an id generated inside the run and thrown
     # away is an id they can never continue.
     thread_id = args.thread_id or f"openstategraph-cli-{uuid.uuid4().hex}"
-    result = _ask(lambda: workflow.ask(args.question, thread_id=thread_id, context=context or None))
+    result = _ask(
+        lambda: workflow.ask(
+            args.question,
+            thread_id=thread_id,
+            context=context or None,
+            # `kanban-patrol/08`'s self-reference marker, carried into the run
+            # store's `session_id` so a later patrol can tell a run somebody
+            # *made while working the board* from ordinary traffic.
+            session_id=getattr(args, "session_id", None),
+        )
+    )
 
     if args.json:
         print(
@@ -1381,6 +1391,17 @@ def cmd_kanban_attend(args: argparse.Namespace) -> int:
     if not result.ok:
         return _error(result.reason)
     print(f"attended {args.task_id} as {args.actor}")
+    # `kanban-patrol/08`. From here on this actor produces runs, and an
+    # unmarked run is read back by the next patrol as a fresh finding — so
+    # the board would file a card about the work done on this card. This is
+    # the last place anything speaks to the agent, so the marker is printed
+    # here rather than left in a skill file it may not have installed.
+    from openstategraph.patrol import card_session_id
+
+    print(
+        f"  mark every run you make while working this card:"
+        f" --session-id {card_session_id(args.task_id)}"
+    )
     return EXIT_OK
 
 
@@ -2049,6 +2070,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--model", help="a model string, e.g. ollama:gpt-oss:120b-cloud")
     run.add_argument("--trace-file", dest="trace_file", help="append one JSON line per run")
     run.add_argument("--thread-id", dest="thread_id", help="continue an earlier conversation")
+    # `kanban-patrol/08`. Not a browser tab: the sitting a run belongs to. An
+    # agent working board card `<id>` passes `card:<id>` here, and the patrol
+    # then never files a card about the work done on that card.
+    run.add_argument(
+        "--session-id",
+        dest="session_id",
+        help="the sitting this run belongs to, e.g. card:<task_id> while working a board card",
+    )
     run.add_argument("--knowledge-dir", dest="knowledge_dir", help="override <package>/knowledge")
     # Repeatable, and typed by the document rather than guessed from the
     # literal: a command line carries strings, and guessing would make

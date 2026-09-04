@@ -121,3 +121,23 @@ describe('an answered judgement carries its decision — `kanban-patrol/15`', ()
     expect(instructionForCard(card({ answer: '' }))).not.toMatch(/Decision/i);
   });
 });
+
+describe('the pasted text carries the self-reference marker — kanban-patrol/08', () => {
+  /**
+   * The whole point of this text is an agent with nothing installed: no
+   * skill file, no MCP connection. That agent will run this project's
+   * workflows to reproduce the defect, and every one of those runs is read
+   * back by the next patrol as fresh evidence — so the board files a card
+   * about the work done on this card. The marker is the only thing that
+   * stops it, and this text is the only thing that agent reads.
+   */
+  it('tells the agent the session to mark its runs with', () => {
+    const text = instructionForCard(card());
+
+    expect(text).toContain('--session-id card:proj-a:thread-1');
+  });
+
+  it('says why, so an agent does not drop it as ceremony', () => {
+    expect(instructionForCard(card()).toLowerCase()).toContain('patrol');
+  });
+});

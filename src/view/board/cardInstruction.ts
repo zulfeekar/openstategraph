@@ -51,6 +51,16 @@ export function instructionForCard(card: BoardCard): string {
   paragraphs.push(
     'Work this test-first: write a failing test for the stated reason before ' +
       'any fix, then make it pass. Do not skip the red step.',
+    // `kanban-patrol/08`. This agent is about to run workflows to reproduce
+    // the defect, and every one of those runs lands in the same store the
+    // patrol reads — unmarked, they come back as fresh findings and the
+    // board files a card about the work done on this one. The reason is on
+    // the line because an instruction with no reason is the first thing an
+    // agent drops.
+    `Any run you make while working this card must name this card as its ` +
+      `sitting, or the next patrol reads it back as a new problem:\n` +
+      `  openstategraph run <package> "<question>" --session-id card:${card.id}\n` +
+      `(over MCP, pass session_id: "card:${card.id}" to run_workflow.)`,
     [
       'Report progress as you go, from this repository:',
       `  openstategraph kanban attend ${card.id} --actor <your name>`,

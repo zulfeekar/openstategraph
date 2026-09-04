@@ -398,3 +398,29 @@ class TestAnswer:
         out = capsys.readouterr().out
         assert "The cloud one." in out
         assert "alice" in out
+
+
+class TestAttendHandsBackTheMarker:
+    """`kanban-patrol/08`. Attending a card is the moment an agent starts
+    producing runs, and it is the last moment anything tells it anything. So
+    the marker it must set on those runs is printed here, spelled out, rather
+    than left in a skill file the agent may not have installed."""
+
+    def test_attending_prints_the_session_marker_for_this_card(
+        self, _project: Path, capsys
+    ) -> None:
+        from openstategraph.patrol import card_session_id
+
+        _filed(_project, "proj-a:thread-1")
+
+        code = cli.main(
+            ["kanban", "attend", "proj-a:thread-1", "--actor", "alice"] + _root(_project)
+        )
+
+        assert code == 0
+        out = capsys.readouterr().out
+        assert card_session_id("proj-a:thread-1") in out, (
+            "Nothing told the agent how to mark the runs it is about to make, "
+            "so the next patrol files a card about this card's own work."
+        )
+        assert "--session-id" in out
