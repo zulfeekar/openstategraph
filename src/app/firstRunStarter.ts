@@ -54,8 +54,46 @@ import { starterAssembly } from '@nodes/assemblies';
 /** The marker that says this browser has been handed its starter already. */
 export const STARTER_PLACED_KEY = 'openstategraph-starter-placed';
 
+/** The note's own id in the placed document — how the rewrite (slice 2) finds it again. */
+export const NOTE_ID = 'first-run-note';
+
 /**
- * The first sentences a stranger reads inside the product.
+ * The last line of a note still waiting for its first run.
+ *
+ * **Not an HTML comment.** That was the first design (program design,
+ * "least confident decisions" #2) and it does not hold: checked live against
+ * the actual `RichText` render (react-markdown, no raw-HTML plugin), a
+ * standalone `<!-- ... -->` line is not recognised as an HTML block in this
+ * position — it comes through as ordinary paragraph text, so a reader would
+ * see the literal comment syntax printed at the bottom of the note. Recorded
+ * in `docs/plans/runnable-starter/00-status.md`.
+ *
+ * A single zero-width space (`U+200B`) on its own line has none of that
+ * problem: it is a real, non-whitespace character, so markdown does not trim
+ * the line away, but it renders at zero width — nothing a reader can see. It
+ * must stay the **last** line of every before-run wording: the rewrite
+ * (slice 2) replaces from the marker onward rather than hunting for it.
+ */
+export const BEFORE_RUN_MARKER = '​';
+
+/**
+ * The question already sitting in the Input on first paint.
+ *
+ * About the product itself, on purpose (program design, "least confident
+ * decisions" #4): a data question would need a tool and a key before the
+ * first press could ever succeed, and the whole point of the tracer is one
+ * press to a real answer. A question about OpenStateGraph is checkable by
+ * the reader with nothing else configured.
+ */
+export const STARTER_QUESTION =
+  'What is a state graph, and why would I draw one instead of writing a script?';
+
+/** What `beforeRunNote`/`firstRunFragment` read to decide their wording. */
+export type StarterReadiness = { readonly modelConfigured: boolean; readonly runReadiness: string };
+
+/**
+ * The first sentences a stranger reads inside the product, before their
+ * first Run.
  *
  * Four jobs and no fifth: name the three nodes, say the one gesture that runs
  * them, say that nothing is saved yet — in `Untitled`, the same word the top
@@ -67,15 +105,35 @@ export const STARTER_PLACED_KEY = 'openstategraph-starter-placed';
  * beside this holds it under 400 characters so the next session answers a
  * support question somewhere else.
  */
-export const FIRST_RUN_NOTE = [
+const BEFORE_RUN_TEXT = [
   '# Start here',
   '',
-  'The **Input** holds your question, the **Agent** answers it, the **Output** shows the answer.',
+  'The **Input** already has a question, the **Agent** answers it, the **Output** shows the answer.',
   '',
-  `Type a question into the Input and press Run. Nothing is saved yet — this canvas is ${UNNAMED_DOCUMENT} until you save it.`,
+  `Press Run to see it answered. Nothing is saved yet — this canvas is ${UNNAMED_DOCUMENT} until you save it.`,
   '',
   'Done reading? Delete this note. The three nodes stay.',
+  '',
+  BEFORE_RUN_MARKER,
 ].join('\n');
+
+/**
+ * The before-run wording for a given readiness.
+ *
+ * `null` — `serverReadiness` has not answered yet — reads as the ordinary
+ * "press Run" text: on first paint there is no evidence of a missing model,
+ * so nothing here should read as a warning. The `modelConfigured: false`
+ * wording (quoting `runReadiness` verbatim, never inventing a second
+ * sentence for the same fact) is `stable-beta-public/06` slice 3; until
+ * that lands every readiness reads as ready.
+ */
+export function beforeRunNote(readiness: StarterReadiness | null): string {
+  void readiness;
+  return BEFORE_RUN_TEXT;
+}
+
+/** The `null`-readiness wording, kept as a constant for callers that have no readiness to pass. */
+export const FIRST_RUN_NOTE = beforeRunNote(null);
 
 const NOTE_TYPE = 'annotate.note';
 const NOTE_AT = { x: 0, y: 0 };
@@ -95,22 +153,27 @@ const FLOW_OFFSET_Y = NOTE_SIZE.height + 70;
  * escaping into the clipboard's own slot is the kind of aliasing that only
  * shows up on the second call.
  */
-export function firstRunFragment(): ClipboardFragment {
+export function firstRunFragment(readiness: StarterReadiness | null): ClipboardFragment {
   const flow = starterAssembly.fragment;
   return {
     origin: NOTE_AT,
     nodes: [
       {
-        id: 'first-run-note',
+        id: NOTE_ID,
         type: NOTE_TYPE,
         position: NOTE_AT,
         size: NOTE_SIZE,
         parentId: null,
-        data: { body: FIRST_RUN_NOTE },
+        data: { body: beforeRunNote(readiness) },
       },
       ...flow.nodes.map((node) => ({
         ...node,
         position: { x: node.position.x, y: node.position.y + FLOW_OFFSET_Y },
+        // The assembly's own Input stays empty (a palette drag must not
+        // answer a question nobody asked); the first-visit fragment is the
+        // one place a question is filled in, so only that node's `prompt`
+        // is touched here.
+        data: 'prompt' in node.data ? { ...node.data, prompt: STARTER_QUESTION } : node.data,
       })),
     ],
     edges: flow.edges,
@@ -181,7 +244,10 @@ export function hasPlacedStarter(store: KeyValueStore): boolean {
  * anyway.
  */
 export function placeFirstRunStarter(workbench: Workbench, store: KeyValueStore): void {
-  workbench.controller.clipboard.insertFragment(firstRunFragment(), NOTE_AT);
+  // Readiness is wired in `stable-beta-public/06` slice 3 (`WorkbenchContext`
+  // reads `serverReadiness`); until then every placement reads as `null`,
+  // which is the same "press Run" wording a not-yet-answered poll produces.
+  workbench.controller.clipboard.insertFragment(firstRunFragment(null), NOTE_AT);
   // A drop leaves what it dropped selected, which is right for a gesture and
   // wrong for an arrival: the first canvas a stranger sees would come up with
   // all four nodes highlighted and one Backspace from empty — while the note

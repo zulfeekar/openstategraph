@@ -15,8 +15,11 @@ import { UNNAMED_DOCUMENT } from '@core/model/documentName';
 import { starterAssembly } from '@nodes/assemblies';
 import { EMPTY_CANVAS_HINT } from '@view/canvas/emptyStateCopy';
 import {
+  BEFORE_RUN_MARKER,
   FIRST_RUN_NOTE,
   STARTER_PLACED_KEY,
+  STARTER_QUESTION,
+  beforeRunNote,
   firstRunFragment,
   hasPlacedStarter,
   placeFirstRunStarter,
@@ -184,14 +187,14 @@ describe('remembering that it was placed', () => {
 
 describe('what is placed', () => {
   it('is the shipped assembly, not a second copy of it', () => {
-    const types = firstRunFragment().nodes.map((node) => node.type);
+    const types = firstRunFragment(null).nodes.map((node) => node.type);
     const assemblyTypes = starterAssembly.fragment.nodes.map((node) => node.type);
     expect(types).toEqual(['annotate.note', ...assemblyTypes]);
-    expect(firstRunFragment().edges).toEqual(starterAssembly.fragment.edges);
+    expect(firstRunFragment(null).edges).toEqual(starterAssembly.fragment.edges);
   });
 
   it('reads top to bottom: the note first, then the flow it describes', () => {
-    const nodes = firstRunFragment().nodes;
+    const nodes = firstRunFragment(null).nodes;
     const note = nodes[0]!;
     for (const node of nodes.slice(1)) {
       expect(node.position.y).toBeGreaterThan(note.position.y);
@@ -199,7 +202,7 @@ describe('what is placed', () => {
   });
 
   it('starts at its own origin, so a paste at that point lands where it was drawn', () => {
-    const fragment = firstRunFragment();
+    const fragment = firstRunFragment(null);
     expect(fragment.origin.x).toBe(Math.min(...fragment.nodes.map((node) => node.position.x)));
     expect(fragment.origin.y).toBe(Math.min(...fragment.nodes.map((node) => node.position.y)));
   });
@@ -220,12 +223,18 @@ describe('what is placed', () => {
     expect(JSON.stringify(document)).not.toContain('firstRun');
   });
 
-  it('carries no question of its own', () => {
-    // The starter assembly's own rule, inherited rather than restated: Run reads
-    // the Input, and a seeded question is one the user never asked being spent
-    // on the first press.
-    const input = firstRunFragment().nodes.find((node) => node.type === 'input.text');
-    expect(String(input?.data?.['prompt'] ?? '')).toBe('');
+  /**
+   * `install-experience` → `stable-beta-public` 06, slice 1. The starter
+   * assembly itself stays empty — a drag from the palette must not answer a
+   * question nobody asked — but the *first-visit* fragment is not a drag
+   * from the palette: it is the one time this product can promise a stranger
+   * an answer with a single press. `STARTER_QUESTION` is filled in here,
+   * never in `starterAssembly`, so the palette's own copy of the assembly is
+   * untouched.
+   */
+  it('the input arrives with the question typed', () => {
+    const input = firstRunFragment(null).nodes.find((node) => node.type === 'input.text');
+    expect(input?.data?.['prompt']).toBe(STARTER_QUESTION);
   });
 
   it('leaves the document unnamed, so no slug is minted from a word nobody chose', () => {
@@ -276,6 +285,33 @@ describe('what the note says', () => {
    */
   it('is short', () => {
     expect(FIRST_RUN_NOTE.length).toBeLessThan(400);
+  });
+
+  /**
+   * The rewrite that lands in slice 2 finds an awaiting note by this marker,
+   * not by a session flag — a refresh mid-way still has the right note. It
+   * has to be the *last* line, so a run's rewrite can simply drop everything
+   * from the marker onward without hunting for it. It is a zero-width space,
+   * not an HTML comment: checked live against the real `RichText` render, a
+   * standalone `<!-- ... -->` line prints as literal visible text rather than
+   * being dropped, so it would have shown at the bottom of every note
+   * (`docs/plans/runnable-starter/00-status.md`).
+   */
+  it('ends with the before-run marker', () => {
+    expect(FIRST_RUN_NOTE.endsWith(BEFORE_RUN_MARKER)).toBe(true);
+  });
+});
+
+describe('beforeRunNote', () => {
+  /**
+   * `serverReadiness` has not answered yet on first paint (slice 3 wires the
+   * poll); `null` is that "do not know" state, and it must read as an
+   * ordinary invitation to press Run rather than as a warning about a model
+   * that might in fact be configured fine.
+   */
+  it('readiness unknown reads as press Run', () => {
+    expect(beforeRunNote(null)).toBe(FIRST_RUN_NOTE);
+    expect(beforeRunNote(null)).toMatch(/press Run/i);
   });
 });
 
