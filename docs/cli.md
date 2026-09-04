@@ -57,9 +57,10 @@ openstategraph init [directory] [--workflows-dir NAME] [--empty] [--force] [--ad
 ```
 
 Makes a directory an OpenStateGraph project: an `openstategraph.yaml`, a
-`.gitignore`, an `AGENTS.md`, a workflows folder and a starter package.
-Defaults to the current directory. **This is the one command that creates a
-project**, and the only thing an install line cannot carry.
+`.gitignore`, an `AGENTS.md`, the four agent config files below, a workflows
+folder and a starter package. Defaults to the current directory. **This is the
+one command that creates a project**, and the only thing an install line cannot
+carry.
 
 The `AGENTS.md` is the brief a coding agent reads — the lexicon, the compiler
 position, the rules that decide whether what it writes is right, and where the
@@ -83,6 +84,27 @@ it is not refused — it is reported (*"already has N files in it — this looks
 like an existing project"*) and added to. Nothing it did not write is ever
 overwritten: run it twice and the second run prints `(already there — left
 alone)` beside each line.
+
+**It also points your coding agent at this project's MCP server.** Four agents
+read four different files for a project-local stdio server, so `init` writes
+all four from one descriptor rather than asking you to paste the same command
+line into each:
+
+| File | Agent | Key |
+| --- | --- | --- |
+| `.mcp.json` | Claude Code | `mcpServers` |
+| `.vscode/mcp.json` | VS Code, GitHub Copilot | `servers` |
+| `.cursor/mcp.json` | Cursor | `mcpServers` |
+| `.codex/config.toml` | OpenAI Codex CLI | `[mcp_servers.openstategraph]` |
+
+An existing file is **merged into**, never replaced: your other servers and any
+keys we do not know about are written back exactly as they were. The one case
+that writes nothing is an `openstategraph` entry that is already there and
+differs from ours — that is a deliberate customisation of yours, typically
+`OPENSTATEGRAPH_MCP_ALLOW_RUNS=1`, and a silent overwrite would disarm it. So
+would replacing a file that will not parse. Both are reported as `kept`, with
+the reason. [`mcp.md`](mcp.md) §1 covers what the entry contains and how to
+enable runs.
 
 | Flag | Effect |
 | --- | --- |

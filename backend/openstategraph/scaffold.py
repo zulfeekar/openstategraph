@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from openstategraph import agent_brief, templates
+from openstategraph.agent_config import AgentFileAction
 
 #: A package's directory name is its frozen identity, and it is what scopes
 #: tool, function, skill and knowledge discovery. Same rule as `slugify`.
@@ -380,6 +381,15 @@ def copy_all_examples(root: Path | str) -> tuple[Path, ...]:
 #: convergence rather than a third meaning (design collision C9).
 STARTER_SLUG = "starter"
 
+#: The last line `init` prints. `osg-agent-experience/25`: everything above it
+#: is a list of files, and a reader who has just been told their agent is
+#: configured still needs the sentence that addresses it. One copy, here,
+#: because the CLI is not the only door that will want to print it.
+NEXT_SENTENCE = (
+    'next: open your coding agent here and say "use OpenStateGraph" and'
+    " describe the workflow you want."
+)
+
 
 @dataclass(frozen=True)
 class InitResult:
@@ -433,6 +443,12 @@ class InitResult:
     #: kanban-patrol/24. Carried so `init`'s printed report can say what
     #: happened per file, same as it does for `AGENTS.md`.
     skills_installed: dict[tuple[str, str], str] = field(default_factory=dict)
+    #: One per agent config file — `.mcp.json`, `.vscode/mcp.json`,
+    #: `.cursor/mcp.json`, `.codex/config.toml` — with which of created /
+    #: merged / current / kept happened to it (`osg-agent-experience/25`).
+    #: Same reason as `agents_md_action`: `init` prints a sentence per file
+    #: and two of those four sentences say it wrote nothing.
+    agent_files: tuple[AgentFileAction, ...] = ()
 
 
 def _existing_directory_refusal(target: Path, label: str) -> str | None:
@@ -754,6 +770,18 @@ def init_project(
         if state == SKILL_CREATED:
             created.append(target / skill_root / relative)
 
+    # The four files four coding agents read to find this project's MCP
+    # server, rendered from one descriptor — osg-agent-experience/25. Same
+    # door, same reason as the skills above: a wheel cannot write into a
+    # user's repository by itself. An existing file is merged into, never
+    # replaced; see `agent_config`.
+    from openstategraph.agent_config import AgentFileState, render_all
+
+    agent_files = render_all(target)
+    for action in agent_files:
+        if action.state is AgentFileState.CREATED:
+            created.append(action.path)
+
     root = target / workflows_dir
     root.mkdir(parents=True, exist_ok=True)
 
@@ -781,6 +809,7 @@ def init_project(
         gitignore_gaps=ignore_gaps,
         adopted=adopted,
         skills_installed=skills_installed,
+        agent_files=agent_files,
     )
 
 
@@ -803,6 +832,7 @@ def _elected_model() -> str | None:
 __all__ = [
     "GalleryFootprint",
     "InitResult",
+    "NEXT_SENTENCE",
     "ScaffoldError",
     "SLUG_PATTERN",
     "STARTER_SLUG",

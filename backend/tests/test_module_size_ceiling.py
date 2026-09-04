@@ -418,6 +418,16 @@ the set it collapses is built from the report rather than re-derived from
 `BUNDLED_SKILLS`. The names still come from the map, because the map is what
 the wheel ships; what changed is that a stale reference page beside a current
 sheet now shows as `mixed` instead of being invisible.
+
+**1467 -> 1481** (`osg-agent-experience/25`, 2026-09-04). Fourteen lines: a
+five-row state table and the loop that prints it. `init` now writes the four
+files four coding agents read to find this project's MCP server, and the rule
+holds — the knowledge (which file, which key, how a merge preserves somebody
+else's servers, what makes a file one we decline to write) is all
+`agent_config.py`; what is here is one sentence per state and the loop that
+picks one, exactly like `_AGENTS_MD_STATE` above it. The note line is the
+reason the loop is not a one-liner: a file we left alone has to say why, and a
+state word cannot.
 """
 
 WORKFLOW_COMPILER = """
@@ -956,7 +966,7 @@ principal, and the comment beside it is where that is said on the wire side.
 
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1467, CLI),
+    "cli.py": Recorded(1481, CLI),
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

@@ -7,7 +7,7 @@
 
 ## Slices
 - [x] Slice 1 — tracer: skill folder + directory installer + rules file + get_engineering_rules
-- [ ] Slice 2 — four agent files from one descriptor, merge semantics, init report
+- [x] Slice 2 — four agent files from one descriptor, merge semantics, init report
 - [ ] Slice 3 — idea cards: columns, file_idea_card, MCP + CLI file, board renders the brief
 - [ ] Slice 4 — triage: pure ordering, MCP + CLI, why_here
 - [ ] Slice 5 — the whole sheet + references + docs + documented-surface pin
@@ -38,3 +38,16 @@
   heading by that name — the rule lives inside the ladder there too, which is
   where it belongs. The pin now measures section length at any heading level,
   so the subsection is still held to a dozen lines.
+
+### Where slice 2 departed from `03-program-design.md`
+- `merge_json_servers` is typed `dict[str, object]` rather than bare `dict`;
+  mypy's `--disallow-any-generics` refuses the signature as 03 writes it.
+- The VS Code entry carries `"type": "stdio"` that the other three do not —
+  that is the shape VS Code documents. One extra key in one renderer, not a
+  second descriptor: the command line is still stated once.
+- The four files are a table (`agent_config.AGENT_FILES`, agent → path → key)
+  rather than four hand-written renderer functions, so a reader checks the
+  research note's table against one block.
+- `init`'s report now ends with two lines starting `next:` — the existing
+  `next:` block and `NEXT_SENTENCE`. Left as 03 wrote the sentence; if the
+  repetition grates, the fix is the older block's header, not the sentence.

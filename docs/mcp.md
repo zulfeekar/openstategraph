@@ -28,17 +28,26 @@ installed `[server]` (`"openstategraph[server,<provider>]"` is enough for
 both the editor and `openstategraph mcp`); install `[mcp]` on its own if you
 want the MCP transport with no web server at all.
 
-`claude_desktop_config.json`, Cursor's `mcp.json`, or any client using the
-`mcpServers` shape:
+**You do not paste this block any more — `openstategraph init` writes it.**
+Four agents read four different files for a project-local stdio server, and
+`init` renders all four from one descriptor:
+
+| File | Agent | Key |
+| --- | --- | --- |
+| `.mcp.json` | Claude Code | `mcpServers` |
+| `.vscode/mcp.json` | VS Code, GitHub Copilot | `servers` |
+| `.cursor/mcp.json` | Cursor | `mcpServers` |
+| `.codex/config.toml` | OpenAI Codex CLI | `[mcp_servers.openstategraph]` |
+
+What it writes into each, in the `mcpServers` spelling:
 
 ```json
 {
   "mcpServers": {
     "openstategraph": {
-      "command": "python3",
-      "args": ["-m", "openstategraph.mcp_server"],
+      "command": "openstategraph",
+      "args": ["mcp"],
       "env": {
-        "PYTHONPATH": "/path/to/openstategraph/backend",
         "OPENSTATEGRAPH_MCP_ALLOW_RUNS": "0"
       }
     }
@@ -46,14 +55,21 @@ want the MCP transport with no web server at all.
 }
 ```
 
-`PYTHONPATH` is how you point at a checkout without installing anything (a
-wheel exists — a release candidate on TestPyPI — but the real PyPI upload has
-not happened yet; see [Using OpenStateGraph in your project](adoption.md)).
-If you ran `pip install -e /path/to/openstategraph/backend`, drop the
-`PYTHONPATH` line — but keep the rest of the `env` block. Only `PYTHONPATH` is
-install-dependent; dropping the whole block also drops
-`OPENSTATEGRAPH_MCP_ALLOW_RUNS=0` and silently re-enables the one tool that
-spends money.
+`command` is the console script the wheel installs, so nothing in the block is
+install-dependent — no `PYTHONPATH`, nothing naming a checkout. Working from a
+checkout with nothing installed is the one case that still needs a hand-written
+entry: `"command": "python3"`, `"args": ["-m", "openstategraph.mcp_server"]`,
+and `"PYTHONPATH": "/path/to/openstategraph/backend"` beside the variable
+below. Keep the rest of the `env` block whichever spelling you use.
+
+An existing file is merged into rather than replaced: other servers and unknown
+keys survive, and a file we cannot parse — or an `openstategraph` entry of
+yours that differs from ours — is left exactly as it is and reported as `kept`.
+[`cli.md`](cli.md#init) has the states.
+
+**To enable runs**, set `OPENSTATEGRAPH_MCP_ALLOW_RUNS=1` in that `env` block
+by hand. That edit is the thing `init` will not undo: on the next run it sees
+an entry that differs from what it would write, keeps yours, and says so.
 
 `OPENSTATEGRAPH_MCP_ALLOW_RUNS=0` removes `run_workflow` from the registry —
 the only tool that reaches a model. Every other tool stays fully functional,

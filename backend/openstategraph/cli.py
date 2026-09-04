@@ -840,6 +840,16 @@ def cmd_new(args: argparse.Namespace) -> int:
 #: "we wrote the file", "we added our block to yours", "we replaced a stale
 #: block" and "it was already right" are four different things to have done
 #: to a file somebody else may own (install-experience/25).
+#: One sentence per state for the four agent config files
+#: (`osg-agent-experience/25`), in the voice the `AGENTS.md` line above uses —
+#: a report that says what happened to a file, not a status word.
+_AGENT_FILE_STATE = {
+    "created": "created — your agent can reach this project's MCP server",
+    "merged": "merged — your other servers and keys were left exactly as they were",
+    "current": "current — already points here, left alone",
+    "kept": "kept — left alone",
+}
+
 _AGENTS_MD_STATE = {
     "created": "how to build here, for your coding agent",
     "added": "our block added to yours — nothing else touched",
@@ -863,7 +873,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     from openstategraph.bundled_skills import BUNDLED_SKILLS
     from openstategraph.config_file import reset_active_config
     from openstategraph.providers import provider_catalogue
-    from openstategraph.scaffold import ScaffoldError, init_project
+    from openstategraph.scaffold import NEXT_SENTENCE, ScaffoldError, init_project
 
     label = args.directory or "."
     try:
@@ -933,6 +943,15 @@ def cmd_init(args: argparse.Namespace) -> int:
         }
         summary = states.pop() if len(states) == 1 else "mixed"
         print(f"  {root + '/':<22}  {skill_names} — {summary}")
+    # osg-agent-experience/25: four agents, four files, one command line. The
+    # note is printed only when there is one, which is exactly the `kept`
+    # cases — a file we declined to write has to say why.
+    for action in result.agent_files:
+        relative = action.path.relative_to(result.directory).as_posix()
+        sentence = _AGENT_FILE_STATE[action.state.value]
+        print(f"  {relative:<22}  {sentence}")
+        if action.note:
+            print(f"  {'':<22}  {action.note}")
     print()
 
     # The generated config was written before this process had any chance to
@@ -967,6 +986,10 @@ def cmd_init(args: argparse.Namespace) -> int:
     print("  openstategraph .")
     if result.starter is not None:
         print(f'  openstategraph run {args.workflows_dir}/{result.starter.name} "hello"')
+    print()
+    # Unwrapped, unlike the model line above: this is the one line a reader
+    # copies, and a wrapped sentence loses a word to the newline on paste.
+    print(NEXT_SENTENCE)
     return EXIT_OK
 
 
