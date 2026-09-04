@@ -106,13 +106,21 @@ directory the package lives in. A project with nothing saved says so, and
 offers to start one.
 
 The **first** visit in a browser is the one exception, and a deliberate one
-(`install-experience` 24): a browser holding no draft at all has never opened
-this editor, and it is handed a starter rather than an empty grid — Input →
-Agent → Output, wired, under a note saying what the three nodes are, how to run
-them, and that the note can be deleted. It is nobody else's document; it is
-composed from the palette's own **Starter flow**, it is unsaved and called
-`Untitled`, and one undo or one delete is the end of it. It is offered **once
-per browser**, so getting rid of it is permanent.
+(`install-experience` 24, `stable-beta-public` 06): a browser holding no draft
+at all has never opened this editor, and it is handed a runnable example
+rather than an empty grid — Input → Agent → Output, wired, with a question
+already typed into the **Input**. A note above the three nodes says press
+**Run**; press it and the **Agent** answers, the answer lands in the
+**Output**, and the note rewrites itself once to say who answered and what it
+cost, and that the question or the agent's instructions are the next thing to
+change. If no model is configured, the note never says *press Run* — it names
+the environment variable to set, quoted from the server's own account of why
+nothing can answer yet, and a run that fails anyway explains itself the same
+way. It is nobody else's document; it is composed from the palette's own
+**Starter flow**, it is unsaved and called `Untitled`, and one undo or one
+delete is the end of it — deleting the note is always allowed and the three
+nodes stay. It is offered **once per browser**, so getting rid of it is
+permanent.
 
 Open `chinook-assistant` from **Workflows**
 and it runs with **no credentials at all**: the canvas preview's default model

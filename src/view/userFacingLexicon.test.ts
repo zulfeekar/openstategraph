@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { afterRunNote, beforeRunNote } from '@app/firstRunStarter';
 
 /**
  * consistency-sweep ticket 10 — *"subgraph" is not a word this product says.*
@@ -133,6 +134,52 @@ describe('the number that is not a lap count', () => {
     expect(
       offences,
       `the step budget was called something the lexicon forbids:\n${offences.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
+/**
+ * `stable-beta-public/06`, slice 4 — **the starter's own wording never
+ * reached this census.**
+ *
+ * `src/app/firstRunStarter.ts` composes the before-run, no-model, and
+ * after-run notes a first-time visitor reads, and none of that lives under
+ * `src/view/` or `src/core/` — the two directories the two censuses above
+ * walk — so a forbidden word inside one of those templates would never have
+ * been caught by a source scan, static or otherwise: `beforeRunNote`'s
+ * no-model sentence and `afterRunNote`'s failure sentence are quoted from the
+ * server at runtime, not literals sitting in a file for a scanner to read.
+ *
+ * So this builds every wording the module can produce — both before-run
+ * shapes, both after-run shapes, several models, several reasons — and checks
+ * the built strings directly, the same two patterns the censuses above check
+ * source text against.
+ */
+describe('the starter notes say nothing the censuses above would have missed', () => {
+  const wordings = [
+    beforeRunNote(null),
+    beforeRunNote({ modelConfigured: true, runReadiness: '' }),
+    beforeRunNote({
+      modelConfigured: false,
+      runReadiness: 'No model is configured. Set OLLAMA_API_KEY to run against the cloud.',
+    }),
+    afterRunNote({ ok: true, models: ['gpt-oss:120b-cloud'], totalTokens: 1522 }),
+    afterRunNote({ ok: true, models: ['a', 'b', 'c'], totalTokens: 999999 }),
+    afterRunNote({ ok: false, reason: 'The provider refused the request.' }),
+  ];
+
+  it('never says "subgraph"', () => {
+    const offences = wordings.filter((wording) => /subgraph/i.test(wording));
+    expect(offences, `a starter note said "subgraph":\n${offences.join('\n')}`).toEqual([]);
+  });
+
+  it('never calls the step budget "iterations" or "turns"', () => {
+    const offences = wordings.filter((wording) =>
+      /max iterations|max turns|maximum iterations/i.test(wording),
+    );
+    expect(
+      offences,
+      `a starter note used a forbidden word for the step budget:\n${offences.join('\n')}`,
     ).toEqual([]);
   });
 });

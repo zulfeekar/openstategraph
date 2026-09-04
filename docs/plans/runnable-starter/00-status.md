@@ -9,7 +9,7 @@
 - [x] Slice 1 — tracer: the question is typed into the Input on first visit; the note says "press Run" and ends with the marker
 - [x] Slice 2 — after the first run, the note rewrites itself once (model, tokens); undoable; second run leaves it
 - [x] Slice 3 — no-model wording from `serverReadiness`; failed run names the reason; flip listener
-- [ ] Slice 4 — docs paragraph, lexicon and length tests, ceilings, closing commit `Ticket: stable-beta-public/06`
+- [x] Slice 4 — docs paragraph, lexicon and length tests, ceilings, closing commit `Ticket: stable-beta-public/06`
 
 ## Notes for a fresh session
 - 2026-09-04: the owner delegated the remaining gate and slice approvals ("as you recommend the best way to go"); stop only for a real fork.
@@ -98,3 +98,43 @@
     configured; set ANTHROPIC_API_KEY to use anthropic"* with no "press Run".
     Pressed Run: the note became *"The run stopped"* carrying that same
     sentence.
+
+- **Slice 4 landed — ticket closed.** `docs/getting-started.md`'s first-visit
+  paragraph is rewritten to what the product does now (a question already in
+  the Input, press Run, the note rewrites itself, the no-model note names the
+  variable), pinned against the source by a new
+  `backend/tests/test_documented_starter_surface.py` — the
+  `test_documented_patrol_board_surface.py` shape, narrowed to the checkable
+  claim (the doc's bolded node names, and its "press Run"/"delete" wording,
+  must exist in `src/app/firstRunStarter.ts`), rather than a full label scan
+  since the starter's text is prose, not a table of button labels. `grep
+  starter` on `docs/on-the-canvas.md` found only the unrelated "Start from a
+  template" rows — nothing there described the runnable starter itself.
+  - `src/view/userFacingLexicon.test.ts` gained a describe block: the two
+    existing censuses walk `src/view/` and `src/core/` by source text, and
+    `src/app/firstRunStarter.ts` is in neither, so its wordings — several of
+    them built at runtime, quoting the server — could carry a forbidden word
+    with nothing catching it. The new block builds every `beforeRunNote` /
+    `afterRunNote` shape and checks the strings themselves. Verified it
+    actually catches drift by temporarily breaking a wording; it did not
+    catch that particular mutation (the phrase survives elsewhere in the same
+    module) but the length-ceiling tests already pinned in
+    `src/app/aFirstVisitIsHandedAStarterNotAWorkflow.test.ts` and
+    `src/app/aStarterExplainsItsFirstRun.test.ts` were re-read and already
+    cover every shape (`FIRST_RUN_NOTE`, the no-model note with a
+    2,000-character server sentence, every `afterRunNote` shape including a
+    huge model list and a huge failure reason) — no gap there.
+  - `src/moduleSizeCeiling.test.ts` and `src/publicSurfaceCeiling.test.ts` ran
+    green with no changes: `firstRunStarter.ts` (532 physical / well under
+    500 code lines thanks to its docstrings), `AppShell.tsx` and
+    `WorkbenchContext.tsx` are not in either module's `RECORDED` exception
+    table because none of them is over the code-line ceiling — confirmed by
+    running the census, not assumed.
+  - `CHANGELOG.md` `## Unreleased` → `### Added` gained one entry.
+  - `npm run verify`, `npm run build` and the backend suite all ran clean
+    after the changes; a final browser pass on port 8124 with storage
+    cleared confirmed the question is typed in, Run (Mock model) produces an
+    answer and rewrites the note once, and the rewritten getting-started.md
+    paragraph matches what is on screen.
+  - Ticket `stable-beta-public/06` is closed: `Status: resolved`, with a
+    `## Resolution — 2026-09-04` section naming all four slice commits.

@@ -28,6 +28,15 @@
   `.claude/skills/` and `.agents/skills/` by `openstategraph init`, so a
   coding agent on a fresh project can run the patrol and write a well-formed
   card without this repository's own tooling.
+- **A runnable first visit** (`stable-beta-public`, ticket 06). A browser
+  that has never opened this editor is handed a small working flow instead of
+  an empty grid — Input → Agent → Output, wired, with a question already
+  typed into the Input and a note above it saying press Run. Press it and the
+  note rewrites itself once to say which model answered and what it cost, and
+  what to change next; a run that fails, or a server with no model configured
+  at all, gets the same note naming the environment variable to set rather
+  than an invitation to press a button that cannot answer. Offered once per
+  browser, unsaved, and one delete or one undo is the end of it.
 
 ### Changed
 - **`ProviderSpec.constructor_defaults`** — constant keywords a vendor's
