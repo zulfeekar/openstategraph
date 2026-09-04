@@ -35,6 +35,14 @@ the output leaves:
   from what your own recorded runs revealed — a repeated tool call, an unstable
   answer, a node that failed — each one claimable by a coding agent through the
   CLI or MCP, and admitted to `Resolved` only with a red-then-green test on it.
+- **Your coding agent knows how to use it.** `openstategraph init` installs a
+  skill into the project, so *"use OpenStateGraph"* plus a sentence about what
+  you want starts a real design interview — one question per turn, generated
+  from your concept — and ends with the work filed as cards on that same board
+  and built one at a time, failing test first. It reads the node vocabulary and
+  the engineering rules before it composes anything, so it cannot invent a node
+  type; it will not run a workflow without your permission. See
+  [the OpenStateGraph skill](docs/the-openstategraph-skill.md).
 
 ### Why not LangGraph directly
 

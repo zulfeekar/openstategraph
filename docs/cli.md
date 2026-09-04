@@ -79,6 +79,16 @@ own house rules can live in the same file. Re-run `openstategraph init . --force
 after an upgrade to take a newer brief. The bytes placed are the bytes in the
 distribution, never a second rendering.
 
+**And it installs the skills your coding agent reads.** Three directories into
+each of `.claude/skills/` and `.agents/skills/`: the entry sheet for building a
+workflow with this product — the routing check, the interview, the sizing call,
+the board and the test-first loop, with its long form in `references/` beside
+it — plus one for authoring a well-formed ticket and one for the run patrol.
+The rules page under `references/` is written at install time from the file the
+wheel carries, so it is the same text `get_engineering_rules` serves over MCP.
+[The OpenStateGraph skill](the-openstategraph-skill.md) is what a reader wants
+here; this page is what a typist wants.
+
 It is written for a directory that is already yours. A directory with files in
 it is not refused — it is reported (*"already has N files in it — this looks
 like an existing project"*) and added to. Nothing it did not write is ever
@@ -375,6 +385,10 @@ openstategraph kanban show <task-id> [--workflows-root DIR]
 openstategraph kanban release <task-id> [--threshold-seconds N] [--workflows-root DIR]
 openstategraph kanban triage [--board NAME] [--workflows-root DIR]
 ```
+
+These seven verbs are the whole of the loop a coding agent runs against the
+board — file, triage, attend, show, stage, answer, release. [The OpenStateGraph
+skill](the-openstategraph-skill.md) is the order it runs them in and why.
 
 The CLI door onto one card of the patrol board (`kanban-patrol/19`), beside
 the MCP one (`kanban-patrol/16`) — for a coding agent that can shell out but

@@ -1,0 +1,111 @@
+# The build loop — long form
+
+Read this when step 8 of `SKILL.md` is the step you are on. One card at a
+time, start to finish, before the next card is attended.
+
+## 1. Attend
+
+MCP: `kanban_attend_card`. CLI: `openstategraph kanban attend <task_id>
+--actor <you>`.
+
+Attending is exclusive: the first caller wins and the second is told who holds
+it. If you are refused, take the next card from triage rather than waiting.
+
+If a card is held by somebody who has plainly stopped, the board flags it
+stale and `kanban_release_card` / `openstategraph kanban release` is the
+explicit, deliberate unstick. It is not a way to take a card off a working
+agent.
+
+Read the card before you start: `kanban_show_card` /
+`openstategraph kanban show <task_id>` prints the whole self-contained
+instruction — the story, the done-when, the evidence, the model and effort.
+
+## 2. The failing test, at the layer the defect lives
+
+**First, before any implementation.** Run it and read the failure. A test you
+did not watch fail is a test you have not established anything with.
+
+*The layer the defect lives* is the part people get wrong. If a document
+compiles to the wrong graph, the test belongs at the compiler, not at the HTTP
+route that happens to call it. If a prompt produces an unparseable answer, the
+test belongs at the parser with the answer the model actually produced pasted
+into it — not at a live run.
+
+Prefer a deterministic layer wherever one exists. `compile_workflow` and
+`validate_workflow` answer without a model, so a test that asserts on their
+verdict costs nothing and cannot flake.
+
+## 3. `set_stage red`
+
+MCP: `kanban_set_stage`. CLI: `openstategraph kanban stage <task_id> red
+--actor <you> --test-id <id> --reason "<why it failed>"`.
+
+Both fields are the evidence, and the board demands them: the test's
+identifier, and the reason it failed in your own words. "It failed" is not a
+reason. "`test_router_names_a_known_branch` failed: the router answered
+`writer: draft` and the parser required a bare key" is.
+
+## 4. Make it pass
+
+The smallest change that turns that test green. Not the refactor you can see;
+not the second feature you noticed. Those are cards.
+
+## 5. Break the fix, and watch it go red again
+
+The step that gets skipped, and the only one that proves the test holds the
+behaviour rather than merely passing beside it. Revert or corrupt the change
+you just made — comment out the line, flip the condition — run the test, see
+red, then restore.
+
+If the test stays green while the fix is broken, the test is asserting
+something else and you have learned that now rather than in three months.
+
+Back up the file you are about to break, or make the break something you can
+reverse exactly. Do not rely on a version-control command to undo edits that
+are not yet committed.
+
+## 6. `set_stage green`
+
+Same tool and verb, `green`. This is the claim that the test now passes and
+that you have seen it fail — both.
+
+## 7. Commit
+
+One card, one commit, wherever the work allows it. The message says what was
+wrong and what was ruled out, not just what changed. Stage the files you
+touched by path; other people work in this repository too.
+
+## 8. `set_stage finished`, with the commit
+
+`openstategraph kanban stage <task_id> finished --actor <you> --commit <sha>`.
+The commit is required here, and that is deliberate: `Resolved` is a column
+about evidence, and a card that reached it with no commit is a claim nobody
+can check.
+
+## The two standing rules
+
+**Compile before you save.** `compile_workflow` or `validate_workflow` first,
+`save_workflow_draft` after. They are deterministic — no model, no credentials,
+no cost — and they name the defect precisely. A document saved without them is
+a defect the developer finds instead of you.
+
+**Do not run workflows casually.** Runs are gated off by default
+(`OPENSTATEGRAPH_MCP_ALLOW_RUNS=0`) because they cost money. Run only when the
+developer has enabled runs *and* asked for one in this conversation. When you
+do, pass the session marker `card:<task_id>` — over MCP as the session id, on
+the CLI as `--session-id card:<task_id>` — so the project's own patrol can
+tell your work from the developer's traffic and does not later file cards
+about its own shadow.
+
+## When a card turns out to be wrong
+
+Two honest outcomes, and both are fine:
+
+- **Already true.** The behaviour the card asks for is present. Add the test
+  that pins it, cite the evidence, and finish the card.
+- **Not reproducible.** Say so, do not commit a speculative change, and put
+  what you tried on the card. A card sent back with what was ruled out is
+  worth more than a fix that fits no defect.
+
+Never mark a card finished for work that is half done. File the remainder as
+its own card and say which half shipped.

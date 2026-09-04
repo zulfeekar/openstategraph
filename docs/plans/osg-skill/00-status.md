@@ -10,7 +10,7 @@
 - [x] Slice 2 — four agent files from one descriptor, merge semantics, init report
 - [x] Slice 3 — idea cards: columns, file_idea_card, MCP + CLI file, board renders the brief
 - [x] Slice 4 — triage: pure ordering, MCP + CLI, why_here
-- [ ] Slice 5 — the whole sheet + references + docs + documented-surface pin
+- [x] Slice 5 — the whole sheet + references + docs + documented-surface pin
 - [ ] Slice 6 — tested as a user (fresh install, real agent), three environments, close 25 and 26
 
 ## Notes for a fresh session
@@ -80,3 +80,31 @@
 - `kanban_store.py` crossed the 500-line module ceiling (493 -> 544) and now
   carries a recorded row with its argument, beside the raised numbers for
   `cli.py`, `mcp_server.py`, `api/schemas.py` and `RuntimeClient.ts`.
+
+### Where slice 5 departed from `03-program-design.md`
+- **There is no CLI verb for the node vocabulary, and none was invented.**
+  `openstategraph --help` has no `nodes`; the vocabulary is assembled by the
+  MCP server from `compile/port_specs.json`, which the wheel ships. So the
+  sheet's door table sends a command-line agent to that file rather than to a
+  verb, and the honest gap is stated instead of papered over. Adding a verb
+  would have been a second door onto generated data in the same slice that
+  writes the sheet, with nothing pinning the two together.
+- **`references/engineering-rules.md` is generated, never committed.**
+  `bundled_skills.bundled_skill_files()` adds one synthetic entry
+  (`RULES_REFERENCE` → `ENGINEERING_RULES`) so the installer writes the rules
+  into the skill tree from the same file `get_engineering_rules` serves. A
+  committed page would have been a second copy of the rules with nothing
+  holding them together — the duplication those rules forbid. The two existing
+  tree tests now derive their expectation from `bundled_skill_files()` rather
+  than from `rglob`, because a generated file is invisible to a glob.
+- **The sheet is 250 lines against a ceiling of 250**, and that is deliberate
+  rather than lucky: it was written long and trimmed to fit, twice. The long
+  form is in the four written reference pages.
+- **The lexicon pin has one narrowed exemption.** `grilling` is a card kind in
+  this product (`kanban file --kind grilling`), so the forbidden-name test
+  allows the word only on a line that also says `kind`. The hyphenated names
+  are forbidden outright.
+- **`test_documented_skill_surface.py` also pins `docs/the-openstategraph-skill.md`
+  into `docs/README.md`'s index.** Not in 03's plan; a reader's page the index
+  does not name is a page nobody reaches from the documentation's front door,
+  and that index is the one enumeration `docs/README.md` promises.

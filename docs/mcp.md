@@ -28,6 +28,11 @@ installed `[server]` (`"openstategraph[server,<provider>]"` is enough for
 both the editor and `openstategraph mcp`); install `[mcp]` on its own if you
 want the MCP transport with no web server at all.
 
+`init` also installs the skill your agent reads once the server is selected —
+the routing check, the interview, the board loop and the rules it must read
+before composing anything. [The OpenStateGraph skill](the-openstategraph-skill.md)
+is the reader's page for it.
+
 **You do not paste this block any more — `openstategraph init` writes it.**
 Four agents read four different files for a project-local stdio server, and
 `init` renders all four from one descriptor:
@@ -494,6 +499,10 @@ file|attend|stage|answer|show|release`) for an agent that is not MCP-attached
 to this project's server. Both wrap the identical function; there is no second
 implementation of the claim or ordering logic to drift out of sync with this
 one.
+
+The order these are called in — triage, attend, red, green, finished — is the
+build loop in [the OpenStateGraph skill](the-openstategraph-skill.md), which is
+the document a coding agent follows when it uses them.
 
 `kanban_list_cards` is where an agent arriving cold starts: every other tool
 here takes a `task_id` you must already know. It answers `{"ok": true,

@@ -70,6 +70,23 @@ BUNDLED_SKILLS: dict[str, Path] = {
 #: first in this project's own runtime.
 SKILL_ROOTS: tuple[str, ...] = (".claude/skills", ".agents/skills")
 
+#: The rules file the MCP server's `get_engineering_rules` serves — package
+#: data beside this module, not inside a skill directory, because it has two
+#: consumers.
+ENGINEERING_RULES: Path = _HERE / "engineering_rules.md"
+
+#: Where the installer writes a copy of it, relative to a skill root.
+#:
+#: **Generated, never committed a second time.** An agent holding the MCP door
+#: calls `get_engineering_rules`; an agent holding only the command line has no
+#: such call — there is no `openstategraph rules` verb, and adding one would be
+#: a second door onto a file the wheel already carries for a caller who can
+#: simply read it. So the sheet's own `references/` gets the text, copied at
+#: install time from the one file. A hand-written page here would be a second
+#: copy of the rules with nothing pinning the two together, which is precisely
+#: the duplication-of-knowledge defect those rules forbid.
+RULES_REFERENCE: str = "openstategraph/references/engineering-rules.md"
+
 CREATED = "created"
 REFRESHED = "refreshed"
 CURRENT = "current"
@@ -87,6 +104,7 @@ def bundled_skill_files() -> dict[tuple[str, str], Path]:
     for name, source in BUNDLED_SKILLS.items():
         for path in sorted(source.rglob("*.md")):
             files[(name, str(path.relative_to(source.parent)))] = path
+    files[("openstategraph", RULES_REFERENCE)] = ENGINEERING_RULES
     return files
 
 
@@ -122,6 +140,8 @@ def install_bundled_skills(directory: Path | str) -> dict[tuple[str, str], str]:
 
 __all__ = [
     "BUNDLED_SKILLS",
+    "ENGINEERING_RULES",
+    "RULES_REFERENCE",
     "SKILLS_ROOT",
     "bundled_skill_files",
     "CREATED",
