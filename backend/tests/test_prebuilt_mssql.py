@@ -54,10 +54,10 @@ resolvers:
 def allowlist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     """A lenses YAML inside a workflows root, returned as its relative path."""
     root = tmp_path / "workflows"
-    (root / "cpl").mkdir(parents=True)
-    (root / "cpl" / "lenses.yaml").write_text(LENSES, encoding="utf-8")
+    (root / "analyst").mkdir(parents=True)
+    (root / "analyst" / "lenses.yaml").write_text(LENSES, encoding="utf-8")
     monkeypatch.setenv("OPENSTATEGRAPH_WORKFLOWS_ROOT", str(root))
-    return "cpl/lenses.yaml"
+    return "analyst/lenses.yaml"
 
 
 class _StubCursor:
@@ -125,10 +125,10 @@ class TestTheEnvironmentVariableIsNamedNotHeld:
     def test_a_variable_set_to_blank_is_the_same_refusal(
         self, allowlist: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("CPL_DSN", "   ")
-        tool = MssqlQueryTool(connection="CPL_DSN", allowlist=allowlist)
+        monkeypatch.setenv("WAREHOUSE_DSN", "   ")
+        tool = MssqlQueryTool(connection="WAREHOUSE_DSN", allowlist=allowlist)
         result = tool.run(query="SELECT 1 FROM dbo.invoice_line_v2")
-        assert result.error is not None and "CPL_DSN" in result.error
+        assert result.error is not None and "WAREHOUSE_DSN" in result.error
 
     def test_the_connection_string_itself_is_never_the_field(
         self, allowlist: str, monkeypatch: pytest.MonkeyPatch
@@ -155,7 +155,7 @@ class TestTheStatementGate:
 
     @pytest.fixture(autouse=True)
     def _dsn(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OPENSTATEGRAPH_MSSQL_URL", "Server=warehouse;Database=cpl")
+        monkeypatch.setenv("OPENSTATEGRAPH_MSSQL_URL", "Server=warehouse;Database=warehouse")
 
     @pytest.mark.parametrize(
         "query",
@@ -201,7 +201,7 @@ class TestTheStatementGate:
 class TestTheAllowlist:
     @pytest.fixture(autouse=True)
     def _dsn(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OPENSTATEGRAPH_MSSQL_URL", "Server=warehouse;Database=cpl")
+        monkeypatch.setenv("OPENSTATEGRAPH_MSSQL_URL", "Server=warehouse;Database=warehouse")
 
     def test_an_unpinned_table_is_refused_and_the_pins_are_printed(
         self, allowlist: str, stub: _StubConnection
@@ -257,7 +257,7 @@ class TestTheAllowlist:
 class TestAQueryThatRuns:
     @pytest.fixture(autouse=True)
     def _dsn(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OPENSTATEGRAPH_MSSQL_URL", "Server=warehouse;Database=cpl")
+        monkeypatch.setenv("OPENSTATEGRAPH_MSSQL_URL", "Server=warehouse;Database=warehouse")
 
     def test_rows_come_back_as_the_familys_markdown_table(
         self, allowlist: str, stub: _StubConnection
@@ -298,17 +298,17 @@ class TestTheFamilyContract:
     def test_configure_returns_a_fresh_instance(self) -> None:
         tool = MssqlQueryTool()
         configured = tool.configure(
-            {"connection": "CPL_DSN", "allowlist": "cpl/lenses.yaml", "maxRows": "50"}
+            {"connection": "WAREHOUSE_DSN", "allowlist": "analyst/lenses.yaml", "maxRows": "50"}
         )
         assert configured is not tool
         assert isinstance(configured, MssqlQueryTool)
-        assert configured.connection == "CPL_DSN"
-        assert configured.allowlist == "cpl/lenses.yaml"
+        assert configured.connection == "WAREHOUSE_DSN"
+        assert configured.allowlist == "analyst/lenses.yaml"
         assert configured.row_cap == 50
         assert tool.connection == "OPENSTATEGRAPH_MSSQL_URL"
 
     def test_configure_is_deterministic(self) -> None:
-        data = {"connection": "CPL_DSN", "allowlist": "cpl/lenses.yaml", "maxRows": "50"}
+        data = {"connection": "WAREHOUSE_DSN", "allowlist": "analyst/lenses.yaml", "maxRows": "50"}
         first, second = MssqlQueryTool().configure(data), MssqlQueryTool().configure(data)
         assert (first.connection, first.allowlist, first.row_cap) == (
             second.connection,

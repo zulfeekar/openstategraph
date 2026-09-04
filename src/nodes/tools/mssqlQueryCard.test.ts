@@ -46,16 +46,16 @@ describe('tool.mssql-query card', () => {
     const workbench = makeWorkbench();
     const node = addNode(workbench, 'tool.mssql-query', {
       data: {
-        connection: 'CPL_DSN',
-        allowlist: 'cpl-analyst/lenses.yaml',
+        connection: 'WAREHOUSE_DSN',
+        allowlist: 'analyst/lenses.yaml',
         maxRows: '50',
       },
     });
     const saved = workbench.serializer.serialize(workbench.model);
     const restored = saved.nodes.find((entry) => entry.id === node.id);
     expect(restored?.data).toMatchObject({
-      connection: 'CPL_DSN',
-      allowlist: 'cpl-analyst/lenses.yaml',
+      connection: 'WAREHOUSE_DSN',
+      allowlist: 'analyst/lenses.yaml',
       maxRows: '50',
     });
   });
