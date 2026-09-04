@@ -161,6 +161,15 @@
   the evidence gate, the copy-instruction flow — with `docs/cli.md` and
   `docs/mcp.md` carrying the two doors, and `docs/openapi.json` regenerated.
 
+## 0.3.0rc13 — 2026-09-05
+
+Everything under *Unreleased* above this line at the time of the cut. The
+pre-release that adds the read-only T-SQL tool (`tool.mssql-query`, behind
+the `[mssql]` extra: one `SELECT`, an allowlist from a YAML's pins, the
+connection named by an environment variable), the size-first rule in the
+OpenStateGraph skill, the `[server]` extra carrying the MCP transport, and
+the stream contract saying how each stream ends.
+
 ## 0.3.0rc12 — 2026-09-04
 
 Everything under *Unreleased* above this line at the time of the cut. The
