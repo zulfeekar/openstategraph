@@ -253,3 +253,22 @@ class TestTheMergeRuleItself:
         )
 
         assert state is AgentFileState.KEPT
+
+
+class TestTheDescriptorBuildsOnEveryPythonCIRuns:
+    """osg-agent-experience/44. `ServerDescriptor.env` shipped as a bare
+    `mappingproxy` default: CPython 3.11 refuses any unhashable dataclass
+    default at class-definition time, 3.13 does not, and CI runs 3.11 first —
+    82 collection errors on the first push. A `default_factory` is what every
+    version accepts; this pins that the field is built that way, so the next
+    3.13-only session cannot ship the same class of defect."""
+
+    def test_env_is_a_default_factory_not_a_bare_proxy(self) -> None:
+        import dataclasses
+
+        from openstategraph.agent_config import ServerDescriptor
+
+        env_field = next(f for f in dataclasses.fields(ServerDescriptor) if f.name == "env")
+        assert env_field.default is dataclasses.MISSING
+        assert env_field.default_factory is not dataclasses.MISSING
+        assert dict(ServerDescriptor().env) == {"OPENSTATEGRAPH_MCP_ALLOW_RUNS": "0"}

@@ -50,7 +50,7 @@ from __future__ import annotations
 import json
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
@@ -75,7 +75,11 @@ class ServerDescriptor:
     name: str = "openstategraph"
     command: str = "openstategraph"
     args: tuple[str, ...] = ("mcp",)
-    env: Mapping[str, str] = DEFAULT_ENV
+    env: Mapping[str, str] = field(default_factory=lambda: DEFAULT_ENV)
+    # `default_factory`, not the proxy itself: CPython 3.11 refuses any
+    # unhashable default on a dataclass field, and a `mappingproxy` is one.
+    # 3.13 lets it through, which is how this shipped and how CI, which
+    # runs 3.11 first, was the instrument that caught it (osg-agent-experience/44).
     description: str = "OpenStateGraph — local workflow compiler, validator and board"
 
     def entry(self) -> dict[str, object]:

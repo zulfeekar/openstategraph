@@ -1,0 +1,752 @@
+{
+  "version": 1,
+  "name": "Warehouse Analyst",
+  "published": false,
+  "savedAt": "2026-09-04T23:32:28.236565",
+  "document": {
+    "version": 3,
+    "name": "Warehouse Analyst - NL to SQL to NL",
+    "settings": {},
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 100
+        }
+      },
+      {
+        "id": "axis1",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Extract axis values: entity, date_range, unit, grain."
+          }
+        },
+        "position": {
+          "x": 200,
+          "y": 100
+        }
+      },
+      {
+        "id": "router1",
+        "type": "route.classifier",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Route to correct lens resolver."
+          }
+        },
+        "position": {
+          "x": 380,
+          "y": 100
+        }
+      },
+      {
+        "id": "sql1",
+        "type": "tool.sql-query",
+        "data": {
+          "database": "mssql"
+        },
+        "position": {
+          "x": 380,
+          "y": 350
+        }
+      },
+      {
+        "id": "lens1",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle albums queries."
+          }
+        },
+        "position": {
+          "x": 540,
+          "y": 150
+        }
+      },
+      {
+        "id": "lens2",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle artists queries."
+          }
+        },
+        "position": {
+          "x": 680,
+          "y": 150
+        }
+      },
+      {
+        "id": "lens3",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle artists_silver queries."
+          }
+        },
+        "position": {
+          "x": 820,
+          "y": 150
+        }
+      },
+      {
+        "id": "lens4",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle tracks queries."
+          }
+        },
+        "position": {
+          "x": 960,
+          "y": 150
+        }
+      },
+      {
+        "id": "lens5",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle playlists queries."
+          }
+        },
+        "position": {
+          "x": 1100,
+          "y": 150
+        }
+      },
+      {
+        "id": "lens6",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle genres queries."
+          }
+        },
+        "position": {
+          "x": 540,
+          "y": 230
+        }
+      },
+      {
+        "id": "lens7",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle media_types queries."
+          }
+        },
+        "position": {
+          "x": 680,
+          "y": 230
+        }
+      },
+      {
+        "id": "lens8",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle playlist_track queries."
+          }
+        },
+        "position": {
+          "x": 820,
+          "y": 230
+        }
+      },
+      {
+        "id": "lens9",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle invoice_items queries."
+          }
+        },
+        "position": {
+          "x": 960,
+          "y": 230
+        }
+      },
+      {
+        "id": "lens10",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle customers queries."
+          }
+        },
+        "position": {
+          "x": 1100,
+          "y": 230
+        }
+      },
+      {
+        "id": "lens11",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle pricing_history queries."
+          }
+        },
+        "position": {
+          "x": 540,
+          "y": 310
+        }
+      },
+      {
+        "id": "lens12",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle pricing_now queries."
+          }
+        },
+        "position": {
+          "x": 680,
+          "y": 310
+        }
+      },
+      {
+        "id": "lens13",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle sales_timeseries queries."
+          }
+        },
+        "position": {
+          "x": 820,
+          "y": 310
+        }
+      },
+      {
+        "id": "lens14",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle sales_events queries."
+          }
+        },
+        "position": {
+          "x": 960,
+          "y": 310
+        }
+      },
+      {
+        "id": "lens15",
+        "type": "agent.llm",
+        "data": {
+          "systemPrompt": {
+            "type": "rules",
+            "content": "Handle sales_product queries."
+          }
+        },
+        "position": {
+          "x": 1100,
+          "y": 310
+        }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 500
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "axis1",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "axis1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "router1",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens1",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens2",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens3",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens4",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens5",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens6",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens7",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens8",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens9",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens10",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens11",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens12",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens13",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens14",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens15",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens2",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens3",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens4",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens5",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens6",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens7",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens8",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens9",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens10",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens11",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens12",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens13",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens14",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "sql1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "lens15",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens2",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens3",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens4",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens5",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens6",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens7",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens8",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens9",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens10",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens11",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens12",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens13",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens14",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lens15",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      }
+    ]
+  }
+}
