@@ -42,7 +42,7 @@ def _declared_names() -> dict[str, list[str]]:
     one by that mechanism."""
     by_name: dict[str, list[str]] = {}
     sources = [path for path in (ROOT / "skills").glob("*/SKILL.md")]
-    sources += list(BUNDLED_SKILLS.values())
+    sources += [directory / "SKILL.md" for directory in BUNDLED_SKILLS.values()]
     for path in sources:
         match = _NAME.search(path.read_text())
         if not match:
@@ -58,14 +58,15 @@ class TestWhatItInstalls:
         for root in SKILL_ROOTS:
             for name in BUNDLED_SKILLS:
                 assert (tmp_path / root / name / "SKILL.md").is_file()
-        assert set(results) == {(root, name) for root in SKILL_ROOTS for name in BUNDLED_SKILLS}
+        installed = {relative for _root, relative in results}
+        assert installed >= {f"{name}/SKILL.md" for name in BUNDLED_SKILLS}
 
     def test_the_installed_content_matches_the_shipped_file_verbatim(self, tmp_path: Path) -> None:
         install_bundled_skills(tmp_path)
 
         for name, source in BUNDLED_SKILLS.items():
             installed = (tmp_path / SKILL_ROOTS[0] / name / "SKILL.md").read_text()
-            assert installed == source.read_text()
+            assert installed == (source / "SKILL.md").read_text()
 
     def test_fresh_install_reports_created(self, tmp_path: Path) -> None:
         results = install_bundled_skills(tmp_path)
@@ -94,8 +95,8 @@ class TestIdempotency:
 
         results = install_bundled_skills(tmp_path)
 
-        assert results[(SKILL_ROOTS[0], "ticket-forge")] == REFRESHED
-        assert edited.read_text() == BUNDLED_SKILLS["ticket-forge"].read_text()
+        assert results[(SKILL_ROOTS[0], "ticket-forge/SKILL.md")] == REFRESHED
+        assert edited.read_text() == (BUNDLED_SKILLS["ticket-forge"] / "SKILL.md").read_text()
 
 
 class TestThePatrolSkillStatesTheSelfReferenceTrap:
@@ -109,7 +110,7 @@ class TestThePatrolSkillStatesTheSelfReferenceTrap:
     """
 
     def _skill(self) -> str:
-        return BUNDLED_SKILLS["kanban-patrol"].read_text()
+        return (BUNDLED_SKILLS["kanban-patrol"] / "SKILL.md").read_text()
 
     def test_it_tells_the_agent_to_mark_the_runs_it_makes(self) -> None:
         text = self._skill()

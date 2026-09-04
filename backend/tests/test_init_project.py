@@ -653,9 +653,10 @@ class TestProjectIdentity:
 
 
 class TestBundledSkillsInstallOnInit:
-    """`kanban-patrol/24`. `ticket-forge` and `kanban-patrol` are OpenStateGraph's
-    own skills — installed the same way `AGENTS.md` is, project-locally, in
-    both directories a coding agent might scan."""
+    """`kanban-patrol/24`. `ticket-forge`, `kanban-patrol` and the entry sheet
+    `openstategraph` (`osg-agent-experience/25`) are OpenStateGraph's own
+    skills — installed the same way `AGENTS.md` is, project-locally, in both
+    directories a coding agent might scan."""
 
     def test_a_fresh_project_gets_both_skills_in_both_roots(self, tmp_path: Path) -> None:
         from openstategraph.bundled_skills import BUNDLED_SKILLS, SKILL_ROOTS
@@ -665,6 +666,7 @@ class TestBundledSkillsInstallOnInit:
         for root in SKILL_ROOTS:
             for name in BUNDLED_SKILLS:
                 assert (result.directory / root / name / "SKILL.md").is_file()
+        assert "openstategraph" in BUNDLED_SKILLS
 
     def test_a_second_init_does_not_rewrite_unchanged_skills(self, tmp_path: Path) -> None:
         from openstategraph.bundled_skills import SKILL_ROOTS

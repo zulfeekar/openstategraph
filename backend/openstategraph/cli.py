@@ -926,9 +926,11 @@ def cmd_init(args: argparse.Namespace) -> int:
     # kanban-patrol/24: OpenStateGraph's own skills, installed the same way —
     # project-local, in both directories a coding agent might scan. One line
     # per root so a reader sees both rather than inferring the second.
-    skill_names = ", ".join(sorted({name for _, name in result.skills_installed}))
+    skill_names = ", ".join(sorted(BUNDLED_SKILLS))
     for root in dict.fromkeys(r for r, _ in result.skills_installed):
-        states = {result.skills_installed[(root, name)] for name in BUNDLED_SKILLS}
+        states = {
+            state for (where, _relative), state in result.skills_installed.items() if where == root
+        }
         summary = states.pop() if len(states) == 1 else "mixed"
         print(f"  {root + '/':<22}  {skill_names} — {summary}")
     print()

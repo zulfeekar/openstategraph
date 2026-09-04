@@ -88,6 +88,16 @@ A token is not a substitute for a network boundary. `deploy/Caddyfile` and
 
 ### Step 1 — `get_node_vocabulary()`, always first
 
+Beside it, once: `get_engineering_rules()`. The vocabulary says what exists;
+the rules say what may legally be built out of it — the
+interface/abstract/base/concrete ladder, extension by registration, port
+cardinality, one field schema, tests first, and the rule that decides most
+arguments: *never invent a node type the registry does not know*. Making a
+new one is fine, through the family's base and registered first. It answers
+`{"version", "rules"}`, versioned with the installed package because they are
+the rules of the release the caller actually has; it is deterministic, calls
+no model, and stays open on a deployment with runs closed.
+
 The client's model cannot invent our node types or port ids, so the server's
 instructions make this the mandatory first call. The payload is
 machine-readable and assembled from three existing sources of truth (the
@@ -603,7 +613,7 @@ credential, secret or key:
    denial-of-service knob.
 
 The exposed tools, in `EXPOSED_TOOLS` order. Authoring a workflow:
-`get_node_vocabulary`, `compile_workflow`, `validate_workflow`,
+`get_node_vocabulary`, `get_engineering_rules`, `compile_workflow`, `validate_workflow`,
 `list_workflows`, `describe_workflow`, `get_knowledge`, `export_plugin`,
 `save_workflow_draft`, `run_workflow`. The patrol board (§5a):
 `kanban_attend_card`, `kanban_set_stage`, `kanban_list_cards`,

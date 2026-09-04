@@ -97,6 +97,7 @@ logger = logging.getLogger(__name__)
 #: absent deliberately, and a test asserts it.
 EXPOSED_TOOLS: tuple[str, ...] = (
     "get_node_vocabulary",
+    "get_engineering_rules",
     "compile_workflow",
     "validate_workflow",
     "list_workflows",
@@ -1223,6 +1224,26 @@ def build_mcp_server(
         You cannot compose a workflow correctly without this.
         """
         return vocabulary.describe()
+
+    @server.tool(name="get_engineering_rules")
+    def get_engineering_rules() -> dict[str, Any]:
+        """CALL THIS BEFORE COMPOSING ANYTHING, beside `get_node_vocabulary`.
+
+        The vocabulary says what exists; this says what may be built out of
+        it — the interface/abstract/base/concrete ladder, extension by
+        registration, port cardinality, one field schema, tests first, and
+        the rule that decides most arguments: never invent a node type the
+        registry does not know (making a new one is fine, through the
+        family's base, registered first).
+
+        Deterministic: no model, no store, no credentials. `version` is the
+        installed package's, because these are the rules of the release the
+        caller actually has.
+        """
+        from openstategraph import __version__
+        from openstategraph.engineering_rules import read_engineering_rules
+
+        return {"version": __version__, "rules": read_engineering_rules()}
 
     @server.tool(name="compile_workflow")
     def compile_workflow(document: Any, name: str | None = None) -> dict[str, Any]:

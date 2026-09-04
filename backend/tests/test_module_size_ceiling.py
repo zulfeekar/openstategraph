@@ -410,6 +410,14 @@ No new logic here at all — `patrol.card_session_id` owns the spelling and
 a value along and one command saying what the actor must now do. A separate
 module for one f-string was not considered.
 
+
+**1465 -> 1467** (`osg-agent-experience/25`, 2026-09-04). Two lines, and they
+are a subtraction that reads as an addition: `init`'s skills line summarised
+one state per skill, and the installer now reports one state per *file*, so
+the set it collapses is built from the report rather than re-derived from
+`BUNDLED_SKILLS`. The names still come from the map, because the map is what
+the wheel ships; what changed is that a stale reference page beside a current
+sheet now shows as `mixed` instead of being invisible.
 """
 
 WORKFLOW_COMPILER = """
@@ -678,6 +686,15 @@ never the server minting one — `test_a_sitting_is_named_by_the_browser.py`
 still pins that — and it is what lets an agent working a board card over MCP
 mark its runs so the next patrol skips them.
 
+
+**887 -> 897** (`osg-agent-experience/25`, 2026-09-04). Ten lines,
+`get_engineering_rules` — the second half of the sentence the server's own
+instructions already made mandatory. `get_node_vocabulary` says what exists;
+this says what may be built out of it, for a caller who has installed the
+wheel and therefore has no copy of this repository's architecture document.
+The text is not here: it is package data with one reader
+(`engineering_rules.py`), and this is a wrapper over it, so the rules cannot
+acquire a second spelling on the transport that serves them.
 """
 
 ROUTES_WORKFLOWS = """
@@ -939,11 +956,11 @@ principal, and the comment beside it is where that is said on the wire side.
 
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1465, CLI),
+    "cli.py": Recorded(1467, CLI),
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(891, MCP_SERVER),
+    "mcp_server.py": Recorded(897, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(529, SCHEMAS),

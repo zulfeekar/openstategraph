@@ -750,9 +750,9 @@ def init_project(
     from openstategraph.bundled_skills import install_bundled_skills
 
     skills_installed = install_bundled_skills(target)
-    for (skill_root, name), state in skills_installed.items():
+    for (skill_root, relative), state in skills_installed.items():
         if state == SKILL_CREATED:
-            created.append(target / skill_root / name / "SKILL.md")
+            created.append(target / skill_root / relative)
 
     root = target / workflows_dir
     root.mkdir(parents=True, exist_ok=True)
