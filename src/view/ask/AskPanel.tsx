@@ -4,6 +4,7 @@ import { showsThinking } from './settledThinking';
 import { SpawnedPills } from '@view/spawned/SpawnedPills';
 import { spawnedTasks } from '@view/spawned/spawnedTasks';
 import { showsSteps } from './showsSteps';
+import { senderLabel } from './senderLabel';
 import { attemptsLine } from './attemptsLine';
 import { decisionRows } from './decisionRows';
 import { rectOfAdded } from './revealAdded';
@@ -2150,149 +2151,155 @@ function Turn({
       ) : null}
       <div className="ask__question">{turn.question}</div>
 
-      {showsSteps({ running: turn.running, hasPills }) ? (
-        <div className="ask__steps">
-          {/* The trace tree and the bars used to be here, behind a two-tab
+      {/* Everything below is the workflow's side of the conversation, in one
+          group under one name (`stable-beta-public/10`). */}
+      <div className="ask__reply">
+        <p className="ask__sender">{senderLabel(controller.model.name)}</p>
+
+        {showsSteps({ running: turn.running, hasPills }) ? (
+          <div className="ask__steps">
+            {/* The trace tree and the bars used to be here, behind a two-tab
               switch. `memory-and-replay` 51 moved both to the run dock along
               the bottom of the shell, side by side rather than one at a time:
               they are two readings of one record and a 300px chat column could
               only ever show one. What is left in the chat panel is the chat —
               what is being said now, and what this run handed to somebody
               else. */}
-          {/* Below both views and outside either record: what the working step
+            {/* Below both views and outside either record: what the working step
               is saying about itself right now is not a step that ran and not a
               bar on a timeline. Gated on `running` so every ending — answered,
               stopped, failed, paused — clears it without having to remember
               to. `aria-live` because for a screen reader this line is the only
               evidence the run has not died. */}
-          {/* Between the record and the live line: a pill is neither a step
+            {/* Between the record and the live line: a pill is neither a step
               that ran nor the sentence being said now — it is *what this run
               handed to somebody else*, and it belongs where a reader looks
               after asking "what is taking so long". Nothing here is savable
               and nothing here writes: see `SpawnedPills`. */}
-          <SpawnedPills rows={turn.activity} running={turn.running} />
-          {turn.running && turn.progress ? (
-            <ThinkingLine text={turn.progress.text} className="ask__live" />
-          ) : (
-            // And when nothing is saying anything, what it is waiting for.
-            //
-            // `launch-readiness/141`: measured on a 28-node package, the first
-            // narration frame does not leave the server until 4.99 s — three
-            // nodes run before anything with a voice does. The frames that do
-            // arrive are prompt (received 15.9 ms, in the DOM 62.9 ms), so
-            // this is not a rendering delay to fix; it is a silence to
-            // account for. The sentence names the wait and never the work,
-            // because the stream does not say what the next step is — see
-            // `waitingLine`.
-            <ThinkingLine
-              text={waitingLine({
-                running: turn.running,
-                saidSomething: turn.progress !== null || turn.spoke,
-                streaming: turn.thinking !== '',
-                awaitingApproval: turn.pendingApproval !== null,
-                stepsSoFar: turn.activity.length,
-              })}
-              className="ask__live"
-            />
-          )}
-        </div>
-      ) : null}
+            <SpawnedPills rows={turn.activity} running={turn.running} />
+            {turn.running && turn.progress ? (
+              <ThinkingLine text={turn.progress.text} className="ask__live" />
+            ) : (
+              // And when nothing is saying anything, what it is waiting for.
+              //
+              // `launch-readiness/141`: measured on a 28-node package, the first
+              // narration frame does not leave the server until 4.99 s — three
+              // nodes run before anything with a voice does. The frames that do
+              // arrive are prompt (received 15.9 ms, in the DOM 62.9 ms), so
+              // this is not a rendering delay to fix; it is a silence to
+              // account for. The sentence names the wait and never the work,
+              // because the stream does not say what the next step is — see
+              // `waitingLine`.
+              <ThinkingLine
+                text={waitingLine({
+                  running: turn.running,
+                  saidSomething: turn.progress !== null || turn.spoke,
+                  streaming: turn.thinking !== '',
+                  awaitingApproval: turn.pendingApproval !== null,
+                  stepsSoFar: turn.activity.length,
+                })}
+                className="ask__live"
+              />
+            )}
+          </div>
+        ) : null}
 
-      {/* Above the reasoning, because the tools are what the reasoning is
+        {/* Above the reasoning, because the tools are what the reasoning is
           reasoning about — and in their own blocks, so a long result scrolls
           on its own instead of pushing the model's prose out of one shared
           region (ticket 02). */}
-      <ToolResults results={turn.toolResults} />
+        <ToolResults results={turn.toolResults} />
 
-      {showsDraft({
-        draft: turn.draft,
-        running: turn.running,
-        answer: turn.result?.answer ?? '',
-        awaitingApproval: turn.pendingApproval !== null,
-      }) ? (
-        // A reply a grader has still to judge (`every-workflow-green` 45).
-        //
-        // Its own region, above the ordinary streamed block, because it is the
-        // one piece of text on this panel that the run may be about to throw
-        // away. `role="status"` on the notice and nowhere else: the notice is
-        // written once and never changes, so a screen reader announces the
-        // state once — putting the live region on the text would announce
-        // every token.
-        //
-        // `ask__draft` is `user-select: none`. Selecting the figure out of an
-        // unsettled answer and pasting it somewhere is precisely how three
-        // wrong numbers were reported as results in one day, and a mark that
-        // stays behind on screen while the number travels is not a mark.
-        <div className="ask__draft">
-          <p className="ask__draft-notice" role="status">
-            {DRAFT_NOTICE}
-          </p>
-          <pre className="ask__draft-text">{turn.draft}</pre>
-        </div>
-      ) : null}
+        {showsDraft({
+          draft: turn.draft,
+          running: turn.running,
+          answer: turn.result?.answer ?? '',
+          awaitingApproval: turn.pendingApproval !== null,
+        }) ? (
+          // A reply a grader has still to judge (`every-workflow-green` 45).
+          //
+          // Its own region, above the ordinary streamed block, because it is the
+          // one piece of text on this panel that the run may be about to throw
+          // away. `role="status"` on the notice and nowhere else: the notice is
+          // written once and never changes, so a screen reader announces the
+          // state once — putting the live region on the text would announce
+          // every token.
+          //
+          // `ask__draft` is `user-select: none`. Selecting the figure out of an
+          // unsettled answer and pasting it somewhere is precisely how three
+          // wrong numbers were reported as results in one day, and a mark that
+          // stays behind on screen while the number travels is not a mark.
+          <div className="ask__draft">
+            <p className="ask__draft-notice" role="status">
+              {DRAFT_NOTICE}
+            </p>
+            <pre className="ask__draft-text">{turn.draft}</pre>
+          </div>
+        ) : null}
 
-      {showsThinking({
-        thinking: turn.thinking,
-        running: turn.running,
-        answer: turn.result?.answer ?? '',
-        awaitingApproval: turn.pendingApproval !== null,
-      }) ? (
-        // Raw tokens while streaming (legible mid-arrival), markdown once
-        // settled — the "improperly formatted chat" fix (ticket 62).
-        //
-        // `showsThinking` rather than `turn.thinking`: a settled block ends
-        // with the answer by construction, so rendering both printed the whole
-        // answer twice (`every-workflow-green` 10). It survives only for a turn
-        // that settled without publishing one.
-        turn.running ? (
-          <pre className="ask__thinking">{turn.thinking}</pre>
-        ) : (
-          <RichText className="ask__thinking ask__thinking--settled" text={turn.thinking} />
-        )
-      ) : null}
+        {showsThinking({
+          thinking: turn.thinking,
+          running: turn.running,
+          answer: turn.result?.answer ?? '',
+          awaitingApproval: turn.pendingApproval !== null,
+        }) ? (
+          // Raw tokens while streaming (legible mid-arrival), markdown once
+          // settled — the "improperly formatted chat" fix (ticket 62).
+          //
+          // `showsThinking` rather than `turn.thinking`: a settled block ends
+          // with the answer by construction, so rendering both printed the whole
+          // answer twice (`every-workflow-green` 10). It survives only for a turn
+          // that settled without publishing one.
+          turn.running ? (
+            <pre className="ask__thinking">{turn.thinking}</pre>
+          ) : (
+            <RichText className="ask__thinking ask__thinking--settled" text={turn.thinking} />
+          )
+        ) : null}
 
-      {turn.pendingApproval ? (
-        <ApprovalPrompt
-          approval={turn.pendingApproval}
-          onApprove={() => onRespond(turn.id, 'approve')}
-          onReject={(note) => onRespond(turn.id, 'reject', note)}
-        />
-      ) : null}
+        {turn.pendingApproval ? (
+          <ApprovalPrompt
+            approval={turn.pendingApproval}
+            onApprove={() => onRespond(turn.id, 'approve')}
+            onReject={(note) => onRespond(turn.id, 'reject', note)}
+          />
+        ) : null}
 
-      {/* Muted, with no error styling and no warning glyph: the developer
+        {/* Muted, with no error styling and no warning glyph: the developer
           asked for this, so presenting it as a failure would be the panel
           disagreeing with them. */}
-      {turn.capabilityGap !== null && !turn.suggestion ? (
-        <CapabilityGapCard
-          gap={turn.capabilityGap}
-          onStart={() => onStartBuild(turn.capabilityGap ?? '')}
-        />
-      ) : null}
+        {turn.capabilityGap !== null && !turn.suggestion ? (
+          <CapabilityGapCard
+            gap={turn.capabilityGap}
+            onStart={() => onStartBuild(turn.capabilityGap ?? '')}
+          />
+        ) : null}
 
-      {turn.stopped ? <p className="ask__stopped">{stoppedLine(turn.stopped)}</p> : null}
+        {turn.stopped ? <p className="ask__stopped">{stoppedLine(turn.stopped)}</p> : null}
 
-      {turn.error ? (
-        <p className="ask__error">
-          <Icon glyph={TriangleAlert} size="sm" />
-          {turn.error}
-        </p>
-      ) : null}
+        {turn.error ? (
+          <p className="ask__error">
+            <Icon glyph={TriangleAlert} size="sm" />
+            {turn.error}
+          </p>
+        ) : null}
 
-      {turn.result ? <Answer result={turn.result} /> : null}
+        {turn.result ? <Answer result={turn.result} /> : null}
 
-      {turn.suggestion ? (
-        <SuggestionCard
-          suggestion={turn.suggestion}
-          accept={acceptActionFor(turn.suggestion as CapabilitySuggestion)}
-          decision={turn.suggestionDecision}
-          onAccept={() => onApplySuggestion(turn.id, turn.suggestion as CapabilitySuggestion)}
-          onDecline={() => onDeclineSuggestion(turn.id)}
-        />
-      ) : null}
+        {turn.suggestion ? (
+          <SuggestionCard
+            suggestion={turn.suggestion}
+            accept={acceptActionFor(turn.suggestion as CapabilitySuggestion)}
+            decision={turn.suggestionDecision}
+            onAccept={() => onApplySuggestion(turn.id, turn.suggestion as CapabilitySuggestion)}
+            onDecline={() => onDeclineSuggestion(turn.id)}
+          />
+        ) : null}
 
-      {/* What the editor did on the developer's behalf, in the thread where
+        {/* What the editor did on the developer's behalf, in the thread where
           they are already looking — never only on the canvas. */}
-      {turn.notice ? <p className="ask__did">{turn.notice}</p> : null}
+        {turn.notice ? <p className="ask__did">{turn.notice}</p> : null}
+      </div>
     </div>
   );
 }

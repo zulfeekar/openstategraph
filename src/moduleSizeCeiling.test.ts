@@ -86,7 +86,7 @@ interface Recorded {
 
 const RECORDED: Readonly<Record<string, Recorded>> = {
   'view/ask/AskPanel.tsx': {
-    lines: 969,
+    lines: 973,
     reason: `The largest module under \`src/\` and the one the ticket named: the counterpart
       of \`node_runtime.py\` with no split ticket behind it at all. Eight hundred and
       eighty-nine code lines out of 2,237 physical — the rest is JSX structure, imports and
@@ -179,7 +179,24 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       of something a reader had nowhere to click. Both branches already existed
       here and already read those frames; what is added is a \`queueRow\` in
       each, which is this module's one job — turn a frame into a row. No new
-      reason to change, and the transcript seam is still the next one.`,
+      reason to change, and the transcript seam is still the next one.
+
+      **964 -> 969** (\`stable-beta-public/08\`) has no row of its own, and that
+      is recorded rather than quietly absorbed into the next one: the number
+      was bumped for the \`showsSteps\` import and the two-line \`hasPills\`
+      fold, the resolution says so, and the row that should have said it here
+      was not written. A number moved without its argument is the exact failure
+      this table exists to prevent, so it is named where the next reader will
+      look.
+
+      **969 -> 973** (\`stable-beta-public/10\`). Four lines: the \`senderLabel\`
+      import, and a \`.ask__reply\` wrapper carrying one \`.ask__sender\`
+      paragraph around everything the workflow said back. The *rule* for what
+      that label reads is not among them — it is \`senderLabel.ts\`, beside its
+      own test, for the reason \`draftNotice.ts\` and \`settledThinking.ts\`
+      were extracted. No new reason to change: this module already composed
+      every block inside that wrapper, and the wrapper only says which side of
+      a conversation they are on. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
     lines: 881,

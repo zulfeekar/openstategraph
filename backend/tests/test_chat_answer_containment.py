@@ -91,5 +91,29 @@ class TestTheAnswerCardContainsItsAnswer:
         assert "overflow-wrap: anywhere" in _rule(page, ".q")
 
     def test_the_page_never_scrolls_sideways_as_a_whole(self, page: str) -> None:
-        """Containment means the overflow stays in the card that owns it."""
-        assert "max-width: 100%" in _rule(page, ".answer")
+        """Containment means the overflow stays in the card that owns it.
+
+        This used to read ``max-width: 100%`` literally. `stable-beta-public/10`
+        turned the answer into a bubble, so the cap is now the conversation
+        grammar's own ``--chat-bubble-max-width`` — a *tighter* bound than the
+        one this test was written to hold, not a weaker one. Asserting the
+        literal would have failed on a change that made the property more true,
+        which is what a test of a spelling does.
+
+        So the property is asserted instead: whatever the card declares, it
+        resolves to a percentage of its column that is at most the full column.
+        The token is resolved out of the page rather than assumed, because a
+        `var()` naming nothing is an invalid value, not a fallback — and an
+        answer with no cap at all is exactly the sideways scroll this file is
+        about.
+        """
+        declared = re.search(r"max-width:\s*([^;]+);", _rule(page, ".answer"))
+        assert declared is not None, ".answer declares no width cap at all"
+        value = declared.group(1).strip()
+        token = re.fullmatch(r"var\((--[a-z0-9-]+)\)", value)
+        if token is not None:
+            resolved = re.search(rf"{token.group(1)}:\s*([^;]+);", page)
+            assert resolved is not None, f"{token.group(1)} is declared nowhere"
+            value = resolved.group(1).strip()
+        assert value.endswith("%"), f".answer's width cap is not a percentage: {value}"
+        assert float(value.rstrip("%")) <= 100

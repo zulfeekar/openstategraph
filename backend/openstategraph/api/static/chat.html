@@ -130,6 +130,32 @@
 
   main { flex: 1; overflow-y: auto; padding: var(--space-4) var(--space-5); min-height: 0; }
 
+  /* ---------- The conversation grammar (`stable-beta-public/10`) ----------
+   *
+   * The same four names the editor's chat panel declares on `.ask__thread`
+   * (`src/view/ask/AskPanel.css`), resolving to the same tokens.
+   *
+   * This file restates the token *values* in its own `:root` above, because
+   * it is a standalone asset served straight off the backend with no build
+   * step — so the radii here are the authored 9px/3px rather than the app's
+   * flat zero, and that divergence is old and deliberate. What must not
+   * diverge is the grammar: how round a bubble is, how much room its text
+   * has, how far apart two bubbles from one side sit, and how far apart the
+   * two sides sit. `src/view/ask/chatBubblesAgree.test.ts` reads this file
+   * and `AskPanel.css` as text and fails if the names or the token
+   * expressions drift apart.
+   *
+   * Before this ticket the page had none of them: a question was a small
+   * tinted box on the right and an answer a full-width bordered rectangle —
+   * the same shape as the composer below it. */
+  #log {
+    --chat-bubble-radius: var(--radius-lg);
+    --chat-bubble-padding: var(--space-2) var(--space-3);
+    --chat-gap-group: var(--space-1);
+    --chat-gap-side: var(--space-3);
+    --chat-bubble-max-width: 78%;
+  }
+
   /* ---------- Live flow ---------- */
   #flow { position: relative; }
   #flow svg { width: 100%; height: auto; }
@@ -233,14 +259,37 @@
   .empty p { margin: 0; color: var(--muted); font-size: var(--font-size-14); }
 
   /* ---------- A turn ---------- */
-  .turn { margin-bottom: var(--space-6); }
+  /* One turn: the question, then everything the workflow said back. The room
+     below it is the room between two turns of one conversation — a bigger
+     unit than the side change inside a turn, which is `--chat-gap-side`. */
+  .turn { margin-bottom: var(--space-5); }
   .q {
-    max-width: 88%; margin: 0 0 var(--space-2-5) auto; width: fit-content;
-    padding: var(--space-2) var(--space-3); background: var(--accent-soft);
-    border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xs) var(--radius-xl); font-size: var(--font-size-14);
+    max-width: var(--chat-bubble-max-width); margin: 0 0 var(--chat-gap-side) auto; width: fit-content;
+    padding: var(--chat-bubble-padding); background: var(--accent-soft);
+    /* Square at the bottom right — the corner facing this side's own edge. */
+    border-radius: var(--chat-bubble-radius) var(--chat-bubble-radius) var(--radius-xs) var(--chat-bubble-radius);
+    font-size: var(--font-size-14);
     /* Same containment as `.answer` below, found in the same screenshot: a
        question with a URL in it ran off the right edge of its own bubble. */
     overflow-wrap: anywhere; word-break: break-word;
+  }
+
+  /* ---------- The workflow's side ----------
+     Everything the run said back, in one group under one name: the steps
+     strip, the timeline, the reasoning, a draft, an approval and the answer.
+     Each keeps its own component — the ticket's instruction was *do not
+     invent anything new* — and what changes is that they now sit inside one
+     side of a conversation instead of stacking down the middle of the column
+     at the same width as the composer.
+
+     `align-items: stretch` on purpose: the answer caps its own width, while
+     the boxes are panels and would look broken shrunk to their text. */
+  .reply { display: flex; flex-direction: column; gap: var(--chat-gap-group); align-items: stretch; }
+  /* Who is speaking, once per turn rather than once per bubble. No avatar:
+     the product has no face for a workflow. */
+  .who {
+    margin: 0; color: var(--muted); font-size: var(--font-size-11);
+    font-weight: var(--font-weight-semibold); text-transform: uppercase; letter-spacing: .07em;
   }
 
   /* The steps are an activity strip, not a log: one quiet line per step, on a
@@ -249,7 +298,7 @@
   .steps {
     font-size: var(--font-size-12); color: var(--muted);
     background: var(--surface); border: 1px solid var(--line-soft);
-    border-radius: var(--radius-lg); padding: var(--space-2) var(--space-2-5); margin: 0 0 var(--space-2);
+    border-radius: var(--radius-lg); padding: var(--space-2) var(--space-2-5); margin: 0;
     display: flex; flex-direction: column; gap: var(--space-0-5);
   }
   .steps:empty { display: none; }
@@ -337,7 +386,7 @@
   }
 
   /* ---------- Read-only run timeline ---------- */
-  details.tl { margin: 0 0 var(--space-2); font-size: var(--font-size-12); }
+  details.tl { margin: 0; font-size: var(--font-size-12); }
   details.tl[hidden] { display: none; }
   details.tl > summary {
     cursor: pointer; list-style: none; color: var(--faint);
@@ -368,17 +417,17 @@
      selected out of an unsettled answer and pasted elsewhere arrives with
      nothing attached saying it was unsettled, which is exactly how three wrong
      figures were reported as results in one day. */
-  .draft:not([hidden]) { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-lg); padding: var(--space-2) var(--space-3); margin-top: var(--space-2); user-select: none; -webkit-user-select: none; }
+  .draft:not([hidden]) { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-lg); padding: var(--space-2) var(--space-3); margin-top: 0; user-select: none; -webkit-user-select: none; }
   .draft-notice { margin: 0 0 var(--space-1); font-size: var(--font-size-12); color: var(--muted); }
   .draft-text { font-size: var(--font-size-12); color: var(--muted); font-style: italic; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow-y: auto; }
   .thinking { font-size: var(--font-size-12); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow-y: auto; }
-  .thinking:not(:empty) { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-lg); padding: var(--space-2) var(--space-3); margin-top: var(--space-2); }
+  .thinking:not(:empty) { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-lg); padding: var(--space-2) var(--space-3); margin-top: 0; }
   /* The model's deliberation, kept visibly apart from the reply it is
      deliberating towards — see the `block` branch in `stream()`. Fainter and
      italic, because it is the one text on this page nobody should mistake for
      the answer. */
   .reasoning { font-size: var(--font-size-12); color: var(--faint); font-style: italic; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 110px; overflow-y: auto; }
-  .reasoning:not(:empty) { border-inline-start: 2px solid var(--line); padding: var(--space-1) var(--space-3); margin-top: var(--space-2); }
+  .reasoning:not(:empty) { border-inline-start: 2px solid var(--line); padding: var(--space-1) var(--space-3); margin-top: 0; }
   /* Containment (ticket 27). A URL is a normal thing for the Web Researcher
      branch to answer with, and one arrived 400px wider than the card: the
      prose around it wrapped, the link ran off the right edge and stopped
@@ -389,10 +438,17 @@
      behaviour and also lets the token shrink its line box, `word-break` is
      the legacy alias `.ask__answer` already carries. The scroll stays for
      what genuinely cannot break — a wide table. */
+  /* The workflow's bubble (`stable-beta-public/10`). This was a full-width
+     raised card with a hairline border, and the border plus the full width is
+     what made it read as a form field rather than as something somebody said.
+     It is still the block in a turn with the most presence — the surface
+     ground carries it against the page — but it is now a bubble: capped
+     width, on the left, squared off against its own edge. */
   .answer {
-    background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius-xl);
-    padding: var(--space-3-5) var(--space-4); margin-top: var(--space-2); overflow-x: auto; font-size: var(--font-size-14);
-    max-width: 100%; overflow-wrap: anywhere; word-break: break-word;
+    align-self: flex-start;
+    background: var(--surface); border-radius: var(--chat-bubble-radius) var(--chat-bubble-radius) var(--chat-bubble-radius) var(--radius-xs);
+    padding: var(--chat-bubble-padding); margin-top: 0; overflow-x: auto; font-size: var(--font-size-14);
+    max-width: var(--chat-bubble-max-width); overflow-wrap: anywhere; word-break: break-word;
   }
   .answer > :first-child { margin-top: 0; } .answer > :last-child { margin-bottom: 0; }
   .answer h3, .answer h4, .answer h5 { margin: var(--space-3-5) 0 var(--space-1-5); font-size: var(--font-size-16); }
@@ -415,7 +471,7 @@
     display: flex; align-items: center; gap: var(--space-2);
     background: color-mix(in srgb, var(--paused) 12%, var(--raised));
     border: 1px solid var(--paused); border-radius: var(--radius-lg);
-    padding: var(--space-2) var(--space-3); margin-top: var(--space-2);
+    padding: var(--space-2) var(--space-3); margin-top: 0;
     font-size: var(--font-size-13); color: var(--text);
   }
   /* `launch-readiness` 33 — an author rule that sets `display` unconditionally
@@ -428,7 +484,7 @@
   .rejected-banner[hidden] { display: none; }
   .rejected-banner .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--paused); flex: none; }
   .error { color: var(--danger); }
-  .hitl { border: 1px solid var(--line); border-radius: var(--radius-xl); padding: var(--space-3) var(--space-4); margin-top: var(--space-2); background: var(--surface); }
+  .hitl { border: 1px solid var(--line); border-radius: var(--radius-xl); padding: var(--space-3) var(--space-4); margin-top: 0; background: var(--surface); }
 
   /* ---------- The approval card ----------
    *
@@ -1359,10 +1415,32 @@ async function docFor(slug) {
   return state.doc.document;
 }
 
+/* The name above the workflow's first bubble of a turn
+ * (`stable-beta-public/10`).
+ *
+ * The picker's own label rather than the slug: a slug is a name the customer
+ * never chose (`say-it-on-the-surface/03`), and the option they selected is
+ * the words this page has already used for the workflow. Falls back to the
+ * slug only when the picker cannot say — a run started before the catalogue
+ * answered — because a bubble with nothing above it is unattributed, which is
+ * the defect this ticket is about. */
+function workflowName() {
+  const sel = $("wf");
+  const option = sel && sel.selectedOptions && sel.selectedOptions[0];
+  const label = option ? option.textContent.trim() : "";
+  return label || state.workflow || "Workflow";
+}
+
+/* Everything below the question goes inside `.reply` — the workflow's side of
+ * the conversation, in one group under one name. */
+function replyOf(el) {
+  return el.querySelector(".reply") || el;
+}
+
 function turnEl(question) {
   const el = document.createElement("div");
   el.className = "turn";
-  el.innerHTML = `<div class="q"></div><div class="steps"></div>`
+  el.innerHTML = `<div class="q"></div><div class="reply"><p class="who"></p><div class="steps"></div>`
     + `<details class="tl" hidden><summary>Timeline · <span class="tl-count"></span> · <span class="tl-total"></span></summary>`
     + `<div class="tl-body"></div><p class="tl-note">Durations are gaps between stream frames, not measured spans.</p></details>`
     + `<div class="reasoning"></div>`
@@ -1371,8 +1449,9 @@ function turnEl(question) {
     + `<div class="thinking"></div>`
     + `<div class="rejected-banner" hidden><span class="dot"></span>`
     + `<span>The answer below is one our reviewer rejected — we ran out of attempts to improve it.</span></div>`
-    + `<div class="answer" hidden></div>`;
+    + `<div class="answer" hidden></div></div>`;
   el.querySelector(".q").textContent = question;
+  el.querySelector(".who").textContent = workflowName();
   const empty = $("empty");
   if (empty) empty.remove();
   $("log").appendChild(el);
@@ -1867,7 +1946,7 @@ function noteDropped(el, detail) {
   note.textContent =
     "The connection to the runtime ended without saying how the run finished — the server most likely restarted or crashed. Nothing was saved from this turn; ask again."
     + (detail ? ` (${detail})` : "");
-  el.appendChild(note);
+  replyOf(el).appendChild(note);
   el.scrollIntoView({ block: "end" });
 }
 
@@ -1894,7 +1973,7 @@ function noteStopped(el, cancellable) {
   note.textContent = cancellable
     ? "Stopped by you — the step that was running was cancelled, and nothing further is scheduled. The model call it had already sent still finishes; its result is discarded."
     : "Stopped by you — nothing further is scheduled. Steps already dispatched cannot be interrupted: they finish in the background and their results are discarded.";
-  el.appendChild(note);
+  replyOf(el).appendChild(note);
   el.scrollIntoView({ block: "end" });
 }
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -1915,7 +1994,7 @@ function offerSave(el, answerText) {
   box.innerHTML = `<b>This answer contains a workflow.</b>
     <input id="save-slug" placeholder="slug e.g. my-research-team" style="width:220px">
     <button>Save as workflow</button> <span class="saved"></span>`;
-  el.appendChild(box);
+  replyOf(el).appendChild(box);
   box.querySelector("button").onclick = async () => {
     const slug = box.querySelector("#save-slug").value.trim();
     const note = box.querySelector(".saved");
@@ -2002,7 +2081,7 @@ function offerSave(el, answerText) {
       <button type="button" class="btn-approve" data-d="approve">Approve</button>
       <button type="button" class="btn-reject" data-d="reject">Reject</button>
     </div>`;
-  el.appendChild(box);
+  replyOf(el).appendChild(box);
   const buttons = [...box.querySelectorAll("button")];
   for (const b of buttons) {
     b.onclick = async () => {

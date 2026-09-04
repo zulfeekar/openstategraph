@@ -61,6 +61,42 @@
   /* On top of the column's own canonical inset (`.ask .panel__body`), a
      little more room on the right so the scrollbar never sits under text. */
   padding-right: var(--space-1);
+
+  /* ---------- The conversation grammar (`stable-beta-public/10`) ----------
+   *
+   * Four decisions, named once, so a message reads as a message rather than as
+   * a form field. Before this the two sides of the thread were told apart only
+   * by colour: the question was a small tinted box hugging the right edge and
+   * the answer a full-width bordered rectangle — the same shape as an input.
+   *
+   * The same four names are declared in the customer page
+   * (`backend/openstategraph/api/static/chat.html`, on `#log`), which restates
+   * the token *values* in its own `:root` because it is a standalone asset with
+   * no build step. `chatBubblesAgree.test.ts` reads both files and fails if the
+   * names or the token expressions drift apart — the values are allowed to
+   * differ, since that divergence is the standalone file's whole reason to
+   * exist, and the grammar is not.
+   *
+   * `--chat-bubble-radius` resolves to **0** here today, and that is the design
+   * system's answer, not an oversight: every `--radius-*` in this product is
+   * `--osg-radius`, which the authored system sets to zero and describes as
+   * *"Flat, 0 radius, one accent"* (`src/design/styles/tokens.css`). The
+   * grammar is still written in terms of it, corner by corner, so the day
+   * `--osg-radius` moves the bubbles round themselves — and so that the corner
+   * a bubble squares off against its own side is a decision written down
+   * somewhere rather than an accident of a shorthand. */
+  --chat-bubble-radius: var(--radius-lg);
+  --chat-bubble-padding: var(--space-2) var(--space-3);
+  /* Consecutive blocks from the same side — the sender label, the steps box,
+     the answer — read as one run of speech. */
+  --chat-gap-group: var(--space-1);
+  /* The turn of the column, question to reply. Bigger than a group gap and
+     smaller than the thread's own turn-to-turn `--space-5` (`09`). */
+  --chat-gap-side: var(--space-3);
+  /* Not the full column: a bubble that reaches both edges is a rectangle
+     again. Roughly the messaging convention, and short enough that the side
+     a message came from is legible before a word is read. */
+  --chat-bubble-max-width: 78%;
 }
 
 /* ---------- Empty state ---------- */
@@ -83,7 +119,9 @@
 .ask__turn {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  /* A turn holds exactly one side change — the question, then everything the
+     workflow said back — so the turn's own row gap *is* the side-change gap. */
+  gap: var(--chat-gap-side);
 }
 
 /* No rule between turns: the question bubble's own alignment already reads as
@@ -115,14 +153,48 @@
 
 .ask__question {
   align-self: flex-end;
-  max-width: 88%;
-  padding: var(--space-2) var(--space-3);
+  max-width: var(--chat-bubble-max-width);
+  padding: var(--chat-bubble-padding);
   background: var(--color-bg-selected);
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg);
+  /* Square at the bottom right — the corner that faces this side's own edge,
+     the messaging convention's tail without a new shape. */
+  border-radius: var(--chat-bubble-radius) var(--chat-bubble-radius) var(--radius-xs)
+    var(--chat-bubble-radius);
   color: var(--color-text-primary);
   font: var(--type-body-md);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* ---------- The workflow's side ----------
+ *
+ * Everything the run said back, in one column on the left: the sender's name,
+ * the live line and hand-off pills, tool results, an approval gate, warnings,
+ * suggestions and the answer. They keep their own components — the ticket's
+ * instruction was *do not invent anything new* — and what changes is only
+ * that they now sit inside one side of a conversation instead of stacking
+ * down the middle of the column at the same width as the composer.
+ *
+ * `align-items: stretch` on purpose: a bubble caps its own width, while the
+ * boxes (steps, approval, suggestion) are panels and would look broken shrunk
+ * to their text. */
+
+.ask__reply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--chat-gap-group);
+  align-items: stretch;
+}
+
+/* Who is speaking, once per run rather than once per bubble. No avatar: the
+   product has no face for a workflow and inventing one is what the ticket
+   forbids, so the name does the whole job. */
+.ask__sender {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--type-label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 /* ---------- Composer ---------- */
@@ -368,15 +440,22 @@
   gap: var(--space-2);
 }
 
-/* Full width, raised, and the only block in a turn with real presence: the
-   answer is what the user asked for, and the machinery around it is
-   supporting material. */
+/* The workflow's bubble (`stable-beta-public/10`).
+ *
+ * This was a full-width raised card with a hairline border, and the border
+ * plus the full width is exactly what made it read as a form field rather
+ * than as something somebody said. It is still the block in a turn with real
+ * presence — the sunken ground carries it against the panel's own surface,
+ * the way the question's tinted ground carries the other side — but it is now
+ * a bubble: capped width, on the left, squared off against its own edge. */
 .ask__answer {
   margin: 0;
-  padding: var(--space-3);
-  background: var(--color-bg-surface-raised);
-  border: var(--border-width-hairline) solid var(--color-border);
-  border-radius: var(--radius-lg);
+  align-self: flex-start;
+  max-width: var(--chat-bubble-max-width);
+  padding: var(--chat-bubble-padding);
+  background: var(--color-bg-surface-sunken);
+  border-radius: var(--chat-bubble-radius) var(--chat-bubble-radius) var(--chat-bubble-radius)
+    var(--radius-xs);
   color: var(--color-text-primary);
   font: var(--type-body-md);
   /* An answer is prose, not code, so it wraps rather than scrolling sideways. */
