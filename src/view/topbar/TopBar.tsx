@@ -276,21 +276,18 @@ export function TopBar({
       setTokens(0);
     });
     const offUsage = engine.on('run:usage', ({ usage }) => setTokens(usage.totalTokens));
-    const offFinish = engine.on('run:finish', ({ ok, error, reason }) => {
-      setRunning(false);
-      // A handover to the backend runtime is not a failure and gets no error
-      // toast — the shell opens the chat panel and explains it there, where
-      // the user's next action already is. Toasting as well would read as
-      // "something went wrong" for a run that is about to work.
-      if (reason === 'requires-backend-runtime') return;
-      if (!ok && error) onNotify(error);
-    });
+    // The `run:finish` listener that stood here — reset the badge, toast the
+    // error, stay silent on a handover to the backend runtime — was removed by
+    // `stable-beta-public/14`: nothing in the shipped app calls `engine.run()`,
+    // so it had never once been invoked. `src/aDeadEventHasNoListeners.test.ts`
+    // is the pin. The two above are the same dead event bus and are left
+    // standing only because removing them is the badge's own question, filed
+    // as `stable-beta-public/15` rather than smuggled in here.
     return () => {
       offStart();
       offUsage();
-      offFinish();
     };
-  }, [workbench, onNotify]);
+  }, [workbench]);
 
   /**
    * What Run would actually ask. Live — it re-reads on every field edit, so

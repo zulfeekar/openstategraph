@@ -33,7 +33,8 @@ import { useViewportWidth } from './layout/useViewportWidth';
 import { observeResize } from './layout/observeResize';
 import { clampDockHeight } from './layout/dockFit';
 import { RunDock } from './run/RunDock';
-import { runView } from './run/runView';
+import { runEnded } from './run/runEnded';
+import { runView, type RunView } from './run/runView';
 import { StoredRuns } from './run/StoredRuns';
 import { SpendBar } from './spend/SpendBar';
 import { useSpend } from './spend/useSpend';
@@ -160,12 +161,14 @@ export function AppShell() {
   // below explains it, and History — which the panel opens on — is where the
   // server's record of that run is.
   const [askOpen, setAskOpen] = useState(INTERRUPTED_RUN !== null);
-  // Set when Run hands a graph over to the backend runtime (see the
-  // `run:finish` effect below); cleared as soon as the panel is closed.
+  // Set when a previous run was interrupted; cleared as soon as the panel is
+  // closed. It used to carry Run's handover to the backend runtime as well —
+  // that branch hung off `run:finish` and went with it (`stable-beta-public/14`):
+  // Run has streamed a backend run for every graph since ticket 03, so there is
+  // nothing left to hand over.
   const [askNotice, setAskNotice] = useState<string | null>(
     INTERRUPTED_RUN === null ? null : interruptedRunNotice(INTERRUPTED_RUN),
   );
-  const [askFocusNonce, setAskFocusNonce] = useState(0);
   /** A Run press, handed to the Ask panel to execute as a turn (ticket 03). */
   const [askRunRequest, setAskRunRequest] = useState<{
     question: string;
@@ -237,8 +240,8 @@ export function AppShell() {
    * bottom of the shell; the modal it opens (slice 5) reads the same answer,
    * so the two surfaces can never disagree about an instant.
    *
-   * `spendRefresh` is the *something happened* signal — bumped on the run
-   * dock's terminal frame (`run:finish`, below, on both `ok` and failure: a
+   * `spendRefresh` is the *something happened* signal — bumped when the run
+   * on show stops running (`runEnded`, below, on both success and failure: a
    * failed run still spent whatever tokens it spent before it failed) and on
    * window focus (`useSpend` itself). Nothing polls: the numbers move only
    * when a run ends, so a timer would be a request per interval for an
@@ -602,32 +605,30 @@ export function AppShell() {
     [workbench, runWorkflow, saveOpenWorkflow, toggleDock],
   );
 
-  /* ---------------- run feedback ---------------- */
-
+  /* ---------------- run feedback ----------------
+   *
+   * `stable-beta-public/14`. This was `workbench.engine.on('run:finish', …)`,
+   * and it never fired once: that event belongs to the canvas's own
+   * sequential preview walk, and nothing in the shipped app calls
+   * `engine.run()` any more — the toolbar's Run opens the chat and streams a
+   * backend run. So the toast and the token bar's refresh were both correct,
+   * both tested against a faked engine, and both dead; the bar caught up only
+   * on window focus, which is how `07` came to be filed as a store race.
+   *
+   * It reads the `runView` snapshot instead — the same one the dock is drawn
+   * from and the first-run starter already reads, so this is a second reader
+   * on the subscription above rather than a second subscription.
+   * `src/aDeadEventHasNoListeners.test.ts` fails the day a listener comes back
+   * without a caller to fire it.
+   */
+  const runBefore = useRef<RunView | null>(null);
   useEffect(() => {
-    const off = workbench.engine.on('run:finish', ({ ok, usage, error, reason }) => {
-      // The status bar refetches on every terminal frame, win or lose — a
-      // failed run can still have spent tokens before it failed, and the
-      // *This tab* cell is only honest if it moves either way.
-      setSpendRefresh((value) => value + 1);
-      if (ok) {
-        notify(`Run finished · ${usage.totalTokens.toLocaleString()} tokens`);
-        return;
-      }
-      // Run must not dead-end where Chat would have worked. The canvas
-      // preview cannot walk a cycle, but the backend runtime — the same one
-      // this panel already uses — runs it fine, so Run hands over instead of
-      // refusing: open the chat, say why, focus the box. Deliberately *not* an
-      // automatic run: the backend needs a question, and inventing an empty
-      // one would spend tokens on something nobody asked.
-      if (reason === 'requires-backend-runtime') {
-        setAskNotice(error ?? 'This graph runs on the backend runtime.');
-        setAskOpen(true);
-        setAskFocusNonce((value) => value + 1);
-      }
-    });
-    return off;
-  }, [workbench, notify]);
+    const ended = runEnded(runBefore.current, shownRun);
+    runBefore.current = shownRun;
+    if (ended === null) return;
+    setSpendRefresh((value) => value + 1);
+    if (ended.toast !== null) notify(ended.toast);
+  }, [shownRun, notify]);
 
   const onNotify = useCallback((message: string) => notify(message), [notify]);
   /**
@@ -890,7 +891,6 @@ export function AppShell() {
               {askOpen ? (
                 <AskPanel
                   notice={askNotice}
-                  focusNonce={askFocusNonce}
                   runRequest={askRunRequest}
                   stopRequest={askStopRequest}
                   streams={askStreams}
