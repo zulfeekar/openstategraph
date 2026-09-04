@@ -502,7 +502,9 @@ edge for more room.
 on the edge, quiet at rest so you can find it without hunting, and a heavier
 stroke the moment your pointer or your keyboard focus lands on it. The
 timeline's top edge has one; so does the left edge of the chat and inspector
-column. If an edge has no bar, it does not move.
+column. If an edge has no bar, it does not move. What you grab is a band a few
+pixels wide straddling the edge rather than the line itself, so the drag starts
+whether you land just inside the panel or just outside it.
 
 Two things are drawn side by side: **bars** on the left, one row per node with
 a time axis over them, and the **trace** on the right, which is the detail for

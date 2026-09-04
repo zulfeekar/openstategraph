@@ -156,3 +156,71 @@ describe('and nothing else draws one', () => {
     expect(source).not.toMatch(/className="[^"]*grip/);
   });
 });
+
+describe('and the surface it edges cannot cover it — `stable-beta-public/22`', () => {
+  /**
+   * **A 7px target of which three pixels answered.** Measured on 8124 with
+   * the inspector open, `document.elementFromPoint` walked across the
+   * column grip at its vertical centre: the grip answered at x 594, 595,
+   * 596 and the panel answered at 597 through 601. The strip straddles the
+   * edge (`left: -3px`), so the three pixels that worked were the three
+   * *outside* the column and every pixel over the column itself belonged to
+   * the panel. The owner reported it as the drag not working, which is what
+   * a 3px sliver on a 1103px window feels like by hand.
+   *
+   * `22` guessed a stacking context between the two. There is none:
+   * `.app-shell__right-panels` computes `position: absolute; z-index: auto`,
+   * and every ancestor above it is `z-index: auto` with no transform,
+   * opacity, filter, isolation or containment. The grip and the panels are
+   * **siblings in one stacking context**, and the panel simply carries the
+   * larger number — `z-index: 20` against the grip's `1`.
+   *
+   * The trap is that the panel looks unpositioned. `.panel` is
+   * `position: static`, where `z-index` is normally inert — but a flex item
+   * with a `z-index` other than `auto` paints as though it were positioned
+   * (CSS Flexible Box §painting), and `.app-shell__right-panels > .panel`
+   * is a flex item. So the number was live all along and nothing between
+   * needed to explain it.
+   *
+   * Hence a token rather than a literal, and a derived one: a grip sits one
+   * step above the surface it resizes, so `--z-panel` moving takes it along.
+   * The 7px strip is unchanged and deliberately so — widening it to 9 or
+   * 11px would have bought back the same three pixels while eating further
+   * into the panel's own content, and the primitive's stated size was never
+   * the thing that was wrong.
+   */
+  const zScale = (): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const match of code(at('design/styles/tokens.css')).matchAll(/(--z-[a-z-]+):\s*([^;]+);/g))
+      out[match[1] ?? ''] = (match[2] ?? '').trim();
+    return out;
+  };
+
+  /** `calc(var(--z-panel) + 1)` → the integer a browser would paint with. */
+  const resolve = (scale: Record<string, string>, name: string): number => {
+    const raw = scale[name];
+    if (raw === undefined) throw new Error(`no ${name} in the z scale`);
+    const expanded = raw.replace(/var\((--z-[a-z-]+)\)/g, (_m, ref: string) =>
+      String(resolve(scale, ref)),
+    );
+    const arithmetic = /^calc\(([\d\s+-]+)\)$/.exec(expanded)?.[1] ?? expanded;
+    const bare = arithmetic.replace(/\s+/g, '');
+    const terms = bare.match(/[+-]?\d+/g);
+    if (terms === null || terms.join('') !== bare)
+      throw new Error(`${name} is not an integer or a sum of them: ${raw}`);
+    return terms.reduce((total, term) => total + Number(term), 0);
+  };
+
+  it('declares --z-grip above --z-panel, derived from it rather than guessed', () => {
+    const scale = zScale();
+    expect(scale['--z-grip']).toMatch(/var\(--z-panel\)/);
+    expect(resolve(scale, '--z-grip')).toBeGreaterThan(resolve(scale, '--z-panel'));
+  });
+
+  it('spends that token on .grip, so the comparison is between the two names', () => {
+    expect(ruleBody(at(GRIP_CSS), '.grip')).toMatch(/z-index:\s*var\(--z-grip\);/);
+    expect(ruleBody(at('design/primitives/Panel.css'), '.panel')).toMatch(
+      /z-index:\s*var\(--z-panel\);/,
+    );
+  });
+});

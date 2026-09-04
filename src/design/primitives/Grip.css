@@ -24,11 +24,18 @@
  * The hit area stays 7px on both axes and the full length of the edge — a
  * 2px line is a target nobody hits — while the visible bar is the
  * invitation. So the strip straddles the edge (`-3px`) and the bar sits at
- * `3px` inside it, on the edge itself. */
+ * `3px` inside it, on the edge itself.
+ *
+ * And all seven of them have to answer a pointer, which is `22`: the four
+ * inside the column belonged to `.panel` until `--z-grip` existed, because
+ * the panel is a flex item carrying `--z-panel` and a flex item paints by
+ * its `z-index` even at `position: static`. The strip stayed 7px — the
+ * size was never what was wrong, and widening it would only have taken the
+ * same three pixels back out of the panel's own content. */
 .grip {
   position: absolute;
   touch-action: none;
-  z-index: 1;
+  z-index: var(--z-grip);
 }
 
 .grip::before {

@@ -634,6 +634,16 @@
   --z-canvas: 0;
   --z-canvas-overlay: 10;
   --z-panel: 20;
+  /* A draggable edge sits one step above the surface it resizes
+     (`stable-beta-public/22`). Derived rather than placed on the decade
+     scale, because the fact worth writing down is the *relationship*: the
+     column grip and the panel beside it are siblings in one stacking
+     context, so whichever carries the larger number takes the pointer.
+     With a literal `1` the panel took five of the grip's seven pixels and
+     the drag failed by hand. A flex item paints by its `z-index` even at
+     `position: static`, which is why `.panel` never looked like the
+     winner. */
+  --z-grip: calc(var(--z-panel) + 1);
   --z-topbar: 30;
   --z-floating: 40;
   --z-dragging: 50;
