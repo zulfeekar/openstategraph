@@ -190,10 +190,13 @@ name:
 [deep]                          only a document with an agent.deep node
 [sqlite]                        durable threads (settings.checkpointer)
 [server]                        the editor's HTTP API — never on your path,
-                                and no provider: pair it, [server,ollama]
-[mcp]                           MCP, in both directions — needed to *use* an
+                                and no provider: pair it, [server,ollama].
+                                Also pulls in [mcp], so `openstategraph mcp`
+                                works after this one alone.
+[mcp]                           MCP on its own, with no web server — install
+                                this by name if all you want is to *use* an
                                 MCP server (a tool.mcp node, the MCP panel)
-                                as much as to *be* one (openstategraph mcp)
+                                or *be* one (openstategraph mcp)
 [postgres]                      a shared checkpoint/memory store for more
                                 than one process
 [bastion]                       prompt-injection screening. AGPL-3.0-or-later,

@@ -54,6 +54,12 @@
   shape assertion pinning it.
 
 ### Changed
+- **The `[server]` extra now pulls in `[mcp]`** (`osg-agent-experience/19`).
+  `"openstategraph[server,ollama]"` — the requirement's own documented install
+  line — used to leave `openstategraph mcp` answering the missing-extra
+  message; `[server]` now resolves to a superset of `[mcp]`'s requirements,
+  the same self-reference `[sqlite]` already used. `[mcp]` still installs on
+  its own for the MCP transport with no web server.
 - **`ProviderSpec.constructor_defaults`** — constant keywords a vendor's
   constructor is always given, beside the environment-sourced
   `constructor_args`. It carries `stream_usage=True` for `openai` and

@@ -23,7 +23,10 @@ is this server.
 ## 1. Point a client at it
 
 The server is a Python module. stdio is the default because that is what a
-local MCP client spawns.
+local MCP client spawns. It needs the `[mcp]` extra — already included if you
+installed `[server]` (`"openstategraph[server,<provider>]"` is enough for
+both the editor and `openstategraph mcp`); install `[mcp]` on its own if you
+want the MCP transport with no web server at all.
 
 `claude_desktop_config.json`, Cursor's `mcp.json`, or any client using the
 `mcpServers` shape:

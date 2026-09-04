@@ -245,6 +245,27 @@ class TestTheDocumentedInstallCanRunSomething:
 
         assert resolve({"server"}, extras) & provider_extras == set()
 
+    def test_the_server_extra_pulls_in_mcp(self, extras: dict[str, list[str]]) -> None:
+        """osg-agent-experience/19.
+
+        The local MCP server is part of the developer experience (owner
+        decision, `.scratch/osg-agent-experience/OWNER-DECISIONS.md`), so the
+        requirement's own install line — `"openstategraph[server,ollama]"`,
+        run for real on 2026-09-04 — has to leave a reader able to run
+        `openstategraph mcp`. It did not: `[server]` pulled in `[sqlite]` and
+        nothing else, so a fresh install hit the missing-extra message the
+        moment an agent said "use OpenStateGraph MCP".
+
+        `[mcp]` stays a real, nameable extra (someone who only wants the MCP
+        transport, with no web server, still installs `[mcp]` alone) — this
+        only asks that `[server]`'s own requirement set be a superset of it,
+        the same shape as the `[sqlite]` self-reference already above it.
+        """
+        assert "mcp" in resolve({"server"}, extras), (
+            "'openstategraph[server,ollama]' must yield a working "
+            "'openstategraph mcp' — [server] does not resolve to [mcp]"
+        )
+
 
 class TestServeSaysSoBeforeItServes:
     """The other half of ticket 37: the gap must be loud where it is chosen.

@@ -102,6 +102,13 @@ class TestLeanCore:
         for extra, requirements in capability_extras.items():
             for requirement in requirements:
                 name = requirement_name(requirement)
+                # `openstategraph[mcp]` inside `[server]` (osg-agent-experience/19,
+                # the same shape `[sqlite]` already used) is composition, not an
+                # extracted *distribution* — self-references name no package this
+                # mapping tracks, and two of them in one extra are not a
+                # collision.
+                if name == DISTRIBUTION:
+                    continue
                 assert name not in placement, (
                     f"{name} is claimed by both [{placement[name]}] and [{extra}] — "
                     "an extracted dependency has exactly one owning capability"

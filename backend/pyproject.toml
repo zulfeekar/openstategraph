@@ -105,6 +105,15 @@ server = [
     "fastapi>=0.115,<0.142",
     "uvicorn>=0.30",
     "python-multipart>=0.0.9",
+    # The local MCP server is part of the developer experience (owner
+    # decision, `.scratch/osg-agent-experience/OWNER-DECISIONS.md`,
+    # osg-agent-experience/19): a coding agent that has just installed
+    # `[server,<provider>]` and is told "use OpenStateGraph MCP" needs a
+    # server to reach, not the missing-extra message. `[mcp]` stays a real,
+    # independently installable extra — this only makes `[server]`'s own
+    # requirement set a superset of it, the same self-reference `[sqlite]`
+    # above already uses.
+    "openstategraph[mcp]",
 ]
 # The upper bound is not caution, it is a break we hit: `mcp` 2.0.0 removed
 # `mcp.server.fastmcp`, which `openstategraph.mcp_server` imports, so a fresh
