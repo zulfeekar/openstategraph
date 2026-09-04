@@ -57,14 +57,45 @@ The library path shares their resolver, and this package requires
 
 - **They pin LangGraph 1.x.** `pip install openstategraph` into their
   environment succeeds and shares the pin. Nothing special to do.
-- **They pin LangGraph 0.x.** The resolver refuses the library install, and
-  the refusal is correct. Say this, in these terms:
+- **They pin LangGraph 0.x.** Two different things happen, and which one you
+  get depends on whether the pin is *stated to the resolver*. This was
+  measured, not assumed (ticket `26`, 2026-09-04).
+
+  **When the pin is stated** — `uv add`, or `pip install -r requirements.txt`,
+  or `pip install -c constraints.txt`, or anything reading a `pyproject.toml`
+  that declares it — the install is refused, and the refusal is correct. It
+  looks like this:
+
+  ```
+  ERROR: Cannot install langgraph<1 and openstategraph==<version> because
+  these package versions have conflicting dependencies.
+  The conflict is caused by:
+      The user requested langgraph<1
+      openstategraph <version> depends on langgraph<2 and >=1.0
+  ERROR: ResolutionImpossible
+  ```
+
+  uv words it differently and means the same thing: *"your project depends on
+  langgraph<1 and openstategraph, we can conclude that your project's
+  requirements are unsatisfiable."*
+
+  **When the pin is not stated** — a bare `pip install openstategraph` into a
+  virtualenv that merely *has* LangGraph 0.x installed — pip does **not**
+  refuse. It uninstalls their LangGraph and installs 1.x, along with
+  `langgraph-checkpoint`, `langgraph-prebuilt` and `langgraph-sdk`, and says
+  so only in the `Successfully installed` line nobody reads. Their service
+  now imports a LangGraph it was never tested against, and the failure lands
+  far from the install that caused it.
+
+  So: **check `pip show langgraph` after any library install into a project
+  you did not pin yourself**, and never treat "the install succeeded" as
+  evidence the clash was absent. Either way, say this:
 
   > Your project pins LangGraph 0.x and OpenStateGraph requires 1.x, so the
-  > resolver will refuse the library install. The developer tool is
-  > unaffected — it runs from its own environment — so you can draw, validate
-  > and compile today. Importing a workflow inside your service needs the
-  > LangGraph 1.x upgrade first.
+  > library install cannot honour both. The developer tool is unaffected —
+  > it runs from its own environment — so you can draw, validate and compile
+  > today. Importing a workflow inside your service needs the LangGraph 1.x
+  > upgrade first.
 
   **Do not force it.** Not with a resolver override, not with a flag that
   ignores dependencies, not by vendoring a copy of anything. A forced install

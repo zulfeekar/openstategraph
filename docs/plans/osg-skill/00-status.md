@@ -11,7 +11,7 @@
 - [x] Slice 3 — idea cards: columns, file_idea_card, MCP + CLI file, board renders the brief
 - [x] Slice 4 — triage: pure ordering, MCP + CLI, why_here
 - [x] Slice 5 — the whole sheet + references + docs + documented-surface pin
-- [ ] Slice 6 — tested as a user (fresh install, real agent), three environments, close 25 and 26
+- [x] Slice 6 — tested as a user (fresh install, real agent), three environments, close 25 and 26
 
 ## Notes for a fresh session
 - Map: `.scratch/osg-agent-experience/` — `REQUIREMENTS.md` (owner's text
@@ -108,3 +108,37 @@
   into `docs/README.md`'s index.** Not in 03's plan; a reader's page the index
   does not name is a page nobody reaches from the documentation's front door,
   and that index is the one enumeration `docs/README.md` promises.
+
+### Where slice 6 departed from `04-slices.md`
+
+- **The real coding agent refused, and the fallback was taken.** `claude -p`
+  in the scaffolded project answered `Not logged in · Please run /login` — a
+  nested CLI carries no credentials of its own. The twelve steps were then
+  driven by hand against the *installed* `SKILL.md`, through the doors it
+  names and nothing else. That is weaker evidence about whether an agent
+  follows the sheet and equally strong evidence about whether the sheet can
+  be followed; the transcript in ticket 25 says which it is, at the top,
+  rather than burying it.
+- **`--version` cannot prove provenance.** The checkout still carries
+  `0.3.0rc11`, the string TestPyPI publishes, so the wheel built here and the
+  stale published one print the same thing. Provenance was established from
+  the payload instead — the installed tree carries `agent_skills/`, and rc11
+  has no `bundled_skills.py` at all. Worth knowing before the next slice
+  trusts a version string.
+- **Case 3b did not behave as the sheet promised, which is why it was run.**
+  A bare `pip install` into a venv holding LangGraph 0.6 does not refuse — it
+  silently upgrades to 1.x. The refusal is real only when the pin is stated
+  to the resolver (`uv add`, `-r`, `-c`). Sheet, reference page and
+  `docs/adding-openstategraph-to-your-project.md` §0.1 all corrected;
+  transcripts in ticket 26.
+- **Two findings were too large for wording and became tickets 29 and 30.**
+  29: `get_node_vocabulary`'s `document_shape.settings` names only `model`, so
+  `settings.recursionLimit` — the thing that ends a revision loop, which the
+  sheet's own Budget dimension asks about — is unreachable through the doors
+  the sheet points at, and a plausible guess is silently ignored. 30: a
+  `--blocked-by` naming no card is accepted, and strands the card forever
+  while telling its blocker `nothing waits on it`.
+- **The sheet stayed at 250 lines.** Three corrections landed in it and the
+  ceiling did not move: the ceiling's own argument (long form goes to
+  `references/`) decided the split, so the sheet carries one true sentence per
+  finding and `references/environments.md` carries the measured account.

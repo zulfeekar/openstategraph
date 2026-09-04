@@ -29,6 +29,33 @@
   `.claude/skills/` and `.agents/skills/` by `openstategraph init`, so a
   coding agent on a fresh project can run the patrol and write a well-formed
   card without this repository's own tooling.
+- **A skill that teaches a coding agent to build here**
+  (`osg-agent-experience`, tickets 25 and 26). Say *"use OpenStateGraph"* in a
+  project this tool has touched and the agent picks up a third bundled skill,
+  `openstategraph` — twelve steps, installed into `.claude/skills/` and
+  `.agents/skills/` beside the other two. It routes first (a workflow in your
+  project, or a change to the platform), reads the installed node vocabulary
+  and the engineering rules before composing anything, interviews you **one
+  question per turn** across eight dimensions, sizes the work and says which
+  size it chose, files every decision and every task as a card, takes the top
+  card by triage and builds it test-first through the board — red with a test
+  id, break the fix on purpose, green, commit, finished. Five reference pages
+  carry the long form: the interview, the build loop, the four gates a
+  spawned helper must pass, and which environment you are in. The rules the
+  agent must not break travel with it: `get_engineering_rules` serves them
+  over MCP with the package version, and the installer writes the same file
+  into the skill tree, so the two doors cannot disagree. `openstategraph
+  init` now also writes the four agent config files that register the local
+  MCP server — `.mcp.json`, `.vscode/mcp.json`, `.cursor/mcp.json`,
+  `.codex/config.toml` — merging into an existing one and never overwriting a
+  foreign entry, so no one has to paste JSON out of the docs again. Runs are
+  off in every one of them (`OPENSTATEGRAPH_MCP_ALLOW_RUNS=0`): an agent may
+  draw, compile and validate for free, and spends nothing without being told
+  to. A developer or an agent can file its own **idea card** —
+  `openstategraph kanban file`, `kanban_file_card` — carrying a story, a
+  done-when and a reason, so the board holds wanted work as well as detected
+  problems; and `openstategraph kanban triage` / `kanban_triage` answers with
+  the cards in order and, for each, the rule that put it there.
 - **A runnable first visit** (`stable-beta-public`, ticket 06). A browser
   that has never opened this editor is handed a small working flow instead of
   an empty grid — Input → Agent → Output, wired, with a question already

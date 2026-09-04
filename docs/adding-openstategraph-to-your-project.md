@@ -123,6 +123,15 @@ different questions and they are versioned separately.
 | How | `pip install "openstategraph[<provider>]"`, in your project's environment | `uv tool install "openstategraph[server,<provider>]"` (or `pipx install`) |
 | What you then run | nothing — you `import openstategraph` | `openstategraph .` in any project, with nothing activated |
 
+**The tool's environment is isolated from your project's, and that includes
+LangGraph.** The editor, the compiler, the board and the MCP server all run
+from the tool's own virtualenv; nothing they do can move a pin of yours, and
+nothing you pin can stop them working. The *library* install is the opposite —
+it shares your resolver completely, and this package requires
+`langgraph>=1.0,<2`. So a project pinned to LangGraph 0.x can draw, validate
+and compile today, and owes the 1.x upgrade only when it wants to `import
+openstategraph` inside the service itself.
+
 The tool form is why the verb takes a directory. One global install, and
 `openstategraph .` in any project opens the editor on **that** project's
 workflows — the same way you run a formatter you installed once:

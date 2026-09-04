@@ -127,8 +127,8 @@ at the end of it. File each with `kanban_file_card` (or
 - **done-when** — the check that settles it. Something you can run.
 - **priority and its reason** — one sentence citing evidence from this
   interview. A priority with no reason is a guess with a label.
-- **blocked-by** — the cards this one waits on. This is what makes triage
-  work; skip it and the board loses its order.
+- **blocked-by** — the cards this one waits on, by the **full id** filing
+  printed. A bare slug resolves to nothing and strands the card forever.
 - **agent_model / agent_effort** — defaults by shape:
 
 | Shape of the work | model | effort |
@@ -216,20 +216,20 @@ Three starting points, and the tool install is isolated from the project's own
 environment in all of them.
 
 - **A fresh folder.** `openstategraph init` and you are ready.
-- **An existing project.** `openstategraph init` writes additively — skills,
-  agent config files, the workflows root — and touches no dependency.
+- **An existing project.** `init` writes additively — skills, agent config
+  files, the workflows root — and touches no dependency of theirs.
 - **An existing LangGraph codebase.** The developer tool runs from its own
   environment and shares nothing with the project's pins. The *library*
   install does share them, and that is where a clash lives: this package
-  requires `langgraph>=1.0,<2`. If their project pins LangGraph 0.x, the
-  library install is refused by the resolver, and the refusal is correct. Tell
-  them:
+  requires `langgraph>=1.0,<2`. If their project pins LangGraph 0.x, an
+  install that *states* that pin is refused by the resolver and the refusal is
+  correct — but a bare `pip install` into a built venv is not: it upgrades
+  their LangGraph out from under them. Check after. Tell them:
 
   > Your project pins LangGraph 0.x and OpenStateGraph requires 1.x, so the
-  > resolver will refuse the library install. The developer tool is
-  > unaffected — it runs from its own environment — so you can draw,
-  > validate and compile today. Importing a workflow inside your service
-  > needs the LangGraph 1.x upgrade first.
+  > library install cannot honour both. The developer tool is unaffected — it
+  > runs from its own environment — so you can draw, validate and compile
+  > today. Importing a workflow into your service needs the 1.x upgrade first.
 
   Do not force it with a flag. Do not vendor a copy.
 
