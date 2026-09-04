@@ -28,7 +28,13 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  box-shadow: inset 0 0 0 2px var(--color-border-focus);
+  /* 2px as a literal, deliberately: `--border-width-rule` is the draggable
+   * weight and pinned to three declarations, `--border-width-marker` is a bar
+   * beside a block and pinned to its own eight, and this is neither — it is
+   * the drop target's own ring, at exactly the width it was written at when
+   * it was an inset shadow (`stable-beta-public/02`). `canvas.css` is the
+   * file `ruleAndDisplayFace.test.ts` exempts outright for this reason. */
+  border: 2px solid var(--color-border-focus);
   background: color-mix(in srgb, var(--color-border-focus) 4%, transparent);
 }
 
@@ -86,9 +92,7 @@
 /* JointJS applies this while a cell is being dragged. */
 .joint-element.is-dragging .node,
 .joint-dragging .node {
-  box-shadow:
-    var(--shadow-xl),
-    0 0 0 1.5px var(--color-border-focus);
+  border-color: var(--color-border-focus);
   cursor: grabbing;
 }
 
@@ -346,11 +350,16 @@
 }
 
 /* While a node is actively running, the glow owns the border: the selection
- * ring (--shadow-node-selected) is a solid accent stroke that visually
- * dominates the gradient sweep (owner screenshot). Selection state itself is
- * untouched — the ring returns the moment the run moves on. */
+ * edge is a solid accent stroke that visually dominates the gradient sweep
+ * (owner screenshot). Selection state itself is untouched — the accent edge
+ * returns the moment the run moves on.
+ *
+ * `stable-beta-public/02` changed the mechanism, not the rule: this used to
+ * be `box-shadow: none` cancelling `--shadow-node-selected`, and the card's
+ * edge is now a real `border`, so the cancellation is a colour rather than
+ * the absence of a shadow. */
 .joint-element.is-active.is-selected .node {
-  box-shadow: none;
+  border-color: var(--color-border);
 }
 
 .joint-element.is-active .node {
@@ -435,9 +444,7 @@
  * this layer still never reaches into `NodeCard`'s markup or stylesheet. */
 .joint-element.is-paused .node {
   position: relative;
-  box-shadow:
-    var(--shadow-node),
-    0 0 0 1.5px var(--color-status-warning);
+  border-color: var(--color-status-warning);
 }
 
 .joint-element.is-paused .node::after {
@@ -537,7 +544,7 @@
   height: 44px;
   border-radius: var(--radius-lg);
   background: var(--color-bg-subtle);
-  box-shadow: inset 0 0 0 1px var(--color-border);
+  border: var(--border-width-hairline) solid var(--color-border);
   color: var(--color-text-quaternary);
 }
 

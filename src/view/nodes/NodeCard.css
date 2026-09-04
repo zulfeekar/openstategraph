@@ -17,23 +17,26 @@
   width: 100%;
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface);
-  box-shadow: var(--shadow-node);
+  /* `stable-beta-public/02`: the card's edge is a border, not a ring painted
+   * by a shadow that also carried a 1px offset lift. Depth on this canvas is
+   * layering and ground tone; blur and offset are gone from the product. */
+  border: var(--border-width-hairline) solid var(--color-border);
   /* The card is measured to derive the element's height, so its own box must
    * be content-sized rather than stretched to the SVG element's height. */
   height: max-content;
   transition:
-    box-shadow var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out);
   /* Rendering hint: a card being dragged is composited rather than repainted. */
   contain: layout style;
 }
 
 .joint-element:hover .node {
-  box-shadow: var(--shadow-node-hover);
+  border-color: var(--color-border-emphasis);
 }
 
 .joint-element.is-selected .node {
-  box-shadow: var(--shadow-node-selected);
+  border-color: var(--color-border-focus);
 }
 
 /* ---------- Header ---------- */
@@ -195,9 +198,7 @@
   padding: var(--space-0-5) var(--space-2);
   border-radius: var(--radius-full);
   background: var(--color-bg-surface);
-  box-shadow:
-    inset 0 0 0 1px var(--color-border),
-    var(--shadow-xs);
+  border: var(--border-width-hairline) solid var(--color-border);
   font: var(--type-caption);
   color: var(--color-text-tertiary);
   white-space: nowrap;
@@ -212,15 +213,11 @@
 /* ---------- Status ---------- */
 
 .node[data-status='running'] {
-  box-shadow:
-    var(--shadow-node),
-    0 0 0 1.5px var(--color-status-running);
+  border-color: var(--color-status-running);
 }
 
 .node[data-status='error'] {
-  box-shadow:
-    var(--shadow-node),
-    0 0 0 1.5px var(--color-status-error);
+  border-color: var(--color-status-error);
 }
 
 .node__error {
@@ -259,7 +256,7 @@
   padding: var(--space-2-5);
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
-  box-shadow: inset 0 0 0 1px var(--color-border);
+  border: var(--border-width-hairline) solid var(--color-border);
 }
 
 .node__result-empty {
@@ -317,15 +314,13 @@
   height: 100%;
   border-radius: var(--radius-xl);
   background: var(--color-group-fill);
-  box-shadow: inset 0 0 0 1px var(--color-group-border);
+  border-color: var(--color-group-border);
   padding: var(--space-4);
   gap: var(--space-2);
 }
 
 .joint-element.is-selected .node--container {
-  box-shadow:
-    inset 0 0 0 1px var(--color-group-border),
-    0 0 0 1.5px var(--color-border-focus);
+  border-color: var(--color-border-focus);
 }
 
 .node--container .node__group-title {
@@ -377,7 +372,7 @@
 
 .node--annotation {
   background: var(--color-note-fill);
-  box-shadow: inset 0 0 0 1px var(--color-note-border);
+  border-color: var(--color-note-border);
   padding: var(--space-3);
 }
 
@@ -412,7 +407,7 @@
   padding: var(--space-2);
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
-  box-shadow: inset 0 0 0 1px var(--color-border);
+  border: var(--border-width-hairline) solid var(--color-border);
 }
 
 .repeatable-group__field {
