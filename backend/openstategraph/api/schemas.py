@@ -149,6 +149,18 @@ class KanbanCardResponse(BaseModel):
     answer: str = ""
     answered_by: str = ""
     answered_at: str = ""
+    #: `osg-agent-experience/25`'s idea card — the brief a card filed from a
+    #: conversation carries, because the conversation is not something a later
+    #: reader can open. Empty on every patrol card, which has a run thread
+    #: behind it instead. `blocked_by` is a list rather than the JSON text the
+    #: column holds: the encoding is the store's business.
+    story: str = ""
+    done_when: str = ""
+    blocked_by: list[str] = []
+    #: Advisory, and empty whenever nobody had an opinion — never a default
+    #: model name, which would read on the board as a decision somebody made.
+    agent_model: str = ""
+    agent_effort: str = ""
     #: `kanban-patrol/19`'s explicit Release — whether this card's claim has
     #: gone past the hour-long lease with no heartbeat. Computed by
     #: `flagged_stale` at read time, never stored: the same "flag, never

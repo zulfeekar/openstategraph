@@ -344,6 +344,16 @@
             ],
             "title": "Actor"
           },
+          "agent_effort": {
+            "default": "",
+            "title": "Agent Effort",
+            "type": "string"
+          },
+          "agent_model": {
+            "default": "",
+            "title": "Agent Model",
+            "type": "string"
+          },
           "answer": {
             "default": "",
             "title": "Answer",
@@ -363,12 +373,25 @@
             "title": "Area",
             "type": "string"
           },
+          "blocked_by": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked By",
+            "type": "array"
+          },
           "board": {
             "title": "Board",
             "type": "string"
           },
           "category": {
             "title": "Category",
+            "type": "string"
+          },
+          "done_when": {
+            "default": "",
+            "title": "Done When",
             "type": "string"
           },
           "evidence_commit": {
@@ -416,6 +439,11 @@
             "default": false,
             "title": "Stale",
             "type": "boolean"
+          },
+          "story": {
+            "default": "",
+            "title": "Story",
+            "type": "string"
           },
           "task_id": {
             "title": "Task Id",

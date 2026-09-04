@@ -187,6 +187,32 @@
   white-space: nowrap;
 }
 
+/* `osg-agent-experience/25`'s idea brief — the want, the check that settles
+   it, and the advisory model line. Flat: no border, no panel, no second
+   background. A card already carries a badge, a kind, an area and a status
+   line, and boxing the brief would make the newest thing on the card the
+   loudest. Tone alone separates the three — secondary for the story, which is
+   read; tertiary for the two below it, which are consulted. Tokens only;
+   nothing is minted here. */
+.patrol-card__story {
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.patrol-card__done-when {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.patrol-card__done-when-text {
+  color: var(--color-text-secondary);
+}
+
+.patrol-card__agent {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
 .patrol-card__evidence-test {
   font-family: var(--font-mono);
   color: var(--color-text-secondary);

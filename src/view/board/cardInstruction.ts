@@ -48,6 +48,31 @@ export function instructionForCard(card: BoardCard): string {
   if (card.priorityReason) {
     paragraphs.push(`Why this matters: ${card.priorityReason}`);
   }
+  // `osg-agent-experience/25`. The brief an idea card carries, and it goes
+  // **before** the test-first instruction rather than after it: what "done"
+  // means is what the first failing test is written against, so an agent that
+  // meets it below that instruction meets it after the decision it was
+  // supposed to inform. Omitted entirely on a patrol card, which has none —
+  // the same rule `priorityReason` follows on the line above, and the reason
+  // it is a rule: an empty "Done when:" is worse than no line at all.
+  if (card.story) {
+    paragraphs.push(`Story: ${card.story}`);
+  }
+  if (card.doneWhen) {
+    paragraphs.push(`Done when: ${card.doneWhen}`);
+  }
+  if (card.blockedBy?.length) {
+    paragraphs.push(
+      `Blocked by: ${card.blockedBy.join(', ')} — finish those first, or say why ` +
+        'this can go ahead without them.',
+    );
+  }
+  // Advisory, and said as advice. One line, both halves together: a model
+  // named without an effort reads as a whole answer and is half of one.
+  if (card.agentModel) {
+    const effort = card.agentEffort ? `, ${card.agentEffort} effort` : '';
+    paragraphs.push(`Suggested for this card: ${card.agentModel}${effort}.`);
+  }
   paragraphs.push(
     'Work this test-first: write a failing test for the stated reason before ' +
       'any fix, then make it pass. Do not skip the red step.',

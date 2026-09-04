@@ -71,6 +71,27 @@ export function PatrolCard({ card, column, onAnswer, onRelease }: PatrolCardProp
       <span className="patrol-card__title">{card.title}</span>
       <span className="patrol-card__secondary">{card.secondary}</span>
 
+      {/* `osg-agent-experience/25`. The brief an idea card carries, directly
+          under the title, because it *is* the card — a title alone is what
+          this feature exists to stop a filed idea decaying into. Guarded, not
+          merely mapped: a patrol card has no story and must draw nothing at
+          all here, not an empty element under every title on the board. */}
+      {card.story ? <span className="patrol-card__story">{card.story}</span> : null}
+      {card.doneWhen ? (
+        <span className="patrol-card__done-when">
+          Done when: <span className="patrol-card__done-when-text">{card.doneWhen}</span>
+        </span>
+      ) : null}
+      {/* Model and effort on one line, together — neither reads as a whole
+          answer on its own, and two lines would give an advisory hint the
+          same weight as the brief above it. */}
+      {card.agentModel ? (
+        <span className="patrol-card__agent">
+          suggested: {card.agentModel}
+          {card.agentEffort ? ` · ${card.agentEffort} effort` : ''}
+        </span>
+      ) : null}
+
       {/* The two axes the owner asked the board to carry, so it can be
           prioritised and read by discipline rather than only listed.
           Priority is a `Badge`; the area is a plain mono tag, because a

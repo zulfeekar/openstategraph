@@ -94,6 +94,11 @@ describe('an In Progress card says which stage it is at', () => {
       answer: '',
       answered_by: '',
       answered_at: '',
+      story: '',
+      done_when: '',
+      blocked_by: [],
+      agent_model: '',
+      agent_effort: '',
       stale: false,
     };
     const card = mapKanbanCardToBoardCard(row, Date.now());

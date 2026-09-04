@@ -28,6 +28,11 @@ function row(overrides: Partial<KanbanCardResponse> = {}): KanbanCardResponse {
     answer: '',
     answered_by: '',
     answered_at: '',
+    story: '',
+    done_when: '',
+    blocked_by: [],
+    agent_model: '',
+    agent_effort: '',
     stale: false,
     ...overrides,
   };
@@ -184,5 +189,46 @@ describe('the decision — `kanban-patrol/15` — crosses the seam or is absent'
 
     expect(card.answer).toBeUndefined();
     expect(card.answeredBy).toBeUndefined();
+  });
+});
+
+/**
+ * `osg-agent-experience/25`. The brief an idea card carries. Absent, never
+ * empty — the same rule `priorityReason` follows above, and load-bearing for
+ * the same reason: a card renders these only when they are actually there,
+ * and `''` would draw an empty line under every patrol card on the board.
+ */
+describe('an idea card brings its brief across', () => {
+  it('carries the story, the done-when and the model and effort', () => {
+    const card = mapKanbanCardToBoardCard(
+      row({
+        story: 'A weekly planner wants a first agenda without typing one.',
+        done_when: 'A run answers with five numbered items.',
+        agent_model: 'opus',
+        agent_effort: 'high',
+      }),
+      Date.now(),
+    );
+
+    expect(card.story).toBe('A weekly planner wants a first agenda without typing one.');
+    expect(card.doneWhen).toBe('A run answers with five numbered items.');
+    expect(card.agentModel).toBe('opus');
+    expect(card.agentEffort).toBe('high');
+  });
+
+  it('carries the ids this card waits on', () => {
+    expect(
+      mapKanbanCardToBoardCard(row({ blocked_by: ['proj-a:idea-other'] }), Date.now()).blockedBy,
+    ).toEqual(['proj-a:idea-other']);
+  });
+
+  it('leaves every one of them absent on a patrol row, never an empty string', () => {
+    const card = mapKanbanCardToBoardCard(row(), Date.now());
+
+    expect(card.story).toBeUndefined();
+    expect(card.doneWhen).toBeUndefined();
+    expect(card.agentModel).toBeUndefined();
+    expect(card.agentEffort).toBeUndefined();
+    expect(card.blockedBy).toBeUndefined();
   });
 });

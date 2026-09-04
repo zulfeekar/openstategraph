@@ -48,6 +48,7 @@ class TestExposedSurface:
         assert "kanban_set_stage" in EXPOSED_TOOLS
         assert "kanban_show_card" in EXPOSED_TOOLS
         assert "kanban_release_card" in EXPOSED_TOOLS
+        assert "kanban_file_card" in EXPOSED_TOOLS
 
 
 class TestAttend:
@@ -795,3 +796,152 @@ class TestTheKanbanToolsAreDocumented:
             f"docs/mcp.md documents kanban tools that are not registered: "
             f"{sorted(named - set(self.KANBAN))}"
         )
+
+
+@pytest.fixture()
+def _identified(tmp_path: Path, monkeypatch) -> Path:
+    """A project this door can name — `osg-agent-experience/25`.
+
+    A card is keyed by `project_id`, and that id is read from the project's
+    own committed config, never invented per-call (`kanban-patrol/23`). So a
+    test of the filing door has to give it a project to file into, exactly as
+    a real one has.
+    """
+    from openstategraph.config_file import reset_active_config
+
+    config = tmp_path / "openstategraph.yaml"
+    config.write_text("project_id: proj-a\n")
+    monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(config))
+    reset_active_config()
+    yield config
+    reset_active_config()
+
+
+def _brief(**overrides: object) -> dict:
+    args: dict = {
+        "kind": "task",
+        "title": "Draft the agenda",
+        "story": "A weekly planner wants a first agenda without typing one.",
+        "done_when": "A run answers with five numbered items.",
+        "priority": "high",
+        "priority_reason": "It is the first thing the owner asked for.",
+    }
+    args.update(overrides)
+    return args
+
+
+class TestFileCard:
+    """`osg-agent-experience/25`'s filing door — the one kanban tool that
+    creates a card rather than moving one already on the board."""
+
+    def test_the_tool_is_declared(self) -> None:
+        assert "kanban_file_card" in EXPOSED_TOOLS
+
+    def test_filing_returns_the_id_and_the_column_it_landed_in(
+        self, services: WorkflowServices, _identified: Path
+    ) -> None:
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_file_card", _brief())
+
+        assert result["ok"] is True
+        assert result["task_id"] == "proj-a:idea-draft-the-agenda"
+        assert result["column"] == "detected"
+
+    def test_the_brief_reaches_the_store(
+        self, services: WorkflowServices, _identified: Path
+    ) -> None:
+        from openstategraph.kanban_store import kanban_store_path, read_card
+
+        server = build_mcp_server(services)
+
+        _call(server, "kanban_file_card", _brief(blocked_by=["proj-a:idea-other"],
+                                                 agent_model="opus", agent_effort="high"))
+
+        card = read_card(kanban_store_path(services.store.root), "proj-a:idea-draft-the-agenda")
+        assert card.done_when == "A run answers with five numbered items."
+        assert card.blocked_by == ("proj-a:idea-other",)
+        assert (card.agent_model, card.agent_effort) == ("opus", "high")
+
+    def test_a_judgement_is_filed_into_needs_you(
+        self, services: WorkflowServices, _identified: Path
+    ) -> None:
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_file_card",
+                       _brief(kind="grilling", title="One node or two"))
+
+        assert result["column"] == "needsYou"
+
+    def test_a_missing_brief_is_a_structured_refusal_not_a_stack_trace(
+        self, services: WorkflowServices, _identified: Path
+    ) -> None:
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_file_card", _brief(done_when="  "))
+
+        assert result["ok"] is False
+        assert "done_when" in result["reason"]
+
+    def test_a_duplicate_title_is_a_structured_refusal(
+        self, services: WorkflowServices, _identified: Path
+    ) -> None:
+        server = build_mcp_server(services)
+        _call(server, "kanban_file_card", _brief())
+
+        result = _call(server, "kanban_file_card", _brief(story="Something else."))
+
+        assert result["ok"] is False
+        assert "already" in result["reason"]
+
+    def test_a_project_with_no_identity_is_told_so_rather_than_crashing(
+        self, services: WorkflowServices, tmp_path: Path, monkeypatch
+    ) -> None:
+        from openstategraph.config_file import reset_active_config
+
+        monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(tmp_path / "nothing.yaml"))
+        monkeypatch.chdir(tmp_path)
+        reset_active_config()
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_file_card", _brief())
+
+        reset_active_config()
+        assert result["ok"] is False
+        assert "init" in result["reason"]
+
+
+class TestTheFilerIsTheServersFinding:
+    """`kanban-patrol/29`'s rule, applied to the one write that creates a
+    card: over MCP the caller filling in `actor` is a model, so a deployment
+    that can identify the person behind the request records *them*."""
+
+    HEADER = TestActorIsTheServersToDetermine.HEADER
+
+    def test_a_vouched_principal_is_the_filer_whatever_the_model_passed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from openstategraph.config_file import reset_active_config
+        from openstategraph.kanban_store import kanban_store_path, read_card
+        from openstategraph.principal import TrustedHeaderPrincipals
+
+        config = tmp_path / "openstategraph.yaml"
+        config.write_text("project_id: proj-a\n")
+        monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(config))
+        reset_active_config()
+        root = tmp_path / "workflows"
+        root.mkdir()
+        services = WorkflowServices(
+            workflows_root=root, principals=TrustedHeaderPrincipals(self.HEADER)
+        )
+        server = build_mcp_server(services)
+
+        with TestActorIsTheServersToDetermine._arriving_with(
+            {self.HEADER: "alice@example.com", "X-OpenStateGraph-Proxy": "1"}
+        ):
+            _call(server, "kanban_file_card", _brief(actor="claude"))
+
+        reset_active_config()
+        assert read_card(
+            kanban_store_path(root), "proj-a:idea-draft-the-agenda"
+        ).actor == "alice@example.com"

@@ -1188,6 +1188,19 @@ export interface KanbanCardRow {
   readonly answer: string;
   readonly answered_by: string;
   readonly answered_at: string;
+  //: `osg-agent-experience/25`'s idea card — the brief a card filed from a
+  //: conversation carries, because the conversation is not something a later
+  //: reader can open. Empty on every patrol card, which has a run thread
+  //: behind it instead; `blocked_by` is a list rather than the JSON text the
+  //: column holds, because the encoding is the store's business.
+  readonly story: string;
+  readonly done_when: string;
+  readonly blocked_by: readonly string[];
+  //: Advisory — what to give a subagent that takes this card. Empty whenever
+  //: nobody had an opinion, never a default model name, which would read on
+  //: the board as a decision somebody made.
+  readonly agent_model: string;
+  readonly agent_effort: string;
   //: `kanban-patrol/19`'s explicit Release — whether this card's claim has
   //: gone past the hour-long lease with no heartbeat. Computed by the
   //: backend at read time, never stored.

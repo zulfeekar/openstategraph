@@ -33,11 +33,14 @@ once.
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
+from collections.abc import Sequence
 from typing import Any
 from pathlib import Path
 
@@ -147,6 +150,25 @@ class Card:
     answer: str
     answered_by: str
     answered_at: str
+    #: The brief an *idea* card carries — `osg-agent-experience/25`. A patrol
+    #: card justifies itself with the run it was minted from; a card filed out
+    #: of a conversation has no thread to point at, so the plain-English want
+    #: and the check that settles it are written on the card at filing time or
+    #: they are lost with the chat log. Empty on every patrol card, never
+    #: `None`: the same one-spelling-of-nothing rule the evidence and answer
+    #: fields above already keep.
+    story: str = ""
+    done_when: str = ""
+    #: The other cards this one waits on, as ids. A tuple rather than the JSON
+    #: text the column actually holds — the encoding is this module's business
+    #: and nothing above it should have to know it, which is the same reason
+    #: `evidence_green` is a `bool` here and an `INTEGER` there.
+    blocked_by: tuple[str, ...] = ()
+    #: What to give the subagent that takes this card. Advisory, and empty
+    #: whenever nobody had an opinion — never a default model name invented
+    #: here, which would read on the board as a decision somebody made.
+    agent_model: str = ""
+    agent_effort: str = ""
 
 
 #: `kanban-patrol/19`'s explicit Release lease, in seconds — one hour. Owned
@@ -238,6 +260,14 @@ def card_row(card: Card, *, stale: bool) -> dict[str, Any]:
         "answer": card.answer,
         "answered_by": card.answered_by,
         "answered_at": card.answered_at,
+        # `osg-agent-experience/25`. On every row, not only an idea card's,
+        # for the reason this function exists: two doors publishing different
+        # field sets is how a board and an agent come to read different cards.
+        "story": card.story,
+        "done_when": card.done_when,
+        "blocked_by": list(card.blocked_by),
+        "agent_model": card.agent_model,
+        "agent_effort": card.agent_effort,
         "stale": stale,
     }
 
@@ -265,6 +295,15 @@ _COLUMN_DEFS: dict[str, str] = {
     "answer": "TEXT NOT NULL DEFAULT ''",
     "answered_by": "TEXT NOT NULL DEFAULT ''",
     "answered_at": "TEXT NOT NULL DEFAULT ''",
+    # `osg-agent-experience/25`. Declared only here, not also in the
+    # `CREATE TABLE` below: the repair loop runs on a freshly created store
+    # too, so one declaration covers both cases and the older columns'
+    # duplication is history rather than a pattern to extend.
+    "story": "TEXT NOT NULL DEFAULT ''",
+    "done_when": "TEXT NOT NULL DEFAULT ''",
+    "blocked_by": "TEXT NOT NULL DEFAULT ''",
+    "agent_model": "TEXT NOT NULL DEFAULT ''",
+    "agent_effort": "TEXT NOT NULL DEFAULT ''",
 }
 
 
@@ -358,11 +397,159 @@ def file_card(
         conn.close()
 
 
+#: `osg-agent-experience/25`. Every idea card's id starts here, so a reader of
+#: a board — or of a `--session-id` on a run — can tell a card somebody wanted
+#: from a card the patrol found without opening either.
+IDEA_PREFIX = "idea-"
+
+#: The kinds an idea card may be filed as. Narrower than `cardKind.ts`'s six on
+#: purpose: `research`, `prototype` and `decision` end in something this door
+#: cannot state a done-when for, and a done-when is what `file_idea_card`
+#: refuses a card without. A card that ends in a judgement is a `grilling`.
+IDEA_KINDS: frozenset[str] = frozenset({"task", "bug", "grilling"})
+
+_SLUG_SEPARATORS = re.compile(r"[^a-z0-9]+")
+
+
+def _decode_blocked_by(raw: str | None) -> tuple[str, ...]:
+    """The JSON list the column holds, as ids. Tolerant in reading and strict
+    in trusting, `CLAUDE.md`'s own rule: a blank column, a store written before
+    the column existed and a value that is not a JSON list all mean "no
+    blockers" rather than a crash on a read of somebody else's board."""
+    if not raw:
+        return ()
+    try:
+        loaded = json.loads(raw)
+    except ValueError:
+        return ()
+    if not isinstance(loaded, list):
+        return ()
+    return tuple(str(item) for item in loaded if str(item).strip())
+
+
+def idea_task_id(project_id: str, title: str) -> str:
+    """`<project_id>:idea-<slug>` — the id an idea card is filed under.
+
+    Derived from the title rather than minted from a counter, so the same idea
+    described twice is the same card and an agent can name one in
+    `blocked_by` before it has filed it.
+
+    A title with no word characters is **refused**, never slugged to nothing:
+    `proj-a:idea-` is an id that two different titles would both mint, which
+    is exactly the collision deriving the id from the title is meant to make
+    impossible.
+    """
+    slug = _SLUG_SEPARATORS.sub("-", title.strip().lower()).strip("-")
+    if not slug:
+        raise ValueError(
+            f"cannot file a card from title {title!r}: a title needs at least "
+            "one letter or digit to make an id from"
+        )
+    return f"{project_id}:{IDEA_PREFIX}{slug}"
+
+
+def file_idea_card(
+    db_path: Path,
+    *,
+    project_id: str,
+    kind: str,
+    title: str,
+    story: str,
+    done_when: str,
+    priority: str,
+    priority_reason: str,
+    area: str = "backend",
+    actor: str = "",
+    blocked_by: Sequence[str] = (),
+    agent_model: str = "",
+    agent_effort: str = "",
+) -> str:
+    """File a card out of a conversation — `osg-agent-experience/25`. Returns
+    its `task_id`.
+
+    **Not `file_card` with more arguments.** That one writes what a patrol
+    found, and its whole justification is the run thread behind it, which any
+    later reader can go and look at. This one writes what somebody *said they
+    wanted*, and the chat log it came from is not a thing the next reader can
+    open. So the brief is required here and defaulted there: an empty `story`
+    is precisely the shape the lost conversation would take on the card.
+
+    **And it refuses a duplicate rather than ignoring it.** `file_card` uses
+    `INSERT OR IGNORE`, which is right for a patrol re-run — the same finding
+    seen again is the same card. Here a collision means two different ideas
+    were given one title, and silently keeping the first would lose the
+    second with nothing said. The caller renames.
+
+    `actor` is who filed it, and it goes in the same column a claimant's name
+    goes in — the card is still `unattended`, so the first `attend` overwrites
+    it with whoever takes the work, which is the honest reading of that column
+    either way: the person this card is currently with. Over MCP the string
+    arriving here is the server's own finding rather than the model's claim
+    (`kanban-patrol/29`); over the CLI it is the shell's, `20`'s stated floor.
+    """
+    if kind not in IDEA_KINDS:
+        raise ValueError(
+            f"kind {kind!r} is not one this door files — use one of "
+            f"{', '.join(sorted(IDEA_KINDS))}"
+        )
+    if priority not in BOARD_PRIORITIES:
+        raise ValueError(
+            f"priority {priority!r} is not one of {', '.join(BOARD_PRIORITIES)}"
+        )
+    if area not in BOARD_AREAS:
+        raise ValueError(f"area {area!r} is not one of {', '.join(BOARD_AREAS)}")
+    for name, value in (
+        ("story", story),
+        ("done_when", done_when),
+        ("priority_reason", priority_reason),
+    ):
+        if not value.strip():
+            raise ValueError(
+                f"{name} is empty — a card filed from a conversation carries "
+                "its brief or the brief is lost with the conversation"
+            )
+
+    task_id = idea_task_id(project_id, title)
+    ensure_schema(db_path)
+    conn = sqlite3.connect(db_path)
+    try:
+        existing = conn.execute(
+            "SELECT title FROM cards WHERE task_id = ?", (task_id,)
+        ).fetchone()
+        if existing is not None:
+            raise ValueError(
+                f"{task_id} already exists ({existing[0]!r}) — two ideas cannot "
+                "share one title; name this one differently"
+            )
+        conn.execute(
+            """
+            INSERT INTO cards
+                (task_id, board, kind, category, title, stage, actor, priority,
+                 area, priority_reason, filed_at, story, done_when, blocked_by,
+                 agent_model, agent_effort)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                task_id, "workflows", kind, "idea", title.strip(),
+                Stage.UNATTENDED.value, actor.strip() or None,
+                priority, area, priority_reason.strip(),
+                _now(), story.strip(), done_when.strip(),
+                json.dumps([str(item) for item in blocked_by]),
+                agent_model.strip(), agent_effort.strip(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return task_id
+
+
 _CARD_COLUMNS = (
     "task_id, board, kind, category, title, stage, actor, last_heartbeat_at, "
     "priority, area, priority_reason, filed_at, "
     "evidence_test_id, evidence_red_reason, evidence_green, evidence_commit, "
-    "answer, answered_by, answered_at"
+    "answer, answered_by, answered_at, "
+    "story, done_when, blocked_by, agent_model, agent_effort"
 )
 
 
@@ -387,6 +574,11 @@ def _row_to_card(row: tuple[Any, ...]) -> Card:
         answer=row[16],
         answered_by=row[17],
         answered_at=row[18],
+        story=row[19],
+        done_when=row[20],
+        blocked_by=_decode_blocked_by(row[21]),
+        agent_model=row[22],
+        agent_effort=row[23],
     )
 
 

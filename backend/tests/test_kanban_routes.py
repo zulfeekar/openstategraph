@@ -453,3 +453,50 @@ class TestAClientThatConnectsMidPatrol:
 
         cards = client.get("/api/kanban/cards").json()
         assert any(card["task_id"] == "proj-x:thread-9" for card in cards)
+
+
+class TestTheIdeaBriefOnTheWire:
+    """`osg-agent-experience/25`. The board draws the brief, so the brief has
+    to reach it — and on *every* row, not only an idea card's, because two
+    doors publishing different field sets is how a board and an agent come to
+    read different cards."""
+
+    def test_an_idea_cards_five_fields_reach_the_board(self, client: TestClient) -> None:
+        from openstategraph.kanban_store import file_idea_card
+
+        db = kanban_store_path(client.app.state.services.store.root)
+        ensure_schema(db)
+        file_idea_card(
+            db,
+            project_id="proj-a",
+            kind="task",
+            title="Draft the agenda",
+            story="A weekly planner wants a first agenda without typing one.",
+            done_when="A run answers with five numbered items.",
+            priority="high",
+            priority_reason="It is the first thing the owner asked for.",
+            blocked_by=("proj-a:idea-other",),
+            agent_model="opus",
+            agent_effort="high",
+        )
+
+        row = client.get("/api/kanban/cards").json()[0]
+
+        assert row["story"].startswith("A weekly planner")
+        assert row["done_when"] == "A run answers with five numbered items."
+        assert row["blocked_by"] == ["proj-a:idea-other"]
+        assert row["agent_model"] == "opus"
+        assert row["agent_effort"] == "high"
+
+    def test_a_patrol_card_carries_them_empty_rather_than_missing(
+        self, client: TestClient
+    ) -> None:
+        _filed(client)
+
+        row = client.get("/api/kanban/cards").json()[0]
+
+        assert row["story"] == ""
+        assert row["done_when"] == ""
+        assert row["blocked_by"] == []
+        assert row["agent_model"] == ""
+        assert row["agent_effort"] == ""

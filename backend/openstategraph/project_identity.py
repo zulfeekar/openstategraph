@@ -184,3 +184,31 @@ def adopt_for_active_config() -> ProjectIdentityResult | None:
     )
     reset_active_config()
     return result
+
+
+def project_id_for_board() -> str:
+    """The project id a card is filed under, resolved the one way —
+    `osg-agent-experience/25`.
+
+    `cmd_patrol_run` wrote this sequence out longhand and was the only door
+    that needed it. There are three now (the patrol, the `kanban file` CLI and
+    the MCP tool), and three spellings of "read the config, adopt if it
+    predates the field, refuse if there is nothing to adopt into" is three
+    chances for one door to file cards under an id the other two do not use —
+    which on a board keyed by that id means work filed where nobody looks.
+
+    Raises `ProjectIdentityError` when there is no config to adopt into: an
+    identity is never invented per-call, `kanban-patrol/23`'s standing rule.
+    """
+    from openstategraph.config_file import active_config
+
+    config = active_config()
+    if config is not None and config.project_id:
+        return config.project_id
+    adopted = adopt_for_active_config()
+    if adopted is None or not adopted.project_id:
+        raise ProjectIdentityError(
+            "no project_id and no config file to put one in — run "
+            "`openstategraph init` here."
+        )
+    return adopted.project_id

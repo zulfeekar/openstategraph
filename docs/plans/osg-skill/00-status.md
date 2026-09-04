@@ -8,7 +8,7 @@
 ## Slices
 - [x] Slice 1 — tracer: skill folder + directory installer + rules file + get_engineering_rules
 - [x] Slice 2 — four agent files from one descriptor, merge semantics, init report
-- [ ] Slice 3 — idea cards: columns, file_idea_card, MCP + CLI file, board renders the brief
+- [x] Slice 3 — idea cards: columns, file_idea_card, MCP + CLI file, board renders the brief
 - [ ] Slice 4 — triage: pure ordering, MCP + CLI, why_here
 - [ ] Slice 5 — the whole sheet + references + docs + documented-surface pin
 - [ ] Slice 6 — tested as a user (fresh install, real agent), three environments, close 25 and 26
@@ -51,3 +51,32 @@
 - `init`'s report now ends with two lines starting `next:` — the existing
   `next:` block and `NEXT_SENTENCE`. Left as 03 wrote the sentence; if the
   repetition grates, the fix is the older block's header, not the sentence.
+
+### Where slice 3 departed from `03-program-design.md`
+- `file_idea_card` gained an `actor` parameter 03's signature does not have.
+  The slice requires the MCP door to resolve the filer through
+  `_actor_on_the_card` and the CLI to take `--actor`, and with only the five
+  named columns there was nowhere for that name to go. It writes the existing
+  `actor` column on a still-`unattended` card, which the first `attend`
+  overwrites — the honest reading of that column either way: the person this
+  card is currently with.
+- `blocked_by` is a `tuple[str, ...]` on `Card` and a `list[str]` on the wire,
+  not the JSON text the column holds. The encoding is the store's business,
+  the same way `evidence_green` is a `bool` on `Card` and an `INTEGER` in
+  sqlite.
+- `project_identity.project_id_for_board()` is new and not in 03's file list.
+  `cmd_patrol_run` had the read-config / adopt / refuse sequence longhand and
+  was the only door that needed it; there are three now, and three spellings
+  of it is three chances for one door to file under an id the others do not
+  use — which on a board keyed by that id means work filed where nobody looks.
+- `anIdeaCardCarriesItsBrief.test.ts` reads `PatrolCard.tsx` and
+  `PatrolBoard.css` as text rather than mounting the card. Forced: vitest's
+  `include` is `src/**/*.test.ts` (a `.tsx` file is not collected) and this
+  repository has no React mount harness. It is also the shape the board's own
+  tests already use — `aBoardHeaderOutranksItsCards.test.ts` — and it lets the
+  *guard* be asserted, which is the load-bearing half: an unguarded
+  `{card.story}` draws an empty element on every patrol card and would pass a
+  "the story appears" mount unchanged.
+- `kanban_store.py` crossed the 500-line module ceiling (493 -> 544) and now
+  carries a recorded row with its argument, beside the raised numbers for
+  `cli.py`, `mcp_server.py`, `api/schemas.py` and `RuntimeClient.ts`.

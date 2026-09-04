@@ -175,6 +175,32 @@ export interface BoardCard {
   readonly answer?: string;
   /** Who decided. An unattributed decision is a rumour. */
   readonly answeredBy?: string;
+  /**
+   * The brief a card filed from a conversation carries —
+   * `osg-agent-experience/25`.
+   *
+   * A patrol card justifies itself with the run thread behind it, which a
+   * reader can go and open. A card filed out of a conversation cannot: the
+   * chat is gone. So the want (`story`) and the check that settles it
+   * (`doneWhen`) are written on the card at filing time, and the store
+   * refuses a card without them.
+   *
+   * Absent, never an empty string — the same rule `priorityReason` and
+   * `stale` follow, and load-bearing here for the same reason: the card
+   * guards on the prop, so `''` would draw an empty line under every patrol
+   * card's title.
+   */
+  readonly story?: string;
+  readonly doneWhen?: string;
+  /** The other cards this one waits on, as ids. Absent when it waits on none. */
+  readonly blockedBy?: readonly string[];
+  /**
+   * What to give a subagent that takes this card. **Advisory**, and absent
+   * whenever nobody had an opinion — never a default model name, which would
+   * read on the board as a decision somebody made.
+   */
+  readonly agentModel?: string;
+  readonly agentEffort?: string;
 }
 
 /**

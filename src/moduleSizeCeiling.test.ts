@@ -216,7 +216,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       part of it this module knows. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 895,
+    lines: 900,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -353,7 +353,15 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       time: one line per mirrored wire field, and one method that is
       \`releaseCard()\`'s own shape — a POST, a JSON body, an \`Err\` reading
       the backend's own \`detail\` rather than a second failure shape
-      invented here.`,
+      invented here.
+
+      **895 -> 900** (\`osg-agent-experience/25\`). Five declared members on
+      \`KanbanCardRow\` — the brief a card filed from a conversation carries
+      (\`story\`, \`done_when\`, \`blocked_by\`) and the model and effort to give a
+      subagent that takes it. Five lines, no method and no behaviour at all:
+      exactly the bill this entry's argument describes, one line per mirrored
+      wire field, and the physical count moved by three times as much because
+      each carries its documentation.`,
   },
 };
 

@@ -112,6 +112,7 @@ EXPOSED_TOOLS: tuple[str, ...] = (
     "kanban_show_card",
     "kanban_release_card",
     "kanban_answer_card",
+    "kanban_file_card",
 )
 
 
@@ -1549,6 +1550,83 @@ def build_mcp_server(
         except (StageOrderError, MissingEvidenceError) as exc:
             return {"ok": False, "reason": str(exc)}
         return {"ok": result.ok, "reason": result.reason}
+
+    @server.tool(name="kanban_file_card")
+    def kanban_file_card(
+        kind: str,
+        title: str,
+        story: str,
+        done_when: str,
+        priority: str,
+        priority_reason: str,
+        area: str = "backend",
+        blocked_by: list[str] | None = None,
+        agent_model: str = "",
+        agent_effort: str = "",
+        actor: str = "",
+        ctx: _MCPContext | None = None,  # type: ignore[type-arg]
+    ) -> dict[str, Any]:
+        """File a card from a conversation — `osg-agent-experience/25`. The
+        one kanban tool that *creates* a card; the others move one already on
+        the board.
+
+        The patrol files what it found in the run store, and a reader can go
+        and look at the thread behind it. A card filed from a conversation has
+        no such thread — the chat it came from is not something the next
+        reader can open. So the brief is required, not defaulted: `story` (the
+        plain-English want), `done_when` (the check that settles it) and
+        `priority_reason` (why it is that urgent) are refused blank, because
+        an empty string is exactly the shape the lost conversation would take.
+
+        `kind` is `task`, `bug` or `grilling`. A `grilling` ends in a
+        judgement, so it lands in **Needs You** and no agent may settle it;
+        the other two land in **Detected**, which is where an agent pulls
+        work from. `blocked_by` names other cards' ids. `agent_model` /
+        `agent_effort` are advisory — what to give a subagent that takes this
+        card — and are left empty when nobody had an opinion, never filled
+        with a default that would read as somebody's decision.
+
+        The id is derived from the title (`<project_id>:idea-<slug>`), so two
+        ideas given one title are a **refusal**, not a silent merge: rename
+        one. Every refusal is `{"ok": false, "reason": ...}`, the same
+        structured shape every tool at this door uses.
+        """
+        from openstategraph.kanban_store import (
+            column_for,
+            file_idea_card,
+            kanban_store_path,
+            read_card,
+        )
+        from openstategraph.project_identity import (
+            ProjectIdentityError,
+            project_id_for_board,
+        )
+
+        try:
+            project_id = project_id_for_board()
+        except (ProjectIdentityError, OSError) as exc:
+            return {"ok": False, "reason": str(exc)}
+
+        db = kanban_store_path(services.store.root)
+        try:
+            task_id = file_idea_card(
+                db,
+                project_id=project_id,
+                kind=kind,
+                title=title,
+                story=story,
+                done_when=done_when,
+                priority=priority,
+                priority_reason=priority_reason,
+                area=area,
+                actor=_actor_on_the_card(services.principals, ctx, actor),
+                blocked_by=tuple(blocked_by or ()),
+                agent_model=agent_model,
+                agent_effort=agent_effort,
+            )
+        except ValueError as exc:
+            return {"ok": False, "reason": str(exc)}
+        return {"ok": True, "task_id": task_id, "column": column_for(read_card(db, task_id))}
 
     @server.tool(name="kanban_release_card")
     def kanban_release_card(

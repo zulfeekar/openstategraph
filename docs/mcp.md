@@ -485,10 +485,12 @@ replaces it; name a slug only to update a package you saved earlier.
 `kanban_attend_card(task_id, actor)`, `kanban_set_stage(task_id, stage, actor,
 test_id, reason, commit)`, `kanban_show_card(task_id)`,
 `kanban_release_card(task_id, threshold_seconds)`,
-`kanban_answer_card(task_id, answer, actor)` — the MCP half of
+`kanban_answer_card(task_id, answer, actor)`,
+`kanban_file_card(kind, title, story, done_when, priority, priority_reason,
+area, blocked_by, agent_model, agent_effort, actor)` — the MCP half of
 `kanban-patrol/19`'s card lifecycle, beside a CLI door (`openstategraph kanban
-attend|stage|answer|show|release`) for an agent that is not MCP-attached to
-this project's server. Both wrap the identical function; there is no second
+file|attend|stage|answer|show|release`) for an agent that is not MCP-attached
+to this project's server. Both wrap the identical function; there is no second
 implementation of the claim or ordering logic to drift out of sync with this
 one.
 
@@ -565,6 +567,27 @@ one somebody is already working, and a second answer on a card somebody
 already decided are all `{"ok": false, "reason": "..."}` naming which — never
 a silent overwrite of somebody else's decision.
 
+`kanban_file_card` is the one tool here that **creates** a card rather than
+moving one already on the board (`osg-agent-experience/25`). The patrol files
+what it found in the run store, and a reader can go and look at the thread
+behind the card; a card filed out of a conversation has no such thread, so the
+brief is required rather than defaulted. `story` (the plain-English want),
+`done_when` (the check that settles it) and `priority_reason` (why it is that
+urgent) are refused blank — an empty string is exactly the shape the lost
+conversation would take on the card.
+
+`kind` is `task`, `bug` or `grilling`, and it decides the column the same
+derived way everything else here does: a `grilling` ends in a judgement and
+lands in `needsYou`, the other two land in `detected`. The id is derived from
+the title — `<project_id>:idea-<slug>` — so two ideas given one title are a
+refusal rather than a silent merge, and `blocked_by` can name a card by an id
+its filer can predict. `agent_model` and `agent_effort` are advisory: what to
+give a subagent that takes the card, left empty when nobody had an opinion
+rather than filled with a default that would read as somebody's decision.
+Every refusal is the same `{"ok": false, "reason": "..."}` shape, including a
+project with no `project_id` yet — a card is never filed under an invented
+identity (`kanban-patrol/23`).
+
 `kanban_release_card` is the human's explicit press on a card the system has
 already flagged stale — "flag, never auto-release" — refused the same
 structured way for any card not currently past `threshold_seconds` (default
@@ -633,7 +656,8 @@ The exposed tools, in `EXPOSED_TOOLS` order. Authoring a workflow:
 `list_workflows`, `describe_workflow`, `get_knowledge`, `export_plugin`,
 `save_workflow_draft`, `run_workflow`. The patrol board (§5a):
 `kanban_attend_card`, `kanban_set_stage`, `kanban_list_cards`,
-`kanban_show_card`, `kanban_release_card`, `kanban_answer_card`. A tool absent
+`kanban_show_card`, `kanban_release_card`, `kanban_answer_card`,
+`kanban_file_card`. A tool absent
 from that tuple does not exist over MCP — publishing, deleting and anything
 credential-shaped are absent deliberately, and a test asserts it. No total
 here, for §2's reason: the names are the half that matters, and a count is the

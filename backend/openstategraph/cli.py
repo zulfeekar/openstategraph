@@ -1515,6 +1515,52 @@ def cmd_kanban_answer(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_kanban_file(args: argparse.Namespace) -> int:
+    """File a card from a conversation — `osg-agent-experience/25`.
+
+    A thin door onto `kanban_store.file_idea_card`, which owns every rule:
+    which kinds this door files, that the brief cannot be blank, and that two
+    ideas cannot share one title. The identity a card is keyed to comes from
+    the project's own config, adopted if it predates the field and never
+    invented per-call, exactly as `patrol run` resolves it — one function, so
+    two doors cannot file into two different boards.
+    """
+    from openstategraph.kanban_store import (
+        column_for,
+        file_idea_card,
+        kanban_store_path,
+        read_card,
+    )
+    from openstategraph.project_identity import ProjectIdentityError, project_id_for_board
+
+    try:
+        project_id = project_id_for_board()
+    except (ProjectIdentityError, OSError) as exc:
+        return _error(str(exc))
+
+    db = kanban_store_path(getattr(args, "workflows_root", None))
+    try:
+        task_id = file_idea_card(
+            db,
+            project_id=project_id,
+            kind=args.kind,
+            title=args.title,
+            story=args.story,
+            done_when=args.done_when,
+            priority=args.priority,
+            priority_reason=args.reason,
+            area=args.area,
+            actor=args.actor,
+            blocked_by=tuple(args.blocked_by or ()),
+            agent_model=args.agent_model,
+            agent_effort=args.agent_effort,
+        )
+    except ValueError as exc:
+        return _error(str(exc))
+    print(f"filed {task_id} in {column_for(read_card(db, task_id))}")
+    return EXIT_OK
+
+
 def cmd_kanban_show(args: argparse.Namespace) -> int:
     """The self-contained instruction — `kanban-patrol/19`'s "Copy
     instruction" affordance, from the CLI door: a coding agent (or a human
@@ -2360,6 +2406,40 @@ def build_parser() -> argparse.ArgumentParser:
     )
     kanban_answer.add_argument("--workflows-root", dest="workflows_root")
     kanban_answer.set_defaults(handler=cmd_kanban_answer)
+
+    kanban_file = kanban_commands.add_parser(
+        "file",
+        help="file a card from a conversation, brief and all (osg-agent-experience/25)",
+    )
+    kanban_file.add_argument(
+        "--kind", required=True, choices=["task", "bug", "grilling"],
+        help="a grilling ends in a judgement and lands in Needs You; the other two land in Detected",
+    )
+    kanban_file.add_argument("--title", required=True, help="the id is a slug of this")
+    kanban_file.add_argument("--story", required=True, help="the plain-English want")
+    kanban_file.add_argument(
+        "--done-when", dest="done_when", required=True, help="the check that settles it"
+    )
+    kanban_file.add_argument("--priority", required=True, choices=["high", "med", "low"])
+    kanban_file.add_argument("--reason", required=True, help="why it is that urgent")
+    kanban_file.add_argument(
+        "--area", default="backend", choices=["ui", "ux", "frontend", "backend", "test", "docs"]
+    )
+    kanban_file.add_argument(
+        "--blocked-by", dest="blocked_by", action="append", default=[],
+        help="a card id this one waits on; repeat for several",
+    )
+    kanban_file.add_argument(
+        "--agent-model", dest="agent_model", default="",
+        help="advisory: the model to give a subagent that takes this card",
+    )
+    kanban_file.add_argument(
+        "--agent-effort", dest="agent_effort", default="",
+        help="advisory: the reasoning effort to give that subagent",
+    )
+    kanban_file.add_argument("--actor", required=True, help="who filed it — kanban-patrol/20")
+    kanban_file.add_argument("--workflows-root", dest="workflows_root")
+    kanban_file.set_defaults(handler=cmd_kanban_file)
 
     kanban_release = kanban_commands.add_parser(
         "release",

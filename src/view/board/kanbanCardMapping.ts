@@ -31,6 +31,14 @@ export interface KanbanCardResponse {
   readonly answer: string;
   readonly answered_by: string;
   readonly answered_at: string;
+  //: `osg-agent-experience/25`. The brief an idea card carries; empty strings
+  //: and an empty list on every patrol card, which is why the mapping below
+  //: turns them into absent props rather than passing them through.
+  readonly story: string;
+  readonly done_when: string;
+  readonly blocked_by: readonly string[];
+  readonly agent_model: string;
+  readonly agent_effort: string;
   //: `kanban-patrol/19`'s explicit Release — whether this card's claim has
   //: gone past the hour-long lease with no heartbeat. Absent-vs-`false`
   //: does not apply here — every row carries this field always, unlike
@@ -103,5 +111,14 @@ export function mapKanbanCardToBoardCard(row: KanbanCardResponse, now: number): 
     // exists at all.
     answer: row.answer || undefined,
     answeredBy: row.answered_by || undefined,
+    // `osg-agent-experience/25`, and the same absent-not-empty rule as every
+    // line above it. Load-bearing rather than tidy: the card guards on these
+    // props, so `''` would draw an empty story element under the title of all
+    // seven patrol cards.
+    story: row.story || undefined,
+    doneWhen: row.done_when || undefined,
+    blockedBy: row.blocked_by?.length ? row.blocked_by : undefined,
+    agentModel: row.agent_model || undefined,
+    agentEffort: row.agent_effort || undefined,
   };
 }

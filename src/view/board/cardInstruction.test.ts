@@ -141,3 +141,57 @@ describe('the pasted text carries the self-reference marker — kanban-patrol/08
     expect(instructionForCard(card()).toLowerCase()).toContain('patrol');
   });
 });
+
+/**
+ * `osg-agent-experience/25`. An idea card's brief has to survive the paste,
+ * because the paste is the *only* thing an agent with nothing installed ever
+ * sees. Two of the fields go before the work rather than after it: what
+ * "done" means decides how the work is done, and reading it at the bottom is
+ * reading it after the decision it was supposed to inform.
+ */
+describe('an idea card pastes its brief', () => {
+  const idea = () =>
+    card({
+      id: 'proj-a:idea-draft-the-agenda',
+      title: 'Draft the agenda',
+      kind: 'task',
+      story: 'A weekly planner wants a first agenda without typing one.',
+      doneWhen: 'A run answers with five numbered items.',
+      agentModel: 'opus',
+      agentEffort: 'high',
+    });
+
+  it('states what done means', () => {
+    expect(instructionForCard(idea())).toContain('A run answers with five numbered items.');
+  });
+
+  it('states it before the test-first instruction it is supposed to inform', () => {
+    const text = instructionForCard(idea());
+
+    expect(text.indexOf('A run answers with five numbered items.')).toBeLessThan(
+      text.indexOf('Work this test-first'),
+    );
+  });
+
+  it('carries the story, so the want is not only a title', () => {
+    expect(instructionForCard(idea())).toContain(
+      'A weekly planner wants a first agenda without typing one.',
+    );
+  });
+
+  it('names the model and effort suggested for this card, on one line', () => {
+    const line = instructionForCard(idea())
+      .split('\n')
+      .find((candidate) => candidate.includes('opus'));
+
+    expect(line).toContain('high');
+  });
+
+  it('says nothing about a model when nobody suggested one', () => {
+    expect(instructionForCard(card())).not.toContain('Suggested');
+  });
+
+  it('prints no empty done-when block on a patrol card', () => {
+    expect(instructionForCard(card())).not.toContain('Done when');
+  });
+});

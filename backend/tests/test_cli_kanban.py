@@ -424,3 +424,89 @@ class TestAttendHandsBackTheMarker:
             "so the next patrol files a card about this card's own work."
         )
         assert "--session-id" in out
+
+
+class TestFile:
+    """`osg-agent-experience/25`'s filing door, for the agent that can shell
+    out but is not MCP-attached. Same `file_idea_card`, never a second
+    implementation of the brief's refusals."""
+
+    @pytest.fixture()
+    def _identified(self, _project: Path, monkeypatch) -> Path:
+        from openstategraph.config_file import reset_active_config
+
+        config = _project / "openstategraph.yaml"
+        config.write_text("project_id: proj-a\n")
+        monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(config))
+        reset_active_config()
+        yield _project
+        reset_active_config()
+
+    def _argv(self, project: Path, *extra: str) -> list[str]:
+        return [
+            "kanban", "file",
+            "--kind", "task",
+            "--title", "Draft the agenda",
+            "--story", "A weekly planner wants a first agenda without typing one.",
+            "--done-when", "A run answers with five numbered items.",
+            "--priority", "high",
+            "--reason", "It is the first thing the owner asked for.",
+            "--actor", "alice",
+            *extra,
+        ] + _root(project)
+
+    def test_filing_writes_the_card_and_prints_where_it_landed(
+        self, _identified: Path, capsys
+    ) -> None:
+        code = cli.main(self._argv(_identified))
+
+        assert code == 0
+        card = read_card(kanban_store_path(_identified / "workflows"), "proj-a:idea-draft-the-agenda")
+        assert card.done_when == "A run answers with five numbered items."
+        assert card.actor == "alice"
+        out = capsys.readouterr().out
+        assert "proj-a:idea-draft-the-agenda" in out
+        assert "detected" in out
+
+    def test_the_optional_fields_reach_the_card(self, _identified: Path) -> None:
+        cli.main(
+            self._argv(
+                _identified,
+                "--area", "frontend",
+                "--blocked-by", "proj-a:idea-other",
+                "--blocked-by", "proj-a:idea-second",
+                "--agent-model", "opus",
+                "--agent-effort", "high",
+            )
+        )
+
+        card = read_card(kanban_store_path(_identified / "workflows"), "proj-a:idea-draft-the-agenda")
+        assert card.area == "frontend"
+        assert card.blocked_by == ("proj-a:idea-other", "proj-a:idea-second")
+        assert (card.agent_model, card.agent_effort) == ("opus", "high")
+
+    def test_a_grilling_lands_in_needs_you(self, _identified: Path, capsys) -> None:
+        cli.main(self._argv(_identified, "--kind", "grilling"))
+
+        assert "needsYou" in capsys.readouterr().out
+
+    def test_a_blank_brief_field_exits_nonzero_and_names_it(
+        self, _identified: Path, capsys
+    ) -> None:
+        argv = self._argv(_identified)
+        argv[argv.index("--story") + 1] = "   "
+
+        code = cli.main(argv)
+
+        assert code != 0
+        assert "story" in capsys.readouterr().err
+
+    def test_a_second_card_with_the_same_title_exits_nonzero(
+        self, _identified: Path, capsys
+    ) -> None:
+        cli.main(self._argv(_identified))
+
+        code = cli.main(self._argv(_identified))
+
+        assert code != 0
+        assert "already" in capsys.readouterr().err

@@ -360,6 +360,11 @@ said, the other what it cost and what executed.
 ### `kanban`
 
 ```
+openstategraph kanban file --kind {task,bug,grilling} --title TEXT --story TEXT
+                           --done-when TEXT --priority {high,med,low} --reason TEXT
+                           [--area {ui,ux,frontend,backend,test,docs}]
+                           [--blocked-by ID ...] [--agent-model NAME]
+                           [--agent-effort LEVEL] --actor NAME [--workflows-root DIR]
 openstategraph kanban attend <task-id> --actor NAME [--workflows-root DIR]
 openstategraph kanban stage <task-id> {red,green,finished} --actor NAME
                             [--test-id ID] [--reason TEXT] [--commit SHA]
@@ -374,6 +379,26 @@ The CLI door onto one card of the patrol board (`kanban-patrol/19`), beside
 the MCP one (`kanban-patrol/16`) — for a coding agent that can shell out but
 is not attached to this project's MCP server. Both doors call the identical
 `kanban_store.set_stage`, never two implementations of the claim logic.
+
+`file` is the one verb here that **creates** a card rather than moving one
+already on the board (`osg-agent-experience/25`). The patrol files what it
+found in the run store, and a reader can go and look at the thread behind the
+card; a card filed out of a conversation has no such thread, so the brief is
+required rather than defaulted. `--story` (the plain-English want),
+`--done-when` (the check that settles it) and `--reason` (why it is that
+urgent) are refused blank, because an empty string is exactly the shape the
+lost conversation would take on the card.
+
+The id is a slug of the title — `<project_id>:idea-<slug>` — so two ideas
+given one title are a refusal rather than a silent merge, and `--blocked-by`
+(repeatable) can name a card by an id its filer can predict. `--agent-model`
+and `--agent-effort` are advisory: what to give a subagent that takes the
+card, left empty when nobody had an opinion rather than filled with a default
+that would read as somebody's decision. A `grilling` lands in Needs You, a
+`task` or `bug` in Detected, by the same derived rule as everything else on
+this board. The `project_id` comes from the project's own committed config,
+adopted if it predates the field and never invented per-call
+(`kanban-patrol/23`) — the same resolution `patrol run` uses.
 
 `attend` is the exclusive, atomic claim: the first caller wins, a second
 caller on an already-attended card exits non-zero and is told exactly who has

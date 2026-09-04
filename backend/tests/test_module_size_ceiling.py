@@ -705,6 +705,15 @@ wheel and therefore has no copy of this repository's architecture document.
 The text is not here: it is package data with one reader
 (`engineering_rules.py`), and this is a wrapper over it, so the rules cannot
 acquire a second spelling on the transport that serves them.
+**897 -> 947** (`osg-agent-experience/25`). Fifty lines, `kanban_file_card` —
+the one kanban tool that *creates* a card, and thirty-two of the fifty are
+its docstring, which is the same argument this entry opens with: over MCP the
+docstring is the interface, and a model has to be told which three kinds this
+door files, that the id is a slug of the title so two ideas cannot share one,
+and that `agent_model`/`agent_effort` are advisory rather than a decision
+somebody made. No new logic: `kanban_store.file_idea_card` owns every
+refusal, and `_actor_on_the_card` — already here — owns whose name lands on
+the card.
 """
 
 ROUTES_WORKFLOWS = """
@@ -962,18 +971,56 @@ writes them. Declarations and their documentation again, and again the
 documentation is the load-bearing part: `actor` on the request is the
 caller's *claim*, dropped rather than merged on a deployment that resolves a
 principal, and the comment beside it is where that is said on the wire side.
+
+`529 -> 534`, 2026-09-04 (`osg-agent-experience/25`). Five fields on
+`KanbanCardResponse` — the brief a card filed from a conversation carries
+(`story`, `done_when`, `blocked_by`) and the model and effort to give a
+subagent that takes it. Declarations and their documentation once more, and
+the documentation earns the lines the same way: `blocked_by` is a `list[str]`
+here and JSON text in the column, and the comment is where a reader of the
+wire is told the encoding is the store's business and not theirs.
+"""
+
+KANBAN_STORE = """
+The kanban card store — the stage machine, the evidence gate, and the two
+writes that put a card on the board. It crossed the ceiling on the day it
+gained the second write (`osg-agent-experience/25`), which is the honest
+account: 493 -> 544 is `file_idea_card`, `idea_task_id`, `_decode_blocked_by`
+and five columns.
+
+**Why the second write is not a flag on the first.** `file_card` records what
+a patrol found, and its whole justification is the run thread behind it, which
+any later reader can open; it uses `INSERT OR IGNORE`, because the same
+finding seen twice is one card. `file_idea_card` records what somebody said
+they wanted, the conversation behind it is gone, and a second card with one
+title is two different ideas — so it requires the brief and refuses the
+duplicate. Every default and every refusal is opposite. One function with a
+mode switch would be a function whose docstring has to say "unless" four
+times, which is the god-object shape one function down.
+
+**Why the module and not a sibling.** `column_for` decides where a filed card
+lands and reads the same `Stage` and kind vocabulary the stage machine owns;
+`card_row` is the one row both doors publish. A `kanban_ideas.py` importing
+all three back would be a second module with no boundary — the split this
+table exists to prompt is worth making when a *reason to change* separates,
+and "what a card is and where it goes" is still one reason.
+
+Its length is docstrings, the same as `mcp_server.py`'s: this module is what
+two doors and an HTTP route all wrap, so the argument for each refusal is
+written where the refusal is rather than three times at the doors.
 """
 
 RECORDED: dict[str, Recorded] = {
+    "kanban_store.py": Recorded(544, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1481, CLI),
+    "cli.py": Recorded(1547, CLI),
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(897, MCP_SERVER),
+    "mcp_server.py": Recorded(947, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
-    "api/schemas.py": Recorded(529, SCHEMAS),
+    "api/schemas.py": Recorded(534, SCHEMAS),
 }
 
 
