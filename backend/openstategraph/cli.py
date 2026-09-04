@@ -642,6 +642,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     reading a run; nobody reaches this command except by having the package on
     their disk.
     """
+    from openstategraph.document_checks import document_findings
     from openstategraph.prebuilt_architect import ValidateWorkflowTool
     from openstategraph.schema import normalize_document
     from openstategraph.validation import unresolved_mounts, unresolved_tool_bindings
@@ -709,11 +710,24 @@ def cmd_validate(args: argparse.Namespace) -> int:
     findings, notes = (
         _compiler_findings(manifest.parent) if manifest.name == "workflow.json" else ([], [])
     )
+    # The document read against what its own node types declare
+    # (`osg-agent-experience/32`) — a `data` key nothing on that type reads, a
+    # value of the wrong shape or outside its own list, a *Database file*
+    # naming no file, a classifier wired onward with nothing to route on, an
+    # edge on a port the type does not have. None of it is visible to a plan:
+    # the plan is built *from* these values and never asks whether they are the
+    # ones the node reads, which is how nineteen nodes of confident nonsense
+    # printed VALID.
+    #
+    # The root is the package's siblings — the same one `unresolved_mounts`
+    # above searches and the same one a run will resolve a path-valued field
+    # against, so `examples/sql-qa` answers about `examples/`.
+    schema = [f.message for f in document_findings(document, workflows_root=manifest.parent.parent)]
     found = [line[2:] for line in report.splitlines() if line.startswith("- ")]
     # `plan.warnings` reaches this command twice — through the seam above and
     # again on `failure_warnings` — and one problem said once is the point.
     findings = [f for f in findings if f not in found]
-    problems = [*found, *mounts, *tools, *findings]
+    problems = [*found, *mounts, *tools, *findings, *schema]
     topology = report.split("\n\n", 1)[1] if "\n\n" in report else ""
     if problems:
         # Folded into the verdict rather than printed after it: one command,

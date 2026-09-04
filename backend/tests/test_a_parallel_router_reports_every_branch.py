@@ -59,7 +59,10 @@ def two_desk_document() -> dict[str, Any]:
                 "route.classifier",
                 matchMode="all",
                 branches=[{"id": "b-cost", "name": "cost"}, {"id": "b-risk", "name": "risk"}],
-                instruction="Pick every desk the question belongs to.",
+                # `rules`, not `instruction`: a classifier has no field by
+                # that name, so the sentence never reached the model and
+                # nothing said so (`osg-agent-experience/32`).
+                rules="Pick every desk the question belongs to.",
             ),
             _node("costdesk", "agent.llm"),
             _node("riskdesk", "agent.llm"),

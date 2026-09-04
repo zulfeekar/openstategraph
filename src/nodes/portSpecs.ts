@@ -2,7 +2,7 @@ import { Registry } from '@core/kernel/Registry';
 import { ModelRegistry } from '@core/model/ModelRegistry';
 import { CredentialStore, ProviderRegistry } from '@core/providers/ProviderRegistry';
 import { defaultsFrom } from '@core/model/contracts/fields';
-import type { FieldValue, NodeData } from '@core/model/contracts/fields';
+import type { FieldSchema, FieldValue, NodeData } from '@core/model/contracts/fields';
 import type { INodeDefinition } from '@core/model/contracts/node';
 import type { IPortDescriptor } from '@core/model/contracts/ports';
 import { maxConnectionsOf } from '@core/model/contracts/ports';
@@ -38,7 +38,7 @@ import { LEGACY_SKILL_BODY_KEY } from './inputs/SkillNode';
  */
 
 /** Bumped when the artifact's shape changes in a way Python must notice. */
-export const PORT_SPEC_SCHEMA_VERSION = 3;
+export const PORT_SPEC_SCHEMA_VERSION = 4;
 
 /** Where the emitted artifact lives, relative to the repository root. */
 export const PORT_SPEC_ARTIFACT_PATH = 'backend/openstategraph/compile/port_specs.json';
@@ -168,6 +168,37 @@ export interface GeneratedField {
   readonly hint: string;
   readonly required: boolean;
   readonly defaultValue: FieldValue;
+  /**
+   * The permitted values, **only when the field declares a fixed list**.
+   *
+   * `options` on a `select` or a `combobox` may be a function of runtime state
+   * — the model picker's list depends on which providers hold credentials, the
+   * reasoning tiers on which model is chosen, the package picker on what is on
+   * disk. A static artifact cannot publish an answer that moves, and a checker
+   * handed a stale one would refuse valid documents, so the function case is
+   * **omitted rather than resolved**: `undefined` here means "this list is not
+   * knowable from the catalogue", never "this field has no options".
+   *
+   * `backend/openstategraph/document_checks.py` reads it for exactly one
+   * finding — a `select` value outside its own list — and a `combobox` is
+   * deliberately not checked against it, because typing what does not exist
+   * yet is what that kind is for.
+   */
+  readonly options?: readonly GeneratedFieldOption[];
+  /**
+   * `FieldSchemaBase.pathRoot` — the root a path-valued field resolves
+   * against, when it is one. Omitted for every field whose value is not a
+   * path, which is nearly all of them.
+   */
+  readonly path_root?: string;
+  /** `FieldSchemaBase.jsonValue` — the value may be JSON text or the object. */
+  readonly json_value?: boolean;
+}
+
+/** One permitted value, and what the editor calls it. */
+export interface GeneratedFieldOption {
+  readonly value: string;
+  readonly label: string;
 }
 
 export interface GeneratedPortType {
@@ -341,6 +372,28 @@ function splitPorts(
 }
 
 /**
+ * One field, as a consumer in another language needs to see it.
+ *
+ * The two conditional properties are conditional on purpose: a JSON key that
+ * is present-but-empty and a key that is absent say different things, and only
+ * the second one is honest about a list this generator cannot resolve.
+ */
+function serializeField(field: FieldSchema): GeneratedField {
+  const options = 'options' in field && Array.isArray(field.options) ? field.options : undefined;
+  return {
+    key: field.key,
+    kind: field.kind,
+    label: field.label ?? '',
+    hint: field.hint ?? '',
+    required: field.required ?? false,
+    defaultValue: field.defaultValue ?? null,
+    ...(options ? { options: options.map((o) => ({ value: o.value, label: o.label })) } : {}),
+    ...(field.pathRoot ? { path_root: field.pathRoot } : {}),
+    ...(field.jsonValue ? { json_value: true } : {}),
+  };
+}
+
+/**
  * Builds the artifact. Pure, deterministic and sorted, so the drift diff is
  * about the catalogue rather than about iteration order.
  */
@@ -370,14 +423,7 @@ export function buildPortSpecArtifact(): NodeCatalogueArtifact {
         // the data record is what the backend reads and a `file` field writes
         // two keys into it. Sorted so the drift diff is about the catalogue.
         field_keys: Object.keys(defaultsFrom(definition.fields)).sort(),
-        fields: definition.fields.map((field) => ({
-          key: field.key,
-          kind: field.kind,
-          label: field.label ?? '',
-          hint: field.hint ?? '',
-          required: field.required ?? false,
-          defaultValue: field.defaultValue ?? null,
-        })),
+        fields: definition.fields.map((field) => serializeField(field)),
       };
     })
     .sort((a, b) => (a.type < b.type ? -1 : a.type > b.type ? 1 : 0));

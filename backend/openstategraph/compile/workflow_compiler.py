@@ -1685,14 +1685,18 @@ def data_key_findings(
     the silent wrong answer this ticket exists to close — the owner's
     decision, 2026-08-24.
 
-    **Advisory**: a key `data` carries that no field on that node type
-    declares (and that is not a named `legacy_data_keys` exemption). Probably
-    a typo — the stranger's was `totallyWrongKey` — but it might be a newer
-    version's field or a plugin's, and refusing it would break a document
-    that works today on a guess about intent. Never returned as a hard
-    finding, on the precedent `Finding.UNWIRED_REVISE` set
-    (`workflow-gallery/31`): a report that must not move VALID to INVALID
-    cannot ride the same channel as one that does.
+    **Advisory**: today, exactly one sentence — a `tool.*`/`function.*` type
+    with no static field schema to check at all, named below.
+
+    It used to carry a second: a key `data` holds that no field on that node
+    type declares, reported as advice because "it might be a newer field or a
+    plugin's, so the document stays valid". `osg-agent-experience/32` moved
+    that class onto the verdict (`document_checks.unknown_fields`), and the
+    sentence is gone from here rather than kept beside it — the editor's
+    validate door printed both at once, so one list said *stays valid* directly
+    above `valid: false`, and the new sentence names the node's actual fields
+    while the old one did not. Two spellings of one finding is the duplication
+    this file's own contract exists to prevent.
 
     **A `tool.*`/`function.*` type absent from the generated catalogue is
     skipped, not guessed at.** Those two prefixes are exactly the ones
@@ -1728,20 +1732,12 @@ def data_key_findings(
             continue
         raw_data = node.get("data")
         data = raw_data if isinstance(raw_data, dict) else {}
-        allowed = CATALOGUE.field_keys.get(node_type, frozenset()) | CATALOGUE.legacy_data_keys
         for key in sorted(CATALOGUE.required_field_keys.get(node_type, frozenset())):
             if key not in data:
                 hard.append(
                     f'Node "{node_id}" ({node_type}) is missing "{key}", which its own '
                     "field schema marks required — there is no working version of this "
                     "node without it."
-                )
-        for key in sorted(data):
-            if key not in allowed:
-                advisory.append(
-                    f'Node "{node_id}" ({node_type}) sets "{key}", which no field on '
-                    "this node type declares — probably a typo, but it might be a "
-                    "newer field or a plugin's, so the document stays valid."
                 )
     return hard, advisory
 

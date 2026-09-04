@@ -87,6 +87,11 @@ export const PLATFORM_TOOL_NODES = [
         // Without a value the tool refuses every call with "No readable
         // database at '(unset)'". Knowable before the run, so it says so.
         required: true,
+        // And *with* a value that names no file it refuses just as
+        // completely — `osg-agent-experience/32`, where this field held the
+        // word `mssql`. The sentence above is the hint; this is the same fact
+        // as data, so `validate` can ask the disk instead of asking a reader.
+        pathRoot: 'workflows',
       },
     ],
   }),
@@ -107,6 +112,11 @@ export const PLATFORM_TOOL_NODES = [
         // Without a value the tool refuses every call with "No readable
         // database at '(unset)'". Knowable before the run, so it says so.
         required: true,
+        // And *with* a value that names no file it refuses just as
+        // completely — `osg-agent-experience/32`, where this field held the
+        // word `mssql`. The sentence above is the hint; this is the same fact
+        // as data, so `validate` can ask the disk instead of asking a reader.
+        pathRoot: 'workflows',
       },
     ],
   }),
@@ -128,6 +138,11 @@ export const PLATFORM_TOOL_NODES = [
         // Without a value the tool refuses every call with "No readable
         // database at '(unset)'". Knowable before the run, so it says so.
         required: true,
+        // And *with* a value that names no file it refuses just as
+        // completely — `osg-agent-experience/32`, where this field held the
+        // word `mssql`. The sentence above is the hint; this is the same fact
+        // as data, so `validate` can ask the disk instead of asking a reader.
+        pathRoot: 'workflows',
       },
       {
         key: 'maxRows',

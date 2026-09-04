@@ -76,13 +76,15 @@ def _document() -> dict[str, Any]:
         "nodes": [
             _n("in1", "input.text"),
             _n("sub1", "workflow.subgraph", workflow="somewhere-else"),
-            _n("agent1", "agent.llm", instruction="Answer the question."),
+            # `systemPrompt` is the field; `instruction` is not one this type has.
+            _n("agent1", "agent.llm", systemPrompt="Answer the question."),
             _n("out1", "output.formatted"),
         ],
         "edges": [
             {
                 "source": {"nodeId": "in1", "portId": "text"},
-                "target": {"nodeId": "sub1", "portId": "prompt"},
+                # A mount's input port is `input`.
+                "target": {"nodeId": "sub1", "portId": "input"},
             },
             {
                 "source": {"nodeId": "sub1", "portId": "result"},

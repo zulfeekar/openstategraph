@@ -53,6 +53,39 @@ interface FieldSchemaBase<TValue extends FieldValue> {
    * node's contract answer "is this ready?" the same way.
    */
   readonly required?: boolean;
+  /**
+   * This field's value is a **path to a file**, resolved against a named root.
+   *
+   * Declared rather than inferred, because the alternative is a checker
+   * guessing from a field's `hint` or from its node type — a hand-kept list on
+   * the Python side, which is the mirror `portSpecs.ts` exists to delete.
+   *
+   * `'workflows'` is the workflows root: the same directory
+   * `openstategraph.prebuilt_sql._resolve_database` resolves against, and the
+   * same containment rule (a value that escapes the root is not a file this
+   * product will open). One value rather than a free string, so a second root
+   * is a deliberate addition on both sides of the seam.
+   *
+   * The case that asked for it (`osg-agent-experience/32`): a `tool.sql-query`
+   * whose *Database file* held the word `mssql`. The field is `required` and
+   * it had a value, so every check the document met said yes, and only the run
+   * said "No readable database at 'mssql'".
+   */
+  readonly pathRoot?: 'workflows';
+  /**
+   * The value is **JSON**: the text of it in the editor, where a control can
+   * only produce text, or the object itself in a document somebody wrote by
+   * hand. Both are read, and by the same reader — `apply_mount_overrides`
+   * takes `str | dict` on purpose.
+   *
+   * Declared because nothing else can tell the two dicts apart. A mount's
+   * `overrides` holding `{"grader1": {…}}` and an agent's `systemPrompt`
+   * holding `{"type": "rules", …}` are the same JSON shape in the same
+   * `textarea` kind; the first is a shipped example (`same-package-twice`) and
+   * the second is `osg-agent-experience/32`'s sixteen agents, whose prompt was
+   * never read. A checker guessing between them gets one of the two wrong.
+   */
+  readonly jsonValue?: boolean;
 }
 
 export interface TextFieldSchema extends FieldSchemaBase<string> {

@@ -34,13 +34,30 @@ from typing import Any
 MOUNT_NODE_TYPES = ("workflow.subgraph",)
 
 
-def validate_document(document: dict[str, Any]) -> tuple[bool, list[str]]:
+def validate_document(
+    document: dict[str, Any],
+    *,
+    workflows_root: Path | None = None,
+) -> tuple[bool, list[str]]:
     """`(valid, findings)` for one workflow document.
 
     `findings` is a list of single lines, never one blob: every caller renders
     them — the editor as a list, MCP as a reply — and a caller that has to
     split a string is a caller that will split it differently.
+
+    **Two questions, one verdict** (`osg-agent-experience/32`). The seam below
+    plans the graph and reports what the *plan* could not resolve. It does not
+    read a node's `data` against that node type's own published field schema,
+    nor an edge's port against that type's port table — so a router configured
+    through a key it does not have, with no branches, fanning fifteen edges out
+    of a port it does not declare, planned perfectly well and printed VALID.
+    `document_checks` asks the second question, and its findings are findings:
+    they join the list and they move the verdict.
+
+    `workflows_root` is where a path-valued field resolves from — a package's
+    parent directory when there is one, the ambient root otherwise.
     """
+    from openstategraph.document_checks import document_findings
     from openstategraph.prebuilt_architect import ValidateWorkflowTool
 
     result = ValidateWorkflowTool().run(document=json.dumps(document))
@@ -71,6 +88,16 @@ def validate_document(document: dict[str, Any]) -> tuple[bool, list[str]]:
             # is not this function's failure to report — its own findings
             # already answered VALID, and this is best-effort advice on top.
             pass
+    schema_findings = [
+        finding.message
+        for finding in document_findings(document, workflows_root=workflows_root)
+    ]
+    if schema_findings:
+        # Appended rather than merged into the plan's own list: these are about
+        # the document as written, and the plan's are about the graph it
+        # became. Order keeps the two groups legible in a terminal.
+        findings = [*findings, *schema_findings]
+        valid = False
     return valid, findings
 
 

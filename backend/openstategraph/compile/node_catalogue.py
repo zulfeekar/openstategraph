@@ -31,7 +31,10 @@ from pathlib import Path
 from typing import Any
 
 #: Bumped in lockstep with `PORT_SPEC_SCHEMA_VERSION` in `src/nodes/portSpecs.ts`.
-SCHEMA_VERSION = 3
+#: 4 added `options` and `path_root` to a field record — the two things
+#: `document_checks.py` needs to tell a wrong value from a right one
+#: (`osg-agent-experience/32`).
+SCHEMA_VERSION = 4
 
 #: Ships inside the package, not at the repo root: an installed wheel has no
 #: repository around it.
@@ -68,6 +71,36 @@ class PortSpec:
     #: Source port types this port accepts, the editor's port-level widening
     #: already resolved in.
     accepts: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class FieldSpec:
+    """One configurable field, as a checker needs to see it.
+
+    The editor declares this once (`src/core/model/contracts/fields.ts`) and
+    the generator publishes it; nothing here is a second declaration.
+
+    `options` is `None` — never an empty tuple — when the field's list is a
+    *function* of runtime state (the model picker, the package picker) and so
+    is not knowable from a static artifact. The difference matters: an empty
+    tuple would read as "no value is permitted" and would refuse every
+    document that sets the field.
+
+    `path_root` names the root a path-valued field resolves against, and is
+    `""` for the overwhelming majority of fields, whose values are not paths.
+    """
+
+    key: str
+    kind: str
+    required: bool = False
+    label: str = ""
+    options: tuple[str, ...] | None = None
+    path_root: str = ""
+    #: The value may be JSON *text* or the object it denotes — both are read,
+    #: by the same reader. Declared on the field because nothing downstream
+    #: can tell a mount's `overrides` dict from a prompt that should have been
+    #: a paragraph.
+    json_value: bool = False
 
 
 @dataclass(frozen=True)
@@ -155,6 +188,38 @@ class NodeCatalogue:
         """
         return {
             str(node["type"]): frozenset(node.get("field_keys") or ())
+            for node in self.nodes
+        }
+
+    @property
+    def field_schema(self) -> dict[str, dict[str, FieldSpec]]:
+        """node type -> field key -> what that field will accept.
+
+        The generalisation `required_field_keys` and `field_keys` are each one
+        column of. Both of those answer a question about a *key*; a document
+        can also carry a key that is declared and a **value** that is not —
+        which is how a `route.classifier` was configured entirely through a
+        key nothing reads, sixteen agents were given a dict where a paragraph
+        goes, and a *Database file* held the word `mssql`, all of it VALID
+        (`osg-agent-experience/32`).
+        """
+        return {
+            str(node["type"]): {
+                str(field["key"]): FieldSpec(
+                    key=str(field["key"]),
+                    kind=str(field.get("kind") or ""),
+                    required=bool(field.get("required")),
+                    label=str(field.get("label") or ""),
+                    options=(
+                        tuple(str(option["value"]) for option in field["options"])
+                        if isinstance(field.get("options"), list)
+                        else None
+                    ),
+                    path_root=str(field.get("path_root") or ""),
+                    json_value=bool(field.get("json_value")),
+                )
+                for field in (node.get("fields") or ())
+            }
             for node in self.nodes
         }
 
@@ -255,6 +320,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "CatalogueError",
     "DynamicPortGroup",
+    "FieldSpec",
     "NodeCatalogue",
     "PortSpec",
     "load_catalogue",

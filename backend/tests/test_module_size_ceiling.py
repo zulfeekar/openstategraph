@@ -434,6 +434,12 @@ state word cannot.
 filtering `list_cards` by board, and a two-line-per-row print loop — no new
 ordering logic, `kanban_store.triage` owns the rule and the sentence, the
 same split `cmd_kanban_file` already keeps from `file_idea_card`.
+
+**1571 -> 1573** (`osg-agent-experience/32`, 2026-09-05). Two lines in
+`cmd_validate`: an import and one list comprehension. The rule holds — every
+check, every sentence and the finding classes are `document_checks.py`, and
+what is here is the command folding one more list into the `problems` it
+already builds from four.
 """
 
 WORKFLOW_COMPILER = """
@@ -479,6 +485,13 @@ where the predicate that decides it lives. `src/view/ask/doorHeadline.ts` had
 been the only statement of the rule, in a different language, with nothing
 between the two — which is why a card offering to build a capability that had
 just been used could not be diagnosed from either side.
+
+**965 -> 957** (`osg-agent-experience/32`, 2026-09-05). Eight lines out.
+`data_key_findings` no longer builds the "no field on this node type declares
+this key" advisory: `document_checks.unknown_fields` says it on the verdict's
+own list, and printing both put "so the document stays valid" directly above
+`valid: false` on the editor's validate door. The required-key half is
+unchanged and stays here, where the plan is.
 """
 
 STREAMING = """
@@ -1034,8 +1047,8 @@ answer identically.
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(582, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1571, CLI),
-    "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
+    "cli.py": Recorded(1573, CLI),
+    "compile/workflow_compiler.py": Recorded(957, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(959, MCP_SERVER),

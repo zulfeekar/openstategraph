@@ -889,7 +889,12 @@ def validate_workflow(services: Services, request: ValidateRequest) -> ValidateR
     """
     from openstategraph.validation import unresolved_mounts, validate_document
 
-    valid, findings = validate_document(request.workflow)
+    # The same root goes to `validate_document`, for the same reason one route
+    # down: a path-valued field (`tool.sql-query`'s *Database file*) names a
+    # file relative to this workflows root, and a door that has the root and
+    # does not pass it answers a question it could have answered
+    # (`osg-agent-experience/32`).
+    valid, findings = validate_document(request.workflow, workflows_root=services.store.root)
     findings = list(findings) + unresolved_mounts(request.workflow, services.store.root)
     return ValidateResponse(valid=valid and not findings, findings=findings)
 

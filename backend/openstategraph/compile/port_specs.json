@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "generated_by": "npm run generate:ports",
   "source": "src/nodes/portSpecs.ts",
   "warning": "GENERATED FILE — DO NOT EDIT. The TypeScript node catalogue is authoritative; run `npm run generate:ports` after changing a node type or a port.",
@@ -183,7 +183,21 @@
           "label": "Runtime",
           "hint": "",
           "required": false,
-          "defaultValue": "react"
+          "defaultValue": "react",
+          "options": [
+            {
+              "value": "react",
+              "label": "Agent · create_agent"
+            },
+            {
+              "value": "deep",
+              "label": "Deep agent · create_deep_agent"
+            },
+            {
+              "value": "custom",
+              "label": "Custom · hand-written node"
+            }
+          ]
         },
         {
           "key": "systemPrompt",
@@ -199,7 +213,17 @@
           "label": "Rules mode",
           "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
           "required": false,
-          "defaultValue": "extend"
+          "defaultValue": "extend",
+          "options": [
+            {
+              "value": "extend",
+              "label": "Add to the built-in rules"
+            },
+            {
+              "value": "replace",
+              "label": "Replace the built-in rules"
+            }
+          ]
         },
         {
           "key": "subagentsNote",
@@ -1103,7 +1127,17 @@
           "label": "Rules mode",
           "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
           "required": false,
-          "defaultValue": "extend"
+          "defaultValue": "extend",
+          "options": [
+            {
+              "value": "extend",
+              "label": "Add to the built-in rules"
+            },
+            {
+              "value": "replace",
+              "label": "Replace the built-in rules"
+            }
+          ]
         },
         {
           "key": "maxRetries",
@@ -1237,7 +1271,17 @@
           "label": "Rules mode",
           "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
           "required": false,
-          "defaultValue": "extend"
+          "defaultValue": "extend",
+          "options": [
+            {
+              "value": "extend",
+              "label": "Add to the built-in rules"
+            },
+            {
+              "value": "replace",
+              "label": "Replace the built-in rules"
+            }
+          ]
         },
         {
           "key": "maxRetries",
@@ -1302,7 +1346,21 @@
           "label": "Format",
           "hint": "",
           "required": false,
-          "defaultValue": "markdown"
+          "defaultValue": "markdown",
+          "options": [
+            {
+              "value": "markdown",
+              "label": "Markdown"
+            },
+            {
+              "value": "plain",
+              "label": "Plain text"
+            },
+            {
+              "value": "json",
+              "label": "JSON"
+            }
+          ]
         },
         {
           "key": "maxRetries",
@@ -1620,7 +1678,17 @@
           "label": "Rules mode",
           "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
           "required": false,
-          "defaultValue": "extend"
+          "defaultValue": "extend",
+          "options": [
+            {
+              "value": "extend",
+              "label": "Add to the built-in rules"
+            },
+            {
+              "value": "replace",
+              "label": "Replace the built-in rules"
+            }
+          ]
         },
         {
           "key": "branches",
@@ -1665,7 +1733,17 @@
           "label": "When several branches match",
           "hint": "Either way the destinations are the ones drawn on this node: “Run the best one” takes a single branch, “Run every match” takes each branch that matched and they run in parallel. Neither invents a destination. When how many pieces of work there are is only known during the run — one worker repeated as many times as the input needs — that is an Orchestrator, which plans the subtasks and dispatches one per task.",
           "required": false,
-          "defaultValue": "best"
+          "defaultValue": "best",
+          "options": [
+            {
+              "value": "best",
+              "label": "Run the best one"
+            },
+            {
+              "value": "all",
+              "label": "Run every match, in parallel"
+            }
+          ]
         },
         {
           "key": "tier",
@@ -1673,7 +1751,21 @@
           "label": "Runtime",
           "hint": "",
           "required": false,
-          "defaultValue": "react"
+          "defaultValue": "react",
+          "options": [
+            {
+              "value": "react",
+              "label": "Agent · create_agent"
+            },
+            {
+              "value": "deep",
+              "label": "Deep agent · create_deep_agent"
+            },
+            {
+              "value": "custom",
+              "label": "Custom · hand-written node"
+            }
+          ]
         },
         {
           "key": "maxRetries",
@@ -1810,7 +1902,17 @@
           "label": "Rules mode",
           "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
           "required": false,
-          "defaultValue": "extend"
+          "defaultValue": "extend",
+          "options": [
+            {
+              "value": "extend",
+              "label": "Add to the built-in rules"
+            },
+            {
+              "value": "replace",
+              "label": "Replace the built-in rules"
+            }
+          ]
         },
         {
           "key": "maxAttempts",
@@ -1826,7 +1928,21 @@
           "label": "Runtime",
           "hint": "",
           "required": false,
-          "defaultValue": "react"
+          "defaultValue": "react",
+          "options": [
+            {
+              "value": "react",
+              "label": "Agent · create_agent"
+            },
+            {
+              "value": "deep",
+              "label": "Deep agent · create_deep_agent"
+            },
+            {
+              "value": "custom",
+              "label": "Custom · hand-written node"
+            }
+          ]
         },
         {
           "key": "maxRetries",
@@ -2759,7 +2875,8 @@
           "label": "Database file",
           "hint": "A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.",
           "required": true,
-          "defaultValue": ""
+          "defaultValue": "",
+          "path_root": "workflows"
         },
         {
           "key": "maxRetries",
@@ -2823,7 +2940,8 @@
           "label": "Database file",
           "hint": "A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.",
           "required": true,
-          "defaultValue": ""
+          "defaultValue": "",
+          "path_root": "workflows"
         },
         {
           "key": "maxRetries",
@@ -2888,7 +3006,8 @@
           "label": "Database file",
           "hint": "A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.",
           "required": true,
-          "defaultValue": ""
+          "defaultValue": "",
+          "path_root": "workflows"
         },
         {
           "key": "maxRows",
@@ -3239,7 +3358,21 @@
           "label": "What the child remembers",
           "hint": "By default this mount is one isolated step: it is handed the task and this conversation so far, and keeps nothing of its own between turns. “Its own conversation” gives the mounted workflow a memory of its own on this thread — it stops being handed this conversation and keeps its own instead, so it can pick up where it left off. Use it for a mounted workflow that is genuinely a running dialogue, and not otherwise: two of these running at the same time write to the same place and conflict. “Nothing at all” keeps no record of the mounted workflow’s run. It can still pause for an approval — but because nothing was kept, answering it runs that workflow again from its first step, so every step before the approval happens a second time.",
           "required": false,
-          "defaultValue": "per-invocation"
+          "defaultValue": "per-invocation",
+          "options": [
+            {
+              "value": "per-invocation",
+              "label": "Nothing · a fresh run every time (default)"
+            },
+            {
+              "value": "per-thread",
+              "label": "Its own conversation · across turns on this thread"
+            },
+            {
+              "value": "stateless",
+              "label": "Nothing at all · an approval inside is answered twice over"
+            }
+          ]
         },
         {
           "key": "overrides",
@@ -3247,7 +3380,8 @@
           "label": "Overrides (this mount only)",
           "hint": "JSON keyed by child node id. Other mounts keep the package defaults.",
           "required": false,
-          "defaultValue": ""
+          "defaultValue": "",
+          "json_value": true
         },
         {
           "key": "maxRetries",

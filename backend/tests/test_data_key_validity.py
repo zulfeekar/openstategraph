@@ -17,6 +17,23 @@ Owner decision, 2026-08-24: the two halves are not the same defect.
   PROBLEMS FOUND require empty. Same shape here: the advisory rides a
   separate channel that never becomes a problem.
 
+**The second half of that decision was reversed on 2026-09-05**, and the
+reversal is recorded here rather than in place of it, because the argument for
+it was good and the evidence against it was better. `osg-agent-experience/32`:
+a coding agent configured a `route.classifier` entirely through `systemPrompt`
+— not one of its fields — and `validate` printed VALID. The generous reading
+("it might be a newer field, or a plugin's, so do not refuse a document that
+works today") assumed a document that works. That one did not work at all, and
+nothing between the agent and the run said so.
+
+`document_checks.unknown_fields` reports the key on `validate_document`'s own
+list now, where it moves the verdict, and the advisory sentence was **removed**
+rather than left beside it: the editor's validate door printed both, so one
+line read "so the document stays valid" directly above `valid: false`. One
+finding, one owner. `plan.warnings` is untouched — the assertions below still
+hold — and `plan.advisories` keeps only the sentence nothing else says, about
+a type with no static field schema at all.
+
 `tool.*`/`function.*` types minted from a package's Python have no static
 field schema at all — skipped, and the skip is not silent (see the
 dynamic-type test below and `ValidateWorkflowTool`'s report).
@@ -39,7 +56,7 @@ def _document(t1_data: dict[str, object]) -> dict[str, object]:
         ],
         "edges": [
             {
-                "source": {"nodeId": "in1", "portId": "out"},
+                "source": {"nodeId": "in1", "portId": "text"},
                 "target": {"nodeId": "a1", "portId": "prompt"},
             },
             {
@@ -65,11 +82,14 @@ class TestMissingRequiredKeyIsRefused:
         assert any("database" in w and "t1" in w for w in plan.warnings), plan.warnings
 
 
-class TestUnknownKeyIsAWarningOnly:
-    def test_an_unknown_key_is_reported_but_stays_valid(self) -> None:
+class TestUnknownKeyMovesTheVerdict:
+    def test_an_unknown_key_is_a_finding_on_the_verdict(self) -> None:
+        # Reversed 2026-09-05 — see this module's docstring. It was
+        # `assert valid is True` for as long as the key nothing reads was
+        # treated as somebody else's field.
         doc = _document({"database": "chinook.sqlite", "totallyWrongKey": "nope"})
         valid, findings = validate_document(doc)
-        assert valid is True
+        assert valid is False
         assert any("totallyWrongKey" in f for f in findings), findings
 
     def test_an_unknown_key_never_reaches_plan_warnings(self) -> None:
@@ -115,7 +135,7 @@ class TestDynamicTypesAreSkippedNotSilently:
             ],
             "edges": [
                 {
-                    "source": {"nodeId": "in1", "portId": "out"},
+                    "source": {"nodeId": "in1", "portId": "text"},
                     "target": {"nodeId": "a1", "portId": "prompt"},
                 },
                 {
@@ -146,7 +166,7 @@ class TestDynamicTypesAreSkippedNotSilently:
             ],
             "edges": [
                 {
-                    "source": {"nodeId": "in1", "portId": "out"},
+                    "source": {"nodeId": "in1", "portId": "text"},
                     "target": {"nodeId": "a1", "portId": "prompt"},
                 },
             ],

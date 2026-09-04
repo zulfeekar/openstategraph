@@ -51,7 +51,9 @@ def _document() -> dict[str, Any]:
         "version": 1,
         "name": "echo",
         "nodes": [_node("in1", "input.text"), _node("out1", "output.formatted")],
-        "edges": [_edge("in1", "text", "out1", "text")],
+        # `result` is the Output node's only in port; `text` was never one
+        # (`osg-agent-experience/32`, which made a fabricated port a finding).
+        "edges": [_edge("in1", "text", "out1", "result")],
     }
 
 

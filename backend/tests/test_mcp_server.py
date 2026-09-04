@@ -357,7 +357,8 @@ class TestStatelessCompile:
             "edges": [
                 {
                     "source": {"nodeId": "in1", "portId": "text"},
-                    "target": {"nodeId": "sub1", "portId": "prompt"},
+                    # A mount's input port is `input`.
+                    "target": {"nodeId": "sub1", "portId": "input"},
                 },
                 {
                     "source": {"nodeId": "sub1", "portId": "result"},

@@ -23,6 +23,10 @@ export const OVERRIDES_FIELD: FieldSchema = {
   onCard: false,
   advanced: true,
   hint: 'JSON keyed by child node id. Other mounts keep the package defaults.',
+  // A control can only produce text; a hand-written document holds the object.
+  // `compile/mount_overrides.apply_mount_overrides` reads both, so both are
+  // declared here rather than left for a checker to guess at.
+  jsonValue: true,
   validate: (value: string) => {
     const raw = value.trim();
     if (!raw) return null;

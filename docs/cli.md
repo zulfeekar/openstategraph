@@ -210,6 +210,34 @@ It answers three questions a plan held in memory cannot:
 A document copied without its package's `tools/`, and a package whose mount
 chain closes on itself, fail here rather than at the first run.
 
+#### The document against what its own node types declare
+
+A plan is built *from* a node's `data` and never asks whether those are the
+values that node reads. So a whole workflow of confident nonsense used to
+print `VALID` — a router configured through a key it does not have, sixteen
+agents whose prompt was a JSON object, a *Database file* holding the word
+`mssql`. Six more findings close that, all of them read off the same node
+catalogue the editor generates, none of them costing a model call:
+
+| Finding | What it means |
+| --- | --- |
+| **unknown field** | a key under `data` that no field on that node type declares, so nothing reads it |
+| **wrong kind** | a container where a scalar goes — an object in a paragraph field, a list where a number belongs |
+| **not an option** | a value outside a picker's own list, so the node silently falls back to its default |
+| **missing file** | a field that names a file — `tool.sql-query`'s *Database file* — pointing at nothing inside the workflows root |
+| **no branches** | a classifier with edges leaving it and no branches configured: it has nothing to choose between |
+| **unknown port** | an edge on a port the node's type does not declare, in or out |
+
+Two are deliberately narrow, because a check that refuses a working document
+is a check people learn to skip. A **picker whose list depends on what is
+installed** — the model field, the package field — publishes no list, and a
+value it cannot check is never refused. A **combobox** is not checked against
+its suggestions at all: typing what does not exist yet is what that control is
+for.
+
+Every one of them is reported by `validate_workflow` over MCP and by the
+editor's own validate as well, from the same list.
+
 When a `tools/` module is present but will not import, the report names **the
 module the interpreter could not find** and the two ways to fix it — an
 editable install of the project, or `prepend_sys_path:`. It does not tell you
