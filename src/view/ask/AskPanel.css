@@ -254,7 +254,6 @@
   min-width: 0;
   border: none;
   background: none;
-  box-shadow: none;
   /* `TextArea` carries its own roomier vertical padding, which is right for a
      node card and wrong inside a pill that already pads itself — without this
      the one-row composer is visibly taller than it was. */
@@ -272,6 +271,8 @@
 .ask__composer-input:focus,
 .ask__composer-input .input__control:focus {
   outline: none;
+  /* `none` draws nothing — this cancels `Field`'s focus-ring halo inside a
+     composer that states focus with a ground tint instead (`12`). */
   box-shadow: none;
 }
 
@@ -335,7 +336,6 @@
 .ask__view-tab[aria-selected='true'] {
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
 }
 
 .ask__activity {

@@ -57,7 +57,6 @@
   border-radius: var(--radius-full);
   background: var(--color-bg-surface);
   border: 1.5px solid var(--accent-solid);
-  box-shadow: var(--shadow-xs);
   transition:
     transform var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);
@@ -69,7 +68,6 @@
   border-radius: var(--radius-full);
   background: var(--color-bg-surface);
   border: 1.5px solid var(--accent-solid);
-  box-shadow: var(--shadow-xs);
 }
 
 .slider__control:hover:not(:disabled)::-webkit-slider-thumb {

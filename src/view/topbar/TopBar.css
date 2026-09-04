@@ -234,7 +234,10 @@
    ring reads as a warning at 6px where a hue change alone would not. */
 .topbar__unsaved[data-state='unreachable'] {
   background: transparent;
-  box-shadow: inset 0 0 0 2px var(--color-status-error);
+  /* 2px as a literal — the same number this rule carried as an inset shadow,
+     and neither the draggable weight nor a marker bar (`stable-beta-public/02`).
+     On a 6px dot with `border-box`, the whole mark is ring. */
+  border: 2px solid var(--color-status-error);
 }
 
 /* The lifecycle cluster — `ship-it` 39. The badge and its verb read as one

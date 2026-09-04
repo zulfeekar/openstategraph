@@ -119,13 +119,14 @@
   --osg-space-16: 64px;
   --osg-space-24: 96px;
 
-  /* Line, radius, elevation */
+  /* Line and radius. The authored file's three `--osg-shadow-*` primitives
+   * are gone with the elevation scale they fed (`stable-beta-public/02`) —
+   * a declared token nothing spends is a name a future author reaches for
+   * believing it means something, and this product no longer draws depth
+   * with an offset. */
   --osg-rule: 2px;
   --osg-hairline: 1px;
   --osg-radius: 0px;
-  --osg-shadow-sm: 0 1px 0 rgba(32, 30, 29, 0.14);
-  --osg-shadow-md: 0 2px 0 rgba(32, 30, 29, 0.18);
-  --osg-shadow-lg: 0 6px 0 rgba(32, 30, 29, 0.22);
 
   /* Motion */
   --osg-dur-1: 120ms;

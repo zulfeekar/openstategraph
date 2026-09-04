@@ -235,24 +235,38 @@
   --color-note-fill: var(--amber-50);
   --color-note-border: var(--amber-100);
 
-  /* ---------- Elevation ----------
-   * Was a two-layer soft shadow — a tight contact shadow plus a wide
-   * ambient one — which is the elevation language of a rounded system.
-   * The design system is flat and 0-radius, and its own shadows say so:
-   * `--osg-shadow-sm/md/lg` are `0 Npx 0`, an offset with **no blur**. A
-   * soft shadow under a square corner reads as a mistake, so the whole
-   * scale moves rather than half of it.
+  /* ---------- Elevation, retired — `stable-beta-public/02` ----------
    *
-   * The ring stays. On a flat system the hairline *is* the edge, and the
-   * offset is only lift. */
-  --shadow-xs: 0 1px 0 rgba(32, 30, 29, 0.1);
-  --shadow-sm: var(--osg-shadow-sm);
-  --shadow-md: var(--osg-shadow-md);
-  --shadow-lg: var(--osg-shadow-lg);
-  --shadow-xl: 0 10px 0 rgba(32, 30, 29, 0.26);
-  --shadow-node: 0 0 0 1px var(--color-border), var(--osg-shadow-sm);
-  --shadow-node-hover: 0 0 0 1px var(--color-border-emphasis), var(--osg-shadow-md);
-  --shadow-node-selected: 0 0 0 var(--osg-rule) var(--osg-accent), var(--osg-shadow-md);
+   * There was a scale here: `--shadow-xs/sm/md/lg/xl` plus three node
+   * rings, spent at 74 `box-shadow` declarations across 24 files. Two
+   * earlier passes had already taken the *blur* out of it — the authored
+   * `--osg-shadow-*` are `0 Npx 0`, an offset with no blur, because a soft
+   * shadow under a square corner reads as a mistake — which left an
+   * offset lift nobody had chosen and a ring that was doing the actual
+   * work.
+   *
+   * The owner's instruction, 2026-09-04, with Miro as the reference feel:
+   * remove the shadow and give a border, everywhere. So the ring became a
+   * real `border` at the one hairline weight, and a floating layer now
+   * says "above" the way a flat system says it — an **opaque ground**
+   * (`--color-bg-surface-raised`, or `--color-bg-inverse` for a tooltip or
+   * a toast) behind that same hairline.
+   *
+   * **No stronger border token was minted, and the reason is two standing
+   * pins rather than taste.** `--color-rule` at `--border-width-rule` is
+   * the draggable weight and is spent at exactly three declarations
+   * (`aBorderIsDraggableOrItIsNot.test.ts`); `--color-border-emphasis` is
+   * interaction *state* and never a resting border, asserted there as an
+   * exact site list. A third resting weight would have contradicted both,
+   * so the hairline carries every layer and the ground carries the
+   * difference between them. `--color-border` measures 4.32:1 against the
+   * canvas at its worst — the thinnest case — which is well clear of the
+   * ~1.5:1 a hairline needs to read at all; the whole table is in
+   * `noShadowButTheGrip.test.ts`, measured rather than stated.
+   *
+   * The one thing kept is the one the owner named: the **draggable grip**,
+   * which stands out on purpose and never used a shadow to do it — it is
+   * 2px of full ink (`--color-rule`), and that is untouched. */
 }
 
 [data-theme='dark'] {
@@ -366,19 +380,12 @@
   --color-note-fill: rgba(245, 158, 11, 0.09);
   --color-note-border: rgba(245, 158, 11, 0.22);
 
-  /* Dark surfaces get their definition from a light hairline, not from a
-   * shadow — so the shadows shrink and the ring carries the edge. That
-   * argument survives the flattening and gets stronger: an unblurred offset
-   * on a dark ground is nearly invisible, so here the ring does almost all
-   * the work and the offset is a hint. */
-  --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.45);
-  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 2px 0 rgba(0, 0, 0, 0.55);
-  --shadow-lg: 0 6px 0 rgba(0, 0, 0, 0.6);
-  --shadow-xl: 0 10px 0 rgba(0, 0, 0, 0.65);
-  --shadow-node: 0 0 0 1px var(--color-border), 0 1px 0 rgba(0, 0, 0, 0.5);
-  --shadow-node-hover: 0 0 0 1px var(--color-border-emphasis), 0 2px 0 rgba(0, 0, 0, 0.55);
-  --shadow-node-selected: 0 0 0 var(--osg-rule) #f4715c, 0 2px 0 rgba(0, 0, 0, 0.55);
+  /* The dark block's own elevation scale is retired with the light one —
+   * see the light block above. Its argument was already that "a light
+   * hairline, not a shadow" gives a dark surface its definition, and the
+   * hairline is now the whole of it: `--color-border` reads at 6.33:1 on
+   * the dark surface and 6.62:1 on the dark canvas, better than either
+   * light figure. */
 }
 
 /* ------------------------------------------------------------------ *

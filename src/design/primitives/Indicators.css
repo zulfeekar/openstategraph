@@ -132,7 +132,7 @@
   padding-inline: var(--space-1);
   border-radius: var(--radius-xs);
   background: var(--color-bg-subtle);
-  box-shadow: inset 0 0 0 1px var(--color-border);
+  border: var(--border-width-hairline) solid var(--color-border);
   font: var(--type-label);
   font-weight: var(--font-weight-medium);
   letter-spacing: var(--letter-spacing-normal);

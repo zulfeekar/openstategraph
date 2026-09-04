@@ -865,7 +865,10 @@ describe('a fallback behind a name that always resolves is dead code', () => {
     // The other kind, by name: a custom property a component publishes onto
     // one element from TypeScript is out of scope everywhere else, so its
     // literal fallback is the value every unmeasured element renders.
-    expect(live).toContain('design/primitives/Field.css:147 --textarea-max-rows');
+    // The line moved 147 → 146 when `stable-beta-public/02` turned the input's
+    // inset ring into a `border` — one declaration shorter after comments are
+    // stripped, which is what this site is counted against.
+    expect(live).toContain('design/primitives/Field.css:146 --textarea-max-rows');
   });
 
   it('leaves no fallback behind a name that is always in scope', () => {

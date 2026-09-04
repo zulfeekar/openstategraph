@@ -160,18 +160,23 @@ function borderColourTokens(value: string): string[] {
   return [];
 }
 
-/** `box-shadow` draws a border in this product wherever it is a ring flush
- *  with the box edge — `inset 0 0 0 Npx <colour>` in a component's own
- *  file, which is how `Field`, `Button`, `Menu`, `Pill`, `Select`,
- *  `Palette`, `Minimap`, `canvas.css` and the node card all draw a 1px edge
- *  without competing with a real `border` a component also needs for its
- *  focus/error state — and `0 0 0 Npx <colour>` with no `inset` keyword at
- *  all inside `--shadow-node`/`-hover`/`-selected` in `theme.css`, which are
- *  spread shadows rather than inset ones but read as the identical ring
- *  once painted; `NodeCard.css` spends them as `box-shadow: var(--shadow-
- *  node-hover)` with no ring syntax of its own to match. A `box-shadow`
- *  with no such ring (a drop shadow, `none`, a glow) is not a border and is
- *  not matched. */
+/** `box-shadow` used to draw most of this product's borders — an
+ *  `inset 0 0 0 1px <colour>` ring flush with the box edge, at `Field`,
+ *  `Button`, `Menu`, `Pill`, `Select`, `Palette`, `Minimap`, `canvas.css`
+ *  and the node card, plus the un-`inset` twins inside `--shadow-node` and
+ *  its two siblings in `theme.css`. **`stable-beta-public/02` turned all of
+ *  them into real `border` declarations and retired the elevation scale**,
+ *  so those sites now arrive through `BORDER_PROPS` above and this function
+ *  finds far fewer of them.
+ *
+ *  It stays, and is not narrowed to nothing, for two reasons: a ring is
+ *  still the mechanism for a **focus** halo on a control whose focus lands
+ *  on a child (`tokens.css`'s focus-ring block says why), so
+ *  `--focus-ring-soft` and `--invalid-ring-soft` are still counted here as
+ *  colours in play; and a new inset ring appearing anywhere else is exactly
+ *  the drift both this file and `noShadowButTheGrip.test.ts` exist to
+ *  catch. A `box-shadow` with no ring (a drop shadow, `none`, a glow) is
+ *  not a border and is not matched. */
 function insetRingColourTokens(value: string): string[] {
   const out: string[] = [];
   for (const m of value.matchAll(/(?:inset\s+)?0\s+0\s+0\s+[\d.]+px\s+([^,]+)/g)) {
@@ -180,15 +185,19 @@ function insetRingColourTokens(value: string): string[] {
   return out;
 }
 
-/** The three custom properties that carry a node-card ring the way a
- *  `box-shadow` declaration does everywhere else — declared once in
- *  `theme.css`, spent by `box-shadow: var(--shadow-node...)` in
- *  `NodeCard.css`, which is why `box-shadow` alone would have missed them. */
-const SHADOW_RING_PROPS = new Set([
-  '--shadow-node',
-  '--shadow-node-hover',
-  '--shadow-node-selected',
-]);
+/** Empty since `stable-beta-public/02`, and kept rather than deleted.
+ *
+ *  It held `--shadow-node`, `--shadow-node-hover` and `--shadow-node-selected`
+ *  — three custom properties in `theme.css` that carried a node-card ring
+ *  which a `box-shadow` census would otherwise have missed, because
+ *  `NodeCard.css` spent them as `box-shadow: var(--shadow-node-hover)` with
+ *  no ring syntax of its own. All three are gone with the elevation scale,
+ *  and the node card draws a `border`.
+ *
+ *  The **mechanism** stays because the mechanism is what a custom property
+ *  makes possible: a ring hidden one indirection deep is invisible to a
+ *  property-name census, and this is where a future one is named. */
+const SHADOW_RING_PROPS = new Set<string>([]);
 
 interface Site {
   readonly file: string;
@@ -436,26 +445,30 @@ describe('a border is drawn by what it means, and there are two weights', () => 
    * theme block that declares it — both read `--color-border-emphasis`,
    * neither is a fresh site.
    */
+  //
+  // **Every row now reads `border-color: var(--color-border-emphasis)`, and
+  // that is `stable-beta-public/02` rather than a loss of detail.** Seven of
+  // these eleven used to be inset rings or `--shadow-node-hover`, because the
+  // resting edge underneath them was itself a ring drawn by `box-shadow`; the
+  // resting edge is a real `border` now, so its hover state is a colour on
+  // that same border. The two `theme.css` rows are gone with the elevation
+  // scale they belonged to, and `NodeCard.css` gained a second row: the
+  // node card's own hover, which used to be `var(--shadow-node-hover)` and
+  // named this token only from inside a custom property.
   const EMPHASIS_SITES: ReadonlyArray<readonly [file: string, value: string]> = [
-    [
-      'design/primitives/Button.css',
-      'inset 0 0 0 1px var(--color-border-emphasis), var(--shadow-xs)',
-    ],
-    ['design/primitives/Field.css', 'inset 0 0 0 1px var(--color-border-emphasis)'],
-    ['design/primitives/Select.css', 'inset 0 0 0 1px var(--color-border-emphasis)'],
-    ['design/styles/theme.css', '0 0 0 1px var(--color-border-emphasis), var(--osg-shadow-md)'],
-    [
-      'design/styles/theme.css',
-      '0 0 0 1px var(--color-border-emphasis), 0 2px 0 rgba(0, 0, 0, 0.55)',
-    ],
+    ['design/primitives/Button.css', 'var(--color-border-emphasis)'],
+    ['design/primitives/Field.css', 'var(--color-border-emphasis)'],
+    ['design/primitives/Select.css', 'var(--color-border-emphasis)'],
     ['view/ask/AskPanel.css', 'var(--color-border-emphasis)'],
-    // A patrol card's `:hover`/`:focus-within` ring — interaction state, and
-    // the resting ring one line above it in that file is `--color-border`,
+    // A patrol card's `:hover`/`:focus-within` edge — interaction state, and
+    // the resting edge one rule above it in that file is `--color-border`,
     // which is the split this list exists to keep honest.
-    ['view/board/PatrolBoard.css', 'inset 0 0 0 1px var(--color-border-emphasis)'],
+    ['view/board/PatrolBoard.css', 'var(--color-border-emphasis)'],
     ['view/nodes/CompositionBody.css', 'var(--color-border-emphasis)'],
+    // Two: the node card's own `:hover`, and the composition row's.
     ['view/nodes/NodeCard.css', 'var(--color-border-emphasis)'],
-    ['view/palette/Palette.css', 'inset 0 0 0 1px var(--color-border-emphasis), var(--shadow-sm)'],
+    ['view/nodes/NodeCard.css', 'var(--color-border-emphasis)'],
+    ['view/palette/Palette.css', 'var(--color-border-emphasis)'],
     ['view/workflow/DrillBanner.css', 'var(--color-border-emphasis)'],
   ];
 
