@@ -487,7 +487,8 @@ test_id, reason, commit)`, `kanban_show_card(task_id)`,
 `kanban_release_card(task_id, threshold_seconds)`,
 `kanban_answer_card(task_id, answer, actor)`,
 `kanban_file_card(kind, title, story, done_when, priority, priority_reason,
-area, blocked_by, agent_model, agent_effort, actor)` — the MCP half of
+area, blocked_by, agent_model, agent_effort, actor)`,
+`kanban_triage(board)` — the MCP half of
 `kanban-patrol/19`'s card lifecycle, beside a CLI door (`openstategraph kanban
 file|attend|stage|answer|show|release`) for an agent that is not MCP-attached
 to this project's server. Both wrap the identical function; there is no second
@@ -598,6 +599,19 @@ resolved card again, and staleness names an abandoned claim, not a
 discharged one. A successful release resets stage, actor, heartbeat,
 and every evidence field back to a fresh, unattended row.
 
+`kanban_triage(board="workflows")` answers "what first," not "what is here" —
+a read-only door needing no principal (`osg-agent-experience/25` slice 4). It
+excludes `finished` cards outright, and treats a `blocked_by` naming one as
+spent, the same way `kanban_release_card` treats a `finished` card as never
+stale. The order: an unblocked card other cards are waiting on, most
+dependents first; then an unblocked card nobody is waiting on, by priority
+(`high`, `med`, `low`); then every still-blocked card, last, in that same
+dependents-then-priority sub-order. Each row is `kanban_list_cards`' own row
+plus `rank` (1-indexed) and `why_here`, the one sentence naming which rule
+placed it there — `"unblocks 2 cards"`, `"high priority, nothing waits on
+it"`, or `"blocked by <ids>"` — so an agent never has to reconstruct the
+order from the raw fields to trust it.
+
 ### Which name lands on the card
 
 `actor` is a parameter a *model* fills in, and this project's standing rule
@@ -657,7 +671,7 @@ The exposed tools, in `EXPOSED_TOOLS` order. Authoring a workflow:
 `save_workflow_draft`, `run_workflow`. The patrol board (§5a):
 `kanban_attend_card`, `kanban_set_stage`, `kanban_list_cards`,
 `kanban_show_card`, `kanban_release_card`, `kanban_answer_card`,
-`kanban_file_card`. A tool absent
+`kanban_file_card`, `kanban_triage`. A tool absent
 from that tuple does not exist over MCP — publishing, deleting and anything
 credential-shaped are absent deliberately, and a test asserts it. No total
 here, for §2's reason: the names are the half that matters, and a count is the

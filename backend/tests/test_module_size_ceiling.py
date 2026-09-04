@@ -428,6 +428,12 @@ else's servers, what makes a file one we decline to write) is all
 picks one, exactly like `_AGENTS_MD_STATE` above it. The note line is the
 reason the loop is not a one-liner: a file we left alone has to say why, and a
 state word cannot.
+
+**1547 -> 1571** (`osg-agent-experience/25`, slice 4, 2026-09-04).
+`cmd_kanban_triage` plus its parser: one call to `kanban_store.triage` after
+filtering `list_cards` by board, and a two-line-per-row print loop — no new
+ordering logic, `kanban_store.triage` owns the rule and the sentence, the
+same split `cmd_kanban_file` already keeps from `file_idea_card`.
 """
 
 WORKFLOW_COMPILER = """
@@ -714,6 +720,14 @@ and that `agent_model`/`agent_effort` are advisory rather than a decision
 somebody made. No new logic: `kanban_store.file_idea_card` owns every
 refusal, and `_actor_on_the_card` — already here — owns whose name lands on
 the card.
+
+**947 -> 959** (`osg-agent-experience/25`, slice 4, 2026-09-04). Twelve lines,
+`kanban_triage` — the board's seventh tool and the first read-only one that
+answers a *ranking* rather than a filter: `kanban_list_cards` answers "what is
+here," this answers "what first." No new logic: `kanban_store.triage` owns
+the ordering and the `why_here` sentence entirely; this filters `list_cards`
+by board and adds `rank`/`why_here` onto the same `_card_payload` row every
+other kanban tool already answers with.
 """
 
 ROUTES_WORKFLOWS = """
@@ -1008,16 +1022,23 @@ and "what a card is and where it goes" is still one reason.
 Its length is docstrings, the same as `mcp_server.py`'s: this module is what
 two doors and an HTTP route all wrap, so the argument for each refusal is
 written where the refusal is rather than three times at the doors.
+
+**2026-09-04, `osg-agent-experience/25` slice 4.** `TriageRow` and `triage`
+added: 544 -> 582. Pure ordering over `Card`s already in memory, no new
+write path and no new column — it belongs beside `column_for` for the same
+reason `column_for` is here at all, one function computing where a card
+sits in a rule both doors (MCP `kanban_triage`, CLI `kanban triage`) must
+answer identically.
 """
 
 RECORDED: dict[str, Recorded] = {
-    "kanban_store.py": Recorded(544, KANBAN_STORE),
+    "kanban_store.py": Recorded(582, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1547, CLI),
+    "cli.py": Recorded(1571, CLI),
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(947, MCP_SERVER),
+    "mcp_server.py": Recorded(959, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(534, SCHEMAS),

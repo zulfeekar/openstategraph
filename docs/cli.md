@@ -373,6 +373,7 @@ openstategraph kanban answer <task-id> --actor NAME --answer TEXT
                             [--workflows-root DIR]
 openstategraph kanban show <task-id> [--workflows-root DIR]
 openstategraph kanban release <task-id> [--threshold-seconds N] [--workflows-root DIR]
+openstategraph kanban triage [--board NAME] [--workflows-root DIR]
 ```
 
 The CLI door onto one card of the patrol board (`kanban-patrol/19`), beside
@@ -460,6 +461,18 @@ resolved card again, so its heartbeat is old by design, and staleness is
 about an abandoned claim rather than a discharged one. A successful release
 resets the row to a fresh, unattended state: stage, actor, heartbeat, and
 all four evidence fields, so the next attend starts clean.
+
+`triage` answers "what first," not "what is here" — read-only, `--board`
+defaulting to `workflows` (`osg-agent-experience/25` slice 4). It excludes
+`finished` cards, and a `--blocked-by` naming one is spent, the same rule
+`release` already applies to staleness. The order: an unblocked card other
+cards are waiting on, most dependents first; then an unblocked card nobody is
+waiting on, by priority (`high`, `med`, `low`); then every still-blocked
+card, last, in that same sub-order. Each line is `rank`, `task_id` and
+title, followed by `why_here` — the one sentence naming which rule placed it
+there, the same function (`kanban_store.triage`) the MCP `kanban_triage` tool
+answers from, so the two doors can never argue about the order. A board with
+nothing to triage prints `nothing to triage` rather than silence.
 
 ### `patrol`
 

@@ -9,7 +9,7 @@
 - [x] Slice 1 — tracer: skill folder + directory installer + rules file + get_engineering_rules
 - [x] Slice 2 — four agent files from one descriptor, merge semantics, init report
 - [x] Slice 3 — idea cards: columns, file_idea_card, MCP + CLI file, board renders the brief
-- [ ] Slice 4 — triage: pure ordering, MCP + CLI, why_here
+- [x] Slice 4 — triage: pure ordering, MCP + CLI, why_here
 - [ ] Slice 5 — the whole sheet + references + docs + documented-surface pin
 - [ ] Slice 6 — tested as a user (fresh install, real agent), three environments, close 25 and 26
 

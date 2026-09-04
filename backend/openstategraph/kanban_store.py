@@ -980,6 +980,85 @@ def list_cards(db_path: Path) -> list[Card]:
     return [_row_to_card(row) for row in rows]
 
 
+@dataclass(frozen=True)
+class TriageRow:
+    """One card, ranked — `osg-agent-experience/25`. `rank` is 1-indexed
+    position in the argued order `triage` returns; `why_here` is the one
+    sentence naming which rule of that order put the card there, so a reader
+    never has to reconstruct the order from the raw fields to trust it."""
+
+    card: Card
+    rank: int
+    why_here: str
+
+
+def triage(cards: Sequence[Card]) -> tuple[TriageRow, ...]:
+    """The owner's pick-up-next order (decision 10), computed fresh from
+    whatever cards are handed in — pure, no store, nothing to persist or
+    drift (least-confident-decision 2 in `03-program-design.md`).
+
+    A `finished` card is excluded outright: it is not work to pick up. Its
+    presence in some other card's `blocked_by` is also spent — a card that
+    was waiting only on work that has since finished is unblocked, the same
+    way `column_for` already treats a decided judgement as no longer
+    outstanding.
+
+    The order, in one pass:
+    1. **Unblocked cards that block others**, most dependents first — the
+       card whose done-when unlocks the most other work is worth doing
+       before a card nothing is waiting on, regardless of either one's
+       priority.
+    2. **Unblocked cards that block nothing**, by priority (high, med, low).
+    3. **Blocked cards, last**, in the *same* sub-order as 1+2 combined —
+       dependents first, priority second — so a blocked card that itself
+       unblocks a chain still sorts ahead of a blocked card nobody is
+       waiting on, even though neither can be picked up yet.
+
+    `why_here` names exactly one of those three rules: "unblocks N cards",
+    "<priority> priority, nothing waits on it", or "blocked by <ids>".
+    """
+    live = [card for card in cards if card.stage is not Stage.FINISHED]
+    finished_ids = {card.task_id for card in cards if card.stage is Stage.FINISHED}
+
+    def outstanding_blockers(card: Card) -> tuple[str, ...]:
+        return tuple(b for b in card.blocked_by if b not in finished_ids)
+
+    dependents: dict[str, list[str]] = {card.task_id: [] for card in live}
+    for card in live:
+        for blocker in outstanding_blockers(card):
+            if blocker in dependents:
+                dependents[blocker].append(card.task_id)
+
+    def priority_rank(card: Card) -> int:
+        try:
+            return BOARD_PRIORITIES.index(card.priority)
+        except ValueError:
+            return len(BOARD_PRIORITIES)
+
+    def sort_key(card: Card) -> tuple[int, int, str]:
+        # Most dependents first (negated for ascending sort), then priority,
+        # then title for a stable, readable tie-break.
+        return (-len(dependents[card.task_id]), priority_rank(card), card.title)
+
+    unblocked = [c for c in live if not outstanding_blockers(c)]
+    blocked = [c for c in live if outstanding_blockers(c)]
+    ordered = sorted(unblocked, key=sort_key) + sorted(blocked, key=sort_key)
+
+    rows = []
+    for rank, card in enumerate(ordered, start=1):
+        blockers = outstanding_blockers(card)
+        n_dependents = len(dependents[card.task_id])
+        if blockers:
+            why_here = f"blocked by {', '.join(blockers)}"
+        elif n_dependents:
+            plural = "card" if n_dependents == 1 else "cards"
+            why_here = f"unblocks {n_dependents} {plural}"
+        else:
+            why_here = f"{card.priority} priority, nothing waits on it"
+        rows.append(TriageRow(card=card, rank=rank, why_here=why_here))
+    return tuple(rows)
+
+
 def flagged_stale(db_path: Path, *, threshold_seconds: int) -> list[str]:
     """Cards whose last heartbeat is older than the threshold. Read-only —
     flags, never releases. `kanban-patrol/19`: a human presses Release

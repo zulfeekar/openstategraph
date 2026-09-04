@@ -510,3 +510,72 @@ class TestFile:
 
         assert code != 0
         assert "already" in capsys.readouterr().err
+
+
+class TestTriage:
+    """`osg-agent-experience/25` slice 4's read-only CLI door onto
+    `kanban_store.triage` — same function, same order the MCP door answers
+    with (`test_mcp_kanban.py::TestTriage`)."""
+
+    @pytest.fixture()
+    def _identified(self, _project: Path, monkeypatch) -> Path:
+        from openstategraph.config_file import reset_active_config
+
+        config = _project / "openstategraph.yaml"
+        config.write_text("project_id: proj-a\n")
+        monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(config))
+        reset_active_config()
+        yield _project
+        reset_active_config()
+
+    def _file(self, project: Path, title: str, *extra: str) -> None:
+        argv = [
+            "kanban", "file",
+            "--kind", "task",
+            "--title", title,
+            "--story", "s", "--done-when", "d",
+            "--priority", "med", "--reason", "r",
+            "--actor", "alice",
+            *extra,
+        ] + _root(project)
+        code = cli.main(argv)
+        assert code == 0
+
+    def _chained(self, project: Path) -> None:
+        self._file(project, "Root")
+        self._file(project, "Middle", "--blocked-by", "proj-a:idea-root")
+        self._file(project, "Leaf", "--blocked-by", "proj-a:idea-middle")
+
+    def test_the_chain_prints_root_then_middle_then_leaf_in_order(
+        self, _identified: Path, capsys
+    ) -> None:
+        self._chained(_identified)
+        capsys.readouterr()  # drop the file output
+
+        code = cli.main(["kanban", "triage"] + _root(_identified))
+
+        assert code == 0
+        out = capsys.readouterr().out
+        root_pos = out.index("proj-a:idea-root")
+        middle_pos = out.index("proj-a:idea-middle")
+        leaf_pos = out.index("proj-a:idea-leaf")
+        assert root_pos < middle_pos < leaf_pos
+
+    def test_it_prints_rank_and_why_here(self, _identified: Path, capsys) -> None:
+        self._chained(_identified)
+        capsys.readouterr()
+
+        cli.main(["kanban", "triage"] + _root(_identified))
+
+        out = capsys.readouterr().out
+        assert "1. proj-a:idea-root" in out
+        assert "unblocks" in out
+        assert "blocked by" in out
+
+    def test_an_empty_board_says_so_rather_than_printing_nothing(
+        self, _identified: Path, capsys
+    ) -> None:
+        code = cli.main(["kanban", "triage"] + _root(_identified))
+
+        assert code == 0
+        assert "nothing to triage" in capsys.readouterr().out

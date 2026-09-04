@@ -1589,6 +1589,26 @@ def cmd_kanban_show(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_kanban_triage(args: argparse.Namespace) -> int:
+    """Which card to pick up next, and why — `osg-agent-experience/25` slice
+    4. Read-only, the CLI half of `kanban_triage`: same `kanban_store.triage`
+    function, so the two doors can never argue about the order."""
+    from openstategraph.kanban_store import kanban_store_path, list_cards, triage
+
+    db = kanban_store_path(getattr(args, "workflows_root", None))
+    board = getattr(args, "board", "") or ""
+    folded = board.strip().casefold()
+    cards = [c for c in list_cards(db) if not folded or c.board.casefold() == folded]
+    rows = triage(cards)
+    if not rows:
+        print("nothing to triage")
+        return EXIT_OK
+    for row in rows:
+        print(f"{row.rank}. {row.card.task_id}  {row.card.title}")
+        print(f"   {row.why_here}")
+    return EXIT_OK
+
+
 def cmd_patrol_run(args: argparse.Namespace) -> int:
     """Read every recorded finding, file what's new, skip what's already
     claimed — kanban-patrol/07's synchronous door. No model, deterministic:
@@ -2452,6 +2472,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     kanban_release.add_argument("--workflows-root", dest="workflows_root")
     kanban_release.set_defaults(handler=cmd_kanban_release)
+
+    kanban_triage = kanban_commands.add_parser(
+        "triage",
+        help="which card to pick up next, and why (osg-agent-experience/25) — "
+        "the same order kanban_triage answers over MCP",
+    )
+    kanban_triage.add_argument(
+        "--board", default="workflows", help="board to triage (default: workflows)"
+    )
+    kanban_triage.add_argument("--workflows-root", dest="workflows_root")
+    kanban_triage.set_defaults(handler=cmd_kanban_triage)
 
     patrol = subparsers.add_parser(
         "patrol",

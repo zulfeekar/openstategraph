@@ -113,6 +113,7 @@ EXPOSED_TOOLS: tuple[str, ...] = (
     "kanban_release_card",
     "kanban_answer_card",
     "kanban_file_card",
+    "kanban_triage",
 )
 
 
@@ -1509,6 +1510,35 @@ def build_mcp_server(
                 continue
             cards.append(_card_payload(db, card))
         return {"ok": True, "cards": cards}
+
+    @server.tool(name="kanban_triage")
+    def kanban_triage(board: str = "workflows") -> dict[str, Any]:
+        """Which card to pick up next, and why — `osg-agent-experience/25`.
+
+        Read-only, and needs no principal: it answers from what is already
+        on the board rather than writing anything. `kanban_list_cards`
+        answers "what is here"; this answers "what first" — an unblocked
+        card that other cards are waiting on outranks an unblocked card
+        nobody is waiting on, which outranks anything still blocked. A
+        `finished` card, and any `blocked_by` naming one, is spent and does
+        not appear or does not block.
+
+        Each row is `kanban_list_cards`' own row (`card_row` plus `column`)
+        with two fields added: `rank` (1-indexed, this call's order) and
+        `why_here`, the one sentence naming which rule placed it — "unblocks
+        N cards", "<priority> priority, nothing waits on it", or "blocked by
+        <ids>". Nothing is stored; call again after the board changes.
+        """
+        from openstategraph.kanban_store import kanban_store_path, list_cards, triage
+
+        db = kanban_store_path(services.store.root)
+        folded = board.strip().casefold()
+        cards = [card for card in list_cards(db) if not folded or card.board.casefold() == folded]
+        rows = [
+            {**_card_payload(db, row.card), "rank": row.rank, "why_here": row.why_here}
+            for row in triage(cards)
+        ]
+        return {"ok": True, "cards": rows}
 
     @server.tool(name="kanban_answer_card")
     def kanban_answer_card(

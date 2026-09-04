@@ -945,3 +945,63 @@ class TestTheFilerIsTheServersFinding:
         assert read_card(
             kanban_store_path(root), "proj-a:idea-draft-the-agenda"
         ).actor == "alice@example.com"
+
+
+class TestTriage:
+    """`osg-agent-experience/25` slice 4's read-only door onto
+    `kanban_store.triage`. No principal is asserted anywhere in this class —
+    the tool needs none, being a read."""
+
+    def test_the_tool_is_declared(self) -> None:
+        assert "kanban_triage" in EXPOSED_TOOLS
+
+    def _chained(self, services: WorkflowServices, _identified: Path) -> None:
+        """Three cards: `root` blocks `middle`, `middle` blocks `leaf` — a
+        chain, so the argued order is unambiguous: `root` unblocks one card
+        directly and is itself unblocked, `middle` and `leaf` are blocked."""
+        db = kanban_store_path(services.store.root)
+        from openstategraph.kanban_store import file_idea_card
+
+        file_idea_card(
+            db, project_id="proj-a", kind="task", title="Root",
+            story="s", done_when="d", priority="med", priority_reason="r",
+        )
+        file_idea_card(
+            db, project_id="proj-a", kind="task", title="Middle",
+            story="s", done_when="d", priority="med", priority_reason="r",
+            blocked_by=("proj-a:idea-root",),
+        )
+        file_idea_card(
+            db, project_id="proj-a", kind="task", title="Leaf",
+            story="s", done_when="d", priority="med", priority_reason="r",
+            blocked_by=("proj-a:idea-middle",),
+        )
+
+    def test_the_chain_comes_back_root_then_middle_then_leaf(
+        self, services: WorkflowServices, _identified: Path
+    ) -> None:
+        self._chained(services, _identified)
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_triage", {"board": "workflows"})
+
+        assert result["ok"] is True
+        ids = [row["task_id"] for row in result["cards"]]
+        assert ids == ["proj-a:idea-root", "proj-a:idea-middle", "proj-a:idea-leaf"]
+
+    def test_each_row_carries_rank_and_why_here(
+        self, services: WorkflowServices, _identified: Path
+    ) -> None:
+        self._chained(services, _identified)
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_triage", {"board": "workflows"})
+
+        ranks = [row["rank"] for row in result["cards"]]
+        assert ranks == [1, 2, 3]
+        top = result["cards"][0]
+        assert "unblocks" in top["why_here"]
+        bottom = result["cards"][-1]
+        assert "blocked by" in bottom["why_here"]
+        # And it is still the same row shape kanban_list_cards answers with.
+        assert "column" in top and "stage" in top
