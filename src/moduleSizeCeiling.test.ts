@@ -182,7 +182,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       reason to change, and the transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 821,
+    lines: 881,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,

@@ -1189,6 +1189,63 @@ export interface KanbanCardRow {
   readonly stale: boolean;
 }
 
+/**
+ * What one model has cost — `ModelSpendResponse`, mirrored.
+ *
+ * **The three `number | null` fields are three-valued on purpose.** `0` is a
+ * measurement — the model was called and nothing came from cache — and `null`
+ * is *no run for this model carried the key*, which is what a provider that
+ * never publishes the detail leaves behind. `?? 0` on any of them is the
+ * editor inventing a figure nobody measured, which is exactly what the bar's
+ * dash exists to avoid (`stable-beta-public/03`).
+ */
+export interface ModelSpend {
+  readonly model: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+  /** Served from an existing cache — `input_token_details.cache_read`. */
+  readonly cachedTokens: number | null;
+  /** Written *to* the cache — billed, and not a saving. */
+  readonly cacheCreationTokens: number | null;
+  /** Output tokens spent thinking; already inside `outputTokens`. */
+  readonly reasoningTokens: number | null;
+  readonly runs: number;
+}
+
+/** One sitting — `SessionSpendResponse`, mirrored. */
+export interface SessionSpend {
+  readonly sessionId: string;
+  /**
+   * ISO-8601 with an offset, as the store keeps it. **Never sorted here**:
+   * `the-cost-of-one-more/11` made the ordering a derived key on the server
+   * because this string does not sort as text, and a client that re-sorted it
+   * would put the wrong order back.
+   */
+  readonly firstAt: string;
+  readonly lastAt: string;
+  readonly runs: number;
+  readonly totalTokens: number;
+}
+
+/**
+ * `GET /api/runs/spend` — what the runs this backend kept have cost.
+ *
+ * One document rather than four calls: the bar and the modal it opens are one
+ * surface, and four fetches would draw four cells measured at four instants.
+ */
+export interface Spend {
+  readonly grandTotal: number;
+  /** `null` when no run anywhere reported a cache figure — see `ModelSpend`. */
+  readonly cachedTotal: number | null;
+  readonly byModel: readonly ModelSpend[];
+  /** The asked-about sitting only; `[]` when it has run nothing. */
+  readonly sessionByModel: readonly ModelSpend[];
+  readonly sessionTotal: number;
+  /** Newest `lastAt` first, in the server's order. */
+  readonly sessions: readonly SessionSpend[];
+}
+
 export interface IRuntimeClient {
   run(request: RunRequest): Promise<Result<RunResult, string>>;
   /**
@@ -1215,6 +1272,8 @@ export interface IRuntimeClient {
   pastRuns(query?: PastRunQuery): Promise<Result<readonly PastRun[], string>>;
   /** One past run, checkpoint by checkpoint. Reads only — nothing re-executes. */
   pastRun(threadId: string, workflowSlug?: string): Promise<Result<PastRunHistory, string>>;
+  /** What the stored runs cost, all of them and this sitting. Reads only. */
+  spend(sessionId?: string): Promise<Result<Spend, string>>;
 }
 
 /**
@@ -1849,6 +1908,38 @@ export class RuntimeClient implements IRuntimeClient {
    * Presence, not validity: a key can be set, well-formed and rejected for
    * want of credit. `configured` means "this server has what it needs to try".
    */
+  /**
+   * What this backend's stored runs have cost.
+   *
+   * The same `Result`/`describeFailure` shape every other read here uses, and
+   * for the same reason: the bar this fills sits on screen at all times, so an
+   * unreachable backend has to be a sentence the surface can show rather than
+   * a rejected promise nobody catches.
+   *
+   * `sessionId` is optional and defaults to the tab's own — the id this client
+   * already sends on every run — because *this sitting* is the question the
+   * bar asks, and making every caller re-derive it would be two places that
+   * decide what a session is.
+   */
+  async spend(sessionId: string = this.sessionId()): Promise<Result<Spend, string>> {
+    const params = new URLSearchParams();
+    if (sessionId) params.set('session_id', sessionId);
+    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/api/runs/spend${suffix}`);
+    } catch {
+      return Err(this.unreachable());
+    }
+    if (!response.ok) return Err(await describeFailure(response));
+    try {
+      return Ok(asSpend(asRecordOfUnknown(await response.json())));
+    } catch {
+      return Err('The runtime returned a response that was not valid JSON');
+    }
+  }
+
   async providers(): Promise<Result<ProviderStatusList, string>> {
     try {
       const response = await this.fetchImpl(`${this.baseUrl}/api/providers`);
@@ -2236,6 +2327,58 @@ async function readDetail(response: Response): Promise<string> {
     return '';
   }
 }
+
+/**
+ * `SpendResponse` as this client is willing to hold it.
+ *
+ * `asReportedTokens` is the whole point of writing this by hand: a missing or
+ * non-numeric field reads back as `null`, never as `0`. The wire's `null`
+ * means *nobody reported it* and a mapper that defaulted it to zero would put
+ * a measurement on the screen that no provider ever made.
+ */
+function asSpend(payload: Record<string, unknown>): Spend {
+  return {
+    grandTotal: asCount(payload['grand_total']),
+    cachedTotal: asReportedTokens(payload['cached_total']),
+    byModel: asRows(payload['by_model']).map(asModelSpend),
+    sessionByModel: asRows(payload['session_by_model']).map(asModelSpend),
+    sessionTotal: asCount(payload['session_total']),
+    sessions: asRows(payload['sessions']).map(asSessionSpend),
+  };
+}
+
+function asModelSpend(row: Record<string, unknown>): ModelSpend {
+  return {
+    model: asString(row['model']),
+    inputTokens: asCount(row['input_tokens']),
+    outputTokens: asCount(row['output_tokens']),
+    totalTokens: asCount(row['total_tokens']),
+    cachedTokens: asReportedTokens(row['cached_tokens']),
+    cacheCreationTokens: asReportedTokens(row['cache_creation_tokens']),
+    reasoningTokens: asReportedTokens(row['reasoning_tokens']),
+    runs: asCount(row['runs']),
+  };
+}
+
+function asSessionSpend(row: Record<string, unknown>): SessionSpend {
+  return {
+    sessionId: asString(row['session_id']),
+    firstAt: asString(row['first_at']),
+    lastAt: asString(row['last_at']),
+    runs: asCount(row['runs']),
+    totalTokens: asCount(row['total_tokens']),
+  };
+}
+
+const asRows = (value: unknown): Record<string, unknown>[] =>
+  (Array.isArray(value) ? value : []).map(asRecordOfUnknown);
+
+/** A figure the server always has an answer for. */
+const asCount = (value: unknown): number => (typeof value === 'number' ? value : 0);
+
+/** A figure the server may never have been told — see `ModelSpend`. */
+const asReportedTokens = (value: unknown): number | null =>
+  typeof value === 'number' ? value : null;
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
 

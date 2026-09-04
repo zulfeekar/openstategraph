@@ -196,7 +196,7 @@ what stops it being a formality is that the number sits in the same table as the
 argument, so raising it lands in review beside a paragraph that has to still be
 true.
 
-Eight Python modules and two TypeScript ones are over it today, each carrying
+Nine Python modules and two TypeScript ones are over it today, each carrying
 its number and its argument in
 `backend/tests/test_module_size_ceiling.py` and `src/moduleSizeCeiling.test.ts`
 — derived censuses, not hand-picked lists, for the reason the class censuses

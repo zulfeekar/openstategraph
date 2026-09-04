@@ -798,6 +798,71 @@
         "title": "McpValidateResponse",
         "type": "object"
       },
+      "ModelSpendResponse": {
+        "description": "What one model has cost, summed over however many runs used it.\n\nKeyed by model for the reason `RecordedUsage` already gives \u2014 *which model\ncost what* is only answerable while they are apart \u2014 and carrying three\nfigures a provider may simply never report.\n\n**`int | None` on all three, and the `None` is the point.** `0` is a\nmeasurement: this model was called and nothing was served from cache. `null`\nis *no run for this model carried the key at all*, which is what a provider\nthat does not publish the detail leaves behind. Flattening the second into\nthe first would put a number on the wire that nobody measured, and a bar\nreading \"0 cached\" is a claim; \"\u2014\" is the truth.",
+        "properties": {
+          "cache_creation_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache Creation Tokens"
+          },
+          "cached_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cached Tokens"
+          },
+          "input_tokens": {
+            "default": 0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "output_tokens": {
+            "default": 0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "reasoning_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Tokens"
+          },
+          "runs": {
+            "default": 0,
+            "title": "Runs",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "default": 0,
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "title": "ModelSpendResponse",
+        "type": "object"
+      },
       "MountDocumentResponse": {
         "description": "One **instance** of a mounted workflow, as that instance actually runs.\n\nA package is a class and a mount node is an instance of it: the mount\ncarries `data.overrides`, which are merged onto a copy of the package at\ncompile time and never written back. Two mounts of one package therefore\nrun two different documents, and this is how a client asks for one of them\nrather than for the shared definition.\n\n`slug` is the **class** \u2014 the package the instance is of \u2014 because\ncapabilities, knowledge, the SQL schema and the palette all belong to the\npackage and a client still asks about those by slug. `mount_path` is the\nchain of mount node ids that identifies *which* instance, and the two\ntogether are what the editor's address bar spells `root/mount-id`.\n\n`warnings` carries the merge's own loud-but-not-fatal reports \u2014 an\noverride naming a child node id that does not exist runs the package\ndefault and says so, rather than refusing to open.",
         "properties": {
@@ -1779,6 +1844,87 @@
           "document"
         ],
         "title": "SaveWorkflowRequest",
+        "type": "object"
+      },
+      "SessionSpendResponse": {
+        "description": "One sitting, as a row in the list of them.\n\nA *session* is the browser tab that asked \u2014 `session_id` is the id the\neditor mints in `sessionStorage` and sends on every run, so it survives a\nrefresh and ends with the tab. Runs that came through the MCP or CLI doors\ncarry no sitting; they are a session of their own with an empty id rather\nthan runs that went missing.",
+        "properties": {
+          "first_at": {
+            "default": "",
+            "title": "First At",
+            "type": "string"
+          },
+          "last_at": {
+            "default": "",
+            "title": "Last At",
+            "type": "string"
+          },
+          "runs": {
+            "default": 0,
+            "title": "Runs",
+            "type": "integer"
+          },
+          "session_id": {
+            "default": "",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "total_tokens": {
+            "default": 0,
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "title": "SessionSpendResponse",
+        "type": "object"
+      },
+      "SpendResponse": {
+        "description": "`GET /api/runs/spend` \u2014 what this deployment's runs have cost.\n\nOne document with four answers in it, because the surface that reads it is\none bar and one modal opened from it: a client that had to make four calls\nto draw four cells would draw them at four different instants.\n\n`session_by_model` and `session_total` are the *asked-about* sitting only,\nand both are empty when no `session_id` was sent or the id names nothing.\nAn unknown sitting is an honest zero, never a 404: a tab that has run\nnothing yet is the ordinary case, not an error.",
+        "properties": {
+          "by_model": {
+            "items": {
+              "$ref": "#/components/schemas/ModelSpendResponse"
+            },
+            "title": "By Model",
+            "type": "array"
+          },
+          "cached_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cached Total"
+          },
+          "grand_total": {
+            "default": 0,
+            "title": "Grand Total",
+            "type": "integer"
+          },
+          "session_by_model": {
+            "items": {
+              "$ref": "#/components/schemas/ModelSpendResponse"
+            },
+            "title": "Session By Model",
+            "type": "array"
+          },
+          "session_total": {
+            "default": 0,
+            "title": "Session Total",
+            "type": "integer"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/SessionSpendResponse"
+            },
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "title": "SpendResponse",
         "type": "object"
       },
       "SqlSchemaResponse": {
@@ -3264,6 +3410,56 @@
           }
         },
         "summary": "Answer an approval and continue the run (SSE)",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/runs/spend": {
+      "get": {
+        "description": "What the work cost: everything, and this sitting.\n\nA sibling of `/api/runs/recorded` and not of `/api/runs`, for the reason\nthis module opens with \u2014 it reads the store and can be nothing else. The\nsame rows the listing pages through, summed instead of listed.\n\n**`session_id` is optional and an unknown one is not an error.** A tab that\nhas run nothing is the ordinary first case, and answering 404 for it would\nmake the editor's status bar show an error on every fresh install.\n\n**Answers the developer channel only, and takes no `audience`.** The\nrecordings door is built for a client anyone may write, so it defaults to\n`customer`; this one is the editor's own count of its own spend, and there\nis no customer-facing surface asking for it. Adding the parameter later is\nadditive \u2014 `run_usage` already owns the boundary \u2014 and inventing it now\nwould be a switch with one position.\n\n**Zeros here, on purpose.** Slice 1 of `stable-beta-public/03` lands the\ndoor, the published contract and the client that reads it; slice 2 lands\n`run_sinks.spend_summary` behind it. What is asserted today is the shape \u2014\nincluding that *not reported* is `null` and not `0`, which is the one thing\na later query cannot add if the wire has already flattened it.",
+        "operationId": "spend_endpoint_api_runs_spend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spend \u2014 what the runs this store kept have cost, in tokens",
         "tags": [
           "Runs"
         ]

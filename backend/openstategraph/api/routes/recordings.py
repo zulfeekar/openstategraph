@@ -34,6 +34,7 @@ from openstategraph.api.schemas import (
     RecordedRunsResponse,
     RecordedThreadResponse,
     RecordedUsage,
+    SpendResponse,
 )
 from openstategraph.run_sinks import RunRecord, read_runs, run_store_path
 
@@ -197,3 +198,40 @@ def read_recorded_thread_endpoint(
         threadId=thread_id,
         runs=[_on_the_wire(record, seen) for record in reversed(records)],
     )
+
+
+@router.get(
+    "/api/runs/spend",
+    response_model=SpendResponse,
+    summary="Spend — what the runs this store kept have cost, in tokens",
+    tags=["Runs"],
+)
+def spend_endpoint(services: Services, session_id: str | None = None) -> SpendResponse:
+    """What the work cost: everything, and this sitting.
+
+    A sibling of `/api/runs/recorded` and not of `/api/runs`, for the reason
+    this module opens with — it reads the store and can be nothing else. The
+    same rows the listing pages through, summed instead of listed.
+
+    **`session_id` is optional and an unknown one is not an error.** A tab that
+    has run nothing is the ordinary first case, and answering 404 for it would
+    make the editor's status bar show an error on every fresh install.
+
+    **Answers the developer channel only, and takes no `audience`.** The
+    recordings door is built for a client anyone may write, so it defaults to
+    `customer`; this one is the editor's own count of its own spend, and there
+    is no customer-facing surface asking for it. Adding the parameter later is
+    additive — `run_usage` already owns the boundary — and inventing it now
+    would be a switch with one position.
+
+    **Zeros here, on purpose.** Slice 1 of `stable-beta-public/03` lands the
+    door, the published contract and the client that reads it; slice 2 lands
+    `run_sinks.spend_summary` behind it. What is asserted today is the shape —
+    including that *not reported* is `null` and not `0`, which is the one thing
+    a later query cannot add if the wire has already flattened it.
+    """
+    # Both arguments are the door's contract rather than dead weight:
+    # `services` carries the store root slice 2 reads, and `session_id` has
+    # to be accepted from the first slice or no client can be written
+    # against the door until the query behind it exists.
+    return SpendResponse()

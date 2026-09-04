@@ -1535,3 +1535,86 @@ class RecordedThreadResponse(BaseModel):
     #: **Oldest first**, unlike the listing. A list is browsed from the newest
     #: and a conversation is read from its beginning.
     runs: list[RecordedRun] = Field(default_factory=list)
+
+
+class ModelSpendResponse(BaseModel):
+    """What one model has cost, summed over however many runs used it.
+
+    Keyed by model for the reason `RecordedUsage` already gives — *which model
+    cost what* is only answerable while they are apart — and carrying three
+    figures a provider may simply never report.
+
+    **`int | None` on all three, and the `None` is the point.** `0` is a
+    measurement: this model was called and nothing was served from cache. `null`
+    is *no run for this model carried the key at all*, which is what a provider
+    that does not publish the detail leaves behind. Flattening the second into
+    the first would put a number on the wire that nobody measured, and a bar
+    reading "0 cached" is a claim; "—" is the truth.
+    """
+
+    #: The provider's own name for the model — not a canvas node.
+    model: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    #: LangChain's `input_token_details.cache_read` — what was served from an
+    #: existing cache rather than paid for in full.
+    cached_tokens: int | None = None
+    #: `input_token_details.cache_creation` — Anthropic's write-to-cache
+    #: figure, which is billed and is not a saving. A separate field rather
+    #: than folded into `cached_tokens` because they move in opposite
+    #: directions on a bill.
+    cache_creation_tokens: int | None = None
+    #: `output_token_details.reasoning` — output tokens a reasoning model spent
+    #: thinking, already counted inside `output_tokens`.
+    reasoning_tokens: int | None = None
+    #: How many recorded runs contributed to this row.
+    runs: int = 0
+
+
+class SessionSpendResponse(BaseModel):
+    """One sitting, as a row in the list of them.
+
+    A *session* is the browser tab that asked — `session_id` is the id the
+    editor mints in `sessionStorage` and sends on every run, so it survives a
+    refresh and ends with the tab. Runs that came through the MCP or CLI doors
+    carry no sitting; they are a session of their own with an empty id rather
+    than runs that went missing.
+    """
+
+    session_id: str = ""
+    #: ISO-8601 with an offset, as the store keeps it. **Not sortable as
+    #: text** (`the-cost-of-one-more/11`) — the order of the list is the
+    #: server's, and a client must not re-sort it.
+    first_at: str = ""
+    last_at: str = ""
+    runs: int = 0
+    total_tokens: int = 0
+
+
+class SpendResponse(BaseModel):
+    """`GET /api/runs/spend` — what this deployment's runs have cost.
+
+    One document with four answers in it, because the surface that reads it is
+    one bar and one modal opened from it: a client that had to make four calls
+    to draw four cells would draw them at four different instants.
+
+    `session_by_model` and `session_total` are the *asked-about* sitting only,
+    and both are empty when no `session_id` was sent or the id names nothing.
+    An unknown sitting is an honest zero, never a 404: a tab that has run
+    nothing yet is the ordinary case, not an error.
+    """
+
+    #: Every run this store kept, summed. An integer, never `None`: a store
+    #: with no runs really has spent nothing.
+    grand_total: int = 0
+    #: `None` when no run anywhere reported a cache figure — see
+    #: `ModelSpendResponse` for why that is not `0`.
+    cached_total: int | None = None
+    #: All time, largest total first.
+    by_model: list[ModelSpendResponse] = Field(default_factory=list)
+    #: The asked-about sitting, same ordering. `[]` when none was asked about.
+    session_by_model: list[ModelSpendResponse] = Field(default_factory=list)
+    session_total: int = 0
+    #: Every sitting this store knows, newest `last_at` first.
+    sessions: list[SessionSpendResponse] = Field(default_factory=list)

@@ -35,6 +35,8 @@ import { clampDockHeight } from './layout/dockFit';
 import { RunDock } from './run/RunDock';
 import { runView } from './run/runView';
 import { StoredRuns } from './run/StoredRuns';
+import { SpendBar } from './spend/SpendBar';
+import { useSpend } from './spend/useSpend';
 import { readDockHeight, rememberDockHeight } from './run/dockHeightMemory';
 import { interruptedRunNotice, takeInterruptedRun } from './ask/interruptedRun';
 import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
@@ -44,6 +46,7 @@ import { DrillBanner } from './workflow/DrillBanner';
 import { useWorkflowFileWatch } from '@app/useWorkflowFileWatch';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import { RuntimeClient } from '@core/runtime/RuntimeClient';
+import { browserSessionId } from '@core/runtime/browserSession';
 import { OpenStreams } from '@core/runtime/OpenStreams';
 import { getOpenSlug } from '@app/openWorkflow';
 import {
@@ -226,6 +229,25 @@ export function AppShell() {
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
   /** The stored-runs picker (`memory-and-replay` 73), hung off its own control. */
   const [storedRunsOpen, setStoredRunsOpen] = useState(false);
+
+  /* ---------------- what the work cost ----------------
+   *
+   * `stable-beta-public/03`. One client and one fetch for the strip along the
+   * bottom of the shell; the modal it opens (slice 5) reads the same answer,
+   * so the two surfaces can never disagree about an instant.
+   *
+   * `spendRefresh` is the *something happened* signal — slice 3 bumps it on
+   * the run dock's terminal frame and on window focus. Nothing polls: the
+   * numbers move only when a run ends, so a timer would be a request per
+   * interval for an answer that is already on screen.
+   */
+  const spendClient = useMemo(() => new RuntimeClient(), []);
+  const [spendRefresh] = useState(0);
+  const { spend: spendAnswer, error: spendError } = useSpend({
+    client: spendClient,
+    sessionId: browserSessionId(),
+    refreshKey: spendRefresh,
+  });
 
   /* ---------------- the two things the run dock adds ----------------
    *
@@ -919,6 +941,19 @@ export function AppShell() {
         />
       ) : null}
       <Toaster toasts={toasts} onDismiss={dismiss} />
+      {/* The last row of the shell, below the stage — so the canvas, the
+          panels and the dock all keep the room they had and the bar takes its
+          28px off the bottom instead of floating over anything. Last child
+          rather than last *visible* thing: the dialogs and the toaster above
+          are overlays and occupy no row. */}
+      <SpendBar
+        spend={spendAnswer}
+        error={spendError}
+        // Slice 5 opens the breakdown here. Until then the control is present
+        // and does nothing visible, which is honest about a half-built
+        // feature in a way a bar that is not there yet would not be.
+        onOpen={() => onNotify('The spend breakdown is stable-beta-public/03, slice 5.')}
+      />
     </div>
   );
 }

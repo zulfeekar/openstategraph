@@ -386,7 +386,7 @@ const SUBJECTS: readonly Subject[] = [
   {
     file: './core/runtime/RuntimeClient.ts',
     className: 'RuntimeClient',
-    members: 14,
+    members: 15,
     exception: `One thin method per backend door, same shape as every member already
       here — 'run', 'runStream', 'resume', 'health', 'pastRuns', 'pastRun',
       'providers', 'verifyProvider', 'kanbanCards', and now 'runPatrol'
@@ -420,7 +420,16 @@ const SUBJECTS: readonly Subject[] = [
       more thin door, same shape as every member already here: a POST, an
       'Err' reading the backend's own refusal message. Not a new kind of
       member, and the same rule still applies: the next door still needs
-      this number updated honestly rather than silently widened.`,
+      this number updated honestly rather than silently widened.
+
+      **Fourteen -> fifteen**, 2026-09-04 (stable-beta-public/03, slice 1 of
+      'docs/plans/token-status-bar'). 'spend' — one GET on
+      '/api/runs/spend', the read behind the editor's token status bar. The
+      same thin shape as 'pastRuns' down to the 'describeFailure' branch,
+      and the count still rises by exactly the number of doors this backend
+      exposes rather than by a new kind of responsibility. Recorded here
+      before the surface that reads it was drawn, which is the point of the
+      rule: the widening is a line in a review rather than a discovery.`,
   },
 ];
 

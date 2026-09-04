@@ -38,10 +38,14 @@ The alternatives were priced and rejected:
   the TypeScript one: `AskPanel.tsx`'s 907 code lines are largely JSX, which is
   one expression inside one `return`. A measure that reads zero on the biggest
   file in `src/` is not a measure.
-- **Top-level definitions.** Ranks `api/schemas.py` (55 declarations, 425 code
-  lines, entirely declarative Pydantic) above `mcp_server.py` (7 definitions,
-  698 code lines). It counts the thing that is cheap to add and misses the
-  thing that grows.
+- **Top-level definitions.** Ranks `api/schemas.py` (67 classes, entirely
+  declarative Pydantic) above `mcp_server.py` (7 definitions, 698 code lines).
+  It counts the thing that is cheap to add and misses the thing that grows.
+  (The two code-line figures that stood in this sentence were the ones
+  measured the day it was written and had both moved by `stable-beta-public/03`
+  — a number in prose with no way to fail, inside the file that argues for
+  pinning numbers. The ranking is the point and it survives without them; the
+  live figures are in `RECORDED` below, which the census has to match.)
 - **Public names exported.** That is the class census's measure raised a level,
   and it already has a file. A module's problem is not always its surface —
   `node_runtime.py` exports very little and is the file this ticket found.
@@ -794,11 +798,50 @@ module chose when it made the column list the one declaration both the writer
 and the reader read.
 """
 
-#: Eight modules, derived and then argued for one at a time. Nothing in this
+#: Nine modules, derived and then argued for one at a time. Nothing in this
 #: table was chosen; the census below produces the keys and this table has to
 #: match it exactly, which is the mechanism the class censuses arrived at after
 #: hand-picked pins were found to cover only the classes somebody had already
 #: worried about.
+SCHEMAS = """
+Every response and request shape this API publishes, in one module, because
+**there is exactly one of them**: `docs/openapi.json` is generated from these
+classes and is the contract `contractDrift.test.ts` holds the TypeScript client
+to. A second schema module would not be a second reason to change — it would be
+the same reason, reached through two imports.
+
+Its length is the wire's width, which is the argument `api/routes/workflows.py`
+already records one level up and `WorkflowFileClient` records on the client
+end: *"the class does not get to be narrower than the API it adapts."* Sixty-odd
+Pydantic classes with no behaviour between them — no branches, no loops, three
+`model_validator`s in the whole file — is a declaration list, and the ceiling's
+own preamble says that is what the recorded-exception mechanism exists for.
+
+**The seam that was considered and does not pay.** Splitting by subject — runs,
+workflows, threads, mcp, kanban — is the obvious cut and the routes are already
+split that way, so it looks free. It is not: several shapes are shared across
+those subjects (`RecordedUsage` is read by the recordings door and the spend
+door; `Audience` reaches four of them), so the split either duplicates them or
+grows a `schemas/common.py` that every module imports, which is the same file
+with an extra hop. What it would buy is a shorter file; what it would cost is
+that `generate_openapi.py`, the drift test and every route module would each
+need to know which of six modules a shape lives in.
+
+**What this number is watching for is behaviour arriving.** A validator, a
+computed field, a `model_validator` that reaches outside the document — those
+are reasons to change that are not the wire's width, and any of them would move
+the code count without moving the class count. That is the shape to refuse.
+
+`490 -> 520`, 2026-09-04 (`stable-beta-public/03`, slice 1 of
+`docs/plans/token-status-bar`). Thirty lines: `ModelSpendResponse`,
+`SessionSpendResponse` and `SpendResponse`, the publication of what the runs
+this deployment kept have cost. Declarations and their documentation, and the
+documentation is load-bearing rather than decorative — three of those fields
+are `int | None` where `None` means *no provider reported this* and `0` means
+*nothing was spent*, and the comment beside each is the only place that
+distinction is written down for whoever mirrors it next.
+"""
+
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
     "cli.py": Recorded(1381, CLI),
@@ -808,6 +851,7 @@ RECORDED: dict[str, Recorded] = {
     "mcp_server.py": Recorded(864, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(661, RUN_SINKS),
+    "api/schemas.py": Recorded(520, SCHEMAS),
 }
 
 
