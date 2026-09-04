@@ -153,6 +153,11 @@ jobs:
         python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
+        # Full history: test_ticket_ledger.py reads real commit subjects, and a
+        # shallow clone answers "(no such commit here)" for every one of them —
+        # the three reds on the first run after the billing block lifted
+        # (stable-beta-public/01, 2026-09-05).
+        with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "${{ matrix.python-version }}" }
       # `[all]` because a checkout exercises every surface — the HTTP API, the
