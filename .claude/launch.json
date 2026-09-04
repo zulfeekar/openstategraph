@@ -46,6 +46,24 @@
       ],
       "cwd": "backend",
       "port": 8123
+    },
+    {
+      "name": "preview-agent",
+      "url": "http://localhost:8124",
+      "autoPort": false,
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "openstategraph.cli",
+        "serve",
+        "--port",
+        "8124"
+      ],
+      "cwd": "backend",
+      "port": 8124,
+      "env": {
+        "OPENSTATEGRAPH_STATE_DIR": "/private/tmp/osg-agent-state"
+      }
     }
   ]
 }
