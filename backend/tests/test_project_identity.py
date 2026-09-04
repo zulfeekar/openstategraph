@@ -95,3 +95,135 @@ class TestNeverOverwritesAnExistingId:
         result = ensure_project_identity(project_id="already-there", state_dir=state_dir)
 
         assert result.state is not ProjectIdentityState.MINTED
+
+
+class TestAdoptingAConfigThatPredatesTheField:
+    """kanban-patrol/23. `ensure_project_identity` mints for a config being
+    *created*; a project made before this field existed has a real file, with
+    comments and an order somebody chose, and nothing was ever allowed to add
+    the line to it — so the kanban board stayed permanently dead there.
+
+    The owner's decision (2026-09-04): append `project_id:` as the last line,
+    with a comment saying who wrote it and why, and print it. A column-0 key
+    at EOF is valid YAML whatever precedes it, so nothing above is reparsed
+    or rewritten.
+    """
+
+    HAND_WRITTEN = (
+        "# our project's config — hand edited, order chosen\n"
+        "version: 1\n"
+        "\n"
+        "# where the packages live\n"
+        "workflows_dir: workflows\n"
+        "providers:\n"
+        "  - id: ollama\n"
+        "    enabled: true\n"
+        "default_model: ollama:gpt-oss:120b-cloud"  # deliberately no trailing newline
+    )
+
+    def test_appends_exactly_one_line_and_every_prior_key_survives(self, tmp_path: Path) -> None:
+        import yaml
+
+        from openstategraph.project_identity import adopt_project_id
+
+        config = tmp_path / "openstategraph.yaml"
+        config.write_text(self.HAND_WRITTEN)
+        before = yaml.safe_load(self.HAND_WRITTEN)
+
+        result = adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
+
+        text = config.read_text()
+        assert result.state is ProjectIdentityState.MINTED
+        assert len([line for line in text.splitlines() if line.startswith("project_id:")]) == 1
+        assert text.endswith(f"project_id: {result.project_id}\n")
+        after = yaml.safe_load(text)
+        assert after.pop("project_id") == result.project_id
+        assert after == before
+        # The comment says who wrote it and why, and cites the ticket.
+        assert "# project_id — added by openstategraph on " in text
+        assert "kanban-patrol/03" in text
+        # The other half of the identity, per this module's own story.
+        assert (tmp_path / ".openstategraph" / "project_identity").read_text().strip() == result.project_id
+
+    def test_a_file_that_already_ends_in_a_newline_grows_no_blank_line(self, tmp_path: Path) -> None:
+        from openstategraph.project_identity import adopt_project_id
+
+        config = tmp_path / "openstategraph.yaml"
+        config.write_text("version: 1\nworkflows_dir: workflows\n")
+
+        adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
+
+        lines = config.read_text().splitlines()
+        assert lines[1] == "workflows_dir: workflows"
+        assert lines[2].startswith("# project_id —")
+        assert lines[3].startswith("project_id: ")
+        assert len(lines) == 4
+
+    def test_a_config_that_already_has_one_is_untouched_byte_for_byte(self, tmp_path: Path) -> None:
+        from openstategraph.project_identity import adopt_project_id
+
+        config = tmp_path / "openstategraph.yaml"
+        original = "version: 1\nproject_id: already-there\nworkflows_dir: workflows\n"
+        config.write_text(original)
+
+        result = adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
+
+        assert config.read_text() == original
+        assert result.state is not ProjectIdentityState.MINTED
+        assert result.project_id == "already-there"
+
+    def test_a_carrier_this_cannot_safely_append_to_is_refused_not_guessed(self, tmp_path: Path) -> None:
+        """A `pyproject.toml [tool.openstategraph]` or a JSON config is not a
+        file where a column-0 YAML key at EOF means anything. Refused by name
+        rather than corrupted."""
+        import pytest
+
+        from openstategraph.project_identity import ProjectIdentityError, adopt_project_id
+
+        config = tmp_path / "pyproject.toml"
+        config.write_text("[tool.openstategraph]\nversion = 1\n")
+
+        with pytest.raises(ProjectIdentityError) as exc:
+            adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
+
+        assert "pyproject.toml" in str(exc.value)
+
+
+class TestTheDoorsThatAdopt:
+    """kanban-patrol/23 wires three doors to `adopt_project_id`; the CLI
+    `patrol run` one is pinned in `test_cli_kanban.py`, beside its siblings.
+    This is the `openstategraph .` / `serve` one, which prints the line
+    before anything is bound."""
+
+    def test_serve_prints_the_line_it_just_wrote(self, tmp_path: Path, monkeypatch) -> None:
+        from openstategraph.cli import adopted_project_id_note
+        from openstategraph.config_file import reset_active_config
+
+        config = tmp_path / "openstategraph.yaml"
+        config.write_text("version: 1\n")
+        monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(config))
+        reset_active_config()
+
+        note = adopted_project_id_note()
+
+        assert note is not None
+        assert "project_id: " in note
+        written = config.read_text()
+        assert note.split()[1] in written
+        # Said once in a project's life, not on every start.
+        reset_active_config()
+        assert adopted_project_id_note() is None
+        assert config.read_text() == written
+
+    def test_a_carrier_it_cannot_append_to_never_stops_the_server(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from openstategraph.cli import adopted_project_id_note
+        from openstategraph.config_file import reset_active_config
+
+        config = tmp_path / "pyproject.toml"
+        config.write_text("[tool.openstategraph]\nversion = 1\n")
+        monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(config))
+        reset_active_config()
+
+        assert adopted_project_id_note() is None

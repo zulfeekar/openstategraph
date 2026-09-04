@@ -384,6 +384,16 @@ decision named) and one nine-line handler. No new logic: `kanban_store
 .release_card` owns the "already flagged, then atomic reset" rule entirely;
 this only reads the exit code out of `SetStageResult` and prints the same
 clean non-zero refusal every other `kanban` verb already does.
+
+**1381 -> 1415** (`kanban-patrol/23`). Thirty-four lines across two doors, and
+the rule holds: the logic is `project_identity.adopt_project_id` and
+`adopt_for_active_config`, which is where a file this code does not own gets
+one appended line. What grew here is a command saying what happened —
+`patrol run` printing the identity it just minted instead of refusing, and
+`adopted_project_id_note`, a function rather than a block inside `cmd_serve`
+for that command's own recorded reason: formatting inside a command is
+formatting no test reaches without binding a socket.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -889,7 +899,7 @@ distinction is written down for whoever mirrors it next.
 
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1381, CLI),
+    "cli.py": Recorded(1415, CLI),
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

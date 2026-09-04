@@ -406,8 +406,19 @@ does not already exist. A card whose stage has already left `unattended` is
 never touched again on a later run, even if the same finding reappears.
 
 Needs the running project's own `project_id` (in its committed
-`openstategraph.yaml`); a project made before that field existed prints an
-error naming `kanban-patrol/23` rather than inventing one.
+`openstategraph.yaml`). A project made **before that field existed** is
+adopted rather than refused (`kanban-patrol/23`): the id is minted, appended
+as the last line of `openstategraph.yaml` under a one-line comment saying
+who wrote it and why, paired with the gitignored companion marker, and
+printed — `project_id: <uuid>  (minted and written to this project's
+config …)`. Nothing above that line is parsed or rewritten; a column-0 key
+at end of file is a valid top-level key whatever precedes it, so comments and
+order survive untouched. The same adoption happens on `openstategraph .` /
+`serve` (printed before the server binds) and on the board's first patrol
+request (logged). A config that already carries the key is never touched, and
+a carrier where an appended YAML key would mean nothing — a `pyproject.toml`
+`[tool.openstategraph]` table, a JSON config — is refused by name with the
+line to add by hand.
 
 ## Knowing what is configured
 

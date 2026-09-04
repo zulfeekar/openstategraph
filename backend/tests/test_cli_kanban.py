@@ -270,18 +270,31 @@ class TestPatrolRun:
         assert code == 0
         assert "finding" in out
 
-    def test_needs_a_project_id_and_says_so_if_missing(self, tmp_path: Path, monkeypatch, capsys) -> None:
+    def test_a_config_that_predates_project_id_is_adopted_and_the_line_printed(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        """`kanban-patrol/23`: this door used to refuse, which left the board
+        permanently dead for any project made before the field existed. It
+        now appends the line to that project's own config and says so."""
+        import yaml
+
         from openstategraph.config_file import reset_active_config
 
         (tmp_path / "workflows").mkdir()
         config = tmp_path / "openstategraph.yaml"
-        # A minimal, hand-written config with no `project_id:` line at all —
-        # `kanban-patrol/23`'s exact case, a config that predates the field.
+        # A minimal, hand-written config with no `project_id:` line at all.
         config.write_text("version: 1\nworkflows_dir: workflows\n")
         monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(config))
         reset_active_config()
 
         code = cli.main(["patrol", "run", "--workflows-root", str(tmp_path / "workflows")])
 
-        assert code != 0
-        assert "project_id" in capsys.readouterr().err
+        out = capsys.readouterr().out
+        assert code == 0
+        assert "project_id: " in out
+        written = yaml.safe_load(config.read_text())
+        assert written["workflows_dir"] == "workflows"
+        assert written["project_id"] and written["project_id"] in out
+        assert (tmp_path / ".openstategraph" / "project_identity").read_text().strip() == written[
+            "project_id"
+        ]

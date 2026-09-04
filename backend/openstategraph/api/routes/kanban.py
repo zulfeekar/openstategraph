@@ -215,21 +215,38 @@ async def run_patrol_once(services: Services) -> PatrolRunAcceptedResponse:
     best-effort guess.
 
     `project_id` comes from the project's own committed config, same source
-    the CLI reads; a project made before that field existed is a clear 400,
-    never a silent no-op or a crash — unchanged from `27`.
+    the CLI reads. A project made **before that field existed** is adopted
+    here rather than refused (`kanban-patrol/23`): the line is appended to
+    that project's own `openstategraph.yaml`, logged, and the request
+    proceeds normally. It was a 400 until then, which meant the board was
+    permanently unusable for every project older than the field. A config
+    this cannot safely append to (a `pyproject.toml` table, a JSON carrier),
+    or none at all, is still a clear 400 naming the reason.
     """
     from openstategraph.config_file import active_config
+    from openstategraph.project_identity import (
+        ProjectIdentityError,
+        adopt_for_active_config,
+        project_id_line,
+    )
 
     config = active_config()
     project_id = config.project_id if config else None
     if not project_id:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "no project_id in this project's config — kanban-patrol/23 owns projects made "
-                "before this field existed."
-            ),
-        )
+        try:
+            adopted = adopt_for_active_config()
+        except (ProjectIdentityError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if adopted is None or not adopted.project_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "no project_id and no config file to put one in — "
+                    "run `openstategraph init` in this project."
+                ),
+            )
+        project_id = adopted.project_id
+        logger.info("%s", project_id_line(project_id))
 
     if not services.patrol_jobs.try_start():
         raise HTTPException(status_code=409, detail="A patrol is already running.")

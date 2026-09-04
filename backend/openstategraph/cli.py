@@ -1469,20 +1469,36 @@ def cmd_patrol_run(args: argparse.Namespace) -> int:
     `patrol.classify_finding`, never this command.
 
     `project_id` comes from the project's own committed config — the same
-    identity every card is keyed to — never invented here.
+    identity every card is keyed to. A project whose config predates the
+    field gets the line **appended and printed** rather than an error
+    (kanban-patrol/23); it is still never invented per-run.
     """
     from openstategraph.config_file import active_config
     from openstategraph.patrol import run_patrol
+    from openstategraph.project_identity import (
+        ProjectIdentityError,
+        adopt_for_active_config,
+        project_id_line,
+    )
     from openstategraph.workflows_root import workflows_root as resolve_workflows_root
 
     root = Path(getattr(args, "workflows_root", None) or resolve_workflows_root())
     config = active_config()
     project_id = config.project_id if config else None
     if not project_id:
-        return _error(
-            "no project_id in this project's config — kanban-patrol/23 owns projects made "
-            "before this field existed. Run `openstategraph init --force` here to check for one."
-        )
+        # A project made before this field existed is adopted rather than
+        # refused (kanban-patrol/23): the line is appended to its own config
+        # and printed, because refusing left the board dead until a hand edit.
+        try:
+            adopted = adopt_for_active_config()
+        except (ProjectIdentityError, OSError) as exc:
+            return _error(str(exc))
+        if adopted is None or not adopted.project_id:
+            return _error(
+                "no project_id and no config file to put one in — run `openstategraph init` here."
+            )
+        project_id = adopted.project_id
+        print(project_id_line(project_id))
 
     result = run_patrol(project_id=project_id, workflows_root=root)
     print(f"{result.total_findings} finding(s) read")
@@ -1719,6 +1735,45 @@ def startup_facts() -> list[str]:
     ]
 
 
+def adopted_project_id_note() -> str | None:
+    """kanban-patrol/23's third door: `openstategraph .` / `serve`.
+
+    A project whose committed config predates `project_id` gets the line
+    appended and **printed here**, before anything is bound — the same rule
+    `startup_facts` is written to, that a message printed after a server is
+    listening is a message somebody scrolls past.
+
+    A function rather than a block inside `cmd_serve` for that function's own
+    stated reason: formatting inside a command is formatting no test reaches
+    without binding a socket. Separate from `startup_facts` because this one
+    *writes*, and a function called `facts` must not.
+
+    Never raises: a carrier this cannot append to, or no config at all, is a
+    project that simply has no identity yet, and `serve` is expected to start
+    anyway and say what it can — the board's own door reports the reason.
+    """
+    from openstategraph.config_file import ConfigError, active_config
+    from openstategraph.project_identity import (
+        ProjectIdentityError,
+        ProjectIdentityState,
+        adopt_for_active_config,
+        project_id_line,
+    )
+
+    try:
+        config = active_config()
+        if config is not None and config.project_id:
+            return None
+        adopted = adopt_for_active_config()
+    except (ProjectIdentityError, ConfigError, OSError):
+        return None
+    if adopted is None or adopted.project_id is None:
+        return None
+    if adopted.state is not ProjectIdentityState.MINTED:
+        return None
+    return project_id_line(adopted.project_id)
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     """The whole product on one origin: editor at `/`, chat at `/chat`, API
     under `/api`. Requires the `[server]` extra.
@@ -1809,6 +1864,12 @@ def cmd_serve(args: argparse.Namespace) -> int:
     providers = no_provider_warning()
     if providers is not None:
         print(providers, file=sys.stderr, flush=True)
+
+    # A fifth, printed at most once in a project's life: the identity a
+    # config that predates the field just gained (kanban-patrol/23).
+    adopted = adopted_project_id_note()
+    if adopted is not None:
+        print(adopted, flush=True)
 
     # …and the two facts that answer "what will Run actually do". Not a
     # warning, so stdout; `flush` for the reason the URLs below flush.
