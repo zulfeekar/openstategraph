@@ -55,12 +55,22 @@ function chatGrammar(source: string): Record<string, string> {
   return found;
 }
 
-/** The four decisions the ticket names. */
+/**
+ * The four decisions `10` named, plus the two `13` added: how far apart two
+ * blocks inside an answer sit (`--chat-block-gap`, tighter than `RichText.css`'s
+ * own `--space-2` — a printed-page rhythm inside a 200px bubble), and how far
+ * apart two list items of one list sit (`--chat-list-item-gap`, tighter still,
+ * because two bullets are one list, not two blocks). Both are read the same
+ * selector-agnostic way as the first four — `chatGrammar()` finds any
+ * `--chat-*` declaration by name, so adding a name here is enough.
+ */
 const GRAMMAR = [
   '--chat-bubble-radius',
   '--chat-bubble-padding',
   '--chat-gap-group',
   '--chat-gap-side',
+  '--chat-block-gap',
+  '--chat-list-item-gap',
 ] as const;
 
 describe('the editor panel and the customer chat page share one conversation grammar', () => {

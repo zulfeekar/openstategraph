@@ -97,6 +97,14 @@
      again. Roughly the messaging convention, and short enough that the side
      a message came from is legible before a word is read. */
   --chat-bubble-max-width: 78%;
+  /* `stable-beta-public/13` — a list inside a bubble was reading like a
+     printed page: `RichText.css`'s own block rhythm (`--space-2` between
+     every paragraph, list and table) is right for the inspector and docs
+     surfaces that file is shared with, and too loose for a ~200px bubble. */
+  --chat-block-gap: var(--space-1);
+  /* Tighter still than the block gap: two bullets are one list, not two
+     blocks. */
+  --chat-list-item-gap: var(--space-0-5);
 }
 
 /* ---------- Empty state ---------- */
@@ -472,9 +480,52 @@
     var(--radius-xs);
   color: var(--color-text-primary);
   font: var(--type-body-md);
-  /* An answer is prose, not code, so it wraps rather than scrolling sideways. */
-  white-space: pre-wrap;
+  /* An answer is prose, not code, so it wraps rather than scrolling sideways
+     — `word-break` alone does that; `white-space` stays `normal`
+     (`stable-beta-public/13`, below explains why it must not be `pre-wrap`
+     here). */
   word-break: break-word;
+}
+
+/* ---------- Lists inside a bubble (`stable-beta-public/13`) ----------
+ *
+ * `Ask what can you do?`: the reply was a short intro and six bullets, and
+ * inside the bubble every bullet sat a blank line's worth of space from its
+ * neighbour, and the intro sat a paragraph away from the first bullet — a
+ * 300px bubble laid out like a printed page. Measured live: a `<li>` itself
+ * carries `margin: 0` (`RichText.css` sets none), and so does the `<p>`
+ * before the list once `--chat-block-gap` (below) is applied — so the gap
+ * was never a margin either. It was `white-space: pre-wrap` on `.ask__answer`
+ * itself: react-markdown's own HTML serialiser joins sibling block tags with
+ * a literal `\n` for readability (`<p>…</p>\n<ul>\n<li>…</li>\n<li>`), which
+ * `white-space: normal` (the default) discards as ordinary inter-tag
+ * whitespace — but `pre-wrap` preserves as a forced, visible line break, one
+ * per boundary. react-markdown parses the model's actual line breaks itself
+ * (a lone `\n` inside one paragraph is CommonMark's own soft break, already
+ * collapsed to a space by the time this container sees it) — so `pre-wrap`
+ * was never preserving anything the model wrote; it was only exposing the
+ * renderer's own formatting whitespace as unwanted vertical gaps. Removed
+ * above rather than patched around.
+ *
+ * Scoped to `.ask__answer` — the same element `RichText` renders as
+ * `.rich-text`, not a descendant of it, so the selector is a compound
+ * (`.ask__answer.rich-text`), never a bare `.rich-text` rule: `RichText.css`
+ * is shared with the inspector and docs surfaces, and its own `--space-2`
+ * block rhythm is right for those, just too loose for a bubble. */
+.ask__answer.rich-text p,
+.ask__answer.rich-text ul,
+.ask__answer.rich-text ol,
+.ask__answer.rich-text table,
+.ask__answer.rich-text pre,
+.ask__answer.rich-text blockquote {
+  margin: 0 0 var(--chat-block-gap);
+}
+
+/* One owner for "how far apart are two bullets": tighter than the
+   block-to-block rhythm above, because two bullets are one list, not two
+   things. */
+.ask__answer.rich-text li + li {
+  margin-top: var(--chat-list-item-gap);
 }
 
 .ask__decisions {

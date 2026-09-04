@@ -154,6 +154,10 @@
     --chat-gap-group: var(--space-1);
     --chat-gap-side: var(--space-3);
     --chat-bubble-max-width: 78%;
+    /* `stable-beta-public/13` — a list inside a bubble was reading like a
+       printed page, on this surface too. */
+    --chat-block-gap: var(--space-1);
+    --chat-list-item-gap: var(--space-0-5);
   }
 
   /* ---------- Live flow ---------- */
@@ -452,6 +456,18 @@
   }
   .answer > :first-child { margin-top: 0; } .answer > :last-child { margin-bottom: 0; }
   .answer h3, .answer h4, .answer h5 { margin: var(--space-3-5) 0 var(--space-1-5); font-size: var(--font-size-16); }
+  /* `stable-beta-public/13` — a list inside a bubble read like a printed
+     page here too: no rule below tightened `<p>`/`<ul>`/`<ol>` at all, so
+     the browser default (~1em) carried both the intro-to-list gap and the
+     gap between bullets — this page's `.answer` never set `white-space:
+     pre-wrap`, so it never had the editor's phantom-line-per-tag-boundary
+     defect (see `src/view/ask/AskPanel.css`'s longer account of that one);
+     it just had no tightening at all. `table` keeps its own rule below (a
+     table wants room on both sides, not just the bottom), so it is
+     deliberately not part of this group. */
+  .answer p, .answer ul, .answer ol, .answer blockquote { margin: 0 0 var(--chat-block-gap); }
+  .answer ul, .answer ol { padding-left: var(--space-4); }
+  .answer li + li { margin-top: var(--chat-list-item-gap); }
   .answer table { border-collapse: collapse; margin: var(--space-2) 0; }
   .answer td, .answer th { border: 1px solid var(--line); padding: var(--space-1) var(--space-2-5); }
   .answer code, .answer pre { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: var(--space-px) var(--space-1-5); font-size: var(--font-size-13); }
