@@ -37,6 +37,20 @@
   at all, gets the same note naming the environment variable to set rather
   than an invitation to press a button that cannot answer. Offered once per
   browser, unsaved, and one delete or one undo is the end of it.
+- **A bottom bar that says what the work cost** (`stable-beta-public`, ticket
+  03). Four cells along the foot of the editor — *Total*, *Cached*, *This tab*,
+  *Models* — summed from every run this project's store kept, refreshed when a
+  run ends and when the window regains focus. Clicking it opens **Tokens
+  spent**: grand total by model (input, output, cached, reasoning, total),
+  this tab by model, and every sitting newest first with the current one
+  marked. **A cell with nothing to report reads `—`, never `0`** — a provider
+  that publishes no cache figure is a different fact from a run that cached
+  nothing — and the tri-state travels all the way from `usage` to the cell.
+  New door: `GET /api/runs/spend` (`docs/api.md`), an aggregate over the same
+  rows `/api/runs/recorded` lists, optionally narrowed to one sitting; an
+  unknown sitting is an honest zero, not a `404`. The walk is O(runs) by
+  design and now measured: 28 ms over ten thousand runs, with a ceiling and a
+  shape assertion pinning it.
 
 ### Changed
 - **`ProviderSpec.constructor_defaults`** — constant keywords a vendor's

@@ -618,6 +618,32 @@ the evidence a card carries before it is allowed to be `Resolved`.
 
 ---
 
+## 9. The bottom bar — what the work has cost
+
+Along the bottom of the editor there is a thin bar with four cells:
+**Total**, **Cached**, **This tab** and **Models**. *Total* is every token
+every run this project ever recorded has spent — not this document's, not
+this sitting's, the whole store. *Cached* is how much of that a provider
+served from its own cache. *This tab* is the sitting you are in right now: a
+sitting starts when the tab does, survives a refresh, and ends when the tab
+closes. *Models* names the models that sitting has used, each with what it spent.
+
+**A cell that has nothing to say says `—`, and it never says `0` instead.**
+The two are different claims: `0` means a provider reported a figure and the
+figure was nought, and a dash means nobody reported one at all. Most providers
+do not report a cache figure, and some report no reasoning tokens — so a dash
+there is about the provider, not about your run.
+
+Click the bar and it opens **Tokens spent**, the same figures broken out into
+three tables: *Grand total, by model* (input, output, cached, reasoning,
+total, with an all-models row read off the wire rather than re-added),
+*This tab, by model*, and *Sessions, newest first* — with the sitting you are
+in marked **this tab**. Escape closes it. The bar is always there; the
+breakdown waits for the first answer to land, because a table of dashes is not
+more honest than no table.
+
+---
+
 ## Glossary
 
 The words this product uses, and what each one must not be mistaken for.

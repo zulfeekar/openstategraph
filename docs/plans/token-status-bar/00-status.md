@@ -11,7 +11,7 @@
 - [x] Slice 3 — this session's block; refetch on run end and focus
 - [x] Slice 4 — cached / cache-creation / reasoning tri-state; streaming opt-in test
 - [x] Slice 5 — the modal
-- [ ] Slice 6 — 10k-row measurement, docs, ceilings, closing commit
+- [x] Slice 6 — 10k-row measurement, docs, ceilings, closing commit
 
 ## Notes for a fresh session
 - 2026-09-04: the owner delegated slice-boundary approvals ("as you recommend the best way to go"); stop only for a real fork.
@@ -21,6 +21,42 @@
 - Ticket: `.scratch/stable-beta-public/tickets/03`.
 - Follow `src/design/tokens.ts`; no raw values; flat, Miro-like, borders not
   shadows (map note).
+
+## What slice 6 changed about 03
+
+- **The measurement found the walk linear and pinned it twice, not once.**
+  Ten thousand runs written through the real `SqliteRunSink` cost
+  `spend_summary()` **28.4 ms** (2,500 → 7.3, 5,000 → 14.4, 20,000 → 67.1 —
+  ×1.98, ×1.98, ×2.36; ~3 µs per run). A single wall-clock ceiling would have
+  been useless on its own: quadratic at ten thousand rows is ×16 and still
+  lands under a second, so `test_spend_summary_cost.py` carries a loose
+  ceiling (1.0 s, ~35×, a smoke alarm for a per-row query) **and** a sharp
+  shape assertion (four times the rows must cost under eight times the time).
+  Both were proved to fail before they were kept.
+- **The second axis is sittings, and it is a coefficient rather than an
+  exponent.** `_SESSION_SPEND` makes two correlated seeks per `GROUP BY`
+  group, so ten thousand runs in ten thousand tabs — the worst case a user can
+  produce — was measured too: 48.5 ms against 26.4 for the same rows in forty
+  tabs. The seeks ride `runs_session_utc`. Recorded in
+  `.scratch/the-cost-of-one-more/MAP.md` under *Found sound*.
+- **Two slice-1 docstrings had gone stale and were corrected in place.**
+  `spend_summary` still said `session_id` was "accepted and not yet used:
+  slice 3 fills it" beside the code that fills it, and `spend_endpoint` still
+  said the three detail figures were "not reported until slice 4". Both were
+  true when written and neither had any way to fail — which is this
+  repository's named recurring defect, committed inside the ticket that keeps
+  naming it. The route's docstring is its OpenAPI `description`, so
+  `docs/openapi.json` was regenerated: a one-line diff, no schema change.
+- **The doc pin is `backend/tests/test_documented_spend_bar_surface.py`**, on
+  `test_documented_starter_surface.py`'s shape — the four cell labels, the
+  three table headings and the `this tab` badge are checked against the source
+  that renders them, and `§9`'s prose is read with its line breaks collapsed
+  because where a paragraph wraps is not a promise. The dash rule is pinned as
+  a rule: the section must say `—` is not `0`, and `reportedTokens` must still
+  be the one place that decides it.
+- **No ceiling row moved.** Slice 6 is docstrings, tests and prose; the code
+  lines are unchanged, and the four rows slices 2–4 moved
+  (`run_sinks.py` 661 → 792 → 803 → 829) each already carry a dated argument.
 
 ## What slice 5 changed about 03
 

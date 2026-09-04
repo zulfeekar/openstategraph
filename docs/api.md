@@ -1763,6 +1763,61 @@ The editor's **Stored runs** popover is the surface built on these, grouping
 them by sitting, then conversation, then turn, and putting a chosen turn on the
 run timeline.
 
+### Optional — spend: `GET /api/runs/spend`
+
+The same rows, **summed instead of listed**. One document, because the surface
+that reads it is one status bar and one modal opened from it, and a client
+making four calls for four cells would draw them at four different instants.
+
+`session_id` is optional and narrows the two `session_*` fields to one sitting.
+An id that names nothing is an honest zero, never a 404 — a browser tab that
+has run nothing yet is the ordinary first case.
+
+```json
+{
+  "grand_total": 1499658,
+  "cached_total": 8241,
+  "by_model": [
+    {"model": "gpt-oss:120b-cloud", "input_tokens": 24010, "output_tokens": 1672,
+     "total_tokens": 25682, "cached_tokens": 8241,
+     "cache_creation_tokens": null, "reasoning_tokens": null, "runs": 6}
+  ],
+  "session_by_model": [],
+  "session_total": 0,
+  "sessions": [
+    {"session_id": "sit-alpha", "first_at": "2026-08-30T19:20:11+0200",
+     "last_at": "2026-08-30T19:29:20+0200", "runs": 6, "total_tokens": 25682}
+  ]
+}
+```
+
+- **This door is snake_case**, unlike `/api/runs/recorded` beside it. That is
+  not tidy and it is deliberate: the field names are the ones the summary
+  itself uses, and renaming them on the way out would put a second vocabulary
+  between the query and its reader.
+- **`null` is not `0`, on every field that carries it.** `0` is a
+  measurement — this model was called and nothing came from cache. `null` is
+  *no run reported that key at all*, which is what a provider that does not
+  publish the detail leaves behind. `cached_total`, `cached_tokens`,
+  `cache_creation_tokens` and `reasoning_tokens` are all three-valued this way;
+  `grand_total`, `total_tokens` and `session_total` never are, because a store
+  with no runs really has spent nothing.
+- `cache_creation_tokens` is Anthropic's write-to-cache figure, which is
+  **billed** and is not a saving — a separate field from `cached_tokens`
+  because the two move in opposite directions on an invoice.
+  `reasoning_tokens` is already counted inside `output_tokens`.
+- `by_model` and `session_by_model` are largest total first; `sessions` is
+  newest `last_at` first. Those stamps carry an offset and are **not sortable
+  as text** — the order is the server's, and a client must not re-sort it.
+- A run that reported no usage is still **a run**: counted in its sitting,
+  contributing no model row. A nameless row in a by-model table would be
+  inventing a model.
+- **Developer channel only, and it takes no `audience`.** This is the editor's
+  own count of its own spend; there is no customer surface asking for it.
+- The walk over each run's `usage` document is O(runs) on purpose — ~3 µs per
+  run, 28 ms over ten thousand, measured and pinned
+  (`backend/tests/test_spend_summary_cost.py`).
+
 ---
 
 ## 4. A whole client, in one file

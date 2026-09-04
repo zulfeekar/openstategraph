@@ -237,12 +237,14 @@ def spend_endpoint(services: Services, session_id: str | None = None) -> SpendRe
     second opinion about where a deployment keeps its runs is how one store
     becomes two.
 
-    **Three figures are still `null` here, and that is the query's answer
-    rather than the door's.** `cached_tokens`, `cache_creation_tokens` and
-    `reasoning_tokens` are *not reported* until slice 4 of
-    `stable-beta-public/03` reads `input_token_details` /
-    `output_token_details`; the session block waits for slice 3. Nothing about
-    the shape moves when they land.
+    **Where a figure is `null`, that is the query's answer rather than the
+    door's.** `cached_tokens`, `cache_creation_tokens` and `reasoning_tokens`
+    are summed from `input_token_details` / `output_token_details` wherever a
+    run reported them and are `null` where no run did — *nobody said*, which is
+    not *nothing was spent*. This paragraph said they were "not reported until
+    slice 4" for as long as slice 4 was unlanded and for one slice after it;
+    the shape did not move when they landed, which is exactly why nothing
+    failed.
     """
     summary = spend_summary(
         run_store_path(services.store.root), session_id=session_id

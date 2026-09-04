@@ -1589,9 +1589,10 @@ def spend_summary(
     not *nothing was spent*, so it is counted in its sitting and adds no model
     row — a nameless row in a by-model table would be inventing a model.
 
-    `session_id` is accepted and not yet used: slice 3 of the plan fills
-    `session_by_model` and `session_total`. It is on the signature from here
-    because the route and the client already pass it.
+    `session_id` narrows the second walk to one sitting, filling
+    `session_by_model` and `session_total`; without it both are empty. An id
+    that names nothing is an honest zero rather than an error — a browser tab
+    that has run nothing is the ordinary first case.
 
     **A store that cannot be read is not an error either**, for the reason
     `read_runs` gives: this answer decorates a screen, and a file one build
