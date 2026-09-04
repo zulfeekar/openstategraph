@@ -1440,6 +1440,35 @@ def cmd_kanban_release(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_kanban_answer(args: argparse.Namespace) -> int:
+    """Record the decision on a Needs You card — `kanban-patrol/15`.
+
+    A thin door onto `kanban_store.answer_card`, which owns every rule: the
+    card goes back to Detected (never to Resolved), an answer is written
+    once, and a blank one or a card that was never in question is refused.
+    Both refusal shapes reach the shell the same clean non-zero way `stage`
+    already reports a failed evidence gate — never a stack trace.
+    """
+    from openstategraph.kanban_store import (
+        MissingEvidenceError,
+        StageOrderError,
+        answer_card,
+        kanban_store_path,
+    )
+
+    db = kanban_store_path(getattr(args, "workflows_root", None))
+    try:
+        result = answer_card(db, args.task_id, actor=args.actor, answer=args.answer)
+    except KeyError:
+        return _error(f"no card {args.task_id!r} in {db}")
+    except (StageOrderError, MissingEvidenceError) as exc:
+        return _error(str(exc))
+    if not result.ok:
+        return _error(result.reason)
+    print(f"answered {args.task_id} as {args.actor} — back in Detected")
+    return EXIT_OK
+
+
 def cmd_kanban_show(args: argparse.Namespace) -> int:
     """The self-contained instruction — `kanban-patrol/19`'s "Copy
     instruction" affordance, from the CLI door: a coding agent (or a human
@@ -1459,6 +1488,12 @@ def cmd_kanban_show(args: argparse.Namespace) -> int:
         print(f"  why: {card.priority_reason}")
     if card.actor:
         print(f"actor: {card.actor}")
+    # `kanban-patrol/15`: the decision, once one has been made. An agent
+    # reading this instead of the board and not being shown the answer is an
+    # agent sent back to ask a question somebody already settled.
+    if card.answer:
+        print(f"decision: {card.answer}")
+        print(f"  answered by: {card.answered_by} at {card.answered_at}")
     return EXIT_OK
 
 
@@ -2258,6 +2293,19 @@ def build_parser() -> argparse.ArgumentParser:
     kanban_show.add_argument("task_id")
     kanban_show.add_argument("--workflows-root", dest="workflows_root")
     kanban_show.set_defaults(handler=cmd_kanban_show)
+
+    kanban_answer = kanban_commands.add_parser(
+        "answer",
+        help="record the decision on a Needs You card — it returns to Detected, "
+        "carrying the answer (kanban-patrol/15)",
+    )
+    kanban_answer.add_argument("task_id")
+    kanban_answer.add_argument("--actor", required=True, help="who decided — kanban-patrol/20")
+    kanban_answer.add_argument(
+        "--answer", required=True, help="the decision itself, in your own words"
+    )
+    kanban_answer.add_argument("--workflows-root", dest="workflows_root")
+    kanban_answer.set_defaults(handler=cmd_kanban_answer)
 
     kanban_release = kanban_commands.add_parser(
         "release",

@@ -29,21 +29,22 @@ export interface PatrolBoardProps {
   readonly onPatrol: () => void;
   readonly onClose: () => void;
   /**
-   * A card's gesture. Optional, because a board with no handler is still a
-   * legible board — the controls simply do not render, which is honest rather
-   * than a button that does nothing.
+   * The decision a person typed onto a Needs You card — `kanban-patrol/15`.
+   * Optional, because a board with no handler is still a legible board: the
+   * control simply does not render, which is honest rather than a field that
+   * throws its contents away.
    */
-  readonly onAct?: (card: BoardCard, action: 'attend' | 'answer') => void;
+  readonly onAnswer?: (card: BoardCard, answer: string) => void;
   /**
    * `kanban-patrol/19`'s explicit Release. Same optional-handler rule as
-   * `onAct`: a board with no handler simply renders no Release button.
+   * `onAnswer`: a board with no handler simply renders no Release button.
    */
   readonly onRelease?: (card: BoardCard) => void;
   /**
    * Re-read the store. Deliberately **not** live yet — `19` rides `07`'s SSE
    * fan-out for a push, which does not exist; this is the honest interim,
    * a caller re-fetching on request rather than the board silently going
-   * stale between opens. Optional, same rule as `onAct`: no handler, no
+   * stale between opens. Optional, same rule as `onAnswer`: no handler, no
    * button, rather than one that does nothing.
    */
   readonly onRefresh?: () => void;
@@ -81,7 +82,7 @@ export function PatrolBoard({
   cards = PATROL_BOARD_FIXTURE,
   onPatrol,
   onClose,
-  onAct,
+  onAnswer,
   onRelease,
   onRefresh,
   statusLine = null,
@@ -137,7 +138,7 @@ export function PatrolBoard({
               key={column.id}
               column={column}
               cards={cards}
-              onAct={onAct}
+              onAnswer={onAnswer}
               onRelease={onRelease}
             />
           ))}

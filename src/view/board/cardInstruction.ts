@@ -15,6 +15,10 @@ import type { BoardCard } from './patrolBoardModel';
  * entirely, same rule this feature applies everywhere else an optional
  * field is missing rather than empty.
  *
+ * **A decision, when the card carries one, comes first** — `kanban-patrol/15`.
+ * An answered Needs You card returns to Detected precisely because the
+ * judgement is settled, so the settled thing is the first thing read.
+ *
  * The last line is the whole point of a card: it tells the reader how to
  * report progress back, so a coding agent that reads this text (rather than
  * having the skill installed to read the row live) still knows what closes
@@ -26,7 +30,21 @@ export function instructionForCard(card: BoardCard): string {
   // renderer the realistic paste destination (a chat-based coding agent)
   // uses, only a blank line does — caught live: a pasted copy ran two
   // fields together with no space between them at all.
-  const paragraphs = [`Task: ${card.id}`, `Title: ${card.title}`, `Context: ${card.secondary}`];
+  const paragraphs: string[] = [];
+  // `kanban-patrol/15`, decided 2026-09-04. An answered judgement returns to
+  // Detected *because* the judgement is made, so the decision goes first —
+  // an agent that meets the question before the answer is an agent that can
+  // re-open it. Read for trimmed content, never mere presence: a row
+  // carrying an empty answer renders no block at all, the same
+  // absent-not-empty rule `priorityReason` already follows.
+  if (card.answer?.trim()) {
+    const decided = card.answeredBy ? ` (decided by ${card.answeredBy})` : '';
+    paragraphs.push(
+      `Decision${decided}: ${card.answer.trim()}\n` +
+        'This judgement has already been made — work to it, do not re-open it.',
+    );
+  }
+  paragraphs.push(`Task: ${card.id}`, `Title: ${card.title}`, `Context: ${card.secondary}`);
   if (card.priorityReason) {
     paragraphs.push(`Why this matters: ${card.priorityReason}`);
   }

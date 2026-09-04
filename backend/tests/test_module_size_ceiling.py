@@ -385,6 +385,14 @@ decision named) and one nine-line handler. No new logic: `kanban_store
 this only reads the exit code out of `SetStageResult` and prints the same
 clean non-zero refusal every other `kanban` verb already does.
 
+**1415 -> 1448** (`kanban-patrol/15`, 2026-09-04). A fifth `kanban` verb,
+`answer` — thirty-three lines: a subparser block, one handler catching the
+two refusals `kanban_store.answer_card` raises, and three lines in
+`kanban show` printing the decision once a card has one. No new logic: the
+store owns "written once", "back to Detected and never to Resolved", and
+every refusal; this reports them the same clean non-zero way every other
+`kanban` verb already does.
+
 **1381 -> 1415** (`kanban-patrol/23`). Thirty-four lines across two doors, and
 the rule holds: the logic is `project_identity.adopt_project_id` and
 `adopt_for_active_config`, which is where a file this code does not own gets
@@ -632,6 +640,15 @@ to module scope — `kanban_show_card` listed eight fields inline and now shares
 it, and the row itself is `kanban_store.card_row`, the same function
 `GET /api/kanban/cards` builds its `KanbanCardResponse` from. No column logic
 landed here: `column_for` lives in `kanban_store.py` beside the stage it reads.
+
+**864 -> 887** (`kanban-patrol/15`, 2026-09-04). The board's sixth tool and
+`16`'s last deferred one, `kanban_answer_card` — twenty-three lines wrapping
+`kanban_store.answer_card`, deliberately unbuilt until the owner had decided
+what Answer *does*, because building it first would have been inventing the
+answer in the adapter. No new logic and no new identity path: the actor comes
+through the same `_actor_on_the_card` the two writing tools already use, and
+the two refusals become the same `{"ok": false, "reason": ...}` shape every
+tool here answers with.
 
 **755 -> 808** (`kanban-patrol/29`, 2026-09-03). The two kanban tools that
 *write* stop taking the caller's word for who is writing. Fifty-three lines,
@@ -895,18 +912,26 @@ documentation is load-bearing rather than decorative — three of those fields
 are `int | None` where `None` means *no provider reported this* and `0` means
 *nothing was spent*, and the comment beside each is the only place that
 distinction is written down for whoever mirrors it next.
+
+`520 -> 529`, 2026-09-04 (`kanban-patrol/15`). Nine lines: three fields on
+`KanbanCardResponse` (the decision recorded on a Needs You card, who made it,
+when) and `KanbanAnswerRequest`/`KanbanAnswerResponse` for the route that
+writes them. Declarations and their documentation again, and again the
+documentation is the load-bearing part: `actor` on the request is the
+caller's *claim*, dropped rather than merged on a deployment that resolves a
+principal, and the comment beside it is where that is said on the wire side.
 """
 
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1415, CLI),
+    "cli.py": Recorded(1448, CLI),
     "compile/workflow_compiler.py": Recorded(965, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(864, MCP_SERVER),
+    "mcp_server.py": Recorded(887, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
-    "api/schemas.py": Recorded(520, SCHEMAS),
+    "api/schemas.py": Recorded(529, SCHEMAS),
 }
 
 

@@ -34,6 +34,13 @@ interface ActionableCard {
   readonly kind: CardKind;
   readonly lifecycle: CardLifecycle;
   /**
+   * The decision recorded on this card — `kanban-patrol/15`. Passed straight
+   * through to `columnForCard`, which is what makes an answered judgement
+   * offer **Attend** rather than a second Answer: the column decides the
+   * affordance, and this changes the column.
+   */
+  readonly answer?: string;
+  /**
    * Whether the API flagged this card's claim as abandoned. Optional
    * because it is absent on every card that is not — the same
    * absent-not-false rule the mapping applies on the wire.
@@ -68,6 +75,23 @@ export function actionForCard(card: ActionableCard): CardAction | null {
  * first reword — the rule `Badge`'s `explanation` already follows, and the
  * reason the hint is owned here rather than at the button.
  */
+/**
+ * May this text be recorded as a decision? — `kanban-patrol/15`.
+ *
+ * `kanban_store.answer_card` refuses a blank or whitespace answer and the
+ * route turns that into a `400`. This is the same rule one layer up, so the
+ * Answer field's button is disabled rather than a person learning it from a
+ * failed request — and it is the *same* trim, so nothing passes here and
+ * fails there.
+ *
+ * A function rather than a check inside the card, for this file's own stated
+ * reason: it is a rule, and a rule inside a component is a rule only a
+ * rendered test can reach.
+ */
+export function isAnswerSubmittable(text: string): boolean {
+  return text.trim().length > 0;
+}
+
 export const ACTION_COPY: Readonly<Record<CardAction, { label: string; hint: string }>> = {
   attend: {
     label: 'Attend',

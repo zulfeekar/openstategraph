@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { BOARD_COLUMNS } from './patrolBoardModel';
 import { CARD_KINDS, columnForCard } from './cardKind';
-import { ACTION_COPY, CARD_ACTIONS, actionForCard, offersRelease } from './cardAction';
+import {
+  ACTION_COPY,
+  CARD_ACTIONS,
+  actionForCard,
+  isAnswerSubmittable,
+  offersRelease,
+} from './cardAction';
 
 /**
  * `kanban-patrol/15`. The four columns are not four states of one interaction
@@ -128,5 +134,88 @@ describe('an action names itself the same way everywhere', () => {
       expect(ACTION_COPY[action].label.length).toBeGreaterThan(0);
       expect(ACTION_COPY[action].hint.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('an answered judgement is a decided one — `kanban-patrol/15`', () => {
+  /**
+   * The owner's decision of 2026-09-04: Answer records a decision on a Needs
+   * You card and returns it to **Detected**, carrying the answer. Never to
+   * Resolved — `17`'s evidence gate is still the only road there — and never
+   * left in Needs You, which is the column a person reads for outstanding
+   * questions.
+   */
+  const JUDGEMENTS = CARD_KINDS.filter(
+    (kind) => columnForCard({ kind, lifecycle: 'open' }) === 'needsYou',
+  );
+
+  it('has judgements to talk about at all', () => {
+    // A rule about an empty set is a rule that passes for the wrong reason.
+    expect(JUDGEMENTS.length).toBeGreaterThan(0);
+  });
+
+  it('moves an answered judgement out of Needs You and into Detected', () => {
+    for (const kind of JUDGEMENTS) {
+      expect(columnForCard({ kind, lifecycle: 'open', answer: 'the cloud one' }), kind).toBe(
+        'detected',
+      );
+    }
+  });
+
+  it('offers Attend on it, because the judgement it was waiting on is made', () => {
+    for (const kind of JUDGEMENTS) {
+      expect(actionForCard({ kind, lifecycle: 'open', answer: 'the cloud one' }), kind).toBe(
+        'attend',
+      );
+    }
+  });
+
+  it('never sends an answered judgement to Resolved', () => {
+    for (const kind of JUDGEMENTS) {
+      expect(columnForCard({ kind, lifecycle: 'open', answer: 'the cloud one' }), kind).not.toBe(
+        'resolved',
+      );
+    }
+  });
+
+  it('treats a blank answer as no answer at all', () => {
+    // `bool(' ')` is true in every language this feature is written in, and
+    // a whitespace decision is exactly as meaningless as an empty one — the
+    // store refuses to write it, and this is the second line.
+    for (const kind of JUDGEMENTS) {
+      expect(columnForCard({ kind, lifecycle: 'open', answer: '   ' }), kind).toBe('needsYou');
+    }
+  });
+
+  it('leaves a claimed answered judgement where it is — somebody is on it', () => {
+    for (const kind of JUDGEMENTS) {
+      expect(columnForCard({ kind, lifecycle: 'claimed', answer: 'the cloud one' }), kind).toBe(
+        'inProgress',
+      );
+    }
+  });
+});
+
+describe('what a person may type into the Answer field', () => {
+  /**
+   * `kanban-patrol/15`. The store refuses a blank answer and returns a `400`;
+   * this is the same rule one layer up, so the button is disabled rather than
+   * the person learning it from a failed request. Pure, so it is asserted
+   * here rather than through a rendered field.
+   */
+  it('accepts a real decision', () => {
+    expect(isAnswerSubmittable('Use the cloud one.')).toBe(true);
+  });
+
+  it('refuses an empty one', () => {
+    expect(isAnswerSubmittable('')).toBe(false);
+  });
+
+  it('refuses whitespace, which is what an empty one usually looks like', () => {
+    expect(isAnswerSubmittable('   \n\t ')).toBe(false);
+  });
+
+  it('is the same trim the store applies, so nothing passes here and fails there', () => {
+    expect(isAnswerSubmittable('  ok  ')).toBe(true);
   });
 });

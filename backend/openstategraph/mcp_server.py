@@ -110,6 +110,7 @@ EXPOSED_TOOLS: tuple[str, ...] = (
     "kanban_list_cards",
     "kanban_show_card",
     "kanban_release_card",
+    "kanban_answer_card",
 )
 
 
@@ -1476,6 +1477,47 @@ def build_mcp_server(
                 continue
             cards.append(_card_payload(db, card))
         return {"ok": True, "cards": cards}
+
+    @server.tool(name="kanban_answer_card")
+    def kanban_answer_card(
+        task_id: str,
+        answer: str,
+        actor: str,
+        ctx: _MCPContext | None = None,  # type: ignore[type-arg]
+    ) -> dict[str, Any]:
+        """Record the decision on a Needs You card — `kanban-patrol/15`, and
+        the last of `16`'s four tools.
+
+        A Needs You card carries a **question** the patrol could not answer,
+        and only a person may answer it. An agent that pulled the card and
+        grilled the person calls this with what they said; it must never
+        choose for them, which is the whole reason the card was in Needs You.
+
+        The card then **returns to Detected**, carrying the decision — so the
+        next `kanban_attend_card` picks it up with the judgement already
+        made. It never reaches Resolved this way: `kanban-patrol/17`'s
+        evidence gate is still the only road there.
+
+        Written once. A blank answer, a card that was never in question, and
+        a decision somebody already made are all `{"ok": false, "reason":
+        ...}` — the same structured refusal every tool at this door uses.
+        """
+        from openstategraph.kanban_store import (
+            MissingEvidenceError,
+            StageOrderError,
+            answer_card,
+            kanban_store_path,
+        )
+
+        db = kanban_store_path(services.store.root)
+        who = _actor_on_the_card(services.principals, ctx, actor)
+        try:
+            result = answer_card(db, task_id, actor=who, answer=answer)
+        except KeyError:
+            return {"ok": False, "reason": f"no card {task_id!r}"}
+        except (StageOrderError, MissingEvidenceError) as exc:
+            return {"ok": False, "reason": str(exc)}
+        return {"ok": result.ok, "reason": result.reason}
 
     @server.tool(name="kanban_release_card")
     def kanban_release_card(

@@ -163,6 +163,18 @@ export interface BoardCard {
    * column's label rather than to a blank status line.
    */
   readonly stage?: CardStage;
+  /**
+   * The decision a person recorded on this card — `kanban-patrol/15`, decided
+   * 2026-09-04. Present only once somebody has answered; absent, never an
+   * empty string, the same rule `priorityReason`/`filedOn`/`stale` follow.
+   *
+   * It is what moves an answered judgement out of Needs You (`columnForCard`
+   * reads it) and what `instructionForCard` puts at the top of the text an
+   * agent is handed, so the judgement is settled before the work is read.
+   */
+  readonly answer?: string;
+  /** Who decided. An unattributed decision is a rumour. */
+  readonly answeredBy?: string;
 }
 
 /**

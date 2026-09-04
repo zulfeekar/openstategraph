@@ -255,6 +255,27 @@ class TestActorIsTheServersToDetermine:
         assert result.get("ok") is True
         assert self._actor(services) == "alice@example.com"
 
+    def test_answer_records_the_principal_not_the_passed_name(self, tmp_path: Path) -> None:
+        """`kanban-patrol/15`'s answer is a *decision*, so whose name it
+        carries matters more than on any other kanban write — a decision
+        attributed to whoever the model said made it is not a record of who
+        made it. Same `_actor_on_the_card` seam as attend, not a second one."""
+        services = self._services(tmp_path)
+        db = _judgement(services)
+        server = build_mcp_server(services)
+
+        with self._arriving_with({self.HEADER: "alice@example.com", "X-OpenStateGraph-Proxy": "1"}):
+            result = _call(
+                server,
+                "kanban_answer_card",
+                {"task_id": "proj-a:judgement", "actor": "claude", "answer": "The cloud one."},
+            )
+
+        assert result.get("ok") is True
+        from openstategraph.kanban_store import read_card
+
+        assert read_card(db, "proj-a:judgement").answered_by == "alice@example.com"
+
     def test_set_stage_records_the_principal_not_the_passed_name(self, tmp_path: Path) -> None:
         services = self._services(tmp_path)
         _filed(services)
@@ -471,3 +492,114 @@ class TestListCards:
         result = _call(server, "kanban_list_cards", {"column": "inProgress"})
 
         assert [c["task_id"] for c in result["cards"]] == ["proj-a:two"]
+
+
+def _judgement(services: WorkflowServices, task_id: str = "proj-a:judgement") -> Path:
+    db = kanban_store_path(services.store.root)
+    ensure_schema(db)
+    file_card(
+        db,
+        task_id=task_id,
+        board="workflows",
+        kind="decision",
+        category="decision",
+        title="Which model should the grader use?",
+    )
+    return db
+
+
+class TestAnswerCard:
+    """`kanban-patrol/15`, and `16`'s last deferred tool. It was deliberately
+    not built until the owner had decided what Answer *does* — building the
+    tool first would have been inventing the answer in the adapter.
+
+    What it is now: the same `kanban_store.answer_card` the CLI and the HTTP
+    route call, so an agent that grills a person over MCP and a person typing
+    into the board write one row through one path.
+    """
+
+    def test_the_tool_is_declared(self) -> None:
+        assert "kanban_answer_card" in EXPOSED_TOOLS
+
+    def test_answering_records_the_decision_and_returns_the_card_to_detected(
+        self, services: WorkflowServices
+    ) -> None:
+        db = _judgement(services)
+        server = build_mcp_server(services)
+
+        result = _call(
+            server,
+            "kanban_answer_card",
+            {"task_id": "proj-a:judgement", "actor": "alice", "answer": "The cloud one."},
+        )
+
+        assert result.get("ok") is True
+        from openstategraph.kanban_store import column_for, read_card
+
+        card = read_card(db, "proj-a:judgement")
+        assert card.answer == "The cloud one."
+        assert column_for(card) == "detected"
+
+    def test_a_blank_answer_is_a_structured_refusal_not_a_stack_trace(
+        self, services: WorkflowServices
+    ) -> None:
+        # Every refusal at this door reads the same way: a client's model
+        # reads `{"ok": false, "reason": ...}` far more reliably than an
+        # exception raised over the transport.
+        _judgement(services)
+        server = build_mcp_server(services)
+
+        result = _call(
+            server,
+            "kanban_answer_card",
+            {"task_id": "proj-a:judgement", "actor": "alice", "answer": "   "},
+        )
+
+        assert result.get("ok") is False
+        assert "answer" in result.get("reason", "")
+
+    def test_a_card_that_was_never_in_question_is_refused(
+        self, services: WorkflowServices
+    ) -> None:
+        _filed(services)
+        server = build_mcp_server(services)
+
+        result = _call(
+            server,
+            "kanban_answer_card",
+            {"task_id": "proj-a:thread-1", "actor": "alice", "answer": "yes"},
+        )
+
+        assert result.get("ok") is False
+        assert "not waiting on a decision" in result.get("reason", "")
+
+    def test_a_missing_card_is_refused_by_name(self, services: WorkflowServices) -> None:
+        _judgement(services)
+        server = build_mcp_server(services)
+
+        result = _call(
+            server,
+            "kanban_answer_card",
+            {"task_id": "nope", "actor": "alice", "answer": "yes"},
+        )
+
+        assert result.get("ok") is False
+        assert "nope" in result.get("reason", "")
+
+    def test_a_second_answer_loses_and_names_the_first(self, services: WorkflowServices) -> None:
+        _judgement(services)
+        server = build_mcp_server(services)
+        _call(
+            server,
+            "kanban_answer_card",
+            {"task_id": "proj-a:judgement", "actor": "alice", "answer": "The cloud one."},
+        )
+
+        result = _call(
+            server,
+            "kanban_answer_card",
+            {"task_id": "proj-a:judgement", "actor": "bob", "answer": "The local one."},
+        )
+
+        assert result.get("ok") is False
+        assert "alice" in result.get("reason", "")

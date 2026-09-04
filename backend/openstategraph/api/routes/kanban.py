@@ -29,7 +29,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from openstategraph.api.deps import Services
+from openstategraph.api.deps import PrincipalId, Services
 from openstategraph.api.patrol_events import (
     KEEPALIVE_SECONDS,
     PATROL_EVENT,
@@ -39,6 +39,8 @@ from openstategraph.api.patrol_events import (
 )
 from openstategraph.api.patrol_registry import PatrolJobRegistry
 from openstategraph.api.schemas import (
+    KanbanAnswerRequest,
+    KanbanAnswerResponse,
     KanbanCardResponse,
     KanbanReleaseResponse,
     PatrolRunAcceptedResponse,
@@ -48,6 +50,9 @@ from openstategraph.api.sse_contract import sse_responses
 from openstategraph.api.streaming import _sse, stop_when_client_leaves_async
 from openstategraph.kanban_store import (
     STALE_THRESHOLD_SECONDS,
+    MissingEvidenceError,
+    StageOrderError,
+    answer_card,
     card_row,
     flagged_stale,
     kanban_store_path,
@@ -189,6 +194,59 @@ def release_kanban_card(task_id: str, services: Services) -> KanbanReleaseRespon
     if not result.ok:
         raise HTTPException(status_code=400, detail=result.reason)
     return KanbanReleaseResponse(ok=True)
+
+
+#: The actor a decision is recorded as when nothing else names one —
+#: `kanban-patrol/15`. The board has no name box and this deployment may
+#: identify nobody, but `kanban-patrol/20`'s floor stands: a card reading
+#: "answered by " with nothing in the blank is meaningless to whoever reads
+#: it next. So the door names itself, which is the true and smallest thing it
+#: can say — the decision came in through the browser.
+ANSWERED_BY_THE_BOARD = "board"
+
+
+@router.post(
+    "/api/kanban/cards/{task_id}/answer",
+    response_model=KanbanAnswerResponse,
+    summary="Record the decision on a Needs You card — it returns to Detected carrying the answer",
+    tags=["Kanban"],
+)
+def answer_kanban_card(
+    task_id: str,
+    body: KanbanAnswerRequest,
+    services: Services,
+    principal_id: PrincipalId,
+) -> KanbanAnswerResponse:
+    """The board's Answer control — `kanban-patrol/15`, the owner's decision
+    of 2026-09-04, made real on the surface a person actually reads a Needs
+    You card on.
+
+    A thin door onto `kanban_store.answer_card`, which owns every rule: the
+    answer is written once, the card returns to **Detected** rather than to
+    Resolved (`17`'s evidence gate is still the only road there), and a blank
+    answer or a card that was never in question is refused. A refusal is a
+    clean `400` naming why, exactly as `release_kanban_card` beside it does;
+    a card that does not exist is a `404`.
+
+    **Whose decision it is, is the server's finding.** `kanban-patrol/29`'s
+    rule at the MCP door, applied here for the same reason: when this
+    deployment resolves a principal, that principal is the actor and the
+    body's `actor` is dropped, never merged. When nothing resolves, the
+    caller's word stands — the transport's own gate is the trust bar
+    (`kanban-patrol/20`) — and when it says nothing either, the door names
+    itself rather than writing a blank.
+    """
+    db = kanban_store_path(services.store.root)
+    who = principal_id or body.actor.strip() or ANSWERED_BY_THE_BOARD
+    try:
+        result = answer_card(db, task_id, actor=who, answer=body.answer)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"no card {task_id!r}") from None
+    except (StageOrderError, MissingEvidenceError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.ok:
+        raise HTTPException(status_code=400, detail=result.reason)
+    return KanbanAnswerResponse(ok=True, answered_by=who)
 
 
 @router.post(

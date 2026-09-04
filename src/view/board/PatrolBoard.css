@@ -192,6 +192,22 @@
   color: var(--color-text-secondary);
 }
 
+/* `kanban-patrol/15`'s Answer control, and `19`'s two copy buttons before
+   it. A wrapping row so two or three small buttons sit side by side, and the
+   field — when one is open — takes the full width above them rather than
+   squeezing three lines into a button-height slot. Spacing tokens only;
+   nothing is minted here. */
+.patrol-card__action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.patrol-card__answer {
+  flex: 1 1 100%;
+}
+
 /* The blank board. Centred in the space the columns would have used, so the
    dialog does not change size when the first card lands. */
 .patrol-board__empty {

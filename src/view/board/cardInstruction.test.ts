@@ -74,3 +74,50 @@ describe('the evidence — priorityReason — actually reaches the instruction',
     expect(text).not.toMatch(/^Why:\s*$/m);
   });
 });
+
+describe('an answered judgement carries its decision — `kanban-patrol/15`', () => {
+  const decided = () =>
+    card({
+      kind: 'decision',
+      title: 'Which model should the grader use?',
+      answer: 'Use the cloud one.',
+      answeredBy: 'zulfeekar',
+    });
+
+  it('prepends the decision, so the agent reads it before the work', () => {
+    // The whole reason an answered card goes back to Detected is that the
+    // judgement is already made. An agent that meets the question first and
+    // the answer last is an agent that can re-open it.
+    const text = instructionForCard(decided());
+    expect(text.indexOf('Use the cloud one.')).toBeLessThan(text.indexOf('Task:'));
+  });
+
+  it('names who decided, because an unattributed decision is a rumour', () => {
+    expect(instructionForCard(decided())).toContain('zulfeekar');
+  });
+
+  it('says plainly that the decision is settled, not a suggestion', () => {
+    expect(instructionForCard(decided())).toMatch(
+      /already (been )?(made|decided)|do not re-?open/i,
+    );
+  });
+
+  it('keeps the decision on its own paragraph, blank line and all', () => {
+    // Same rule every other field here follows: a bare '\n' does not break a
+    // line in the Markdown renderer a chat-based coding agent renders into.
+    const lines = instructionForCard(decided()).split('\n');
+    const taskLine = lines.findIndex((l) => l.startsWith('Task:'));
+    expect(lines[taskLine - 1]).toBe('');
+  });
+
+  it('says nothing about a decision on a card that has none', () => {
+    expect(instructionForCard(card())).not.toMatch(/Decision/i);
+  });
+
+  it('says nothing when the answer is blank rather than absent', () => {
+    // Absent-not-empty, the rule the mapping already keeps — this is the
+    // second line, so a row that arrives with an empty string still renders
+    // no decision block rather than an empty one.
+    expect(instructionForCard(card({ answer: '' }))).not.toMatch(/Decision/i);
+  });
+});

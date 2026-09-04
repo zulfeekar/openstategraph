@@ -1183,6 +1183,11 @@ export interface KanbanCardRow {
   readonly evidence_red_reason: string;
   readonly evidence_green: boolean;
   readonly evidence_commit: string;
+  //: `kanban-patrol/15`'s Answer — the decision recorded on a Needs You
+  //: card, who recorded it, and when. Empty strings until somebody has.
+  readonly answer: string;
+  readonly answered_by: string;
+  readonly answered_at: string;
   //: `kanban-patrol/19`'s explicit Release — whether this card's claim has
   //: gone past the hour-long lease with no heartbeat. Computed by the
   //: backend at read time, never stored.
@@ -2030,6 +2035,36 @@ export class RuntimeClient implements IRuntimeClient {
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { detail?: string };
         return Err(body.detail || `Could not release the card (${response.status})`);
+      }
+      return Ok(undefined);
+    } catch {
+      return Err('Could not reach the runtime');
+    }
+  }
+
+  /**
+   * Record the decision on a Needs You card — `kanban-patrol/15`, decided
+   * 2026-09-04. The card returns to Detected carrying the answer; it never
+   * reaches Resolved this way, because a decision is not evidence.
+   *
+   * **A refusal is an ordinary `Err`,** reading the backend's own `detail`:
+   * a blank answer, a card that was never in question, and a decision
+   * somebody already made are all one shape here, the same rule
+   * `releaseCard()` above already follows rather than a second convention.
+   */
+  async answerCard(taskId: string, answer: string): Promise<Result<void, string>> {
+    try {
+      const response = await this.fetchImpl(
+        `${this.baseUrl}/api/kanban/cards/${encodeURIComponent(taskId)}/answer`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answer }),
+        },
+      );
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { detail?: string };
+        return Err(body.detail || `Could not record the decision (${response.status})`);
       }
       return Ok(undefined);
     } catch {

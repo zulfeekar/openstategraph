@@ -173,6 +173,115 @@ class TestReleaseRoute:
         assert card["stage"] == "attended", "a refused release must not touch the card"
 
 
+class TestAnswerRoute:
+    """`POST /api/kanban/cards/{task_id}/answer` — kanban-patrol/15's Answer,
+    the board's own door onto `kanban_store.answer_card`.
+
+    The browser is where a person actually reads a Needs You card, so this is
+    the door the decision usually arrives through. It adds no rule of its
+    own: the store owns "written once", "back to Detected, never Resolved",
+    and every refusal.
+    """
+
+    def _judgement(self, client: TestClient, task_id: str = "proj-a:judgement") -> Path:
+        root = client.app.state.services.store.root
+        db = kanban_store_path(root)
+        ensure_schema(db)
+        file_card(
+            db,
+            task_id=task_id,
+            board="workflows",
+            kind="decision",
+            category="decision",
+            title="Which model should the grader use?",
+        )
+        return db
+
+    def test_answering_records_the_decision_and_the_card_returns_to_detected(
+        self, client: TestClient
+    ) -> None:
+        self._judgement(client)
+
+        response = client.post(
+            "/api/kanban/cards/proj-a:judgement/answer",
+            json={"answer": "The cloud one.", "actor": "zulfeekar"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["ok"] is True
+        card = client.get("/api/kanban/cards").json()[0]
+        assert card["answer"] == "The cloud one."
+        assert card["answered_by"] == "zulfeekar"
+        assert card["answered_at"]
+        # Still unattended: answering is a decision, not a claim, and the
+        # card must be attendable by an agent straight afterwards.
+        assert card["stage"] == "unattended"
+
+    def test_a_blank_answer_is_a_clean_400_and_touches_nothing(self, client: TestClient) -> None:
+        self._judgement(client)
+
+        response = client.post(
+            "/api/kanban/cards/proj-a:judgement/answer",
+            json={"answer": "   ", "actor": "zulfeekar"},
+        )
+
+        assert response.status_code == 400
+        assert "answer" in response.json()["detail"]
+        assert client.get("/api/kanban/cards").json()[0]["answer"] == ""
+
+    def test_a_card_that_was_never_in_question_is_a_clean_400(self, client: TestClient) -> None:
+        _filed(client)
+
+        response = client.post(
+            "/api/kanban/cards/proj-a:thread-1/answer",
+            json={"answer": "yes", "actor": "zulfeekar"},
+        )
+
+        assert response.status_code == 400
+        assert "not waiting on a decision" in response.json()["detail"]
+
+    def test_a_missing_card_is_a_404(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/kanban/cards/nope/answer", json={"answer": "yes", "actor": "zulfeekar"}
+        )
+
+        assert response.status_code == 404
+
+    def test_a_second_answer_is_refused_and_the_first_decision_stands(
+        self, client: TestClient
+    ) -> None:
+        self._judgement(client)
+        client.post(
+            "/api/kanban/cards/proj-a:judgement/answer",
+            json={"answer": "The cloud one.", "actor": "zulfeekar"},
+        )
+
+        response = client.post(
+            "/api/kanban/cards/proj-a:judgement/answer",
+            json={"answer": "The local one.", "actor": "someone-else"},
+        )
+
+        assert response.status_code == 400
+        assert "zulfeekar" in response.json()["detail"]
+        assert client.get("/api/kanban/cards").json()[0]["answer"] == "The cloud one."
+
+    def test_a_caller_that_names_nobody_is_still_recorded_as_something(
+        self, client: TestClient
+    ) -> None:
+        # `kanban-patrol/20`'s floor: the store refuses a blank actor, and
+        # the board has no name box. A card reading "answered by " with
+        # nothing in the blank is meaningless, so this door names the door.
+        self._judgement(client)
+
+        response = client.post(
+            "/api/kanban/cards/proj-a:judgement/answer", json={"answer": "The cloud one."}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["answered_by"].strip()
+        assert client.get("/api/kanban/cards").json()[0]["answered_by"].strip()
+
+
 class TestRunningThePatrol:
     """`POST /api/kanban/patrol/run` — kanban-patrol/27, made durable by
     `kanban-patrol/07`. The board's own Refresh button already exists; this

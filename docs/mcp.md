@@ -453,10 +453,11 @@ replaces it; name a slug only to update a package you saved earlier.
 `kanban_list_cards(board, column, area, priority)`,
 `kanban_attend_card(task_id, actor)`, `kanban_set_stage(task_id, stage, actor,
 test_id, reason, commit)`, `kanban_show_card(task_id)`,
-`kanban_release_card(task_id, threshold_seconds)` — the MCP half of
+`kanban_release_card(task_id, threshold_seconds)`,
+`kanban_answer_card(task_id, answer, actor)` — the MCP half of
 `kanban-patrol/19`'s card lifecycle, beside a CLI door (`openstategraph kanban
-attend|stage|show|release`) for an agent that is not MCP-attached to this
-project's server. Both wrap the identical function; there is no second
+attend|stage|answer|show|release`) for an agent that is not MCP-attached to
+this project's server. Both wrap the identical function; there is no second
 implementation of the claim or ordering logic to drift out of sync with this
 one.
 
@@ -473,7 +474,9 @@ disagree with the card it describes: a claimed card is `inProgress` whatever
 its kind, a card that carried a test from red to green is `resolved`, and only
 an unattended card is placed by its kind. **Take work from `detected`.** A
 card in `needsYou` is a judgement — a `prototype`, a `grilling`, a `decision`
-— and is the owner's to settle, not an agent's.
+— and is the owner's to settle, not an agent's. Once it is settled it leaves
+that column: an **answered** judgement is `detected`, carrying the decision
+(`kanban_answer_card` below).
 
 All four filters are exact, case-insensitive, and combine. A value outside the
 accepted set answers `{"ok": false, "cards": [], "reason": "..."}` naming what
@@ -513,6 +516,24 @@ disagrees with the recorded id — a missing or mismatched piece returns the
 same structured `{"ok": false, "reason": "..."}` a skipped stage already
 does, never a fresh claim accepted without proof.
 
+`kanban_answer_card` is how a settled judgement gets recorded —
+`kanban-patrol/15`, decided 2026-09-04. A `needsYou` card carries a question
+the patrol could not answer, and **only a person may answer it**: an agent
+that pulled the card asks them and calls this with what they said. Never
+choose for them; that the choice was not the agent's to make is the entire
+reason the card was in `needsYou`.
+
+The card then returns to `detected` carrying the decision, so the next
+`kanban_attend_card` picks it up with the judgement already made, and
+`kanban_show_card` prints the decision at the top. It never reaches
+`resolved` this way — `17`'s evidence gate is still the only road there.
+
+An answer is **written once**. A blank or whitespace answer, a card that was
+never in question (a `bug` is in `detected` because nothing was being asked),
+one somebody is already working, and a second answer on a card somebody
+already decided are all `{"ok": false, "reason": "..."}` naming which — never
+a silent overwrite of somebody else's decision.
+
 `kanban_release_card` is the human's explicit press on a card the system has
 already flagged stale — "flag, never auto-release" — refused the same
 structured way for any card not currently past `threshold_seconds` (default
@@ -527,8 +548,10 @@ and every evidence field back to a fresh, unattended row.
 
 `actor` is a parameter a *model* fills in, and this project's standing rule
 is that identity is the server's to determine, never the caller's to assert.
-So `kanban_attend_card` and `kanban_set_stage` resolve the caller first, and
-what they resolve wins (`kanban-patrol/29`):
+So `kanban_attend_card`, `kanban_set_stage` and `kanban_answer_card` resolve
+the caller first, and what they resolve wins (`kanban-patrol/29`). It matters
+most on the third: a decision attributed to whoever the model said made it is
+not a record of who made it.
 
 - **If this deployment identifies its callers** — `OPENSTATEGRAPH_PRINCIPAL_HEADER`
   names the header your reverse proxy stamps, and the request also carries

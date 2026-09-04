@@ -93,7 +93,13 @@ class MissingEvidenceError(ValueError):
     that lacks the evidence this gate requires — a different refusal from
     `StageOrderError`: not the wrong stage to move from, but the right stage
     with nothing to point the proof at. Names exactly what is missing so the
-    caller (human or agent) can fix it, never a generic failure."""
+    caller (human or agent) can fix it, never a generic failure.
+
+    `kanban-patrol/15` reuses it for `answer_card`'s own blanks — an answer
+    with nothing in it is the same defect the evidence gate already refuses,
+    a write that records a field and says nothing, and a second exception
+    class for one more spelling of "you gave me nothing" would be a second
+    thing a caller has to catch to get the same handling."""
 
 
 @dataclass(frozen=True)
@@ -134,6 +140,13 @@ class Card:
     evidence_red_reason: str
     evidence_green: bool
     evidence_commit: str
+    #: `kanban-patrol/15`'s Answer — the decision a person typed onto a Needs
+    #: You card, written once, with who typed it and when. Empty string when
+    #: nobody has answered yet, never `None`: the same "one spelling of
+    #: nothing" rule the four evidence fields above already follow.
+    answer: str
+    answered_by: str
+    answered_at: str
 
 
 #: `kanban-patrol/19`'s explicit Release lease, in seconds — one hour. Owned
@@ -179,7 +192,17 @@ def column_for(card: Card) -> str:
         return "resolved"
     if card.stage is not Stage.UNATTENDED:
         return "inProgress"
-    return "needsYou" if card.kind in _HUMAN_DECISION_KINDS else "detected"
+    if card.kind not in _HUMAN_DECISION_KINDS:
+        return "detected"
+    # `kanban-patrol/15`, 2026-09-04: an **answered** judgement is a decided
+    # one, so it leaves Needs You the same way a claimed one does. Needs You
+    # is the column a person reads for outstanding questions; a card whose
+    # question has been answered sitting in it is a claim that the question
+    # is still open. It goes to Detected rather than to Resolved because a
+    # decision is not evidence that anything was built — `17`'s gate is still
+    # the only road there — and an agent can now attend it with the judgement
+    # already made.
+    return "detected" if card.answer.strip() else "needsYou"
 
 
 def card_row(card: Card, *, stale: bool) -> dict[str, Any]:
@@ -208,6 +231,13 @@ def card_row(card: Card, *, stale: bool) -> dict[str, Any]:
         "evidence_red_reason": card.evidence_red_reason,
         "evidence_green": card.evidence_green,
         "evidence_commit": card.evidence_commit,
+        # `kanban-patrol/15`. Published on every row rather than only on an
+        # answered one, for the reason this function exists at all: two doors
+        # publishing different field sets is how a board and an agent come to
+        # read different cards.
+        "answer": card.answer,
+        "answered_by": card.answered_by,
+        "answered_at": card.answered_at,
         "stale": stale,
     }
 
@@ -232,6 +262,9 @@ _COLUMN_DEFS: dict[str, str] = {
     "evidence_red_reason": "TEXT NOT NULL DEFAULT ''",
     "evidence_green": "INTEGER NOT NULL DEFAULT 0",
     "evidence_commit": "TEXT NOT NULL DEFAULT ''",
+    "answer": "TEXT NOT NULL DEFAULT ''",
+    "answered_by": "TEXT NOT NULL DEFAULT ''",
+    "answered_at": "TEXT NOT NULL DEFAULT ''",
 }
 
 
@@ -268,7 +301,10 @@ def ensure_schema(db_path: Path) -> None:
                 evidence_test_id TEXT NOT NULL DEFAULT '',
                 evidence_red_reason TEXT NOT NULL DEFAULT '',
                 evidence_green INTEGER NOT NULL DEFAULT 0,
-                evidence_commit TEXT NOT NULL DEFAULT ''
+                evidence_commit TEXT NOT NULL DEFAULT '',
+                answer TEXT NOT NULL DEFAULT '',
+                answered_by TEXT NOT NULL DEFAULT '',
+                answered_at TEXT NOT NULL DEFAULT ''
             )
             """
         )
@@ -325,7 +361,8 @@ def file_card(
 _CARD_COLUMNS = (
     "task_id, board, kind, category, title, stage, actor, last_heartbeat_at, "
     "priority, area, priority_reason, filed_at, "
-    "evidence_test_id, evidence_red_reason, evidence_green, evidence_commit"
+    "evidence_test_id, evidence_red_reason, evidence_green, evidence_commit, "
+    "answer, answered_by, answered_at"
 )
 
 
@@ -347,6 +384,9 @@ def _row_to_card(row: tuple[Any, ...]) -> Card:
         evidence_red_reason=row[13],
         evidence_green=bool(row[14]),
         evidence_commit=row[15],
+        answer=row[16],
+        answered_by=row[17],
+        answered_at=row[18],
     )
 
 
@@ -635,6 +675,96 @@ def release_card(
         return SetStageResult(
             ok=False,
             reason=f"{task_id}: not stale — a card can only be released once it has been flagged",
+        )
+    return SetStageResult(ok=True)
+
+
+def answer_card(
+    db_path: Path, task_id: str, *, actor: str, answer: str
+) -> SetStageResult:
+    """Record the decision a person made on a Needs You card —
+    `kanban-patrol/15`, the owner's decision of 2026-09-04.
+
+    **The card goes back to Detected, never to Resolved.** A decision is not
+    evidence that anything was built, so `17`'s gate is still the only road
+    to Resolved; and the card must not stay in Needs You either, because that
+    is the column a person reads for outstanding questions. `column_for` does
+    the move on its own, from the answer this writes — no second stored
+    column, the same `18` rule the rest of this module keeps.
+
+    **One write path, and it writes once.** The stage is untouched: the card
+    is still `unattended`, so an agent attends it next exactly as it would
+    any Detected card. Two refusals and one loss:
+
+    - A blank actor or a blank answer is `MissingEvidenceError` — the
+      caller's own mistake, named, never recorded as a decision nobody made.
+      `.strip()` first, because `bool(" ")` is `True`.
+    - A card that is not a judgement waiting in Needs You is
+      `StageOrderError`: a `bug` was never in question, and a claimed
+      judgement already has somebody on it.
+    - A **second** answer is a race, not a mistake — two people reading one
+      board and both deciding is ordinary — so it is reported through
+      `SetStageResult.ok` naming who answered first, exactly as a lost
+      attend is, and the first decision stands.
+
+    **Atomic against the database, not against the read above.** The
+    `WHERE` clause requires the answer to still be blank and the card to
+    still be unattended, so two callers that both read a blank answer do not
+    both write one — the same discipline `set_stage` uses, and the reason
+    this is a conditional `UPDATE` rather than a read-then-write.
+    """
+    if not actor.strip():
+        raise MissingEvidenceError(f"{task_id}: actor must be a real, non-blank name")
+    answer = answer.strip()
+    if not answer:
+        raise MissingEvidenceError(f"{task_id}: answer must be a real, non-blank decision")
+
+    current = read_card(db_path, task_id)
+    if current.answer.strip():
+        return SetStageResult(
+            ok=False,
+            reason=(
+                f"{task_id}: already answered by {current.answered_by} "
+                f"at {current.answered_at} — an answer is written once"
+            ),
+        )
+    if column_for(current) != "needsYou":
+        raise StageOrderError(
+            f"{task_id}: not waiting on a decision — a {current.kind} card at "
+            f"{current.stage.value} is in {column_for(current)}, and only a "
+            "judgement nobody has claimed carries a question to answer"
+        )
+
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE cards
+            SET answer = ?, answered_by = ?, answered_at = ?
+            WHERE task_id = ? AND stage = ? AND answer = ''
+            """,
+            (answer, actor, _now(), task_id, Stage.UNATTENDED.value),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    if cursor.rowcount == 0:
+        # Lost between the read above and this write — reread and report who
+        # actually holds the decision, truthfully, never a silent overwrite.
+        loser_view = read_card(db_path, task_id)
+        if loser_view.answer.strip():
+            return SetStageResult(
+                ok=False,
+                reason=(
+                    f"{task_id}: already answered by {loser_view.answered_by} "
+                    f"at {loser_view.answered_at} — an answer is written once"
+                ),
+            )
+        return SetStageResult(
+            ok=False,
+            reason=f"{task_id}: no longer waiting on a decision — card is at "
+            f"{loser_view.stage.value}",
         )
     return SetStageResult(ok=True)
 

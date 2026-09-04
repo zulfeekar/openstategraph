@@ -13,7 +13,14 @@ from pathlib import Path
 import pytest
 
 from openstategraph import cli
-from openstategraph.kanban_store import Stage, ensure_schema, file_card, kanban_store_path
+from openstategraph.kanban_store import (
+    Stage,
+    column_for,
+    ensure_schema,
+    file_card,
+    kanban_store_path,
+    read_card,
+)
 
 
 @pytest.fixture()
@@ -298,3 +305,96 @@ class TestPatrolRun:
         assert (tmp_path / ".openstategraph" / "project_identity").read_text().strip() == written[
             "project_id"
         ]
+
+
+class TestAnswer:
+    """`kanban-patrol/15`. The CLI half of Answer — the same one write path
+    the board and the MCP door use, so a decision typed at a terminal and a
+    decision typed in a browser land identically on the row."""
+
+    def _judgement(self, project: Path, task_id: str = "proj-a:judgement") -> Path:
+        db = kanban_store_path(project / "workflows")
+        ensure_schema(db)
+        file_card(
+            db,
+            task_id=task_id,
+            board="workflows",
+            kind="decision",
+            category="decision",
+            title="Which model should the grader use?",
+        )
+        return db
+
+    def test_answer_records_the_decision_and_moves_the_card(self, _project: Path) -> None:
+        db = self._judgement(_project)
+
+        code = cli.main(
+            ["kanban", "answer", "proj-a:judgement", "--actor", "alice", "--answer", "The cloud one."]
+            + _root(_project)
+        )
+
+        assert code == 0
+        card = read_card(db, "proj-a:judgement")
+        assert card.answer == "The cloud one."
+        assert card.answered_by == "alice"
+        assert column_for(card) == "detected"
+
+    def test_an_empty_answer_exits_nonzero_and_names_what_is_missing(
+        self, _project: Path, capsys
+    ) -> None:
+        # A refusal is a clean non-zero exit with a plain reason, never a
+        # stack trace — the same shape `stage`'s evidence gate already uses.
+        db = self._judgement(_project)
+
+        code = cli.main(
+            ["kanban", "answer", "proj-a:judgement", "--actor", "alice", "--answer", "   "]
+            + _root(_project)
+        )
+
+        assert code != 0
+        assert "answer" in capsys.readouterr().err
+        assert read_card(db, "proj-a:judgement").answer == ""
+
+    def test_a_task_kind_card_is_refused_with_a_reason(self, _project: Path, capsys) -> None:
+        _filed(_project)
+
+        code = cli.main(
+            ["kanban", "answer", "proj-a:thread-1", "--actor", "alice", "--answer", "yes"]
+            + _root(_project)
+        )
+
+        assert code != 0
+        assert "not waiting on a decision" in capsys.readouterr().err
+
+    def test_a_second_answer_exits_nonzero_and_says_who_answered(
+        self, _project: Path, capsys
+    ) -> None:
+        self._judgement(_project)
+        cli.main(
+            ["kanban", "answer", "proj-a:judgement", "--actor", "alice", "--answer", "The cloud one."]
+            + _root(_project)
+        )
+
+        code = cli.main(
+            ["kanban", "answer", "proj-a:judgement", "--actor", "bob", "--answer", "The local one."]
+            + _root(_project)
+        )
+
+        assert code != 0
+        assert "alice" in capsys.readouterr().err
+
+    def test_show_prints_the_decision_once_it_has_one(self, _project: Path, capsys) -> None:
+        # `show` is what an agent reads instead of the board. A card whose
+        # question has been settled and whose answer `show` omits is a card
+        # that sends the agent back to ask it again.
+        self._judgement(_project)
+        cli.main(
+            ["kanban", "answer", "proj-a:judgement", "--actor", "alice", "--answer", "The cloud one."]
+            + _root(_project)
+        )
+
+        cli.main(["kanban", "show", "proj-a:judgement"] + _root(_project))
+
+        out = capsys.readouterr().out
+        assert "The cloud one." in out
+        assert "alice" in out

@@ -13,8 +13,12 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
+import pytest
+
+from openstategraph import kanban_store
 from openstategraph.kanban_store import (
     BOARD_AREAS,
     BOARD_COLUMNS,
@@ -23,6 +27,8 @@ from openstategraph.kanban_store import (
     MissingEvidenceError,
     Stage,
     StageOrderError,
+    answer_card,
+    card_row,
     column_for,
     ensure_schema,
     file_card,
@@ -793,3 +799,185 @@ class TestTheVocabularyIsNotSpeltTwice:
 
     def test_the_priorities_match_the_board(self) -> None:
         assert BOARD_PRIORITIES == self._union("cardPriority.ts", "BoardPriority")
+
+
+class TestAnsweringANeedsYouCard:
+    """`kanban-patrol/15`, the owner's decision of 2026-09-04: a person types
+    a decision onto a Needs You card, the card records it once, and the card
+    **returns to Detected** with the judgement made — so an agent can attend
+    it next.
+
+    It never reaches Resolved: `17`'s evidence gate is still the only road
+    there, and answering a question is not evidence that anything was built.
+    And it never stays in Needs You once answered, because a card sitting in
+    the column a person reads for outstanding questions is a claim that a
+    question is outstanding.
+    """
+
+    def _judgement(self, tmp_path: Path, task_id: str = "proj-a:thread-1") -> Path:
+        db = _db(tmp_path)
+        file_card(
+            db,
+            task_id=task_id,
+            board="workflows",
+            kind="decision",
+            category="decision",
+            title="Which model should the grader use?",
+        )
+        return db
+
+    def test_an_answered_judgement_moves_to_detected(self, tmp_path: Path) -> None:
+        db = self._judgement(tmp_path)
+        assert column_for(read_card(db, "proj-a:thread-1")) == "needsYou"
+
+        result = answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="Use the cloud one.")
+
+        assert result.ok
+        assert column_for(read_card(db, "proj-a:thread-1")) == "detected"
+
+    def test_the_answer_the_actor_and_the_time_are_all_recorded(self, tmp_path: Path) -> None:
+        db = self._judgement(tmp_path)
+
+        answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="Use the cloud one.")
+
+        card = read_card(db, "proj-a:thread-1")
+        assert card.answer == "Use the cloud one."
+        assert card.answered_by == "zulfeekar"
+        # A real instant, never a worded guess — the same rule `filed_at`
+        # already follows, so a reader computes their own relative phrase.
+        assert datetime.fromisoformat(card.answered_at).tzinfo is not None
+
+    def test_answering_does_not_attend_the_card(self, tmp_path: Path) -> None:
+        # Answering is a decision, not a claim. The card must still be
+        # attendable by an agent afterwards — which is the whole point of
+        # sending it back to Detected rather than to In Progress.
+        db = self._judgement(tmp_path)
+
+        answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="Use the cloud one.")
+
+        assert read_card(db, "proj-a:thread-1").stage is Stage.UNATTENDED
+        assert set_stage(db, "proj-a:thread-1", Stage.ATTENDED, actor="agent").ok
+
+    def test_answering_never_reaches_resolved(self, tmp_path: Path) -> None:
+        db = self._judgement(tmp_path)
+
+        answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="Use the cloud one.")
+
+        card = read_card(db, "proj-a:thread-1")
+        assert column_for(card) != "resolved"
+        assert not card.evidence_green
+        assert card.evidence_commit == ""
+
+    def test_an_empty_answer_is_refused(self, tmp_path: Path) -> None:
+        db = self._judgement(tmp_path)
+        with pytest.raises(MissingEvidenceError, match="answer"):
+            answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="")
+
+    def test_a_whitespace_answer_is_refused(self, tmp_path: Path) -> None:
+        # `bool(" ")` is True in Python — the same gap `17`+`21`'s evidence
+        # gate already closed with `.strip()`, closed here at the same time
+        # rather than after somebody finds it live.
+        db = self._judgement(tmp_path)
+        with pytest.raises(MissingEvidenceError, match="answer"):
+            answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="   \n  ")
+        assert column_for(read_card(db, "proj-a:thread-1")) == "needsYou"
+
+    def test_a_blank_actor_is_refused(self, tmp_path: Path) -> None:
+        db = self._judgement(tmp_path)
+        with pytest.raises(MissingEvidenceError, match="actor"):
+            answer_card(db, "proj-a:thread-1", actor="  ", answer="Use the cloud one.")
+
+    def test_a_task_kind_card_cannot_be_answered(self, tmp_path: Path) -> None:
+        # A `bug` is in Detected because nothing was ever in question. An
+        # answer on it would put a `Decision:` block on an instruction where
+        # no decision was ever asked for.
+        db = _db(tmp_path)
+        _filed(db)
+        with pytest.raises(StageOrderError, match="not waiting on a decision"):
+            answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="Use the cloud one.")
+
+    def test_a_claimed_judgement_cannot_be_answered(self, tmp_path: Path) -> None:
+        # Somebody is already on it — the same rule that takes a claimed
+        # judgement out of Needs You in the first place.
+        db = self._judgement(tmp_path)
+        set_stage(db, "proj-a:thread-1", Stage.ATTENDED, actor="agent")
+        with pytest.raises(StageOrderError, match="not waiting on a decision"):
+            answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="Use the cloud one.")
+
+    def test_a_second_answer_loses_and_is_told_who_won(self, tmp_path: Path) -> None:
+        # Written once. Two people reading the same board and both deciding
+        # is the ordinary case, not an attack — so the loser is told, in the
+        # same `SetStageResult` shape a lost attend already uses, never
+        # raised and never a silent overwrite of the first decision.
+        db = self._judgement(tmp_path)
+        assert answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="The cloud one.").ok
+
+        second = answer_card(db, "proj-a:thread-1", actor="someone-else", answer="The local one.")
+
+        assert not second.ok
+        assert "zulfeekar" in second.reason
+        assert read_card(db, "proj-a:thread-1").answer == "The cloud one."
+
+    def test_a_concurrent_second_answer_loses_at_the_database(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The pre-check is not the guard, and this test is the difference.
+        # Both callers read a blank answer — that is what concurrent means —
+        # so the pre-check waves both through and only the `WHERE answer = ''`
+        # in the UPDATE decides it. Staged by handing the second caller the
+        # snapshot it would genuinely have read a moment before the first
+        # caller's write landed; a read-then-write passes every other test in
+        # this class and loses here.
+        db = self._judgement(tmp_path)
+        stale_view = read_card(db, "proj-a:thread-1")
+        assert answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="The cloud one.").ok
+
+        real_read = kanban_store.read_card
+        views = [stale_view]
+
+        def read_the_moment_before(path: Path, task_id: str) -> Card:
+            return views.pop() if views else real_read(path, task_id)
+
+        monkeypatch.setattr(kanban_store, "read_card", read_the_moment_before)
+        second = answer_card(db, "proj-a:thread-1", actor="someone-else", answer="The local one.")
+
+        assert not second.ok
+        assert "zulfeekar" in second.reason
+        assert real_read(db, "proj-a:thread-1").answer == "The cloud one."
+
+    def test_the_row_every_door_publishes_carries_the_answer(self, tmp_path: Path) -> None:
+        db = self._judgement(tmp_path)
+        answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="Use the cloud one.")
+
+        row = card_row(read_card(db, "proj-a:thread-1"), stale=False)
+
+        assert row["answer"] == "Use the cloud one."
+        assert row["answered_by"] == "zulfeekar"
+        assert row["answered_at"]
+
+    def test_an_unanswered_card_publishes_empty_strings_not_none(self, tmp_path: Path) -> None:
+        # Same rule the evidence fields already follow: a field that has not
+        # been written yet is empty, never `None`, so no reader has to tell
+        # two spellings of "nothing here" apart.
+        db = self._judgement(tmp_path)
+        row = card_row(read_card(db, "proj-a:thread-1"), stale=False)
+        assert row["answer"] == ""
+        assert row["answered_by"] == ""
+        assert row["answered_at"] == ""
+
+    def test_an_older_store_gains_the_answer_columns(self, tmp_path: Path) -> None:
+        # `kanban-patrol/26`'s repair loop, exercised on the columns this
+        # ticket adds — a store built before they existed must be repaired on
+        # the next read, not crash on it.
+        db = self._judgement(tmp_path)
+        conn = sqlite3.connect(db)
+        try:
+            for column in ("answer", "answered_by", "answered_at"):
+                conn.execute(f"ALTER TABLE cards DROP COLUMN {column}")
+            conn.commit()
+        finally:
+            conn.close()
+
+        ensure_schema(db)
+
+        assert read_card(db, "proj-a:thread-1").answer == ""

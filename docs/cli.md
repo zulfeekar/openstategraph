@@ -340,6 +340,8 @@ openstategraph kanban attend <task-id> --actor NAME [--workflows-root DIR]
 openstategraph kanban stage <task-id> {red,green,finished} --actor NAME
                             [--test-id ID] [--reason TEXT] [--commit SHA]
                             [--workflows-root DIR]
+openstategraph kanban answer <task-id> --actor NAME --answer TEXT
+                            [--workflows-root DIR]
 openstategraph kanban show <task-id> [--workflows-root DIR]
 openstategraph kanban release <task-id> [--threshold-seconds N] [--workflows-root DIR]
 ```
@@ -380,6 +382,20 @@ moving to `finished` requires red and green already durably on the card and
 is given it is refused, with the row unchanged, when it disagrees with the
 one already recorded. A caller missing any of this exits non-zero with the
 gap named plainly, the same way a skipped stage already does.
+
+`answer` records the decision on a **Needs You** card (`kanban-patrol/15`,
+decided 2026-09-04). A card is in Needs You because the patrol stopped on a
+judgement it should not make, and only a person may make it. Recording the
+answer sends the card back to **Detected**, carrying the decision — so the
+next `attend` picks it up with the judgement already made, and `show` prints
+the decision at the top of the instruction. It never reaches Resolved this
+way: `17`'s evidence gate is still the only road there.
+
+An answer is **written once**. A blank or whitespace answer is refused, so is
+a card that was never in question (a `bug` is in Detected because nothing was
+being asked) or one somebody is already working, and a second answer exits
+non-zero naming who made the first — never a silent overwrite of somebody
+else's decision.
 
 `release` is the human's explicit press on a card the system has already
 flagged stale (past `--threshold-seconds`, default 3600 — one hour, no

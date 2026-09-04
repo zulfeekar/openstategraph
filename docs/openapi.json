@@ -292,6 +292,44 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "KanbanAnswerRequest": {
+        "description": "`POST /api/kanban/cards/{task_id}/answer`'s body \u2014 kanban-patrol/15.\n\n`actor` is the caller's *claim*, and on a deployment that identifies its\ncallers it is dropped rather than merged: the resolved principal is the\nactor, `kanban-patrol/29`'s rule at the MCP door, applied here for the\nsame reason \u2014 a decision attributed to whoever the client said made it is\nnot a record of who made it.",
+        "properties": {
+          "actor": {
+            "default": "",
+            "title": "Actor",
+            "type": "string"
+          },
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "title": "KanbanAnswerRequest",
+        "type": "object"
+      },
+      "KanbanAnswerResponse": {
+        "description": "`POST /api/kanban/cards/{task_id}/answer`'s reply \u2014 kanban-patrol/15.\n\nAlways `ok: true` on a 200; every refusal (a blank answer, a card that\nwas never in question, a decision somebody already made) is a `400` with\n`detail` naming why \u2014 `KanbanReleaseResponse`'s own shape, not a second\nconvention for the same idea on a sibling route.",
+        "properties": {
+          "answered_by": {
+            "title": "Answered By",
+            "type": "string"
+          },
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "answered_by"
+        ],
+        "title": "KanbanAnswerResponse",
+        "type": "object"
+      },
       "KanbanCardResponse": {
         "description": "One row of the kanban board (`kanban-patrol/19`), as the frontend\nreads it. Named rather than a bare `dict` so a generated client has a\ntype to bind \u2014 `test_openapi_contract.py`'s own rule against an\nanonymous JSON shape.",
         "properties": {
@@ -305,6 +343,21 @@
               }
             ],
             "title": "Actor"
+          },
+          "answer": {
+            "default": "",
+            "title": "Answer",
+            "type": "string"
+          },
+          "answered_at": {
+            "default": "",
+            "title": "Answered At",
+            "type": "string"
+          },
+          "answered_by": {
+            "default": "",
+            "title": "Answered By",
+            "type": "string"
           },
           "area": {
             "title": "Area",
@@ -2698,6 +2751,59 @@
           }
         },
         "summary": "Every card in this project's kanban store, current stage included",
+        "tags": [
+          "Kanban"
+        ]
+      }
+    },
+    "/api/kanban/cards/{task_id}/answer": {
+      "post": {
+        "description": "The board's Answer control \u2014 `kanban-patrol/15`, the owner's decision\nof 2026-09-04, made real on the surface a person actually reads a Needs\nYou card on.\n\nA thin door onto `kanban_store.answer_card`, which owns every rule: the\nanswer is written once, the card returns to **Detected** rather than to\nResolved (`17`'s evidence gate is still the only road there), and a blank\nanswer or a card that was never in question is refused. A refusal is a\nclean `400` naming why, exactly as `release_kanban_card` beside it does;\na card that does not exist is a `404`.\n\n**Whose decision it is, is the server's finding.** `kanban-patrol/29`'s\nrule at the MCP door, applied here for the same reason: when this\ndeployment resolves a principal, that principal is the actor and the\nbody's `actor` is dropped, never merged. When nothing resolves, the\ncaller's word stands \u2014 the transport's own gate is the trust bar\n(`kanban-patrol/20`) \u2014 and when it says nothing either, the door names\nitself rather than writing a blank.",
+        "operationId": "answer_kanban_card_api_kanban_cards__task_id__answer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KanbanAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KanbanAnswerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record the decision on a Needs You card \u2014 it returns to Detected carrying the answer",
         "tags": [
           "Kanban"
         ]

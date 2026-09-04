@@ -25,6 +25,9 @@ function row(overrides: Partial<KanbanCardResponse> = {}): KanbanCardResponse {
     evidence_red_reason: '',
     evidence_green: false,
     evidence_commit: '',
+    answer: '',
+    answered_by: '',
+    answered_at: '',
     stale: false,
     ...overrides,
   };
@@ -159,5 +162,27 @@ describe('stale passes through present-and-true only — kanban-patrol/19', () =
     const card = mapKanbanCardToBoardCard(row({ stale: false }), Date.now());
 
     expect(card.stale).toBeUndefined();
+  });
+});
+
+describe('the decision — `kanban-patrol/15` — crosses the seam or is absent', () => {
+  it('carries an answer and who made it', () => {
+    const card = mapKanbanCardToBoardCard(
+      row({ kind: 'decision', answer: 'Use the cloud one.', answered_by: 'zulfeekar' }),
+      Date.now(),
+    );
+
+    expect(card.answer).toBe('Use the cloud one.');
+    expect(card.answeredBy).toBe('zulfeekar');
+  });
+
+  it('leaves both props absent — not empty — on an unanswered card', () => {
+    // `columnForCard` and `instructionForCard` both ask "is there a decision"
+    // by reading this, so "no answer" has to be the prop being absent, the
+    // same rule `priorityReason` follows one field up.
+    const card = mapKanbanCardToBoardCard(row({ kind: 'decision' }), Date.now());
+
+    expect(card.answer).toBeUndefined();
+    expect(card.answeredBy).toBeUndefined();
   });
 });

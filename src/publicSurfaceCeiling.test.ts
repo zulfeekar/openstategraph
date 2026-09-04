@@ -386,7 +386,7 @@ const SUBJECTS: readonly Subject[] = [
   {
     file: './core/runtime/RuntimeClient.ts',
     className: 'RuntimeClient',
-    members: 15,
+    members: 16,
     exception: `One thin method per backend door, same shape as every member already
       here — 'run', 'runStream', 'resume', 'health', 'pastRuns', 'pastRun',
       'providers', 'verifyProvider', 'kanbanCards', and now 'runPatrol'
@@ -429,7 +429,16 @@ const SUBJECTS: readonly Subject[] = [
       and the count still rises by exactly the number of doors this backend
       exposes rather than by a new kind of responsibility. Recorded here
       before the surface that reads it was drawn, which is the point of the
-      rule: the widening is a line in a review rather than a discovery.`,
+      rule: the widening is a line in a review rather than a discovery.
+
+      **Fifteen -> sixteen**, 2026-09-04 (kanban-patrol/15). 'answerCard' —
+      a POST recording the decision a person typed onto a Needs You card,
+      which is the last of the two doors the paragraph four up named as
+      still open ('kanban_list_cards' shipped on the MCP side and needed no
+      method here; this one is the browser's). Same thin shape as
+      'releaseCard' beside it, down to reading the backend's own 'detail' on
+      a refusal, and the rule it was written under is the one being kept:
+      updated honestly, in a review, rather than silently widened.`,
   },
 ];
 

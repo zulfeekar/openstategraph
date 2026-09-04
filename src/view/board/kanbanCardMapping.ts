@@ -25,6 +25,12 @@ export interface KanbanCardResponse {
   readonly evidence_red_reason: string;
   readonly evidence_green: boolean;
   readonly evidence_commit: string;
+  //: `kanban-patrol/15`'s Answer — the decision, who made it, and when.
+  //: Empty strings on every unanswered row, which is why the mapping below
+  //: turns them into absent props rather than passing them through.
+  readonly answer: string;
+  readonly answered_by: string;
+  readonly answered_at: string;
   //: `kanban-patrol/19`'s explicit Release — whether this card's claim has
   //: gone past the hour-long lease with no heartbeat. Absent-vs-`false`
   //: does not apply here — every row carries this field always, unlike
@@ -91,5 +97,11 @@ export function mapKanbanCardToBoardCard(row: KanbanCardResponse, now: number): 
     // and until this line existed the second question had no answer past
     // this seam even though the row had always carried it.
     stage: row.stage as CardStage,
+    // `kanban-patrol/15`. Absent, never `''` — the same rule `priorityReason`
+    // follows above, and here it is load-bearing twice over: `columnForCard`
+    // and `instructionForCard` both read this to decide whether a decision
+    // exists at all.
+    answer: row.answer || undefined,
+    answeredBy: row.answered_by || undefined,
   };
 }

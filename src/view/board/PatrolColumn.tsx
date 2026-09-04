@@ -7,7 +7,7 @@ export interface PatrolColumnProps {
   /** Every card on the board. The column selects its own. */
   readonly cards: readonly BoardCard[];
   /** Passed straight through — the column decides nothing about the gesture. */
-  readonly onAct?: (card: BoardCard, action: 'attend' | 'answer') => void;
+  readonly onAnswer?: (card: BoardCard, answer: string) => void;
   /** Passed straight through — `kanban-patrol/19`'s explicit Release. */
   readonly onRelease?: (card: BoardCard) => void;
 }
@@ -27,7 +27,7 @@ export interface PatrolColumnProps {
  * at a time while a patrol runs, and re-ordering under the reader's pointer
  * is the board nobody can click.
  */
-export function PatrolColumn({ column, cards, onAct, onRelease }: PatrolColumnProps) {
+export function PatrolColumn({ column, cards, onAnswer, onRelease }: PatrolColumnProps) {
   const inColumn = cardsInColumn(cards, column.id);
 
   return (
@@ -47,7 +47,7 @@ export function PatrolColumn({ column, cards, onAct, onRelease }: PatrolColumnPr
             key={card.id}
             card={card}
             column={column}
-            onAct={onAct}
+            onAnswer={onAnswer}
             onRelease={onRelease}
           />
         ))}

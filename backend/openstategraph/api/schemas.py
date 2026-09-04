@@ -142,6 +142,13 @@ class KanbanCardResponse(BaseModel):
     evidence_red_reason: str = ""
     evidence_green: bool = False
     evidence_commit: str = ""
+    #: `kanban-patrol/15`'s Answer — the decision a person typed onto a Needs
+    #: You card, with who typed it and when. Empty when nobody has answered:
+    #: the same one-spelling-of-nothing rule the evidence fields above keep,
+    #: and what moves an answered judgement out of Needs You (`column_for`).
+    answer: str = ""
+    answered_by: str = ""
+    answered_at: str = ""
     #: `kanban-patrol/19`'s explicit Release — whether this card's claim has
     #: gone past the hour-long lease with no heartbeat. Computed by
     #: `flagged_stale` at read time, never stored: the same "flag, never
@@ -161,6 +168,36 @@ class KanbanReleaseResponse(BaseModel):
     """
 
     ok: bool = True
+
+
+class KanbanAnswerRequest(BaseModel):
+    """`POST /api/kanban/cards/{task_id}/answer`'s body — kanban-patrol/15.
+
+    `actor` is the caller's *claim*, and on a deployment that identifies its
+    callers it is dropped rather than merged: the resolved principal is the
+    actor, `kanban-patrol/29`'s rule at the MCP door, applied here for the
+    same reason — a decision attributed to whoever the client said made it is
+    not a record of who made it.
+    """
+
+    answer: str
+    actor: str = ""
+
+
+class KanbanAnswerResponse(BaseModel):
+    """`POST /api/kanban/cards/{task_id}/answer`'s reply — kanban-patrol/15.
+
+    Always `ok: true` on a 200; every refusal (a blank answer, a card that
+    was never in question, a decision somebody already made) is a `400` with
+    `detail` naming why — `KanbanReleaseResponse`'s own shape, not a second
+    convention for the same idea on a sibling route.
+    """
+
+    ok: bool = True
+    #: Who the answer was recorded as. The server's finding, echoed back so a
+    #: caller can see that its own `actor` claim was superseded rather than
+    #: discovering it later on the card.
+    answered_by: str
 
 
 class PatrolRunAcceptedResponse(BaseModel):

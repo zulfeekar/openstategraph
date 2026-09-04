@@ -1,7 +1,8 @@
-import { Badge, Button, StatusDot, Tooltip } from '@design/primitives';
+import { useState } from 'react';
+import { Badge, Button, StatusDot, TextArea, Tooltip } from '@design/primitives';
 import { type BoardCard, type BoardColumn } from './patrolBoardModel';
 import { PRIORITY_MARKS } from './cardPriority';
-import { ACTION_COPY, actionForCard, offersRelease } from './cardAction';
+import { ACTION_COPY, actionForCard, isAnswerSubmittable, offersRelease } from './cardAction';
 import { instructionForCard } from './cardInstruction';
 import { statusTextForCard } from './cardStage';
 
@@ -17,11 +18,15 @@ export interface PatrolCardProps {
    */
   readonly column: BoardColumn;
   /**
-   * The gesture. What it *means* is the column's — `attend` hands a card to an
-   * agent, `answer` asks a person for a judgement — and the caller owns the
-   * consequence, because neither can be done from a browser alone.
+   * The decision a person typed — `kanban-patrol/15`, decided 2026-09-04.
+   *
+   * Replaces the `onAct` that used to carry both gestures. `attend` stopped
+   * needing a handler when `19` made it two clipboard buttons, and `answer`
+   * stopped fitting one when it grew a text field: a callback taking a verb
+   * and no payload cannot carry an answer. Optional, same rule as
+   * `onRelease`: no handler, no field, rather than one that does nothing.
    */
-  readonly onAct?: (card: BoardCard, action: 'attend' | 'answer') => void;
+  readonly onAnswer?: (card: BoardCard, answer: string) => void;
   /**
    * The explicit Release — `kanban-patrol/19`. Distinct from `onAct`: it is
    * not derived from `kind`/`column` the way attend/answer are, it is
@@ -49,12 +54,17 @@ export interface PatrolCardProps {
  * the priority's tone comes from `PRIORITY_MARKS`. Neither is spelled here,
  * which is what keeps the board's palette in one table.
  */
-export function PatrolCard({ card, column, onAct, onRelease }: PatrolCardProps) {
+export function PatrolCard({ card, column, onAnswer, onRelease }: PatrolCardProps) {
   const priority = PRIORITY_MARKS[card.priority];
   // Two of the four columns offer nothing, deliberately — `15`. In Progress
   // offering no action is the board's only defence against two actors working
   // one card.
   const action = actionForCard(card);
+  // Local to the card, deliberately: a half-typed decision is not board
+  // state, nobody else needs to see it, and lifting it would make the board
+  // re-render on every keystroke in one card's field.
+  const [answering, setAnswering] = useState(false);
+  const [draft, setDraft] = useState('');
 
   return (
     <li className="patrol-card">
@@ -154,17 +164,58 @@ export function PatrolCard({ card, column, onAct, onRelease }: PatrolCardProps) 
             </Button>
           </Tooltip>
         </span>
-      ) : action !== null && onAct ? (
-        <Tooltip content={ACTION_COPY[action].hint} multiline>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="patrol-card__action"
-            onClick={() => onAct(card, action)}
-          >
-            {ACTION_COPY[action].label}
-          </Button>
-        </Tooltip>
+      ) : action === 'answer' && onAnswer ? (
+        /* `kanban-patrol/15`, decided 2026-09-04: Answer opens a small text
+           field rather than firing a gesture. The card is in Needs You
+           because a question was asked, so the control has to be able to
+           carry the answer — a button that only says "answered" would record
+           a decision nobody can read.
+
+           Submitting sends the card back to **Detected** carrying the
+           decision (the store does that, from the answer alone), so an agent
+           attends it next with the judgement already made. */
+        <span className="patrol-card__action">
+          {answering ? (
+            <>
+              {/* The design system's own control, not a bare `<textarea>`:
+                  the board paints no field of its own, for the same reason
+                  `04` says it paints no dot of its own. */}
+              <TextArea
+                className="patrol-card__answer"
+                value={draft}
+                autoFocus
+                minRows={2}
+                aria-label={`Your decision on "${card.title}"`}
+                placeholder="Your decision, in your own words"
+                onChange={(event) => setDraft(event.target.value)}
+              />
+              <Button
+                variant="primary"
+                size="sm"
+                /* The same trim the store applies — `isAnswerSubmittable` —
+                   so a blank decision is refused here rather than by a 400
+                   the person has to read to find out. */
+                disabled={!isAnswerSubmittable(draft)}
+                onClick={() => {
+                  onAnswer(card, draft.trim());
+                  setAnswering(false);
+                  setDraft('');
+                }}
+              >
+                Record decision
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setAnswering(false)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Tooltip content={ACTION_COPY[action].hint} multiline>
+              <Button variant="secondary" size="sm" onClick={() => setAnswering(true)}>
+                {ACTION_COPY[action].label}
+              </Button>
+            </Tooltip>
+          )}
+        </span>
       ) : null}
     </li>
   );

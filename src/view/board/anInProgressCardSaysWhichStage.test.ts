@@ -91,6 +91,9 @@ describe('an In Progress card says which stage it is at', () => {
       evidence_red_reason: '',
       evidence_green: false,
       evidence_commit: '',
+      answer: '',
+      answered_by: '',
+      answered_at: '',
       stale: false,
     };
     const card = mapKanbanCardToBoardCard(row, Date.now());

@@ -216,7 +216,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       part of it this module knows. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 881,
+    lines: 895,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -344,7 +344,16 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       (the card was not actually stale) rather than inventing a second
       failure shape. Ten lines, no declared response type needed at all —
       the door answers \`{"ok": true}\` on success and nothing this class
-      reads beyond the boolean \`Result\` already carries.`,
+      reads beyond the boolean \`Result\` already carries.
+
+      **881 -> 895** (\`kanban-patrol/15\`, 2026-09-04). \`answerCard()\` and
+      three declared members on \`KanbanCardRow\` — \`answer\`,
+      \`answered_by\`, \`answered_at\`, the decision recorded on a Needs You
+      card. Fourteen lines and the same bill this entry has taken every
+      time: one line per mirrored wire field, and one method that is
+      \`releaseCard()\`'s own shape — a POST, a JSON body, an \`Err\` reading
+      the backend's own \`detail\` rather than a second failure shape
+      invented here.`,
   },
 };
 

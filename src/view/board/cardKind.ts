@@ -112,8 +112,14 @@ export type CardLifecycle = 'open' | 'claimed' | 'resolved';
  * - `claimed` → **In Progress**, whatever kind it was. This is why a claimed
  *   `grilling` leaves Needs You: somebody is answering it, and leaving it in
  *   Needs You would invite a second person to answer it too.
- * - `open` → wherever its **kind** opens it, which is the only case the kind
- *   decides.
+ * - `open` → wherever its **kind** opens it — **unless** the judgement has
+ *   been answered (`kanban-patrol/15`, decided 2026-09-04), in which case it
+ *   goes to Detected. Needs You is the column a person reads for outstanding
+ *   questions; a card whose question has been settled sitting in it is a
+ *   claim that the question is still open. It goes to Detected and not to
+ *   Resolved because a decision is not evidence that anything was built —
+ *   `17`'s gate is still the only road there — and an agent can now attend it
+ *   with the judgement already made.
  *
  * One function, so no surface can compute a different answer. The board reads
  * it, and `16`'s MCP tools read it, and neither may re-derive it locally.
@@ -121,8 +127,17 @@ export type CardLifecycle = 'open' | 'claimed' | 'resolved';
 export function columnForCard(card: {
   readonly kind: CardKind;
   readonly lifecycle: CardLifecycle;
+  /**
+   * The decision recorded on this card, if one has been. Absent on every
+   * card that has none — and read for its *trimmed* content, never its mere
+   * presence, so a row that arrives carrying an empty or whitespace answer
+   * still reads as unanswered. `kanban_store.answer_card` refuses to write
+   * one; this is the second line.
+   */
+  readonly answer?: string;
 }): BoardColumnId {
   if (card.lifecycle === 'resolved') return 'resolved';
   if (card.lifecycle === 'claimed') return 'inProgress';
+  if (card.answer?.trim()) return 'detected';
   return columnForKind(card.kind);
 }

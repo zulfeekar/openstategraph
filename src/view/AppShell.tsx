@@ -682,6 +682,30 @@ export function AppShell() {
     },
     [onNotify, refreshKanbanCards],
   );
+  /**
+   * The decision a person typed onto a Needs You card — `kanban-patrol/15`,
+   * decided 2026-09-04. The card comes back in **Detected** carrying the
+   * answer, so the next agent attends it with the judgement already made;
+   * nothing here computes that, the store does, from the answer alone.
+   *
+   * A refusal (somebody answered it first, the card was claimed meanwhile)
+   * is an ordinary notification on the same channel every other failure here
+   * uses. Success re-reads the store rather than optimistically moving the
+   * card, so the column a reader sees is the one the row actually says.
+   */
+  const answerKanbanCard = useCallback(
+    (card: BoardCard, answer: string) => {
+      const client = new RuntimeClient();
+      void client.answerCard(card.id, answer).then((result) => {
+        if (!result.ok) {
+          onNotify(result.error);
+          return;
+        }
+        refreshKanbanCards();
+      });
+    },
+    [onNotify, refreshKanbanCards],
+  );
   const runPatrol = useCallback(() => {
     const client = new RuntimeClient();
     // `07`: the door now answers the instant the patrol is launched in the
@@ -1024,12 +1048,7 @@ export function AppShell() {
           statusLine={patrolStatusLine(patrolStatus)}
           onRefresh={refreshKanbanCards}
           onClose={() => setPatrolBoardOpen(false)}
-          onAct={(card) =>
-            // `attend` no longer reaches here — `PatrolCard` handles it
-            // directly (copy-to-clipboard, `kanban-patrol/19`). Only
-            // `answer` still arrives, and it is still honestly unbuilt.
-            onNotify(`Answer "${card.title}" — the decision channel is kanban-patrol/15.`)
-          }
+          onAnswer={answerKanbanCard}
           onRelease={releaseKanbanCard}
           onPatrol={runPatrol}
         />
