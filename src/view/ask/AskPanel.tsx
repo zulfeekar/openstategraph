@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { DRAFT_NOTICE, showsDraft } from './draftNotice';
 import { showsThinking } from './settledThinking';
 import { SpawnedPills } from '@view/spawned/SpawnedPills';
+import { spawnedTasks } from '@view/spawned/spawnedTasks';
+import { showsSteps } from './showsSteps';
 import { attemptsLine } from './attemptsLine';
 import { decisionRows } from './decisionRows';
 import { rectOfAdded } from './revealAdded';
@@ -2129,6 +2131,14 @@ function Turn({
   /** Seeds the composer with the brief that opens the build interview. */
   onStartBuild: (gap: string) => void;
 }) {
+  const controller = useController();
+  // `showsSteps` — stable-beta-public/08. `activity.length` used to gate this
+  // box; `memory-and-replay/51` moved the trace tree and bars it once held
+  // into the run dock, so that condition opened a bordered, empty container
+  // on every finished turn. What the box can still draw is the live line
+  // (`running`) and the hand-off pills below — so those are what it asks.
+  const hasPills =
+    spawnedTasks(turn.activity, (id) => controller.model.node(id) != null).length > 0;
   return (
     <div className="ask__turn">
       {/* The one place the thread's shape is visible: everything above this
@@ -2140,7 +2150,7 @@ function Turn({
       ) : null}
       <div className="ask__question">{turn.question}</div>
 
-      {turn.running || turn.activity.length > 0 ? (
+      {showsSteps({ running: turn.running, hasPills }) ? (
         <div className="ask__steps">
           {/* The trace tree and the bars used to be here, behind a two-tab
               switch. `memory-and-replay` 51 moved both to the run dock along
