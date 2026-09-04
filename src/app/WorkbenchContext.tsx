@@ -47,7 +47,14 @@ import {
   type DraftRestoreReport,
 } from './workflowDrafts';
 import { followOpenPackage } from './capabilityRefresh';
-import { hasPlacedStarter, placeFirstRunStarter, shouldPlaceStarter } from './firstRunStarter';
+import {
+  hasPlacedStarter,
+  placeFirstRunStarter,
+  refreshStarterNote,
+  shouldPlaceStarter,
+  starterReadinessOf,
+} from './firstRunStarter';
+import { serverReadiness } from '@core/providers/serverReadiness';
 
 interface WorkbenchValue {
   readonly workbench: Workbench;
@@ -394,13 +401,42 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
       alreadyPlaced: hasPlacedStarter(localStorage),
     });
     if (placedStarter) {
-      placeFirstRunStarter(workbench, localStorage);
+      // With whatever the shared readiness already holds — usually `null`, as
+      // the health poll rarely beats the first paint. The listener below is
+      // what makes that acceptable rather than a wrong note that stays wrong.
+      placeFirstRunStarter(workbench, localStorage, starterReadinessOf(serverReadiness));
     }
 
     sessionStorage.setItem(DRAFT_SESSION_KEY, session.id);
     claimSession(localStorage, session.id, writer);
     setState({ restore, workflowId: session.id, placedStarter });
   }, [controller, workbench]);
+
+  /**
+   * The first visit's note catches up with the server (`stable-beta-public/06`,
+   * slice 3).
+   *
+   * Readiness is read at placement, and on first paint it is almost always
+   * `null`: `/api/health` is in flight while the canvas is drawn. So the note
+   * a stranger meets says *press Run*, and if the answer that lands says
+   * nothing can run, that invitation has become false. One listener on the
+   * shared source — the same one the top bar's health dot publishes into —
+   * rewrites it, in either direction, and only while the note is still
+   * carrying its marker.
+   *
+   * Here rather than in a component, because every component that could hold
+   * it unmounts: the note outlives any panel, and a subscription that goes
+   * with a closed chat is a note that stops catching up. Unconditional, and
+   * cheap: `refreshStarterNote` is a walk of the nodes that returns `false` on
+   * every canvas that is not a still-awaiting starter.
+   */
+  useEffect(
+    () =>
+      serverReadiness.onChange(() =>
+        refreshStarterNote(workbench, starterReadinessOf(serverReadiness)),
+      ),
+    [workbench],
+  );
 
   // The autosave key follows the open workflow for the rest of the session.
   //

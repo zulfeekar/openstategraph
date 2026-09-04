@@ -440,12 +440,78 @@ describe('the wiring, read from the source', () => {
     expect(source).toMatch(/const placedStarter = shouldPlaceStarter\(\{/);
     expect(source).toMatch(/if \(placedStarter\) \{/);
     expect(source).toMatch(/alreadyPlaced: hasPlacedStarter\(localStorage\)/);
-    expect(source).toMatch(/placeFirstRunStarter\(workbench, localStorage\)/);
+    // With the readiness the shared source already holds — slice 3. A
+    // placement that passed nothing would always write the "press Run"
+    // wording, on an install where pressing Run cannot answer.
+    expect(source).toMatch(
+      /placeFirstRunStarter\(workbench, localStorage, starterReadinessOf\(serverReadiness\)\)/,
+    );
     // Read once, before anything below it can write — otherwise a browser that
     // has just been handed a starter looks, on the next line, like one that
     // always had work in it.
     expect(source.indexOf('const mostRecentId = mostRecentWorkflowId(localStorage)')).toBeLessThan(
       source.indexOf('shouldPlaceStarter({'),
     );
+  });
+});
+
+/**
+ * `stable-beta-public/06`, slice 3 — **the note the first visit gets when
+ * nothing can answer it.**
+ *
+ * The product's own success metric has two halves, and this is the second:
+ * *when no provider is configured, the screen names the variable to set*.
+ * The sentence that names it is the server's — `ProviderCatalogue`'s elected
+ * default explaining itself, carried to the browser as `run_readiness` and
+ * held in `serverReadiness`. It is quoted **verbatim** here, because a second
+ * wording of one fact is two things to keep true, and the frontend has no
+ * business knowing which variable the server would name.
+ */
+describe('the no-model wording', () => {
+  const SENTENCE = 'No model is configured. Set OLLAMA_API_KEY to run against the cloud.';
+  const NO_MODEL = beforeRunNote({ modelConfigured: false, runReadiness: SENTENCE });
+
+  it('quotes the sentence the server gave, whole', () => {
+    expect(NO_MODEL).toContain(SENTENCE);
+  });
+
+  it('does not tell them to press Run, because pressing it would fail', () => {
+    expect(NO_MODEL).not.toMatch(/press Run/i);
+  });
+
+  it('still ends with the marker, so a flip can rewrite it', () => {
+    expect(NO_MODEL.endsWith(BEFORE_RUN_MARKER)).toBe(true);
+  });
+
+  it('is short, like every other wording on this canvas', () => {
+    expect(NO_MODEL.length).toBeLessThan(400);
+    expect(
+      beforeRunNote({ modelConfigured: false, runReadiness: 'x'.repeat(2000) }).length,
+    ).toBeLessThan(400);
+  });
+
+  it('is not what a configured server gets', () => {
+    expect(beforeRunNote({ modelConfigured: true, runReadiness: SENTENCE })).toBe(FIRST_RUN_NOTE);
+  });
+
+  /**
+   * `model_configured` comes from `/api/health`; the sentence comes from
+   * `/api/providers`, which is behind auth and may never answer. Knowing
+   * there is a problem without holding the words for it is not licence to
+   * invent them — the architecture says this file quotes and never composes —
+   * so that state reads as the ordinary invitation.
+   */
+  it('falls back to press Run when the server named no sentence', () => {
+    expect(beforeRunNote({ modelConfigured: false, runReadiness: '   ' })).toBe(FIRST_RUN_NOTE);
+  });
+
+  it('is what a placement with that readiness actually puts on the canvas', () => {
+    const workbench = new Workbench();
+    placeFirstRunStarter(workbench, new FakeStore(), {
+      modelConfigured: false,
+      runReadiness: SENTENCE,
+    });
+    const note = workbench.model.nodes().find((node) => node.type === 'annotate.note');
+    expect(String(note?.data['body'] ?? '')).toContain(SENTENCE);
   });
 });

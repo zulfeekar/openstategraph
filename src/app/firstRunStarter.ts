@@ -130,18 +130,97 @@ const BEFORE_RUN_TEXT = [
 ].join('\n');
 
 /**
+ * How much of the server's readiness sentence the note will carry.
+ *
+ * Shorter than a failure's `REASON_LIMIT` because this wording keeps the
+ * three-node sentence as well — and the 400-character ceiling is the whole
+ * argument for the note existing on a canvas rather than in a manual.
+ */
+const READINESS_LIMIT = 140;
+
+/** As much of a server sentence as fits, with an ellipsis when it does not. */
+function clamped(sentence: string, limit: number): string {
+  const trimmed = sentence.trim();
+  return trimmed.length > limit ? `${trimmed.slice(0, limit).trimEnd()}…` : trimmed;
+}
+
+/**
+ * The wording for a first visit that cannot run yet.
+ *
+ * It **quotes** and does not compose. The sentence is
+ * `ProviderCatalogue.elected_default().reason` — the server's own account of
+ * what a run would do, the one place the variable to set is named — carried
+ * to the browser as `/api/providers`' `run_readiness` and held in
+ * `serverReadiness`. A second wording here would be a second thing to keep
+ * true, and this side of the wire does not know which variable the install
+ * would name.
+ *
+ * It must not say *press Run*: the product's success metric is one press to
+ * an answer, and inviting a press that cannot answer is the failure this
+ * wording exists to prevent.
+ */
+function noModelText(sentence: string): string {
+  return [
+    '# Start here',
+    '',
+    'The **Input** already has a question, the **Agent** answers it, the **Output** shows the answer.',
+    '',
+    'No model is configured yet, so a run has nothing to answer with. The server says:',
+    '',
+    `> ${clamped(sentence, READINESS_LIMIT)}`,
+    '',
+    'This note is yours to delete.',
+    '',
+    BEFORE_RUN_MARKER,
+  ].join('\n');
+}
+
+/**
  * The before-run wording for a given readiness.
  *
  * `null` — `serverReadiness` has not answered yet — reads as the ordinary
  * "press Run" text: on first paint there is no evidence of a missing model,
- * so nothing here should read as a warning. The `modelConfigured: false`
- * wording (quoting `runReadiness` verbatim, never inventing a second
- * sentence for the same fact) is `stable-beta-public/06` slice 3; until
- * that lands every readiness reads as ready.
+ * so nothing here should read as a warning.
+ *
+ * So does `modelConfigured: false` **with no sentence**, and that is a
+ * decision rather than an oversight. `model_configured` arrives on
+ * `/api/health`; the sentence arrives on `/api/providers`, which is behind
+ * auth and may refuse. Knowing there is a wall without holding the words for
+ * it is not licence to invent them — the architecture says this file quotes
+ * and never composes — and `serverReadiness`'s own rule is that saying
+ * nothing is the honest option when the browser cannot know.
  */
 export function beforeRunNote(readiness: StarterReadiness | null): string {
-  void readiness;
-  return BEFORE_RUN_TEXT;
+  if (readiness == null || readiness.modelConfigured) return BEFORE_RUN_TEXT;
+  const sentence = readiness.runReadiness.trim();
+  return sentence === '' ? BEFORE_RUN_TEXT : noModelText(sentence);
+}
+
+/**
+ * What the shared readiness store says, in the two fields this file needs.
+ *
+ * Structural rather than typed against `ServerReadiness`, for the reason
+ * `StarterRunOutcome` is structural: this module is copy and placement, and a
+ * dependency on the provider layer would tie the first-visit text to a class
+ * it has no other business with. The shell passes the real singleton.
+ */
+export interface StarterReadinessSource {
+  modelConfigured(): boolean | null;
+  runReadiness(): string | null;
+}
+
+/**
+ * The readiness to write a note from, or `null` when the server has not
+ * answered.
+ *
+ * `''` for a sentence the server has not given is passed through rather than
+ * replaced: `beforeRunNote` reads it as *no words for this*, which is not the
+ * same as *no problem*, and is the only shape that keeps the two apart.
+ */
+export function starterReadinessOf(source: StarterReadinessSource): StarterReadiness | null {
+  const configured = source.modelConfigured();
+  if (configured === null) return null;
+  return { modelConfigured: configured, runReadiness: source.runReadiness() ?? '' };
 }
 
 /** The `null`-readiness wording, kept as a constant for callers that have no readiness to pass. */
@@ -255,11 +334,17 @@ export function hasPlacedStarter(store: KeyValueStore): boolean {
  * is one extra offer of a starter in a browser that cannot remember anything
  * anyway.
  */
-export function placeFirstRunStarter(workbench: Workbench, store: KeyValueStore): void {
-  // Readiness is wired in `stable-beta-public/06` slice 3 (`WorkbenchContext`
-  // reads `serverReadiness`); until then every placement reads as `null`,
-  // which is the same "press Run" wording a not-yet-answered poll produces.
-  workbench.controller.clipboard.insertFragment(firstRunFragment(null), NOTE_AT);
+export function placeFirstRunStarter(
+  workbench: Workbench,
+  store: KeyValueStore,
+  readiness: StarterReadiness | null = null,
+): void {
+  // `null` by default, and it is the honest default: on first paint the
+  // health poll has usually not answered, and a note that accused an install
+  // of having no model on no evidence would be the defect `serverReadiness`
+  // itself exists to end. `refreshStarterNote` catches up when the answer
+  // lands.
+  workbench.controller.clipboard.insertFragment(firstRunFragment(readiness), NOTE_AT);
   // A drop leaves what it dropped selected, which is right for a gesture and
   // wrong for an arrival: the first canvas a stranger sees would come up with
   // all four nodes highlighted and one Backspace from empty — while the note
@@ -384,4 +469,64 @@ export function explainFirstRun(workbench: Workbench, outcome: StarterRunOutcome
   if (noteId == null) return false;
   workbench.controller.nodes.setField(noteId, 'body', afterRunNote(outcome));
   return true;
+}
+
+/**
+ * Rewrites a note that is **still waiting** to match a readiness that has
+ * just changed.
+ *
+ * The flip, in both directions. A note placed before `/api/health` answered
+ * says *press Run*; if the answer is that nothing can run, the invitation has
+ * become false and is replaced by the server's sentence. A key that appears
+ * while the note is still up is the same event backwards, and reads back to
+ * *press Run*.
+ *
+ * Three things it will not do. It will not touch a note the run has already
+ * explained or the user has edited — both have lost the marker, which is what
+ * "still ours" means everywhere in this file. It will not touch a canvas that
+ * never held a starter. And it pushes **no command** when the wording it
+ * would write is the wording already there: readiness announces on every poll
+ * that moves any field, and a history full of identical note writes would
+ * make Cmd-Z mean nothing.
+ */
+export function refreshStarterNote(
+  workbench: Workbench,
+  readiness: StarterReadiness | null,
+): boolean {
+  const noteId = starterNoteAwaitingRun(workbench);
+  if (noteId == null) return false;
+  const next = beforeRunNote(readiness);
+  if (workbench.model.node(noteId)?.data['body'] === next) return false;
+  workbench.controller.nodes.setField(noteId, 'body', next);
+  return true;
+}
+
+/**
+ * What a failed first run is allowed to say about why.
+ *
+ * Three sources and no fourth, in the order a reader would want them:
+ *
+ * - **The readiness sentence**, when the wall is a missing provider. The same
+ *   sentence the before-run note quotes, so one fact has one wording — and it
+ *   is the only one of the three that names the thing to *do*.
+ * - **The run's own error**, when there was a model and it still failed.
+ * - **An admission**, when neither exists. `runView` carries no error text
+ *   today (checked, not assumed: its fields are `source`, `question`, `rows`,
+ *   `running`, `threadId`, `usage`), so this is the branch a failed run
+ *   without a readiness wall actually takes. It says the run reported nothing
+ *   and points at the timeline, which is true; guessing at a cause on no
+ *   evidence would be the same defect the no-model wording refuses.
+ */
+export function failedRunReason(input: {
+  readonly readiness: StarterReadiness | null;
+  readonly error: string | null;
+}): string {
+  const readiness = input.readiness;
+  if (readiness != null && !readiness.modelConfigured) {
+    const sentence = readiness.runReadiness.trim();
+    if (sentence !== '') return sentence;
+  }
+  const error = input.error?.trim();
+  if (error != null && error !== '') return error;
+  return 'The run reported no reason. The timeline along the bottom has what it did.';
 }

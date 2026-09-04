@@ -58,7 +58,8 @@ import { RuntimeClient } from '@core/runtime/RuntimeClient';
 import { browserSessionId } from '@core/runtime/browserSession';
 import { OpenStreams } from '@core/runtime/OpenStreams';
 import { getOpenSlug } from '@app/openWorkflow';
-import { explainFirstRun } from '@app/firstRunStarter';
+import { explainFirstRun, failedRunReason, starterReadinessOf } from '@app/firstRunStarter';
+import { serverReadiness } from '@core/providers/serverReadiness';
 import {
   BLANK_TEMPLATE,
   createNewWorkflow,
@@ -351,40 +352,6 @@ export function AppShell() {
     useCallback(() => runView.read(), []),
   );
 
-  /**
-   * The first visit's note stops saying "press Run" once a run has finished
-   * (`stable-beta-public/06`, slice 2).
-   *
-   * **Here, and not in the `run:finish` handler below**, which is where the
-   * plan put it. `run:finish` belongs to `workbench.engine`, the canvas's own
-   * sequential preview walk — and nothing in the shipped app calls
-   * `engine.run()` any more: the toolbar's Run opens the chat and streams a
-   * real backend run (`runWorkflow`, above). Checked live rather than
-   * reasoned about: pressing Run finished a run of 2,455 tokens and the note
-   * was untouched, because that event never fired.
-   *
-   * So the rewrite listens where runs actually end — the same `runView`
-   * snapshot the dock is drawn from, already subscribed once above, so this
-   * adds a reader and not a second subscription. A live run that has stopped
-   * running and reported what it spent is a finished run; `usage` carries one
-   * row **per model**, which is where the note's model name comes from.
-   *
-   * It is a no-op on every canvas that is not a still-awaiting starter, which
-   * is nearly all of them, and it writes through the controller, so one Cmd-Z
-   * puts the before-run note back. The failure wording (`ok: false`) exists
-   * and is tested; wiring it needs the readiness sentence, which is slice 3.
-   */
-  useEffect(() => {
-    if (shownRun.source !== 'live' || shownRun.running) return;
-    const usage = shownRun.usage;
-    if (usage == null || usage.length === 0) return;
-    explainFirstRun(workbench, {
-      ok: true,
-      models: usage.map((row) => row.model),
-      totalTokens: usage.reduce((sum, row) => sum + row.totalTokens, 0),
-    });
-  }, [shownRun, workbench]);
-
   /** A drag's request, brought inside what the shell can actually give. */
   const resizeDock = useCallback((requested: number) => {
     const shell = shellRef.current;
@@ -654,7 +621,40 @@ export function AppShell() {
     if (ended === null) return;
     setSpendRefresh((value) => value + 1);
     if (ended.toast !== null) notify(ended.toast);
-  }, [shownRun, notify]);
+    // And the first visit's note stops saying "press Run"
+    // (`stable-beta-public/06`, slices 2 and 3). A no-op on every canvas that
+    // is not a still-awaiting starter, which is nearly all of them, and it
+    // writes through the controller, so one Cmd-Z puts the note back.
+    //
+    // **From the ending, not from the snapshot.** Slice 2 read one snapshot
+    // — finished, with usage — which could see success and never failure: a
+    // run that failed and a tab that has never run one are the *same*
+    // snapshot (no usage, not running), and only the transition tells them
+    // apart. `runEnded` reports a run that reported nothing as
+    // `totalTokens: null`, which is the one thing the shell can honestly call
+    // a failure here.
+    const usage = shownRun.usage ?? [];
+    explainFirstRun(
+      workbench,
+      ended.totalTokens === null
+        ? {
+            ok: false,
+            // The wall, in the server's own words when it has any — the same
+            // sentence the before-run note quotes, so one fact keeps one
+            // wording. `runView` carries no error text of its own, so the
+            // second source is `null` here rather than invented.
+            reason: failedRunReason({
+              readiness: starterReadinessOf(serverReadiness),
+              error: null,
+            }),
+          }
+        : {
+            ok: true,
+            models: usage.map((row) => row.model),
+            totalTokens: ended.totalTokens,
+          },
+    );
+  }, [shownRun, notify, workbench]);
 
   const onNotify = useCallback((message: string) => notify(message), [notify]);
   /**
