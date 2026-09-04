@@ -35,8 +35,20 @@
      the raw panel edge, and the question bubble touched the right edge
      outright. Same token the palette's own rows use
      (`src/view/palette/Palette.css`), so the two side panels read as one
-     spacing system rather than two. */
-  padding: 0 var(--space-3);
+     spacing system rather than two.
+
+     The top inset is the same token, not `--space-5` (`stable-beta-public/09`):
+     measured live, the header-to-first-row inset the inspector panel draws
+     with `.panel-section`'s own padding (`src/design/primitives/Panel.css`)
+     is 12px — `--space-3` — while the gap this thread draws *between* two
+     turns is 20px, `--space-5`. Those are different questions: one is "how
+     far from the chrome does this column's content start" (every panel
+     answers it the same way), the other is "how far apart are two turns of
+     one conversation" (a bigger gap, because a turn is a bigger unit than a
+     row). Before this the top was 0 — the first bubble touched the header's
+     border — which is neither number and is why the room above the first
+     turn read as an accident rather than a rule. */
+  padding: var(--space-3) var(--space-3) 0;
 }
 
 .ask__thread {
