@@ -372,11 +372,15 @@ python3 -m pytest -q                # backend + workflow tests — from the REPO
 **Run pytest from the repo root, not from `backend/`.** The root `pytest.ini`
 is what declares `testpaths = backend workflows/chinook-assistant` and puts the
 example workflow's `tools`/`functions` on `sys.path`; `cd backend && pytest`
-never reads it and quietly runs 49 fewer tests — the curated example package's
-own half, which is exactly the code CI covers and you would then be red on. The
-gap is the number worth carrying and the totals are not: it was 49 measured on
-2026-08-16 and 49 again on 2026-08-30, with the suite more than doubled in
-between. Note that `workflows/` as a whole is **deliberately** not swept, for
+never reads it and quietly runs **57** fewer tests — the curated example
+package's own half, which is exactly the code CI covers and you would then be
+red on. The gap is the number worth carrying and the totals are not: it was 49
+measured on 2026-08-16 and 49 again on 2026-08-30, and 57 on 2026-09-04, with
+the suite more than doubled over that span. It is measured rather than
+remembered now — `backend/tests/test_the_documented_collection_gap_is_the_real_one.py`
+collects the example package and fails when this sentence and that count
+disagree, which is what the two identical 49s hid: a number nothing measures
+looks stable right up until somebody checks it. Note that `workflows/` as a whole is **deliberately** not swept, for
 the collection-collision reason `pytest.ini` spends fifteen lines on and
 `backend/tests/test_collection_policy.py` pins. Live-API tests are opt-in either way: `pytest -m live`.
 

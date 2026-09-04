@@ -87,10 +87,15 @@ Only `tsc -b` follows the project references to `tsconfig.app.json` and
 `tsconfig.node.json`, which is where the code actually is.
 
 **pytest runs from the repo root, and only the root.** The root `pytest.ini`
-is what declares `testpaths = workflows backend` and puts the example
-workflow's `tools`/`functions` on `sys.path`. `cd backend && pytest` never
-reads it, so it silently runs 49 fewer tests — the entire `workflows/` half,
-which CI does run. `mypy` is the opposite: it reads
+is what declares `testpaths = backend workflows/chinook-assistant` and puts
+the example workflow's `tools`/`functions` on `sys.path`. `cd backend &&
+pytest` never reads it, so it silently runs **57** fewer tests — the curated
+example package's own half, which CI does run. Not `workflows/` as a whole:
+that is deliberately unswept, for the collection-collision reason `pytest.ini`
+spends fifteen lines on. The gap is measured by
+`backend/tests/test_the_documented_collection_gap_is_the_real_one.py`, so this
+number cannot go quietly stale the way it did between 2026-08-30 and
+2026-09-04. `mypy` is the opposite: it reads
 `backend/pyproject.toml` and wants to be run from `backend/`.
 
 **`ruff` is neither, and getting it wrong looks like success.** CI runs

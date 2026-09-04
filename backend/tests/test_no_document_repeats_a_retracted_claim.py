@@ -55,8 +55,20 @@ CI_YAML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 #: Every hand-written document a reader treats as authoritative. `.scratch/`
 #: is deliberately absent: a ticket describing the behaviour that was
 #: retracted is the record of the retraction, not a repetition of it.
+#:
+#: `CONTRIBUTING.md` and `SECURITY.md` joined on `stable-beta-public/04`: the
+#: sweep found a retracted claim living in `CONTRIBUTING.md` — the collection
+#: gap described as "the entire `workflows/` half" when `pytest.ini` sweeps one
+#: package of it — and the file that exists to catch exactly that could not see
+#: the page, because the corpus was `docs/**` and three READMEs.
 CORPUS = (
-    [REPO_ROOT / "CLAUDE.md", REPO_ROOT / "README.md", REPO_ROOT / "backend" / "README.md"]
+    [
+        REPO_ROOT / "CLAUDE.md",
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "backend" / "README.md",
+        REPO_ROOT / "CONTRIBUTING.md",
+        REPO_ROOT / "SECURITY.md",
+    ]
     + sorted((REPO_ROOT / "docs").rglob("*.md"))
     + sorted((REPO_ROOT / "openwiki").rglob("*.md"))
 )
@@ -84,6 +96,12 @@ RETRACTED_CLAIMS = (
     "The nine exposed tools",
     "The other eight stay fully functional",
     "The three event streams",
+    # stable-beta-public/04 — `pytest.ini` declares
+    # `testpaths = backend workflows/chinook-assistant`, one package rather
+    # than the tree; `workflows/` as a whole is deliberately unswept and
+    # `test_collection_policy.py` pins that. `CONTRIBUTING.md` said this while
+    # `README.md`, forty lines of argument later, said the opposite.
+    "the entire `workflows/` half",
 )
 
 
