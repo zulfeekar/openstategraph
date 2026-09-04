@@ -141,6 +141,17 @@
   the evidence gate, the copy-instruction flow — with `docs/cli.md` and
   `docs/mcp.md` carrying the two doors, and `docs/openapi.json` regenerated.
 
+## 0.3.0rc12 — 2026-09-04
+
+Everything under *Unreleased* above this line at the time of the cut. The
+pre-release that first ships the OpenStateGraph skill and the patrol board: a
+coding agent told "use OpenStateGraph" reads the rules from the installed
+package, interviews, files idea cards on the project's board, triages them
+and builds test-first; `init` writes the four agent config files for the
+local MCP server; the editor gains the token bar, the runnable starter, a
+flat border-not-shadow surface, chat bubbles and a draggable panel column;
+`[server]` carries the MCP transport.
+
 ## 0.3.0rc11 — 2026-08-31
 
 Everything under *Unreleased* above this line at the time of the cut. The
