@@ -819,6 +819,24 @@ already ran unfiltered two lines above. Not a second reason to change: it is
 the *this session's* half of the question `spend_summary`'s own docstring
 already promised slice 3 would answer.
 
+**803 -> 829**, 2026-09-04 (`stable-beta-public/03`, slice 4 of
+`docs/plans/token-status-bar`). Twenty-six lines, and almost none of them are
+arithmetic: `_DETAILS` (the three `input_token_details` / `output_token_details`
+keys as one table), `_detail`, `_added` and `_total_of` — four small named
+things whose entire job is that **`None` is not `0`**. The sum itself is one
+line in the walk that was already there.
+
+Written as named functions rather than inlined on purpose, and that is the
+argument for the twenty-six: `spent.get("input_token_details", {}).get(
+"cache_read") or 0` is one expression, reads correctly, and is the defect —
+it turns *no provider reported a cache figure* into *nothing came from cache*,
+which the status bar then prints as a measurement. A rule that costs one
+keystroke to break belongs somewhere a test can point at, and `_added`'s two
+branches are the whole tri-state.
+
+Still the third reader of the runs table, not a fourth reason to change: these
+read deeper into the same `usage` document the same walk already parsed.
+
 What would be a second reason, and is the shape to refuse here: a price table.
 Tokens are what the store kept; money is a per-provider rate card nobody in
 this repository holds, and the moment one arrives it is a module of its own
@@ -877,7 +895,7 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(864, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
-    "run_sinks.py": Recorded(803, RUN_SINKS),
+    "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(520, SCHEMAS),
 }
 

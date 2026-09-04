@@ -104,7 +104,7 @@ openstategraph.providers.ProviderCatalogue = dataclass(object) fields(_specs,war
 openstategraph.providers.ProviderDefault = dataclass(object) fields(spec,model,reason,configured)
 openstategraph.providers.ProviderEnvironment = dataclass(object) fields(spec,env)
 openstategraph.providers.ProviderGap = dataclass(object) fields(spec,missing_package,missing_key,missing_arguments)
-openstategraph.providers.ProviderSpec = dataclass(object) fields(name,default_model,extra,env_vars,aliases,endpoint_env,default_endpoint,label,integration_module,constructor_args)
+openstategraph.providers.ProviderSpec = dataclass(object) fields(name,default_model,extra,env_vars,aliases,endpoint_env,default_endpoint,label,integration_module,constructor_args,constructor_defaults)
 openstategraph.providers.builtin_specs = def() -> 'tuple[ProviderSpec, ...]'
 openstategraph.providers.credential_env_vars = def(catalogue: "'ProviderCatalogue | None'" = None) -> 'frozenset[str]'
 openstategraph.providers.env_example_section = def(catalogue: "'ProviderCatalogue | None'" = None) -> 'str'

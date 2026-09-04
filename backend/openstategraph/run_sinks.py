@@ -1649,12 +1649,63 @@ def spend_summary(
         connection.close()
     return SpendSummary(
         grand_total=grand_total,
-        cached_total=None,
+        # Over the models that answered, and `None` when none of them did —
+        # the same rule one level up. Summing `0` for the silent ones would
+        # turn *nobody reported a cache figure* into *nothing came from
+        # cache*, which is the claim this whole tri-state exists to refuse.
+        cached_total=_total_of(by_model, "cached_tokens"),
         by_model=by_model,
         session_by_model=session_by_model,
         session_total=session_total,
         sessions=sessions,
     )
+
+
+#: The three detail figures, as `(field, container, key)`.
+#:
+#: One table rather than three near-identical blocks, for the reason
+#: `CLAUDE.md` gives about binding tables: the rule they share — *sum only the
+#: rows that carry the key* — is stated once, so a fourth detail is a row here
+#: and nothing else. The names are LangChain's own `UsageMetadata`
+#: (`/oss/python/langchain/models`, Token usage): `input_token_details` carries
+#: `cache_read` and `cache_creation`, `output_token_details` carries
+#: `reasoning`. A provider that spells one differently reads as *not reported*,
+#: which is the honest answer rather than a guess.
+_DETAILS: tuple[tuple[str, str, str], ...] = (
+    ("cached_tokens", "input_token_details", "cache_read"),
+    ("cache_creation_tokens", "input_token_details", "cache_creation"),
+    ("reasoning_tokens", "output_token_details", "reasoning"),
+)
+
+
+def _detail(spent: Any, container: str, key: str) -> int | None:
+    """One detail off one model's usage row — `None` when it is not a count.
+
+    **Not `or 0`, and that is the whole function.** A reported `0` is a
+    measurement (*this call was called and none of it came from cache*) and
+    must survive; an absent key, a non-mapping container, a string, or a bool
+    is *nobody said*. `bool` is excluded explicitly because it is an `int` in
+    Python and `True` is not a token count.
+    """
+    holder = spent.get(container)
+    if not isinstance(holder, dict):
+        return None
+    value = holder.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _added(running: int | None, reported: int | None) -> int | None:
+    """`None` + `None` is `None`; anything else adds, treating `None` as absent.
+
+    The tri-state's only arithmetic. `100` and *absent* is `100`, never
+    `100 + 0` — the same answer by number and a different claim, which is why
+    it is a function with a name instead of a `+` with a default.
+    """
+    if reported is None:
+        return running
+    return reported if running is None else running + reported
 
 
 def _by_model(rows: Any) -> tuple[ModelSpend, ...]:
@@ -1665,8 +1716,13 @@ def _by_model(rows: Any) -> tuple[ModelSpend, ...]:
     a model is not a mapping, is skipped rather than raised on — the column
     holds whatever the build that wrote it put there, and one unreadable row
     may not cost the other twenty-four.
+
+    The three detail figures are three-valued and stay so: a model whose runs
+    never carried a key keeps `None`, which is *no provider said*, and is not
+    the same answer as `0` (`stable-beta-public/03`, slice 4).
     """
     totals: dict[str, list[int]] = {}
+    details: dict[str, list[int | None]] = {}
     for row in rows:
         try:
             usage = json.loads(row[0]) if row[0] else {}
@@ -1682,6 +1738,9 @@ def _by_model(rows: Any) -> tuple[ModelSpend, ...]:
             entry[1] += int(spent.get("output_tokens") or 0)
             entry[2] += int(spent.get("total_tokens") or 0)
             entry[3] += 1
+            detail = details.setdefault(str(model), [None] * len(_DETAILS))
+            for index, (_, container, key) in enumerate(_DETAILS):
+                detail[index] = _added(detail[index], _detail(spent, container, key))
     return tuple(
         sorted(
             (
@@ -1690,9 +1749,9 @@ def _by_model(rows: Any) -> tuple[ModelSpend, ...]:
                     input_tokens=counted[0],
                     output_tokens=counted[1],
                     total_tokens=counted[2],
-                    cached_tokens=None,
-                    cache_creation_tokens=None,
-                    reasoning_tokens=None,
+                    cached_tokens=details[model][0],
+                    cache_creation_tokens=details[model][1],
+                    reasoning_tokens=details[model][2],
                     runs=counted[3],
                 )
                 for model, counted in totals.items()
@@ -1702,6 +1761,14 @@ def _by_model(rows: Any) -> tuple[ModelSpend, ...]:
             key=lambda row: (-row.total_tokens, row.model),
         )
     )
+
+
+def _total_of(rows: tuple[ModelSpend, ...], field: str) -> int | None:
+    """One detail across every model — `None` unless at least one reported it."""
+    answered = [
+        value for value in (getattr(row, field) for row in rows) if value is not None
+    ]
+    return sum(answered) if answered else None
 
 
 def _attach_bursts(

@@ -70,12 +70,19 @@ def model_kwargs(model_name: str) -> dict[str, Any]:
     is Azure's; a spec declaring both would be naming one endpoint twice under
     two keywords, and the explicit one wins — a keyword a spec wrote out is
     more specific than one derived from `endpoint_env`.
+
+    **`constructor_defaults` goes in first, and is overridden by everything
+    else** (`stable-beta-public/03`). It is what this *API* requires of every
+    caller — OpenAI's `stream_usage`, without which a streamed run reports no
+    tokens at all — where the two above are what this *machine* supplies. A
+    constant a machine can also name should lose to the machine, which is what
+    the ordering says.
     """
     spec = provider_catalogue().for_model(model_name)
     if spec is None:
         return {}
     here = ProviderEnvironment(spec)
-    kwargs: dict[str, Any] = {}
+    kwargs: dict[str, Any] = dict(spec.constructor_defaults)
     base_url = here.base_url()
     if base_url:
         kwargs["base_url"] = base_url

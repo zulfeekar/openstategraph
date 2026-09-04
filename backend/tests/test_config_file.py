@@ -464,6 +464,7 @@ providers:
             "label",
             "integration_module",
             "constructor_args",
+            "constructor_defaults",
         }
         declared = {field.name for field in dataclasses.fields(ProviderSpec)}
         assert declared == carried, (

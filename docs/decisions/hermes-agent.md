@@ -350,8 +350,14 @@ Split honestly into what was established and what was not.
   responses carry no `usage_metadata`. This degrades correctly rather than
   lying — `messages.py` returns `None`, and its comment is exactly the reason:
   *"'this message cost nothing' and 'nobody said' are different claims"* — but
-  the run reports no token count, and `chat_model.model_kwargs()` has no way to
-  pass `stream_usage` today.
+  the run reported no token count. **The second half of that sentence is now
+  out of date and is corrected rather than deleted**: `model_kwargs()` had no
+  way to pass `stream_usage`, and has one — `ProviderSpec.constructor_defaults`
+  declares `stream_usage=True` for `openai` and `azure_openai`
+  (`stable-beta-public/03`). A Hermes endpoint reached through the OpenAI
+  prefix therefore *is* asked for streamed usage now; whether that endpoint
+  honours `stream_options` is unmeasured here, and a `None` token count from
+  one that does not is still the honest answer.
 - **The parse is not our bottleneck when the server is configured, and is a
   cliff when it is not.** With the vLLM or SGLang parser enabled, tool calls
   arrive as ordinary structured calls and nothing here parses angle brackets.

@@ -146,9 +146,52 @@ class TestTheDoorReadsTheStoreBehindIt:
         assert [row["model"] for row in body["by_model"]] == ["gpt-oss:120b"]
         assert body["by_model"][0]["runs"] == 2
         assert [row["session_id"] for row in body["sessions"]] == ["s-2", "s-1"]
-        # Still not reported, and still not zero: slice 4 fills these.
+        # These rows carry no `input_token_details`, so the detail figures are
+        # `null` — *no provider said* — and not `0`.
         assert body["by_model"][0]["cached_tokens"] is None
         assert body["cached_total"] is None
+
+    def test_a_reported_cache_figure_reaches_the_wire(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Slice 4, end to end: the door republishes what the store found.
+
+        The test above proves `null` survives the trip. This proves a number
+        does too — without it, a route that hardcoded `None` on all three
+        details would still be green, which is precisely the state slice 3
+        left it in.
+        """
+        store = tmp_path / "runs.sqlite"
+        monkeypatch.setenv("OPENSTATEGRAPH_RUN_STORE_PATH", str(store))
+        root = tmp_path / "workflows"
+        root.mkdir()
+        sink = SqliteRunSink(store)
+        sink.record(
+            RunRecord(
+                kind="run",
+                at="2026-09-04T10:00:00+0000",
+                session_id="s-1",
+                usage={
+                    "gpt-4.1-mini": {
+                        "input_tokens": 100,
+                        "output_tokens": 10,
+                        "total_tokens": 110,
+                        "input_token_details": {"cache_read": 64, "cache_creation": 0},
+                        "output_token_details": {"reasoning": 8},
+                    }
+                },
+            )
+        )
+        sink.close()
+
+        body = TestClient(create_app(workflows_root=root)).get("/api/runs/spend").json()
+
+        row = body["by_model"][0]
+        assert row["cached_tokens"] == 64
+        # A reported nought is a measurement and survives as one.
+        assert row["cache_creation_tokens"] == 0
+        assert row["reasoning_tokens"] == 8
+        assert body["cached_total"] == 64
 
     def test_the_session_id_query_param_reaches_the_summary(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

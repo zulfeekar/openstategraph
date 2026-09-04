@@ -45,16 +45,72 @@ class TestTheEndpointReachesTheModel:
         monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434")
         assert model_kwargs("ollama:llama3.1:8b") == {"base_url": "http://localhost:11434"}
 
-    def test_the_other_providers_are_passed_nothing(self) -> None:
+    def test_the_other_providers_are_passed_no_endpoint(self) -> None:
         """`ChatOpenAI` and `ChatAnthropic` read their own base-URL variables.
 
         Passing ours as well would be a second spelling of a working feature.
         """
+        assert "base_url" not in model_kwargs("anthropic:claude-haiku-4-5")
+        assert "base_url" not in model_kwargs("openai:gpt-4.1-mini")
         assert model_kwargs("anthropic:claude-haiku-4-5") == {}
-        assert model_kwargs("openai:gpt-4.1-mini") == {}
 
     def test_an_unknown_prefix_is_passed_nothing(self) -> None:
         assert model_kwargs("mystery:model") == {}
+
+
+class TestTheStreamingUsageOptIn:
+    """OpenAI reports streamed token usage only when asked — `stable-beta-public/03`.
+
+    LangChain says it in as many words: *"Some provider APIs, notably OpenAI
+    and Azure OpenAI chat completions, require users opt-in to receiving token
+    usage data in streaming contexts"* (`/oss/python/langchain/models`, Token
+    usage, read 2026-09-04). `langchain_openai` spells the opt-in
+    `stream_usage`, and **its default is a property of the deployment, not of
+    the caller**: the field's own docstring says it is enabled *unless*
+    `openai_api_base` is set or a custom client is passed, and that this
+    behaviour changed in `langchain-openai` 0.3.35. So a machine pointing
+    `OPENAI_BASE_URL` at a gateway silently stopped reporting what its runs
+    cost, and `docs/decisions/hermes-agent.md` recorded exactly that, adding
+    that `model_kwargs()` *"has no way to pass `stream_usage` today"*. It has
+    one now.
+
+    **Declared on the provider, never in a node.** A node asking "is this
+    OpenAI?" would be the engine growing a vendor name, which `CLAUDE.md`
+    forbids; a spec field is a row of data and a fifth vendor needing the same
+    opt-in is one more row.
+    """
+
+    def test_openai_asks_for_streamed_usage(self) -> None:
+        assert model_kwargs("openai:gpt-4.1-mini")["stream_usage"] is True
+
+    def test_azure_openai_asks_for_it_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Same API, same requirement — and the alias that reaches it."""
+        monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com")
+        monkeypatch.setenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
+
+        assert model_kwargs("azure_openai:gpt-4.1-mini")["stream_usage"] is True
+
+    def test_the_vendors_that_do_not_need_it_are_not_asked(self) -> None:
+        """Ollama's and Anthropic's constructors have no such keyword, and a
+        keyword a constructor does not know is a `TypeError` at build time —
+        which is why this is per-provider data rather than one global default.
+        """
+        assert "stream_usage" not in model_kwargs("ollama:gpt-oss:120b-cloud")
+        assert "stream_usage" not in model_kwargs("anthropic:claude-haiku-4-5")
+        assert "stream_usage" not in model_kwargs("mystery:model")
+
+    def test_the_keyword_is_one_the_constructor_accepts(self) -> None:
+        """The half a data table cannot check on its own.
+
+        A spec may declare any keyword; only the vendor's class says whether it
+        is real. Read off `ChatOpenAI` itself rather than asserted from memory,
+        so a release that renames it fails here instead of at a customer's
+        first streamed run.
+        """
+        from langchain_openai import AzureChatOpenAI, ChatOpenAI
+
+        assert "stream_usage" in ChatOpenAI.model_fields
+        assert "stream_usage" in AzureChatOpenAI.model_fields
 
 
 class TestTheCredentialGateIsOnEveryPath:

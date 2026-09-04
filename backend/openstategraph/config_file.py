@@ -828,6 +828,14 @@ def config_provider_specs(config: OpenStateGraphConfig | None = None) -> list[An
                 # passed and the vendor's own defaults stand
                 # (providers-and-credentials/18).
                 constructor_args=base.constructor_args if base else (),
+                # Inherited and not declarable, for the third time and the
+                # same reason: a file adjusting OpenAI's default model must
+                # not thereby drop `stream_usage=True` and silently stop
+                # every streamed run reporting what it cost
+                # (`stable-beta-public/03`). A provider the file invents
+                # declares no constant keywords, and `()` is the honest
+                # answer — the vendor's own defaults stand.
+                constructor_defaults=base.constructor_defaults if base else (),
             )
         )
     return specs

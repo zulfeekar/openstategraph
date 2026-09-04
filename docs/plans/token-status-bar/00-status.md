@@ -9,7 +9,7 @@
 - [x] Slice 1 — tracer bullet: route with zeros, client, bar of dashes on screen
 - [x] Slice 2 — real grand total, by-model, sessions from the store
 - [x] Slice 3 — this session's block; refetch on run end and focus
-- [ ] Slice 4 — cached / cache-creation / reasoning tri-state; streaming opt-in test
+- [x] Slice 4 — cached / cache-creation / reasoning tri-state; streaming opt-in test
 - [ ] Slice 5 — the modal
 - [ ] Slice 6 — 10k-row measurement, docs, ceilings, closing commit
 
@@ -21,6 +21,50 @@
 - Ticket: `.scratch/stable-beta-public/tickets/03`.
 - Follow `src/design/tokens.ts`; no raw values; flat, Miro-like, borders not
   shadows (map note).
+
+## What slice 4 changed about 03
+
+- **`stream_usage` was missing**, and the answer was a new `ProviderSpec`
+  field rather than a line in a node. `constructor_args` is env-sourced by
+  construction (`ProviderArgument` names variables, and refuses secret-looking
+  ones), so it could not carry a constant; `constructor_defaults:
+  tuple[tuple[str, Any], ...]` is the constants table, merged *first* in
+  `chat_model.model_kwargs` so anything the machine supplies still wins.
+  `openai` and `azure_openai` declare `("stream_usage", True)`; every other
+  provider is passed exactly what it was passed before.
+  `docs/decisions/hermes-agent.md` said in as many words that `model_kwargs()`
+  *"has no way to pass `stream_usage` today"* — that sentence is now corrected
+  in place.
+- **The cost is recorded, not hidden.** An OpenAI-compatible proxy that
+  rejects `stream_options` is now sent it, and there is no environment
+  variable to turn it off. That is the trade `langchain_openai` makes in the
+  other direction (its own default disables the opt-in whenever a base URL is
+  set, which is exactly how a gateway-configured machine stopped reporting
+  what its runs cost). A proxy that needs the switch is a ticket, not a
+  silent default.
+- **Three gates fired on the new field, and all three were right**:
+  `test_config_file.py`'s field census (a config-declared provider must carry
+  it), `tests/public_api.txt` (the dataclass is semver-public — CHANGELOG
+  entry added under *Changed*), and `test_module_size_ceiling.py`
+  (`run_sinks.py` 803 → 829, argued in place).
+- **`test_node_runtime.py`'s `fake_init_chat_model(key)` had to widen to
+  `(key, **kwargs)`.** Not cosmetic: `NodeRuntime._base_model` wraps
+  `build_chat_model` in `except Exception` and degrades to the shared default,
+  so the fake's `TypeError` came back as a *silently degraded model*, not an
+  error. The seven fakes in that file are the only callers that assumed
+  `init_chat_model` takes one argument.
+- **No wire change, so no `docs/openapi.json` regeneration.** Slice 1 already
+  published all three detail fields as nullable (00's own slice-1 note), which
+  is exactly the property that let this slice be a store change.
+- **One test 03 did not list, added because the route could not otherwise
+  fail**: `test_a_reported_cache_figure_reaches_the_wire` in
+  `test_spend_route.py`. Every other route assertion is about `null`, which a
+  route hardcoding `None` would satisfy.
+- **`aSpendCellNeverSaysZeroForNothing.test.ts` renders with
+  `react-dom/server`.** No DOM library is installed (slice 3's note) and
+  `renderToStaticMarkup` needs none; the file is `.test.ts` rather than
+  `.test.tsx` because that is the only pattern `vite.config.ts` collects, so
+  the element is built with `createElement`.
 
 ## What slice 3 changed about 03
 - **No renderer for `useSpend.test.ts`.** `vite.config.ts` sets

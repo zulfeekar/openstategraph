@@ -30,6 +30,14 @@
   card without this repository's own tooling.
 
 ### Changed
+- **`ProviderSpec.constructor_defaults`** — constant keywords a vendor's
+  constructor is always given, beside the environment-sourced
+  `constructor_args`. It carries `stream_usage=True` for `openai` and
+  `azure_openai`: chat completions report streamed token usage only when the
+  caller opts in, and the library's own default for that opt-in depends on
+  whether a base URL is configured, so a machine pointing `OPENAI_BASE_URL`
+  at a gateway silently stopped reporting what its runs cost. Additive — every
+  other provider is passed exactly what it was passed before.
 - **Two design tokens retuned** so all eight column-by-theme cells on the
   board pass WCAG AA, measured rather than asserted; the accent badge has a
   colour off the canvas.

@@ -40,7 +40,7 @@ from __future__ import annotations
 import importlib.util
 import os
 from dataclasses import dataclass, field
-from typing import Mapping
+from typing import Any, Mapping
 
 from openstategraph._extras import install_hint
 
@@ -267,6 +267,27 @@ class ProviderSpec:
     #: one record, and `chat_model.model_kwargs` is the single place they
     #: become an `init_chat_model` call.
     constructor_args: tuple[ProviderArgument, ...] = ()
+
+    #: Keywords this vendor's constructor is always given, as `(keyword, value)`
+    #: pairs. Constants — nothing here reads the environment, which is the
+    #: difference from `constructor_args` above: that field asks *what does
+    #: this machine supply*, this one states *what does this API require of
+    #: everyone*.
+    #:
+    #: `stream_usage=True` for the OpenAI family is the case it was added for
+    #: (`stable-beta-public/03`). Chat completions report streamed token usage
+    #: only when the caller opts in, and `langchain_openai`'s own default for
+    #: the opt-in depends on whether a base URL is configured — so a machine
+    #: pointing `OPENAI_BASE_URL` at a gateway silently stopped reporting what
+    #: its runs cost. Stating it here makes the opt-in ours rather than a
+    #: library default that has already moved twice.
+    #:
+    #: **The cost, recorded rather than hidden:** an OpenAI-compatible proxy
+    #: that rejects `stream_options` is now sent it. That is the same trade
+    #: `langchain_openai` made in the other direction, and there is no
+    #: environment variable to turn it off today; a proxy that needs one is a
+    #: ticket, not a silent default.
+    constructor_defaults: tuple[tuple[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name or ":" in self.name or "/" in self.name:
@@ -926,6 +947,8 @@ def builtin_specs() -> tuple[ProviderSpec, ...]:
             extra="openai",
             integration_module="langchain_openai",
             env_vars=("OPENAI_API_KEY",),
+            # Streamed usage is opt-in on chat completions; see the field.
+            constructor_defaults=(("stream_usage", True),),
             # `aliases=("azure_openai",)` used to sit here, and removing it is
             # the fix rather than a breaking change. An alias means *another
             # spelling of this provider*, and it was never that: it resolved
@@ -990,6 +1013,12 @@ def builtin_specs() -> tuple[ProviderSpec, ...]:
             # different endpoint, and the two are not interchangeable however
             # much the SDK will accept either.
             env_vars=("AZURE_OPENAI_API_KEY",),
+            # The same API behind a different door, so the same opt-in. Stated
+            # on each spec rather than derived from `integration_module`: two
+            # providers sharing a package is not a promise they share a
+            # constructor, and `AzureChatOpenAI` accepting it is asserted
+            # against the class in `test_chat_model.py`.
+            constructor_defaults=(("stream_usage", True),),
             # **The key is not among these, and that is deliberate.** Azure's
             # own client reads `AZURE_OPENAI_API_KEY` from the environment,
             # so declaring it here would put a secret into a keyword dict for

@@ -498,7 +498,7 @@ class TestPerNodeModelResolution:
         calls: list[str] = []
         sentinel = object()
 
-        def fake_init_chat_model(key: str) -> Any:
+        def fake_init_chat_model(key: str, **kwargs: Any) -> Any:
             calls.append(key)
             return sentinel
 
@@ -519,7 +519,7 @@ class TestPerNodeModelResolution:
 
         calls: list[str] = []
 
-        def fake_init_chat_model(key: str) -> Any:
+        def fake_init_chat_model(key: str, **kwargs: Any) -> Any:
             calls.append(key)
             return object()
 
@@ -539,7 +539,7 @@ class TestPerNodeModelResolution:
 
         calls: list[str] = []
 
-        def fake_init_chat_model(key: str) -> Any:
+        def fake_init_chat_model(key: str, **kwargs: Any) -> Any:
             calls.append(key)
             return object()
 
@@ -557,7 +557,7 @@ class TestPerNodeModelResolution:
     ) -> None:
         import langchain.chat_models as chat_models
 
-        def fake_init_chat_model(key: str) -> Any:
+        def fake_init_chat_model(key: str, **kwargs: Any) -> Any:
             raise ValueError(f"no credentials for {key}")
 
         monkeypatch.setattr(chat_models, "init_chat_model", fake_init_chat_model)
@@ -595,7 +595,7 @@ class TestUnresolvedModelIsReported:
         calls: list[str] = []
         sentinel = object()
 
-        def fake_init_chat_model(key: str) -> Any:
+        def fake_init_chat_model(key: str, **kwargs: Any) -> Any:
             calls.append(key)
             return sentinel
 
@@ -650,7 +650,7 @@ class TestUnresolvedModelIsReported:
     ) -> None:
         import langchain.chat_models as chat_models
 
-        def fake_init_chat_model(key: str) -> Any:
+        def fake_init_chat_model(key: str, **kwargs: Any) -> Any:
             raise ValueError(f"no credentials for {key}")
 
         monkeypatch.setattr(chat_models, "init_chat_model", fake_init_chat_model)
@@ -689,7 +689,7 @@ class TestUnresolvedModelIsReported:
         from openstategraph.chat_model import UnconfiguredProvider
         from openstategraph.errors import MissingProviderKey
 
-        def fake_init_chat_model(key: str) -> Any:
+        def fake_init_chat_model(key: str, **kwargs: Any) -> Any:
             raise ValueError(f"no credentials for {key}")
 
         monkeypatch.setattr(chat_models, "init_chat_model", fake_init_chat_model)
