@@ -27,9 +27,11 @@ import { contrastRatio } from '@view/overlays/contrastAudit';
  *   opaque ground the layer paints plus that same hairline.
  *
  * **The grip turned out never to have used a shadow, and that is worth
- * recording rather than quietly discovering twice.** `.run-dock__grip`,
- * `.app-shell__column-grip` and `NodeCard`'s resize corner stand out with
- * 2px of full ink (`--color-rule` / `--color-primary`), the draggable weight
+ * recording rather than quietly discovering twice.** The two edge grips —
+ * `.grip--horizontal` and `.grip--vertical`, one primitive since
+ * `stable-beta-public/21`, `.run-dock__grip` and `.app-shell__column-grip`
+ * when this was written — and `NodeCard`'s resize corner stand out with
+ * full ink (`--color-rule`), the draggable weight
  * `aBorderIsDraggableOrItIsNot.test.ts` already pins. So the exception the
  * ticket names costs this file no allowance at all — the allowances below
  * are all rings — and the third test asserts the grips are still there,
@@ -193,8 +195,11 @@ describe('nothing in this product draws depth with a shadow', () => {
 
 describe('the draggable grip is the exception, and it never needed a shadow', () => {
   const GRIPS: ReadonlyArray<readonly [file: string, selector: string]> = [
-    ['view/run/RunDock.css', '.run-dock__grip'],
-    ['view/AppShell.css', '.app-shell__column-grip'],
+    // One control on two axes since `stable-beta-public/21`; it was
+    // `.run-dock__grip` in `RunDock.css` and `.app-shell__column-grip` in
+    // `AppShell.css` when this list was written.
+    ['design/primitives/Grip.css', '.grip--horizontal'],
+    ['design/primitives/Grip.css', '.grip--vertical'],
     ['view/nodes/NodeCard.css', '.node__resize'],
   ];
 

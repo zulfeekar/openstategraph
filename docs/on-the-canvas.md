@@ -498,6 +498,12 @@ the canvas — the canvas gets shorter and the timeline sits below it, because i
 is a time axis you read *while* watching the thing it measures. Drag its top
 edge for more room.
 
+**Every draggable edge in the editor shows the same grip:** a short bar centred
+on the edge, quiet at rest so you can find it without hunting, and a heavier
+stroke the moment your pointer or your keyboard focus lands on it. The
+timeline's top edge has one; so does the left edge of the chat and inspector
+column. If an edge has no bar, it does not move.
+
 Two things are drawn side by side: **bars** on the left, one row per node with
 a time axis over them, and the **trace** on the right, which is the detail for
 whichever bar you click.

@@ -37,50 +37,13 @@
      drags. */
 }
 
-/* The draggable edge — the **lower** one, the edge this panel shares with
- * the paper it is pushing down. Wider than it looks: a 1px border is a
- * target nobody hits, so the grip is a transparent band straddling that
- * edge with the visible line drawn by the panel's own border. */
-.run-dock__grip {
-  position: absolute;
-  bottom: -3px;
-  left: 0;
-  right: 0;
-  height: 7px;
-  cursor: ns-resize;
-  touch-action: none;
-  z-index: 1;
-}
-
-/* The resting affordance (`stable-beta-public/19`): the column grip's bar
-   turned ninety degrees. Neither grip drew anything until a pointer found
-   it, so this one gets the same treatment in the same commit rather than
-   staying the odd one out. */
-.run-dock__grip::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: 3px;
-  height: 0;
-  width: var(--grip-length);
-  transform: translateX(-50%);
-  border-top: var(--border-width-rule) solid var(--color-rule);
-}
-
-.run-dock__grip:hover::after,
-.run-dock__grip:focus-visible::after {
-  content: '';
-  position: absolute;
-  bottom: 3px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--color-primary);
-}
-
-.run-dock__grip:focus-visible {
-  outline: none;
-}
+/* The draggable lower edge is drawn by the `Grip` primitive
+ * (`design/primitives/Grip.css`) — `stable-beta-public/21`. It used to be
+ * seven declarations here and seven more in `AppShell.css`, one control
+ * spelled twice, and the two came apart on weight: this edge measured 4px
+ * of ink under a pointer (the border below plus the grip's own line) and
+ * the column's measured 2px. The visible line at rest is still this
+ * panel's own `border-bottom`; the grip adds the bar and the stroke. */
 
 .run-dock__head {
   display: flex;

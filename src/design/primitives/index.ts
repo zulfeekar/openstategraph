@@ -6,6 +6,7 @@ export { Icon, ICON_SIZE, type IconSize } from './Icon';
 export { Field, TextInput, TextArea, DisplayRow, useFieldId, type ControlSize } from './Field';
 export { Select, type SelectOption } from './Select';
 export { Slider } from './Slider';
+export { Grip } from './Grip';
 export { Tooltip } from './Tooltip';
 export {
   Menu,

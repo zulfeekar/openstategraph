@@ -141,6 +141,9 @@ const NOT_A_COLOUR = new Set([
   '--border-width-rule',
   '--border-width-marker',
   '--focus-ring-width',
+  // `stable-beta-public/21`: the grip's hover stroke. A width, spelled its
+  // own way because the two grips came apart on exactly this value.
+  '--grip-weight',
 ]);
 
 /** The colour token(s) a border/outline declaration spends, once width and
@@ -306,8 +309,13 @@ describe('a border is drawn by what it means, and there are two weights', () => 
    *
    * `stable-beta-public/19` added a third kind of site: the two grips'
    * *resting* affordance, a short bar centred on the same edge the pointer
-   * already drags, drawn at the same weight so it reads as a preview of
-   * the drag rather than a different line.
+   * already drags. `21` moved that bar into `design/primitives/Grip.css`
+   * and split its two states — the resting bar is now `--color-border` at
+   * hairline weight, so it is no longer a full-ink site at all, and the
+   * full ink is spent on the hover/focus stroke instead. Two rows became
+   * two rows in one file, which is the whole point of that ticket: a
+   * declaration in each surface stylesheet is a weight neither file can
+   * compare with the other, and they had in fact come apart.
    *
    * This replaces `view/run/oneBorderColourTwoWeights.test.ts`, which
    * asserted the same thing about the dock alone against a dock-local
@@ -320,12 +328,12 @@ describe('a border is drawn by what it means, and there are two weights', () => 
     ['view/nodes/NodeCard.css', 'border-right'],
     ['view/nodes/NodeCard.css', 'border-bottom'],
     ['view/run/RunDock.css', 'border-bottom'],
-    // `stable-beta-public/19`'s resting affordance: a bar drawn with a
-    // real border property (not `background`) so this census still sees
-    // it, rather than a filled div that would be invisible to a scan
-    // limited to `BORDER_PROPS`.
-    ['view/AppShell.css', 'border-left'],
-    ['view/run/RunDock.css', 'border-top'],
+    // `stable-beta-public/21`'s hover/focus stroke, on both axes: a bar
+    // drawn with a real border property (not `background`) so this census
+    // still sees it, rather than a filled div that would be invisible to a
+    // scan limited to `BORDER_PROPS`.
+    ['design/primitives/Grip.css', 'border-left'],
+    ['design/primitives/Grip.css', 'border-top'],
   ];
 
   it('spends full ink only where a pointer can drag', () => {
@@ -356,23 +364,45 @@ describe('a border is drawn by what it means, and there are two weights', () => 
   it('gives the draggable weight one width as well as one ink', () => {
     const carrying = borderSites().filter((s) => s.token === '--color-rule');
     for (const site of carrying) {
-      expect(site.value, `${site.file} ${site.property}`).toContain('var(--border-width-rule)');
+      expect(site.value, `${site.file} ${site.property}`).toMatch(
+        /var\(--(?:border-width-rule|grip-weight)\)/,
+      );
     }
     const spending = [
       ...new Set(
         stylesheets().flatMap((path) =>
-          [...read(path).matchAll(/--border-width-rule\)/g)].map(() => under(path)),
+          [...read(path).matchAll(/--(?:border-width-rule|grip-weight)\)/g)].map(() => under(path)),
         ),
       ),
     ].sort();
     expect(spending).toEqual([...new Set(DRAGGABLE.map(([file]) => file))].sort());
   });
 
+  /**
+   * **Two names, one number, and that is the only reason the test above
+   * accepts a second spelling.** `stable-beta-public/21` gave the grip's
+   * hover stroke its own token because the two grips had come apart on
+   * weight and a value with no name cannot be compared. It is not a third
+   * width: it is `--osg-rule` doubled, which is the composite the run
+   * dock's hovered edge already measured (its own rule border with the
+   * grip's line stacked on it). Asserted rather than described, because a
+   * literal here would reopen exactly the drift the token closed.
+   */
+  it('derives the grip weight from the same authored rule width', () => {
+    const tokens = code(read(join(SRC, 'design/styles/tokens.css')));
+    const value = (token: string): string =>
+      (new RegExp(`${token}\\s*:\\s*([^;]+);`).exec(tokens)?.[1] ?? '').replace(/\s+/g, ' ').trim();
+    expect(value('--grip-weight')).toBe('calc(var(--osg-rule) * 2)');
+    expect(value('--border-width-rule')).toBe('var(--osg-rule)');
+  });
+
   it('leaves the grip and the dock edge actually draggable, not merely dark', () => {
     expect(read(join(SRC, 'view/nodes/NodeCard.css'))).toMatch(/cursor: nwse-resize/);
-    expect(read(join(SRC, 'view/run/RunDock.css'))).toMatch(
-      /\.run-dock__grip \{[^}]*cursor: ns-resize/s,
-    );
+    // Since `21` the dock's edge and the column's are the same control, so
+    // the cursor is asserted once, on the primitive, for both axes.
+    const grip = read(join(SRC, 'design/primitives/Grip.css'));
+    expect(grip).toMatch(/\.grip--horizontal \{[^}]*cursor: ns-resize/s);
+    expect(grip).toMatch(/\.grip--vertical \{[^}]*cursor: ew-resize/s);
   });
 
   /**

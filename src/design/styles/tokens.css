@@ -435,6 +435,25 @@
    * `--border-width-marker` above already warns against. */
   --grip-length: 300px;
 
+  /* The weight that stroke takes when a pointer is on it, or a keyboard
+   * focus ring is — `stable-beta-public/21`. The two grips agreed on paper
+   * and disagreed on screen: measured on the running app, the dock's
+   * hovered edge painted 4px of ink (its own `--border-width-rule`
+   * `--color-rule` border with the grip's line stacked on it) while the
+   * column's painted 2px, because the column's edge is a hairline panel
+   * border and the dock's is a rule. The owner pointed at the dock's, so
+   * the dock's is the rule of thumb, and it is a token rather than a
+   * literal in two stylesheets.
+   *
+   * `calc(var(--osg-rule) * 2)` rather than `4px`, for the reason
+   * `--border-width-marker` above gives at more length: the authored file
+   * names two widths and this is not a third number, it is the heavier of
+   * the two doubled — so an owner who re-weights the rule re-weights the
+   * grip with it. At rest the same bar draws at
+   * `--border-width-hairline` in `--color-border`; the primitive owns both
+   * states and a surface cannot pick one. */
+  --grip-weight: calc(var(--osg-rule) * 2);
+
   /* ---------- Neutral ramp (the authored warm ink) ----------
    * Was a cool slate; is now the authored ink family — `#f7f6f6` through
    * `#201e1d`, warm, almost chroma-free.

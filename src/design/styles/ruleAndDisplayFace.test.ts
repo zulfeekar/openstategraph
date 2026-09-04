@@ -211,12 +211,22 @@ describe('the rule separates regions; everything inside one is a hairline', () =
    *
    * `stable-beta-public/19` added `view/AppShell.css`: the column grip's
    * resting affordance, drawn at the same weight as the seam it previews.
+   * `21` took it away again — the two grips are one primitive now, and its
+   * hover stroke spends `--grip-weight`, the same authored width doubled.
+   * That token is read here as well as `--border-width-rule`, because the
+   * question this test asks is "where is a draggable-weight line drawn",
+   * and a second spelling that escaped the scan would be a hole rather
+   * than a narrowing.
    */
-  const RULE_WIDTH_FILES = ['view/AppShell.css', 'view/nodes/NodeCard.css', 'view/run/RunDock.css'];
+  const RULE_WIDTH_FILES = [
+    'design/primitives/Grip.css',
+    'view/nodes/NodeCard.css',
+    'view/run/RunDock.css',
+  ];
 
   it('draws a rule-width line only where a pointer can drag', () => {
     const drawn = stylesheets().flatMap((path) =>
-      [...read(path).matchAll(/--border-width-rule\)/g)].map(() => under(path)),
+      [...read(path).matchAll(/--(?:border-width-rule|grip-weight)\)/g)].map(() => under(path)),
     );
     expect([...new Set(drawn)].sort()).toEqual(RULE_WIDTH_FILES.slice().sort());
   });

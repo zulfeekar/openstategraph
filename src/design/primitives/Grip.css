@@ -1,0 +1,91 @@
+/* The draggable edge, drawn once — `stable-beta-public/21`.
+ *
+ * `16` gave the right-hand column a handle, `19` gave both handles a
+ * resting mark, and each was written where its surface lived: seven
+ * declarations in `AppShell.css` and seven more in `RunDock.css`, agreeing
+ * on a length token and a colour and on nothing else. Measured on the
+ * running app they read as two different lines, because a grip's weight is
+ * whatever it paints *plus* the border it sits on — the dock's edge came to
+ * 4px and the column's to 2px. One control cannot be two stylesheets.
+ *
+ * Two states, both drawn, neither pickable by a surface:
+ *
+ *   at rest   a `--grip-length` bar, centred on the edge, `--color-border`
+ *             at hairline weight — findable without a pointer, quiet
+ *             enough not to read as a second border
+ *   on hover  the same bar at `--grip-weight` in `--color-rule`, plus the
+ *   or focus  resize cursor: the heavy stroke the owner drew
+ *
+ * The bar is drawn with a real border property rather than a background,
+ * so the app-wide draggable-weight census in
+ * `styles/aBorderIsDraggableOrItIsNot.test.ts` can still see and count it;
+ * a filled div would be invisible to a scan limited to border properties.
+ *
+ * The hit area stays 7px on both axes and the full length of the edge — a
+ * 2px line is a target nobody hits — while the visible bar is the
+ * invitation. So the strip straddles the edge (`-3px`) and the bar sits at
+ * `3px` inside it, on the edge itself. */
+.grip {
+  position: absolute;
+  touch-action: none;
+  z-index: 1;
+}
+
+.grip::before {
+  content: '';
+  position: absolute;
+}
+
+.grip:focus-visible {
+  outline: none;
+}
+
+/* ---- vertical: an edge a pointer moves left and right ---- */
+
+.grip--vertical {
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.grip--vertical::before {
+  top: 50%;
+  left: 3px;
+  width: 0;
+  height: var(--grip-length);
+  transform: translateY(-50%);
+  border-left: var(--border-width-hairline) solid var(--color-border);
+}
+
+.grip--vertical:hover::before,
+.grip--vertical:focus-visible::before {
+  height: var(--grip-length);
+  border-left: var(--grip-weight) solid var(--color-rule);
+}
+
+/* ---- horizontal: an edge a pointer moves up and down ---- */
+
+.grip--horizontal {
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+.grip--horizontal::before {
+  left: 50%;
+  bottom: 3px;
+  height: 0;
+  width: var(--grip-length);
+  transform: translateX(-50%);
+  border-top: var(--border-width-hairline) solid var(--color-border);
+}
+
+.grip--horizontal:hover::before,
+.grip--horizontal:focus-visible::before {
+  width: var(--grip-length);
+  border-top: var(--grip-weight) solid var(--color-rule);
+}

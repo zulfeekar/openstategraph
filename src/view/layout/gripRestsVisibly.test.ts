@@ -6,19 +6,23 @@ import { describe, expect, it } from 'vitest';
 /**
  * `stable-beta-public/19`. The owner opened chat and inspector side by
  * side, looked for the handle `16` drew, and pointed at the panel border
- * *between* them — because the real grip, on the column's left edge, draws
- * nothing until a pointer finds it. Hover and focus painted a full-height
- * hairline; nothing painted at rest.
+ * *between* them — because the real grip, on the column's left edge, drew
+ * nothing until a pointer found it. Hover and focus painted a hairline;
+ * nothing painted at rest.
  *
- * The fix is a resting affordance: a `--grip-length` (300px) bar, centred,
- * at `--color-rule` — the same "this is a draggable weight" ink
- * `aBorderIsDraggableOrItIsNot.test.ts` already reserves for a pointer-drag
- * edge. Hover/focus keep the full-height hairline as the "you are
- * dragging this" state; that CSS is untouched.
+ * The claim this file still makes, and the only one: **a grip has a mark
+ * with no pointer near it** — a `--grip-length` bar, centred on its own
+ * axis, on both orientations.
  *
- * The run dock's grip had no resting mark either (`RunDock.css`), so it
- * gets the same treatment turned ninety degrees in this commit, and the
- * two are asserted side by side rather than one at a time.
+ * What it no longer says is what that bar is *made of*. `19` drew it at
+ * `--color-rule` and full rule width, in `AppShell.css` and `RunDock.css`
+ * separately; `21` split the states — quiet at rest, heavy under a pointer
+ * — and moved both into `design/primitives/Grip.css`, because two
+ * stylesheets drawing one control is a weight neither can compare with the
+ * other, and they had come apart by 2px on screen. The states, the tokens
+ * and the fact that no other stylesheet draws one are
+ * `design/primitives/gripIsOneControl.test.ts`; this file is the older,
+ * narrower question, kept because it is the one the owner asked.
  */
 const SRC = fileURLToPath(new URL('../../', import.meta.url));
 const read = (path: string): string => readFileSync(join(SRC, path), 'utf8');
@@ -32,49 +36,46 @@ function ruleBody(css: string, selector: string): string {
   return match[1] ?? '';
 }
 
-describe('the column grip has a resting mark, not just a hover mark', () => {
-  const css = read('view/AppShell.css');
+describe('a grip has a resting mark, not just a hover mark', () => {
+  const css = read('design/primitives/Grip.css');
 
   it('declares --grip-length as a token, 300px', () => {
     const tokens = code(read('design/styles/tokens.css'));
     expect(tokens).toMatch(/--grip-length:\s*300px;/);
   });
 
-  it('draws a resting bar on .app-shell__column-grip, vertically centred', () => {
-    const body = ruleBody(css, '.app-shell__column-grip::before');
-    expect(body).toMatch(/content:\s*['"]{2};?/);
+  it('draws a resting bar on the column grip, vertically centred', () => {
+    const body = ruleBody(css, '.grip--vertical::before');
     expect(body).toMatch(/height:\s*var\(--grip-length\);/);
-    expect(body).toMatch(/border-left:\s*var\(--border-width-rule\) solid var\(--color-rule\);/);
-    // Vertically centred: either top:50%/translateY(-50%), or inset-block
-    // auto-margined, or top+bottom:0 with margin:auto 0.
+    // Vertically centred: either top:50%/translateY(-50%), or top+bottom:0
+    // with margin:auto 0.
     const centred =
       (/top:\s*50%/.test(body) && /translateY\(-50%\)/.test(body)) ||
       (/top:\s*0;/.test(body) && /bottom:\s*0;/.test(body) && /margin:\s*auto 0;/.test(body));
     expect(centred).toBe(true);
   });
 
-  it('still keeps the full-height hairline on hover/focus, unchanged', () => {
-    const hover = ruleBody(
-      css,
-      '.app-shell__column-grip:hover::after,\n.app-shell__column-grip:focus-visible::after',
-    );
-    expect(hover).toMatch(/top:\s*0;/);
-    expect(hover).toMatch(/bottom:\s*0;/);
-    expect(hover).toMatch(/background:\s*var\(--color-primary\);/);
-  });
-});
-
-describe('the run dock grip gets the same resting mark, turned ninety degrees', () => {
-  const css = read('view/run/RunDock.css');
-
-  it('draws a resting bar on .run-dock__grip, horizontally centred', () => {
-    const body = ruleBody(css, '.run-dock__grip::before');
-    expect(body).toMatch(/content:\s*['"]{2};?/);
+  it('draws a resting bar on the run dock grip, horizontally centred', () => {
+    const body = ruleBody(css, '.grip--horizontal::before');
     expect(body).toMatch(/width:\s*var\(--grip-length\);/);
-    expect(body).toMatch(/border-top:\s*var\(--border-width-rule\) solid var\(--color-rule\);/);
     const centred =
       (/left:\s*50%/.test(body) && /translateX\(-50%\)/.test(body)) ||
       (/left:\s*0;/.test(body) && /right:\s*0;/.test(body) && /margin:\s*0 auto;/.test(body));
     expect(centred).toBe(true);
+  });
+
+  /**
+   * The half of `19` that `21` inverted, asserted so the inversion is
+   * deliberate rather than a side effect: at rest the bar is the *quiet*
+   * one. A resting mark drawn at the dragging weight is a second border,
+   * which is what the owner's second look at it said.
+   */
+  it('keeps the resting bar quieter than the stroke a pointer brings', () => {
+    for (const selector of ['.grip--vertical::before', '.grip--horizontal::before']) {
+      const body = ruleBody(css, selector);
+      expect(body).toContain('var(--border-width-hairline)');
+      expect(body).toContain('var(--color-border)');
+      expect(body).not.toContain('var(--grip-weight)');
+    }
   });
 });

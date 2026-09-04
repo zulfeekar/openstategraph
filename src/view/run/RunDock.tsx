@@ -8,6 +8,7 @@ import { runCost } from './runCost';
 import { runView } from './runView';
 import { PayloadPane } from './PayloadPane';
 import { DOCK_MIN_HEIGHT, dockHeightFromArrow, dockHeightFromDrag } from '../layout/dockFit';
+import { Grip } from '@design/primitives';
 // The bars and the trace rows keep their styles where they were written. They
 // are the same two renderings this panel is promoting out of the chat, and
 // moving eight hundred lines of stylesheet in the same commit that moves the
@@ -195,14 +196,14 @@ export function RunDock({
 
   return (
     <section className="run-dock" style={{ height: `${height}px` }} aria-label="Run timeline">
-      <div
-        className="run-dock__grip"
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize the run timeline"
-        aria-valuenow={Math.round(height)}
-        aria-valuemin={DOCK_MIN_HEIGHT}
-        tabIndex={0}
+      {/* The same control the chat column's edge draws, on the other axis
+          (`stable-beta-public/21`) — the look and the ARIA come from the
+          primitive, the arithmetic stays here. */}
+      <Grip
+        orientation="horizontal"
+        ariaLabel="Resize the run timeline"
+        value={height}
+        min={DOCK_MIN_HEIGHT}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}

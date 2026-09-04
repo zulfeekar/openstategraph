@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { Grip } from '@design/primitives';
 import { panelColumnWidthFromArrow, panelColumnWidthFromDrag } from './panelWidth';
 
 /**
@@ -9,11 +10,13 @@ import { panelColumnWidthFromArrow, panelColumnWidthFromDrag } from './panelWidt
  * surfaces, and a gesture with a pointer path, a keyboard path and an ARIA
  * contract is a thing with its own reason to change.
  *
- * The dock's grip (`RunDock`) is the same control on the other axis, and the
- * two are deliberately identical in everything but direction: a separator, a
- * pointer capture so the drag survives leaving the 7px strip, arrows that
- * come from the same module as the drag, and `null` from that module for a
- * key it has no opinion about — so Tab still leaves the handle.
+ * The dock's grip (`RunDock`) is the same control on the other axis, and
+ * since `stable-beta-public/21` that is a fact rather than an intention: both
+ * render `Grip`, which owns the look, the 7px strip and the ARIA. What stays
+ * here is the arithmetic — a pointer capture so the drag survives leaving the
+ * strip, arrows that come from the same module as the drag, and `null` from
+ * that module for a key it has no opinion about, so Tab still leaves the
+ * handle.
  *
  * The width it reports is **unclamped**. The shell owns the clamp: the
  * bounds are facts about the window and about which panels are open, and
@@ -65,15 +68,12 @@ export function PanelColumnGrip({
   );
 
   return (
-    <div
-      className="app-shell__column-grip"
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize the chat and inspector column"
-      aria-valuenow={Math.round(width)}
-      aria-valuemin={min}
-      aria-valuemax={max}
-      tabIndex={0}
+    <Grip
+      orientation="vertical"
+      ariaLabel="Resize the chat and inspector column"
+      value={width}
+      min={min}
+      max={max}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}

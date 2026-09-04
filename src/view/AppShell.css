@@ -77,50 +77,6 @@
   min-width: 0;
 }
 
-/* The column's own resize handle — the run dock's grip turned ninety
-   degrees, and deliberately the same 7px strip, the same hairline that
-   appears on hover and focus, and no shadow. */
-.app-shell__column-grip {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -3px;
-  width: 7px;
-  cursor: ew-resize;
-  touch-action: none;
-  z-index: 1;
-}
-
-/* The resting affordance (`stable-beta-public/19`): a 300px bar centred on
-   the column's left edge, visible with no pointer near it. Hover/focus
-   below replace it with the full-height hairline as the "dragging" state;
-   this one never appears in that state because `::after` paints over it. */
-.app-shell__column-grip::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 3px;
-  width: 0;
-  height: var(--grip-length);
-  transform: translateY(-50%);
-  border-left: var(--border-width-rule) solid var(--color-rule);
-}
-
-.app-shell__column-grip:hover::after,
-.app-shell__column-grip:focus-visible::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 3px;
-  width: 2px;
-  background: var(--color-primary);
-}
-
-.app-shell__column-grip:focus-visible {
-  outline: none;
-}
-
 /* When the panels would leave no canvas, they overlay it instead of squeezing
  * it down to nothing. `data-overlay` is set by the shell from `panelFit`, not
  * by a media query: the answer depends on which panels are open, and a
