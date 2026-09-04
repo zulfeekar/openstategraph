@@ -20,6 +20,20 @@ README's onramp. This test pins it: any edit that drops `--extra-index-url`,
 or that adds a *new* single-index TestPyPI command somewhere in the docs
 tree, goes red instead of silently reopening the same failure for the next
 reader.
+
+**`uv` joined the pattern in `stable-beta-public/05`**, which made the
+README's onramp `uv tool install` rather than `pip install` — the tool form,
+because the editor is a developer tool installed once and pointed at any
+project. The regex said `pip install` literally and so went red on a README
+that had *gained* a correct command, which is the wrong failure: the defect
+this file guards is a TestPyPI install with one index, and it is exactly as
+misleading under `uv` as under pip. So the installer half is now a small
+alternation, and widening it strengthened the first rule as a side effect —
+`uv tool install` / `uv pip install` lines in the docs tree were invisible to
+it before. `uv` needs a *third* flag (`--index-strategy unsafe-best-match`)
+that pip does not; that one is pinned beside the README's other onramp
+claims in `test_the_readme_a_stranger_lands_on.py`, because it is a claim
+about one page rather than a rule about the corpus.
 """
 
 from __future__ import annotations
@@ -40,9 +54,12 @@ DOC_FILES = [
 
 # A bare `--index-url https://test.pypi.org/simple/ ... "openstategraph...`
 # with no `--extra-index-url` anywhere before the package name is the exact
-# shape that fails. Match a pip install invocation naming test.pypi.org.
-PIP_INSTALL_TESTPYPI = re.compile(
-    r"pip install.{0,120}?test\.pypi\.org/simple/.{0,200}?openstategraph[^\s`\"]*",
+# shape that fails. Match any install invocation naming test.pypi.org —
+# `pip install`, `uv pip install` or `uv tool install`, which are the three
+# spellings this repository's pages actually hand a reader.
+INSTALLER = r"(?:pip install|uv tool install|uv pip install)"
+INSTALL_TESTPYPI = re.compile(
+    INSTALLER + r".{0,160}?test\.pypi\.org/simple/.{0,240}?openstategraph[^\s`\"]*",
 )
 
 
@@ -58,7 +75,7 @@ class TestEveryTestPyPICommandCarriesTheExtraIndex:
             # collapse all newlines before scanning so a multi-line command
             # is seen as one.
             collapsed = text.replace("\n", " ")
-            for match in PIP_INSTALL_TESTPYPI.finditer(collapsed):
+            for match in INSTALL_TESTPYPI.finditer(collapsed):
                 line = match.group(0)
                 if "--extra-index-url" not in line:
                     offenders.append(f"{path.relative_to(REPO)}: {line!r}")
@@ -75,7 +92,7 @@ class TestEveryTestPyPICommandCarriesTheExtraIndex:
         collapsed = readme.replace("\n", " ")
         matches = [
             m.group(0)
-            for m in PIP_INSTALL_TESTPYPI.finditer(collapsed)
+            for m in INSTALL_TESTPYPI.finditer(collapsed)
         ]
         assert matches, "README no longer shows a TestPyPI install command at all"
         assert any("--extra-index-url https://pypi.org/simple/" in m for m in matches), (

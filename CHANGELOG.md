@@ -81,6 +81,22 @@
   shape assertion pinning it.
 
 ### Changed
+- **`README.md` opens on the onramp a stranger needs, in the order they need
+  it** (`stable-beta-public/05`). Install (the `uv tool install` line from
+  TestPyPI, with the three flags a pre-release index costs, and the checkout
+  route beside it), first run (`openstategraph init .` and what it writes,
+  then `openstategraph .`), *"use OpenStateGraph"* to a coding agent, the
+  board and how to apply a fix on it, the module-building interview, and a
+  CLI table linking `docs/cli.md`. Every command was executed before it was
+  written, from a throwaway `uv` tool install of `0.3.0rc11` — which is how
+  the page came to say plainly that the published pre-release carries the
+  editor, the compiler, the CLI and the MCP server but **not** the board or
+  the agent skills. The design and layering sections that were duplicated by
+  a docs page now link to it instead. Pinned by
+  `backend/tests/test_the_readme_a_stranger_lands_on.py`: every relative link
+  resolves, the CLI table and argparse agree in both directions, and the
+  `init` table names the files `AGENT_FILES` and `BUNDLED_SKILLS` really
+  write.
 - **The bundled ticket-authoring skill is `ticket-forge`, not `atom-forge`**
   (`osg-agent-experience/21`). It collided with this repository's own
   `skills/atom-forge/` (the module-building interview) — `init` installed
