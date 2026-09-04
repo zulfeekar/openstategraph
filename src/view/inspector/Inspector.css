@@ -75,7 +75,7 @@
   padding: var(--box-inset-dense);
   border-radius: var(--radius-sm);
   background: var(--color-bg-surface-sunken);
-  box-shadow: inset 0 0 0 1px var(--color-border);
+  border: var(--border-width-hairline) solid var(--color-border);
   font: var(--type-mono-sm);
   color: var(--color-text-secondary);
   max-height: 200px;

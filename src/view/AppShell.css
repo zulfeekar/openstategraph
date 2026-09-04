@@ -121,7 +121,6 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  box-shadow: var(--shadow-xl);
 }
 
 .app-shell__body[data-overlay] > .panel--left {

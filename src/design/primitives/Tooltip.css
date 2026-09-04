@@ -14,7 +14,6 @@
   font: var(--type-body-sm);
   font-weight: var(--font-weight-medium);
   letter-spacing: var(--letter-spacing-tight);
-  box-shadow: var(--shadow-lg);
   pointer-events: none;
   animation: tooltip-in var(--duration-fast) var(--ease-out);
 }

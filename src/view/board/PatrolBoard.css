@@ -87,13 +87,13 @@
   padding: var(--box-inset);
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
-  box-shadow: inset 0 0 0 1px var(--color-border);
+  border: var(--border-width-hairline) solid var(--color-border);
   /* Only the two properties that change, and only at the fast duration: a
      card list is the one place a transition on `all` gets expensive, because
      every card arriving during a patrol would animate every property it has. */
   transition:
     background-color var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out);
+    border-color var(--duration-fast) var(--ease-out);
 }
 
 /* Subtle on purpose. A card is not a button yet — attending one is
@@ -108,7 +108,7 @@
 .patrol-card:hover,
 .patrol-card:focus-within {
   background: var(--color-bg-hover);
-  box-shadow: inset 0 0 0 1px var(--color-border-emphasis);
+  border-color: var(--color-border-emphasis);
 }
 
 @media (prefers-reduced-motion: reduce) {

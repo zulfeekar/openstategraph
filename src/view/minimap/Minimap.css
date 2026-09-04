@@ -8,9 +8,7 @@
   overflow: hidden;
   border-radius: var(--radius-xl);
   background: var(--color-bg-surface);
-  box-shadow:
-    inset 0 0 0 1px var(--color-border),
-    var(--shadow-lg);
+  border: var(--border-width-hairline) solid var(--color-border);
 }
 
 /* A card dropped in the bottom-right lands *under* this panel, which is opaque
@@ -34,7 +32,7 @@
   margin: var(--space-2) var(--space-2) 0;
   border-radius: var(--radius-md);
   background: var(--color-bg-canvas);
-  box-shadow: inset 0 0 0 1px var(--color-border);
+  border: var(--border-width-hairline) solid var(--color-border);
   cursor: crosshair;
   overflow: hidden;
 }

@@ -18,7 +18,6 @@
   background: var(--color-bg-surface-raised);
   border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
 }
 
 /* A `Panel` used as a popover's content is no longer claiming a column: it
