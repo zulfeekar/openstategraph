@@ -708,6 +708,12 @@ function md(text) {
     if (line.startsWith("```")) { closeAll(); out.push(inCode ? "</pre>" : "<pre>"); inCode = !inCode; continue; }
     if (inCode) { out.push(line); continue; }
     let l = line.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
+    // A blank line inside a table is not a GFM table terminator on its own —
+    // only a following non-blank, non-row line is. Without this, a model
+    // that puts a blank line between rows (common, tolerated by several
+    // markdown dialects) splits one table into two, or strands the next row
+    // as a paragraph of raw pipes (`18`).
+    if (inTable && !l.trim()) continue;
     if (/^\s*\|.*\|\s*$/.test(l)) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) continue;
       if (!inTable) { closeAll(); out.push("<table>"); inTable = true; }
