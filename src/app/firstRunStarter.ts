@@ -1,6 +1,7 @@
 import type { Workbench } from './Workbench';
 import type { KeyValueStore } from './workflowStore';
 import type { ClipboardFragment } from '@controller/ClipboardService';
+import type { NodeId } from '@core/model/contracts/node';
 import { UNNAMED_DOCUMENT } from '@core/model/documentName';
 import { starterAssembly } from '@nodes/assemblies';
 
@@ -54,7 +55,16 @@ import { starterAssembly } from '@nodes/assemblies';
 /** The marker that says this browser has been handed its starter already. */
 export const STARTER_PLACED_KEY = 'openstategraph-starter-placed';
 
-/** The note's own id in the placed document — how the rewrite (slice 2) finds it again. */
+/**
+ * The note's id **in the fragment**, and only there.
+ *
+ * Not how the rewrite finds it. `insertFragment` routes through
+ * `pasteCommand`, which mints a fresh id for every node it inserts — checked,
+ * not assumed: a placed starter's note is `node:annotate.note-1`. So the
+ * rewrite finds the note by its type and by `BEFORE_RUN_MARKER`, which is
+ * what that marker is for. (The line here used to claim the opposite; it was
+ * written in slice 1, before anything had looked.)
+ */
 export const NOTE_ID = 'first-run-note';
 
 /**
@@ -71,8 +81,10 @@ export const NOTE_ID = 'first-run-note';
  * A single zero-width space (`U+200B`) on its own line has none of that
  * problem: it is a real, non-whitespace character, so markdown does not trim
  * the line away, but it renders at zero width — nothing a reader can see. It
- * must stay the **last** line of every before-run wording: the rewrite
- * (slice 2) replaces from the marker onward rather than hunting for it.
+ * must stay the **last** line of every before-run wording, because that is
+ * the whole test for "this note is still ours to rewrite"
+ * (`starterNoteAwaitingRun`). A note the user has typed one word into no
+ * longer ends with it, and is left alone.
  */
 export const BEFORE_RUN_MARKER = '​';
 
@@ -259,4 +271,117 @@ export function placeFirstRunStarter(workbench: Workbench, store: KeyValueStore)
   } catch {
     /* see above */
   }
+}
+
+/* ---------------- after the first run ---------------- */
+
+/**
+ * A run that has just ended, in the terms the note needs.
+ *
+ * Deliberately **not** a runtime type: this module is copy and placement, and
+ * importing a run's own payload would tie the first-visit text to an
+ * execution shape it has no other business with. The shell translates once,
+ * at the seam it already listens on.
+ *
+ * `models` is one name per model the run reported. The program design said it
+ * comes from "`usage`'s first model key", and that is exactly right about the
+ * **backend** run's `RunUsage[]` — one row per model — which is what the shell
+ * reads. It is not true of `workbench.engine`'s `run:finish`, whose `usage` is
+ * a `TokenUsage`: three counts and no model name anywhere in it. The plan named
+ * the wrong one of the two, and `AppShell.tsx` records how that was found.
+ */
+export type StarterRunOutcome =
+  | { readonly ok: true; readonly models: readonly string[]; readonly totalTokens: number }
+  | { readonly ok: false; readonly reason: string };
+
+/** How much of a failure's own sentence the note will carry. */
+const REASON_LIMIT = 160;
+
+/**
+ * Which model to name, and how to admit the others.
+ *
+ * Program design, least-confident decision 3: a run that touched several
+ * models names the first and counts the rest. A note whose entire argument is
+ * that it is short cannot print a list.
+ */
+function namedModel(models: readonly string[]): string {
+  const first = models[0];
+  if (first == null) return 'The agent';
+  const others = models.length - 1;
+  return others > 0 ? `**${first}** (and ${others} more)` : `**${first}**`;
+}
+
+/**
+ * What the note says once the first run has finished.
+ *
+ * Three jobs, the same discipline as the before-run wording: say **who
+ * answered and what it cost** (the one thing a stranger cannot deduce from
+ * the canvas), say **what to change next**, and stop claiming the run has not
+ * happened. It drops `BEFORE_RUN_MARKER`, which is what makes the rewrite
+ * happen exactly once.
+ *
+ * A failure quotes the run's own sentence rather than inventing a second
+ * wording for the same fact — clamped to `REASON_LIMIT`, because an error
+ * string has no length ceiling and this note does.
+ */
+export function afterRunNote(outcome: StarterRunOutcome): string {
+  if (!outcome.ok) {
+    const reason = outcome.reason.trim();
+    const quoted =
+      reason.length > REASON_LIMIT ? `${reason.slice(0, REASON_LIMIT).trimEnd()}…` : reason;
+    return [
+      '# The run stopped',
+      '',
+      quoted,
+      '',
+      'Press Run again once that is sorted. This note is yours to delete.',
+    ].join('\n');
+  }
+  return [
+    '# It ran',
+    '',
+    `${namedModel(outcome.models)} answered — ${outcome.totalTokens.toLocaleString()} tokens. The answer is in the **Output**.`,
+    '',
+    'Change the question in the **Input** and press Run again.',
+    '',
+    'This note is yours to delete.',
+  ].join('\n');
+}
+
+/**
+ * The starter's note, if it is still waiting for its first run.
+ *
+ * By type and marker rather than by id, because the placed note does not keep
+ * `NOTE_ID` (see above). The marker is the last line of every before-run
+ * wording, so a note the user has edited — even to add one word at the end —
+ * is no longer awaiting anything and is left alone. That is the intended
+ * reading, not a limitation: the rewrite overwrites a whole body, and a body
+ * somebody has been typing in is not ours to overwrite.
+ */
+export function starterNoteAwaitingRun(workbench: Workbench): NodeId | null {
+  for (const node of workbench.model.nodes()) {
+    if (node.type !== NOTE_TYPE) continue;
+    const body = node.data['body'];
+    if (typeof body === 'string' && body.endsWith(BEFORE_RUN_MARKER)) return node.id;
+  }
+  return null;
+}
+
+/**
+ * Rewrites the still-awaiting starter note to explain the run that just ended.
+ *
+ * Through `controller.nodes.setField` — a `SetFieldCommand` — so it is one
+ * undoable step and the model stays the truth the canvas is projected from.
+ * Writing to the node's data directly would put text on a canvas the history
+ * cannot account for, and `Cmd-Z` after a run would then undo something else.
+ *
+ * Returns whether it wrote. `false` is the ordinary case for every run after
+ * the first, and for a note the user deleted or edited — none of which is a
+ * failure worth reporting anywhere.
+ */
+export function explainFirstRun(workbench: Workbench, outcome: StarterRunOutcome): boolean {
+  const noteId = starterNoteAwaitingRun(workbench);
+  if (noteId == null) return false;
+  workbench.controller.nodes.setField(noteId, 'body', afterRunNote(outcome));
+  return true;
 }
