@@ -300,10 +300,14 @@ describe('a border is drawn by what it means, and there are two weights', () => 
 
   /**
    * The owner's sentence, as an assertion: *"the draggable border should
-   * only be dark."* Full ink is spent in exactly two places and a pointer
-   * can take hold of both — the run dock's lower edge, which
-   * `.run-dock__grip` straddles with `cursor: ns-resize`, and the node
-   * card's resize grip, which draws two edges.
+   * only be dark."* Full ink is spent where a pointer can take hold — the
+   * run dock's lower edge, which `.run-dock__grip` straddles with `cursor:
+   * ns-resize`, and the node card's resize grip, which draws two edges.
+   *
+   * `stable-beta-public/19` added a third kind of site: the two grips'
+   * *resting* affordance, a short bar centred on the same edge the pointer
+   * already drags, drawn at the same weight so it reads as a preview of
+   * the drag rather than a different line.
    *
    * This replaces `view/run/oneBorderColourTwoWeights.test.ts`, which
    * asserted the same thing about the dock alone against a dock-local
@@ -316,6 +320,12 @@ describe('a border is drawn by what it means, and there are two weights', () => 
     ['view/nodes/NodeCard.css', 'border-right'],
     ['view/nodes/NodeCard.css', 'border-bottom'],
     ['view/run/RunDock.css', 'border-bottom'],
+    // `stable-beta-public/19`'s resting affordance: a bar drawn with a
+    // real border property (not `background`) so this census still sees
+    // it, rather than a filled div that would be invisible to a scan
+    // limited to `BORDER_PROPS`.
+    ['view/AppShell.css', 'border-left'],
+    ['view/run/RunDock.css', 'border-top'],
   ];
 
   it('spends full ink only where a pointer can drag', () => {

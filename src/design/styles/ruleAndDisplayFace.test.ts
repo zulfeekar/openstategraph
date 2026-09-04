@@ -208,8 +208,11 @@ describe('the rule separates regions; everything inside one is a hairline', () =
    * allowed to draw it are the files allowed to spend `--color-rule` —
    * `aBorderIsDraggableOrItIsNot.test.ts` holds that list app-wide and
    * checks the two halves land on the same declarations.
+   *
+   * `stable-beta-public/19` added `view/AppShell.css`: the column grip's
+   * resting affordance, drawn at the same weight as the seam it previews.
    */
-  const RULE_WIDTH_FILES = ['view/nodes/NodeCard.css', 'view/run/RunDock.css'];
+  const RULE_WIDTH_FILES = ['view/AppShell.css', 'view/nodes/NodeCard.css', 'view/run/RunDock.css'];
 
   it('draws a rule-width line only where a pointer can drag', () => {
     const drawn = stylesheets().flatMap((path) =>

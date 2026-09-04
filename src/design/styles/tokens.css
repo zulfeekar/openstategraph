@@ -423,6 +423,18 @@
    * *selection slot* holding space for an underline that is not drawn yet. */
   --border-width-marker: var(--osg-rule);
 
+  /* The resting length of a drag grip's invitation bar — `stable-beta-
+   * public/19`. A grip drew nothing until a pointer found it, so the eye
+   * took the nearest panel border for the handle. 300px, centred on the
+   * grip's own axis, is visible without a pointer and short enough to read
+   * as a control rather than a second border running the full edge; hover
+   * and focus still paint the full-length hairline as the "dragging" state.
+   * One number for both grips (`.app-shell__column-grip`,
+   * `.run-dock__grip`), because the two are one control turned ninety
+   * degrees and a second number here would be the second guess
+   * `--border-width-marker` above already warns against. */
+  --grip-length: 300px;
+
   /* ---------- Neutral ramp (the authored warm ink) ----------
    * Was a cool slate; is now the authored ink family — `#f7f6f6` through
    * `#201e1d`, warm, almost chroma-free.

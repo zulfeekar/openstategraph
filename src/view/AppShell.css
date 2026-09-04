@@ -91,6 +91,21 @@
   z-index: 1;
 }
 
+/* The resting affordance (`stable-beta-public/19`): a 300px bar centred on
+   the column's left edge, visible with no pointer near it. Hover/focus
+   below replace it with the full-height hairline as the "dragging" state;
+   this one never appears in that state because `::after` paints over it. */
+.app-shell__column-grip::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 0;
+  height: var(--grip-length);
+  transform: translateY(-50%);
+  border-left: var(--border-width-rule) solid var(--color-rule);
+}
+
 .app-shell__column-grip:hover::after,
 .app-shell__column-grip:focus-visible::after {
   content: '';

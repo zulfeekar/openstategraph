@@ -52,6 +52,21 @@
   z-index: 1;
 }
 
+/* The resting affordance (`stable-beta-public/19`): the column grip's bar
+   turned ninety degrees. Neither grip drew anything until a pointer found
+   it, so this one gets the same treatment in the same commit rather than
+   staying the odd one out. */
+.run-dock__grip::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  height: 0;
+  width: var(--grip-length);
+  transform: translateX(-50%);
+  border-top: var(--border-width-rule) solid var(--color-rule);
+}
+
 .run-dock__grip:hover::after,
 .run-dock__grip:focus-visible::after {
   content: '';
