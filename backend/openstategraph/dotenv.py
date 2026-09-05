@@ -41,30 +41,48 @@ edge cases nobody has asked for.
 from __future__ import annotations
 
 import os
+import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 #: The file name, and the one `README.md` and `.env.example` already name.
 ENV_FILE_NAME = ".env"
 
-#: How far up the tree to look. A developer runs the CLI from the project root
-#: or from a subdirectory of it; beyond a few levels we would be reading a file
-#: that belongs to something else entirely.
-_MAX_PARENTS = 4
-
 
 def find_env_file(start: Path | str | None = None) -> Path | None:
-    """The nearest `.env` at or above `start`, or None.
+    """The nearest `.env` in the project holding `start`, or None.
 
-    Walks up rather than requiring the exact directory, because `openstategraph
-    run ./workflows/demo` is as likely to be typed from a subdirectory as from
-    the root.
+    **The same directories `openstategraph.yaml` is looked for in**, asked of
+    `config_file.project_search_path` rather than walked again here: nearest
+    first, stopping at the git root, which is what "my project" means.
+
+    Until `osg-agent-experience/47` this walked four parents of the working
+    directory and no further, so the two walks disagreed for any project
+    deeper than that — `workflows/<slug>/tools/` is already three — and the
+    disagreement is silent in the worst direction: the config is found, the
+    `.env` beside it is not, and every provider reports "needs a key" while
+    the key sits in the file the error names.
     """
-    here = Path(start or Path.cwd()).resolve()
-    for directory in (here, *list(here.parents)[:_MAX_PARENTS]):
+    from openstategraph.config_file import project_search_path
+
+    for directory in project_search_path(start):
         candidate = directory / ENV_FILE_NAME
         if candidate.is_file():
             return candidate
     return None
+
+
+@dataclass(frozen=True)
+class ScannedEnv:
+    """What one `.env` file says, and which of its lines said nothing.
+
+    `malformed` holds **line numbers, never text**. A line in a credentials
+    file is a credential until proven otherwise, and a warning is the one
+    thing here that gets pasted into a support thread.
+    """
+
+    values: dict[str, str]
+    malformed: tuple[int, ...]
 
 
 def _strip_inline_comment(value: str) -> str:
@@ -92,8 +110,9 @@ def _strip_inline_comment(value: str) -> str:
     return value
 
 
-def parse_env_file(text: str) -> dict[str, str]:
-    """`KEY=value` lines, minus comments, blanks and shell decoration.
+def scan_env_file(text: str) -> ScannedEnv:
+    """`KEY=value` lines, minus comments, blanks and shell decoration — plus
+    the numbers of the lines that were none of those.
 
     Deliberately small. `export FOO=bar` is accepted because people paste it
     from a shell; surrounding quotes are stripped because people copy them from
@@ -101,24 +120,45 @@ def parse_env_file(text: str) -> dict[str, str]:
     own files. Anything more elaborate — variable interpolation, multi-line
     values, escape sequences — is a sign the file wants a real parser, and at
     that point `python-dotenv` is the honest answer rather than growing this
-    one.
+    one. `osg-agent-experience/47` re-priced that dependency against
+    `docs/wheel-footprint.json` and kept the parser: the base wheel advertises
+    four dependencies, and a fifth buys quoting edge cases nobody has asked
+    for.
+
+    **A value is taken exactly as it stands.** `DSN=host=db;user=a{b}c` is a
+    line a shell's `source` chokes on, which is how a developer arrives here
+    believing their file is broken; it is not, and nothing about it is
+    rewritten.
+
+    A line with no `=` at all is the only thing skipped, and it is counted so
+    the caller can say which line — see `ScannedEnv`.
     """
     values: dict[str, str] = {}
-    for raw in text.splitlines():
+    malformed: list[int] = []
+    for number, raw in enumerate(text.splitlines(), start=1):
         line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            malformed.append(number)
             continue
         if line.startswith("export "):
             line = line[len("export ") :].lstrip()
         key, _, value = line.partition("=")
         key = key.strip()
         if not key:
+            malformed.append(number)
             continue
         value = _strip_inline_comment(value.strip()).rstrip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
             value = value[1:-1]
         values[key] = value
-    return values
+    return ScannedEnv(values, tuple(malformed))
+
+
+def parse_env_file(text: str) -> dict[str, str]:
+    """The values alone. See `scan_env_file`, which is the one implementation."""
+    return scan_env_file(text).values
 
 
 def load_env_file(start: Path | str | None = None) -> Path | None:
@@ -130,6 +170,12 @@ def load_env_file(start: Path | str | None = None) -> Path | None:
     Returns `None` when there is no file, which is the common case and is not a
     problem: a deployment that exports its variables properly needs no `.env`
     at all.
+
+    A line that is not `KEY=value` is skipped **and said out loud**, on stderr,
+    **by number only** (`osg-agent-experience/47`). Silence there is how a
+    typo'd key becomes a provider that reports "needs a key" for the rest of
+    the project's life; the content of the line stays unprinted because this is
+    the file that holds the credentials.
     """
     path = find_env_file(start)
     if path is None:
@@ -140,9 +186,44 @@ def load_env_file(start: Path | str | None = None) -> Path | None:
         # An unreadable `.env` must not stop a run that may not need it. The
         # missing credential will say so itself, in its own words.
         return None
-    for key, value in parse_env_file(text).items():
+    scanned = scan_env_file(text)
+    for key, value in scanned.values.items():
         os.environ.setdefault(key, value)
+    for number in scanned.malformed:
+        print(
+            f"warning: {path} line {number} is not KEY=value — skipped.",
+            file=sys.stderr,
+        )
     return path
+
+
+def environment_line(start: Path | str | None = None) -> str:
+    """One line for `startup_facts()`: whether a `.env` was read, and how many.
+
+    **The count, never the names.** A variable name out of a credentials file
+    is already half of what nobody should paste into an issue, and the number
+    answers the question a reader actually has — *did my key reach this
+    process* — which nothing at startup answered before.
+
+    Derived on the spot rather than recorded at load time, and that is the
+    honest shape here rather than a shortcut: `startup_facts()` has exactly one
+    production caller, `cmd_serve`, reached only through `cli.console_main`,
+    which loaded this same file moments earlier by this same walk. A recorded
+    fact would be process-global mutable state — the thing `workflows_root`
+    refuses in as many words — bought for nothing.
+
+    An unreadable file reports `no .env` for the same reason `load_env_file`
+    returns `None` for one: nothing from it reached this process.
+    """
+    path = find_env_file(start)
+    if path is None:
+        return "no .env"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return "no .env"
+    count = len(scan_env_file(text).values)
+    return f".env: read, {count} variable{'' if count == 1 else 's'}"
 
 
 def environment_source_note(*, loaded: bool, start: Path | str | None = None) -> str:
@@ -179,8 +260,11 @@ def environment_source_note(*, loaded: bool, start: Path | str | None = None) ->
 
 __all__ = [
     "ENV_FILE_NAME",
+    "ScannedEnv",
+    "environment_line",
     "environment_source_note",
     "find_env_file",
     "load_env_file",
     "parse_env_file",
+    "scan_env_file",
 ]

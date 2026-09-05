@@ -682,6 +682,17 @@ extra serves an editor that cannot run anything — and says so before it binds.
 A source checkout with no built editor serves a *"run the build"* page at `/`
 and a fully working API and `/chat`.
 
+Before it binds it prints what Run will actually do — the default model, the
+workflows root and what chose it, and **whether a `.env` was read**
+(`.env: read, N variables`, or `no .env`; the count, never the names). The
+installed command reads the `.env` that sits beside your `openstategraph.yaml`
+— the same directories the config file is looked for in, nearest first,
+stopping at the git root — into its own environment before anything else runs.
+A variable your shell already exports always wins, so
+`OLLAMA_API_KEY=… openstategraph serve` overrides the file and a container's
+injected secret beats a stale one. A line that is not `KEY=value` is skipped with a warning
+naming **the line number only**.
+
 **`--workers` exists only to be refused by name.** It must be 1. `--workers 4`
 exits **1** and prints the two reasons — the sqlite checkpointer and store
 serialise writes with a per-instance lock that two OS processes do not share,

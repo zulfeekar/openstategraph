@@ -991,6 +991,13 @@ def cmd_init(args: argparse.Namespace) -> int:
         for variable in spec.env_vars:
             print(f"  {variable}=")
     print("  (openstategraph env-example prints the full block, names only)")
+    # The half this message did not say, and its absence is what
+    # `osg-agent-experience/47` was filed over: a stranger followed this
+    # instruction exactly and the first model node still refused, because
+    # nothing in the message says the file is ever read. It is — by the
+    # installed command, at startup, from beside the config file, with an
+    # already-exported variable always winning.
+    print("  it is read at startup; a variable your shell already exports wins")
     print()
     print("next:")
     if label != ".":
@@ -1862,7 +1869,7 @@ def no_provider_warning() -> str | None:
 
 
 def startup_facts() -> list[str]:
-    """What Run will actually do, in two lines, before anything is bound.
+    """What Run will actually do, before anything is bound.
 
     The two questions a reader has when a server they just started shows them
     an editor: *which model will this call*, and *where are my workflows*. Both
@@ -1879,6 +1886,7 @@ def startup_facts() -> list[str]:
     install and say what will happen, and `no_provider_warning` has already
     said the rest.
     """
+    from openstategraph.dotenv import environment_line
     from openstategraph.providers import provider_catalogue
     from openstategraph.workflows_root import resolve_workflows_root
 
@@ -1889,10 +1897,15 @@ def startup_facts() -> list[str]:
     # source. This is the one place it is printed, which is why `open` does
     # not print it a second time.
     root = resolve_workflows_root()
+    # A fourth line, and the one `osg-agent-experience/47` was filed over: the
+    # question *did my key reach this process* had no answer short of pressing
+    # Run and reading a node failure. The count and never the names — see
+    # `dotenv.environment_line`.
     return [
         f"default model  {default.model or '(none)'}",
         f"workflows      {root.path}",
         f"               {root.why}",
+        environment_line(),
     ]
 
 

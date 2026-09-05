@@ -359,6 +359,27 @@ def _search_path(base: Path) -> list[Path]:
     return directories
 
 
+def project_search_path(root: Path | str | None = None) -> list[Path]:
+    """The directories "my project" means, nearest first — the one walk.
+
+    Public because a second thing has to look in the same places:
+    `dotenv.find_env_file` looks for the `.env` that sits **beside**
+    `openstategraph.yaml`. It had a walk of its own — four parents from the
+    working directory — and the two disagreed the moment a project was deeper
+    than four levels: the config was found and the credentials beside it were
+    not, so every provider read "needs a key" while the key sat in the file
+    the error names (`osg-agent-experience/47`).
+
+    Exported rather than copied, because two descriptions of one directory set
+    is the defect this codebase names in `CLAUDE.md`: never restate the table,
+    resolve through it.
+    """
+    base = Path(root).expanduser() if root is not None else Path.cwd()
+    if not base.is_absolute():
+        base = Path.cwd() / base
+    return _search_path(base)
+
+
 def find_config_file(root: Path | str | None = None) -> Path | None:
     """The config file to use, or `None` — which is the normal case.
 
@@ -381,10 +402,7 @@ def find_config_file(root: Path | str | None = None) -> Path | None:
         path = Path(explicit).expanduser()
         return path if path.is_file() else None
 
-    base = Path(root).expanduser() if root is not None else Path.cwd()
-    if not base.is_absolute():
-        base = Path.cwd() / base
-    for directory in _search_path(base):
+    for directory in project_search_path(root):
         found = _carrier_in(directory)
         if found is not None:
             return found
@@ -902,6 +920,7 @@ __all__ = [
     "find_config_file",
     "load_config",
     "looks_like_a_secret",
+    "project_search_path",
     "render_config_file",
     "GITIGNORE_REQUIRED",
     "gitignore_gaps",

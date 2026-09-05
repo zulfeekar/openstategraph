@@ -226,3 +226,124 @@ class TestEveryWayToLaunchTheProcessReadsIt:
 
         body = inspect.getsource(cli.main)
         assert "load_env_file" not in body
+
+
+class TestOneWalkForTheProject:
+    """The `.env` walk and the config walk are the same walk — `osg-agent-experience/47`.
+
+    They were not. `find_config_file` walks up to the git root and stops
+    there; this module walked up four parents from the working directory and
+    stopped there. So a project deep enough — `workflows/<slug>/tools/` is
+    already three — had its `openstategraph.yaml` found and the `.env` beside
+    it not found, and the symptom is the one this whole module exists to end:
+    every provider reads "needs a key" while the key sits in the file the
+    error names.
+
+    Reproduced before the fix, from `workflows/demo/a/b/c` in a project whose
+    root held both files: `config: …/openstategraph.yaml`, `env: None`.
+    """
+
+    def test_the_env_beside_the_config_is_found_however_deep_you_stand(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "openstategraph.yaml").write_text("workflows_dir: workflows\n")
+        (tmp_path / ".env").write_text("OLLAMA_API_KEY=x\n")
+        deep = tmp_path / "workflows" / "demo" / "a" / "b" / "c"
+        deep.mkdir(parents=True)
+
+        assert find_env_file(deep) == tmp_path / ".env"
+
+    def test_the_walk_still_stops_at_the_git_root(self, tmp_path: Path) -> None:
+        """The bound the config walk already draws, inherited rather than
+        restated: a stray `.env` above somebody's project is not their
+        project's credentials.
+        """
+        (tmp_path / ".env").write_text("OLLAMA_API_KEY=from-outside\n")
+        project = tmp_path / "project"
+        (project / ".git").mkdir(parents=True)
+        assert find_env_file(project) is None
+
+
+class TestAMalformedLineIsNamedByNumber:
+    """The line the owner hit, and the two halves of the answer.
+
+    A value holding `{}` or `;` unquoted breaks `source .env` in a shell, so a
+    developer arrives here having been told their file is broken. It is not:
+    this parser takes the value as it stands. What *is* skipped — a line with
+    no `=` at all — is now reported, by **number only**, because the content
+    of a line in a credentials file is a credential.
+    """
+
+    def test_a_value_a_shell_would_choke_on_is_taken_as_it_stands(self) -> None:
+        parsed = parse_env_file("DSN=host=db;user=a{b}c\nOTHER=1\n")
+        assert parsed["DSN"] == "host=db;user=a{b}c"
+        assert parsed["OTHER"] == "1"
+
+    def test_the_skipped_line_is_reported_by_number_and_never_by_content(self) -> None:
+        from openstategraph.dotenv import scan_env_file
+
+        scanned = scan_env_file("A=1\n\n# note\nthis is not a variable\nB=2\n")
+        assert scanned.values == {"A": "1", "B": "2"}
+        assert scanned.malformed == (4,)
+        assert "this is not a variable" not in " ".join(map(str, scanned.malformed))
+
+    def test_loading_warns_with_the_number_alone(self, tmp_path: Path, capsys) -> None:
+        (tmp_path / ".env").write_text("OPENAI_API_KEY=k\nthis is not a variable\n")
+        load_env_file(tmp_path)
+        warning = capsys.readouterr().err
+        assert "line 2" in warning
+        assert "this is not a variable" not in warning
+
+
+class TestTheGeneratedExampleRoundTrips:
+    """`openstategraph env-example` prints a file people copy to `.env`.
+
+    Nothing had ever run the one through the other, so a generator line this
+    parser could not read would have shipped as a silently missing variable.
+    """
+
+    def test_every_generated_name_survives_the_parser(self) -> None:
+        from openstategraph.providers import env_example_section, provider_catalogue
+
+        text = env_example_section()
+        parsed = parse_env_file(text)
+        for spec in provider_catalogue().list():
+            for variable in spec.env_vars:
+                assert variable in parsed, variable
+                assert parsed[variable] == ""
+
+
+class TestStartupSaysWhetherItReadOne:
+    """`startup_facts()` answers *did my key reach this process* — 47.
+
+    Every other question a reader has at startup is answered there (which
+    model, which workflows root, why that root). Whether the `.env` two feet
+    away was read was not, so the only way to find out was to press Run.
+
+    The count and never the names: a variable name in a credentials file is
+    already half of what somebody should not paste into a support thread.
+    """
+
+    def test_a_project_with_a_dotenv_says_so_with_a_count(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from openstategraph import cli
+
+        (tmp_path / ".git").mkdir()
+        (tmp_path / ".env").write_text("OLLAMA_API_KEY=x\nOLLAMA_HOST=http://example\n")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+        monkeypatch.delenv("OLLAMA_HOST", raising=False)
+        load_env_file(tmp_path)
+
+        assert os.environ["OLLAMA_API_KEY"] == "x"
+        assert ".env: read, 2 variables" in cli.startup_facts()
+
+    def test_no_file_says_so_too(self, tmp_path: Path, monkeypatch) -> None:
+        from openstategraph import cli
+
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
+        assert load_env_file(tmp_path) is None
+        assert "no .env" in "\n".join(cli.startup_facts())

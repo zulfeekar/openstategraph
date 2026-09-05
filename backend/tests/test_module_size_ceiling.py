@@ -278,6 +278,12 @@ a record at a time rather than holding a second copy of an unbounded store in
 memory before a byte of it reaches the disk. Both are the export command
 saying what it did, which is the only thing this module is allowed to do.
 
+**1601 -> 1604** (`osg-agent-experience/47`). Three lines, and the rule this
+row keeps holds: an import, one entry appended to `startup_facts()`'s list, and
+one `print` in `init`'s closing block. The logic is `dotenv.environment_line`,
+beside the walk and the parser it reads — this module still only says what the
+command did.
+
 **1125 -> 1127** (`launch-readiness/195`). Two lines in `console_main`: an
 import and a call. The rule holds for the same reason `.env` loading did — the
 logic is `config_file.apply_prepend_sys_path`, beside the `workflows_dir`
@@ -1074,7 +1080,7 @@ in `api/` would be a second place that has to be told when one is added.
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(600, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1601, CLI),
+    "cli.py": Recorded(1604, CLI),
     "compile/workflow_compiler.py": Recorded(957, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
