@@ -454,11 +454,22 @@ openstategraph kanban answer <task-id> --actor NAME --answer TEXT
 openstategraph kanban show <task-id> [--workflows-root DIR]
 openstategraph kanban release <task-id> [--threshold-seconds N] [--workflows-root DIR]
 openstategraph kanban triage [--board NAME] [--workflows-root DIR]
+openstategraph kanban where [--workflows-root DIR]
 ```
 
-These seven verbs are the whole of the loop a coding agent runs against the
-board — file, triage, attend, show, stage, answer, release. [The OpenStateGraph
+Seven of these verbs are the loop a coding agent runs against the board —
+file, triage, attend, show, stage, answer, release. [The OpenStateGraph
 skill](the-openstategraph-skill.md) is the order it runs them in and why.
+
+`where` is the eighth and is not part of the loop: it prints the board's
+address, the reason for that address, and whether a board is there yet. It
+exists because *no board here* and *an empty board* had been the same four
+words at every door, so a project whose board was written by a source checkout
+and read by an installed wheel — two different files — reported as a project
+that had never filed a card (`osg-agent-experience/65`). `triage` names the
+same file whenever it has nothing to hand back. See [the patrol
+board](the-patrol-board.md) §8 for the three sources and why the board is
+machine-local.
 
 The CLI door onto one card of the patrol board (`kanban-patrol/19`), beside
 the MCP one (`kanban-patrol/16`) — for a coding agent that can shell out but

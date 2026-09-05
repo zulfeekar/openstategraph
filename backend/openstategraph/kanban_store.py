@@ -58,18 +58,55 @@ KANBAN_STORE_PATH_ENV = "OPENSTATEGRAPH_KANBAN_STORE_PATH"
 KANBAN_STORE_FILE_NAME = "kanban.sqlite"
 
 
-def kanban_store_path(workflows_root_dir: Path | str | None = None) -> Path:
-    """Where the kanban store lives. The environment variable wins outright;
-    otherwise `state_dir()/kanban.sqlite` — asking never creates anything,
-    `state_dir`'s own rule, which is what lets this be pointed at a
-    read-only mount without writing to it first."""
+@dataclass(frozen=True)
+class KanbanLocation:
+    """Where this project's board is, whether it is there, and what decided —
+    `osg-agent-experience/65`.
+
+    Filed because a board was reported *vanished* and nothing had been
+    deleted. `list_cards` says it in its own docstring — "no store yet" and
+    "store, no rows" mean the same thing to a reader — which is right for a
+    library function returning a list and fatal for a door printing a
+    sentence. Both facts a reader needs are here, so no door has to stat the
+    file itself and no two doors can phrase the answer differently.
+    """
+
+    path: Path
+    exists: bool
+    source: str
+    why: str
+
+
+def kanban_store_location(workflows_root_dir: Path | str | None = None) -> KanbanLocation:
+    """Where the kanban store lives, and whether it is there yet.
+
+    The environment variable wins outright; otherwise
+    `state_dir()/kanban.sqlite`, whose own three-branch chain is reported
+    rather than re-implemented (`state_dir.resolve_state_dir`). Asking never
+    creates anything — `state_dir`'s rule, which is what lets this be pointed
+    at a read-only mount without writing to it first.
+    """
     configured = os.environ.get(KANBAN_STORE_PATH_ENV, "").strip()
     if configured:
-        return Path(configured).expanduser().resolve()
+        path = Path(configured).expanduser().resolve()
+        return KanbanLocation(
+            path,
+            path.is_file(),
+            "environment",
+            f"{KANBAN_STORE_PATH_ENV} is set in this environment",
+        )
 
-    from openstategraph.state_dir import state_dir
+    from openstategraph.state_dir import resolve_state_dir
 
-    return state_dir(workflows_root_dir) / KANBAN_STORE_FILE_NAME
+    choice = resolve_state_dir(workflows_root_dir)
+    path = choice.path / KANBAN_STORE_FILE_NAME
+    return KanbanLocation(path, path.is_file(), choice.source, choice.why)
+
+
+def kanban_store_path(workflows_root_dir: Path | str | None = None) -> Path:
+    """Where the kanban store lives. Defined as `kanban_store_location().path`
+    so the address and the report of it cannot drift."""
+    return kanban_store_location(workflows_root_dir).path
 
 
 class Stage(str, Enum):

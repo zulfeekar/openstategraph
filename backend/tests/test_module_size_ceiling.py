@@ -506,6 +506,18 @@ block those two names cost, two conditional prints and the comment saying why
 they are conditional. This command says what it did, and until now it did not
 say the last two things it did.
 
+**1648 -> 1679** (`osg-agent-experience/65`, 2026-09-05). Thirty-one lines:
+`cmd_kanban_where`, `_board_state_lines` and the parser rows for a new
+subcommand. No new rule — the address and its reason are
+`state_dir.resolve_state_dir` via `kanban_store.kanban_store_location`, so
+this file resolves nothing and states nothing about where a board lives. What
+it does is *print* it, which is the whole ticket: a board written by a source
+checkout and read from an installed wheel is two different files, and the only
+sentence either door had ever printed about it was `nothing to triage`.
+`_board_state_lines` is a function rather than a block inside each command
+because two doors now say the same two sentences, and two spellings of "no
+board here yet" is the defect one directory away from the one being fixed.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -1192,9 +1204,9 @@ it.
 """
 
 RECORDED: dict[str, Recorded] = {
-    "kanban_store.py": Recorded(660, KANBAN_STORE),
+    "kanban_store.py": Recorded(676, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
-    "cli.py": Recorded(1648, CLI),
+    "cli.py": Recorded(1679, CLI),
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

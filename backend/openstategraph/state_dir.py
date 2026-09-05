@@ -51,6 +51,7 @@ import hashlib
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 #: The deployment's explicit answer for where *everything* this process writes
@@ -105,25 +106,68 @@ def project_key(workflows_root_dir: Path) -> str:
     return f"{label}-{digest}"
 
 
-def state_dir(workflows_root_dir: Path | str | None = None) -> Path:
-    """The directory this process may write to. Never guaranteed to exist yet.
+@dataclass(frozen=True)
+class StateChoice:
+    """The directory, and the thing that chose it — `osg-agent-experience/65`.
 
-    Creating it is the caller's job, at the moment it actually writes, so that
-    merely *asking* where state would go never has a side effect — which is
-    what lets `openstategraph` be pointed at a read-only mount and still list,
-    compile and run.
+    The exact shape of `workflows_root.RootChoice`, and it exists for the same
+    reason: three sources decide this and they are indistinguishable from
+    inside the result. A project's board was reported *vanished* when nothing
+    had been deleted at all — three sessions ran from a source checkout and
+    wrote branch 2, a fourth ran an installed wheel and read branch 3, and the
+    only sentence either of them ever printed about it was `nothing to triage`.
+
+    `source` is the machine word — `environment`, `checkout`, `installed` —
+    and `why` is the sentence a reader is shown. Never a second precedence
+    chain: `state_dir()` is *defined* as this function's `path`, so the report
+    and the behaviour cannot drift apart.
+    """
+
+    path: Path
+    source: str
+    why: str
+
+
+def resolve_state_dir(workflows_root_dir: Path | str | None = None) -> StateChoice:
+    """`state_dir()`, plus what decided it. See `StateChoice`.
+
+    Never guaranteed to exist yet: creating it is the caller's job, at the
+    moment it actually writes, so that merely *asking* where state would go
+    never has a side effect — which is what lets `openstategraph` be pointed
+    at a read-only mount and still list, compile and run.
     """
     configured = os.environ.get(STATE_DIR_ENV, "").strip()
     if configured:
-        return Path(configured).expanduser().resolve()
+        return StateChoice(
+            Path(configured).expanduser().resolve(),
+            "environment",
+            f"{STATE_DIR_ENV} is set in this environment",
+        )
 
     from openstategraph.workflows_root import checkout_root, workflows_root
 
     root = Path(workflows_root_dir) if workflows_root_dir else workflows_root()
     if checkout_root() is not None:
-        return root / STATE_DIR_NAME
-    return user_state_home() / project_key(root)
+        return StateChoice(
+            root / STATE_DIR_NAME,
+            "checkout",
+            f"{STATE_DIR_NAME}/ beside the workflows of this checkout",
+        )
+    return StateChoice(
+        user_state_home() / project_key(root),
+        "installed",
+        "openstategraph is installed rather than run from a checkout, so state "
+        f"goes to this machine's per-user directory, keyed to {root}",
+    )
 
 
-__all__ = ["APP_DIR_NAME", "STATE_DIR_ENV", "STATE_DIR_NAME", "project_key", "state_dir",
-           "user_state_home"]
+def state_dir(workflows_root_dir: Path | str | None = None) -> Path:
+    """The directory this process may write to. Never guaranteed to exist yet.
+
+    Defined as `resolve_state_dir(...).path` — one chain, two views of it.
+    """
+    return resolve_state_dir(workflows_root_dir).path
+
+
+__all__ = ["APP_DIR_NAME", "STATE_DIR_ENV", "STATE_DIR_NAME", "StateChoice", "project_key",
+           "resolve_state_dir", "state_dir", "user_state_home"]

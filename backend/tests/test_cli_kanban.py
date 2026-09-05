@@ -592,10 +592,18 @@ class TestTriage:
         assert "unblocks" in out
         assert "blocked by" in out
 
-    def test_an_empty_board_says_so_rather_than_printing_nothing(
+    def test_a_board_that_is_not_there_says_so_rather_than_printing_nothing(
         self, _identified: Path, capsys
     ) -> None:
+        """This assertion read `nothing to triage` until
+        `osg-agent-experience/65`, and that is the defect it was asserting:
+        this fixture has never filed a card, so there is no store at this
+        address at all, and the sentence a reader got was the one an empty
+        board gets. Six filed cards read as a project that had never had any.
+        The address is now named and the two states are two sentences."""
         code = cli.main(["kanban", "triage"] + _root(_identified))
 
+        out = capsys.readouterr().out
         assert code == 0
-        assert "nothing to triage" in capsys.readouterr().out
+        assert "no board here yet" in out
+        assert str(kanban_store_path(_identified / "workflows")) in out

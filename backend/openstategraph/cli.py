@@ -58,6 +58,7 @@ from openstategraph import templates
 #: Fixed, documented above, and referenced by name everywhere below so a
 #: reader never has to decode a bare integer.
 if TYPE_CHECKING:  # pragma: no cover - typing only
+    from openstategraph.kanban_store import Card, KanbanLocation
     from openstategraph.providers import ProviderEnvironment
     from openstategraph.results import RunResult
 
@@ -1679,19 +1680,70 @@ def cmd_kanban_show(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_kanban_where(args: argparse.Namespace) -> int:
+    """Where this project's board is — `osg-agent-experience/65`.
+
+    The door the ticket was filed for the absence of. Three sources decide the
+    address (`state_dir.resolve_state_dir`) and they are indistinguishable
+    from inside the result, so a board written by a checkout and read by an
+    installed wheel is two files and one silence. Read-only, creates nothing,
+    and it is the one command that answers on a project that has never filed a
+    card — which is exactly when somebody needs it.
+    """
+    from openstategraph.kanban_store import kanban_store_location, list_cards
+
+    location = kanban_store_location(getattr(args, "workflows_root", None))
+    print(f"board  {location.path}")
+    print(f"       {location.why}")
+    for line in _board_state_lines(location, list_cards(location.path)):
+        print(line)
+    return EXIT_OK
+
+
+def _board_state_lines(location: "KanbanLocation", cards: list["Card"]) -> list[str]:
+    """The two sentences a reader has to be able to tell apart, in one place.
+
+    `osg-agent-experience/65`: *no board here yet* and *the board is empty*
+    were the same four words at every door, which is how six filed cards read
+    as a project that had never had any. `list_cards` returns `[]` for both
+    on purpose — right for a library, and the reason a door must not just
+    print what it gets back.
+    """
+    if not location.exists:
+        return [
+            "       no board here yet — nothing has been filed against this "
+            "address, which is not the same as an empty board",
+        ]
+    if not cards:
+        return ["       the board is here and empty"]
+    plural = "card" if len(cards) == 1 else "cards"
+    return [f"       {len(cards)} {plural}"]
+
+
 def cmd_kanban_triage(args: argparse.Namespace) -> int:
     """Which card to pick up next, and why — `osg-agent-experience/25` slice
     4. Read-only, the CLI half of `kanban_triage`: same `kanban_store.triage`
-    function, so the two doors can never argue about the order."""
-    from openstategraph.kanban_store import kanban_store_path, list_cards, triage
+    function, so the two doors can never argue about the order.
 
-    db = kanban_store_path(getattr(args, "workflows_root", None))
+    `osg-agent-experience/65`: an empty result names the file it read. The old
+    `nothing to triage` was true of an empty board and a lie about a board
+    that was never at this address, and a reader could not tell which they
+    had been handed.
+    """
+    from openstategraph.kanban_store import kanban_store_location, list_cards, triage
+
+    location = kanban_store_location(getattr(args, "workflows_root", None))
     board = getattr(args, "board", "") or ""
     folded = board.strip().casefold()
-    cards = [c for c in list_cards(db) if not folded or c.board.casefold() == folded]
+    all_cards = list_cards(location.path)
+    cards = [c for c in all_cards if not folded or c.board.casefold() == folded]
     rows = triage(cards)
     if not rows:
-        print("nothing to triage")
+        print(f"board  {location.path}")
+        for line in _board_state_lines(location, all_cards):
+            print(line)
+        if location.exists and all_cards:
+            print("       nothing to triage — no card here is waiting to be picked up")
         return EXIT_OK
     for row in rows:
         print(f"{row.rank}. {row.card.task_id}  {row.card.title}")
@@ -2588,6 +2640,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     kanban_triage.add_argument("--workflows-root", dest="workflows_root")
     kanban_triage.set_defaults(handler=cmd_kanban_triage)
+
+    kanban_where = kanban_commands.add_parser(
+        "where",
+        help="where this project's board is, and whether it is there yet "
+        "(osg-agent-experience/65)",
+    )
+    kanban_where.add_argument("--workflows-root", dest="workflows_root")
+    kanban_where.set_defaults(handler=cmd_kanban_where)
 
     patrol = subparsers.add_parser(
         "patrol",

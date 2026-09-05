@@ -235,9 +235,34 @@ rather than left to whoever reads the card.
 
 ## 8. One board per project, and the project has an identity
 
-Cards live in `workflows/.openstategraph/kanban.sqlite`, keyed by
+Cards live in a SQLite file called `kanban.sqlite`, keyed by
 `project_id + thread_id`. `project_id` is a line in your committed
 `openstategraph.yaml`, minted the first time the project is initialised.
+
+**Where that file is depends on how OpenStateGraph is installed, so ask
+rather than assume:**
+
+```
+openstategraph kanban where
+```
+
+It prints the address, the reason for it, and whether there is a board there
+yet — and it answers on a project that has never filed a card, which is the
+moment you need it. Three sources decide the address, in this order:
+`OPENSTATEGRAPH_STATE_DIR` if you set it; `workflows/.openstategraph/` when
+the command is run from an OpenStateGraph source checkout; otherwise this
+machine's per-user state directory (`~/Library/Application Support/`,
+`$XDG_STATE_HOME`, `%LOCALAPPDATA%`), in a folder keyed to your workflows
+root. This document used to state the second of those three as if it were the
+whole rule, which sent a reader looking in the one place their board was not
+(`osg-agent-experience/65`).
+
+**The board is machine-local state, and that is a decision rather than an
+oversight.** It is not committed, a clone does not carry it, and a colleague
+cannot see it. So **a card is not a record**: it is a working queue for the
+agents driving this checkout. Anything that has to survive the machine —
+a decision, a defect, an argument — belongs in a commit, a ticket or a
+document, and the card is the thing that points at it.
 
 It is committed on purpose — a bare path moves and a bare name is not unique —
 and that creates the obvious hazard: copy the file into a second folder to
