@@ -67,10 +67,14 @@ DEFAULT_ENV: Mapping[str, str] = MappingProxyType({"OPENSTATEGRAPH_MCP_ALLOW_RUN
 class ServerDescriptor:
     """This project's MCP server, as the one fact the renderers read.
 
-    `command` is a single executable token on purpose — a bare PATH name, the
-    console script the wheel installs. Not `python3 -m …`: that spelling needs
-    a `PYTHONPATH` the reader has to know, and it is the shape that rots when
-    the checkout moves.
+    `command` is a single executable token on purpose — a console script, not
+    `python3 -m …`: that spelling needs a `PYTHONPATH` the reader has to know,
+    and it is the shape that rots when the checkout moves.
+
+    The *default* is the bare name, because a descriptor built with no argument
+    is describing the shape of an entry rather than one machine. `init` does
+    not use the default: it calls `resolve_server_command()`, and
+    `docs-onramp/10` is the reason — see that function.
     """
 
     name: str = "openstategraph"
@@ -145,6 +149,94 @@ def missing_server_note(server: ServerDescriptor | None = None) -> str | None:
     return f"`{command}` is not installed here yet — {install_hint('mcp')}"
 
 
+def resolve_server_command(name: str = "openstategraph") -> str:
+    """The command an agent launched from *this* installation can actually run.
+
+    `docs-onramp/10`. Every entry named `openstategraph` bare, resolved against
+    the agent's `PATH`. That is correct for the `uv tool install` route README
+    leads with — the shim lands in `~/.local/bin` and stays valid when the
+    project moves — and wrong for every other install this project documents:
+    a project venv, `pip install -e "backend[…]"` from a checkout, `pipx` in a
+    shell nobody re-sourced. There the name is not on the agent's `PATH`, the
+    server never starts, and the agent shows no tools and says nothing, which
+    reads as *this project's MCP layer is broken*.
+
+    So the bare name is **preferred and not assumed**. It is kept whenever the
+    environment `init` runs in can resolve it, because an absolute path pins the
+    config to one venv and a rebuilt venv is a silently dead entry. Only when
+    the name resolves to nothing does this fall back to the console script
+    beside the running interpreter — `sys.argv[0]` when that *is* the script,
+    else `sys.prefix/bin` — which is the one executable we can name and be sure
+    of.
+
+    And when there is neither, the bare name comes back unchanged. Nothing to
+    point at is not a licence to invent a path, and an entry naming the bare
+    name is at least the case `missing_server_note` already has a sentence for.
+
+    A future reader will want to "fix" this to always write the absolute path,
+    or always write the name. Both were considered here and both lose one of
+    the two installs; that is why the branch exists and why `command_note`
+    prints which way it went.
+    """
+    import shutil
+    import sys
+
+    if shutil.which(name):
+        return name
+
+    argv0 = Path(sys.argv[0]) if sys.argv and sys.argv[0] else None
+    if argv0 is not None and argv0.name in (name, f"{name}.exe") and argv0.is_file():
+        return str(argv0.resolve())
+
+    for folder in ("bin", "Scripts"):
+        for filename in (name, f"{name}.exe"):
+            candidate = Path(sys.prefix) / folder / filename
+            if candidate.is_file():
+                return str(candidate)
+
+    return name
+
+
+def command_note(server: ServerDescriptor) -> str:
+    """What `init` says about the command it just wrote into four files.
+
+    The sentence exists because the resolution above is invisible in the report
+    otherwise: a reader who sees `.mcp.json  created` learns nothing about which
+    entry they got, and they behave differently the next time that environment
+    is rebuilt or moved.
+
+    **Three outcomes, not two**, and the third is the one this function got
+    wrong first. Asking only whether the command is absolute collapses *found
+    on PATH* with *nothing to point at*, and the bare name that comes back from
+    the third case was then announced as found — a false sentence, printed at
+    exactly the reader who most needs a true one. Caught walking the fix as a
+    user with `~/.local/bin` off the `PATH`.
+
+    `shutil.which` is asked a second time here rather than threaded out of
+    `resolve_server_command`. Both calls happen inside one `init`, against one
+    environment, so they cannot disagree; a resolver returning a command *and*
+    a reason would make every caller that wants only the command unpack one.
+    """
+    import shutil
+
+    if Path(server.command).is_absolute():
+        return (
+            f"the four files run {server.command} — an absolute path, because "
+            f"`{ServerDescriptor.command}` is not on this shell's PATH. Rebuild or move that "
+            "environment and re-run init."
+        )
+    if shutil.which(server.command):
+        return (
+            f"the four files run `{server.command}`, found on PATH — so they keep working "
+            "wherever that install moves to."
+        )
+    return (
+        f"the four files run `{server.command}`, which is not on this shell's PATH and has "
+        "no console script beside this interpreter either — your agent will not be able to "
+        "start it. Install the wheel (or `uv tool install openstategraph`) and re-run init."
+    )
+
+
 #: One row per agent: the file, and the top-level key its servers live under.
 #: `None` marks the TOML one, which has a table path rather than a key.
 AGENT_FILES: tuple[tuple[str, str, str | None], ...] = (
@@ -206,7 +298,7 @@ def merge_codex_toml(existing_text: str, server: ServerDescriptor) -> tuple[str,
 
 
 def render_all(
-    project: Path | str, server: ServerDescriptor = ServerDescriptor()
+    project: Path | str, server: ServerDescriptor | None = None
 ) -> tuple[AgentFileAction, ...]:
     """Write (or merge into) all four files, and say what happened to each.
 
@@ -215,6 +307,12 @@ def render_all(
     opened their agent in this directory yet — and each file is a few lines
     naming one command.
     """
+    # `None` rather than a descriptor default evaluated at import: the command
+    # is a fact about the environment `init` is running in (`docs-onramp/10`),
+    # and an import-time default would answer for the environment that imported
+    # this module. One descriptor still drives all four files — the resolution
+    # happens once, here, above the loop.
+    server = server or ServerDescriptor(command=resolve_server_command())
     target = Path(project)
     actions: list[AgentFileAction] = []
     for agent, relative, servers_key in AGENT_FILES:
@@ -331,5 +429,7 @@ __all__ = [
     "merge_codex_toml",
     "missing_server_note",
     "merge_json_servers",
+    "command_note",
     "render_all",
+    "resolve_server_command",
 ]

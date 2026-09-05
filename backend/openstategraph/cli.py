@@ -940,7 +940,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     from openstategraph.bundled_skills import BUNDLED_SKILLS
     from openstategraph.config_file import reset_active_config
     from openstategraph.providers import provider_catalogue
-    from openstategraph.agent_config import missing_server_note
+    from openstategraph.agent_config import command_note, missing_server_note
     from openstategraph.scaffold import (
         NEXT_SENTENCE,
         RESTART_SENTENCE,
@@ -1033,6 +1033,26 @@ def cmd_init(args: argparse.Namespace) -> int:
     # is one keystroke away, rather than there. And all of it is read at
     # start-up by an agent this command was very likely typed inside.
     indent = " " * 26  # the block's own second column, `  {name:<22}  `
+    # docs-onramp/10: which command those four entries actually name. A bare
+    # `openstategraph` is right for a `uv tool` install and dead for a venv
+    # one, and the report said nothing either way — so an agent that could not
+    # start the server showed no tools and no reason.
+    if result.agent_server is not None:
+        print(
+            textwrap.fill(
+                command_note(result.agent_server),
+                width=88,
+                initial_indent=indent,
+                subsequent_indent=indent,
+                # A path is one word and a broken path is not a path — this is
+                # the one sentence in the report that can carry a token wider
+                # than the column. `break_on_hyphens` too: the default splits
+                # `.../pytest-of-.../venv/bin/...` at every hyphen, which is
+                # the same defect one character at a time.
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+        )
     absent = missing_server_note()
     if absent:
         print(f"{indent}{absent}")

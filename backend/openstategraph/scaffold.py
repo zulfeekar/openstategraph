@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from openstategraph import agent_brief, templates
-from openstategraph.agent_config import AgentFileAction
+from openstategraph.agent_config import AgentFileAction, ServerDescriptor
 
 #: A package's directory name is its frozen identity, and it is what scopes
 #: tool, function, skill and knowledge discovery.
@@ -507,6 +507,11 @@ class InitResult:
     #: Same reason as `agents_md_action`: `init` prints a sentence per file
     #: and two of those four sentences say it wrote nothing.
     agent_files: tuple[AgentFileAction, ...] = ()
+    #: The descriptor those four files were rendered from — carried so `init`
+    #: can say **which** command it wrote (`docs-onramp/10`). Resolving it a
+    #: second time in the CLI would give the same answer today and would be two
+    #: places deciding one thing.
+    agent_server: ServerDescriptor | None = None
 
 
 def agent_surface_changed(result: InitResult) -> bool:
@@ -876,9 +881,19 @@ def init_project(
     # door, same reason as the skills above: a wheel cannot write into a
     # user's repository by itself. An existing file is merged into, never
     # replaced; see `agent_config`.
-    from openstategraph.agent_config import AgentFileState, render_all
+    from openstategraph.agent_config import (
+        AgentFileState,
+        ServerDescriptor,
+        render_all,
+        resolve_server_command,
+    )
 
-    agent_files = render_all(target)
+    # Resolved here, once, and carried on the result: `docs-onramp/10` — a
+    # bare `openstategraph` is not on the agent's PATH for a venv or an
+    # editable checkout install, and the four files are then a server that
+    # never starts and never says so.
+    agent_server = ServerDescriptor(command=resolve_server_command())
+    agent_files = render_all(target, agent_server)
     for action in agent_files:
         if action.state is AgentFileState.CREATED:
             created.append(action.path)
@@ -911,6 +926,7 @@ def init_project(
         adopted=adopted,
         skills_installed=skills_installed,
         agent_files=agent_files,
+        agent_server=agent_server,
     )
 
 

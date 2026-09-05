@@ -60,10 +60,17 @@ What it writes into each, in the `mcpServers` spelling:
 }
 ```
 
-`command` is the console script the wheel installs, so nothing in the block is
-install-dependent — no `PYTHONPATH`, nothing naming a checkout. Working from a
-checkout with nothing installed is the one case that still needs a hand-written
-entry: `"command": "python3"`, `"args": ["-m", "openstategraph.mcp_server"]`,
+`command` is the console script the wheel installs, and **`init` resolves it
+against the environment it is running in**. If the bare name is on your `PATH`
+— the `uv tool install` route — that is what the four files carry, and they
+keep working wherever that install moves. If it is not, which is every venv,
+editable-checkout and un-re-sourced `pipx` install, they carry the absolute
+path of *this* interpreter's console script instead, because an agent resolves
+`command` against its own `PATH` and a bare name it cannot find is a server
+that never starts and never says why. `init` prints which of the two it wrote,
+in the block where it tells you to restart your agent; re-run it if you rebuild
+or move that environment. Working from a checkout with nothing installed at all
+is the one case that still needs a hand-written entry: `"command": "python3"`, `"args": ["-m", "openstategraph.mcp_server"]`,
 and `"PYTHONPATH": "/path/to/openstategraph/backend"` beside the variable
 below. Keep the rest of the `env` block whichever spelling you use.
 

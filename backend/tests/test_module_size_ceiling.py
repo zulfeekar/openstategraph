@@ -533,6 +533,14 @@ and ships in no wheel. The references moved into comments beside the strings,
 which is why the code count fell rather than rose: two of them were
 continuation lines that the shorter help text no longer needs.
 
+**1683 -> 1694** (`docs-onramp/10`, 2026-09-05). Eleven lines, and all eleven
+are `init` printing one more sentence: which command it wrote into the four
+agent config files. `init` writes a bare `openstategraph` that a venv install's
+agent cannot resolve, so the server never started and nothing said so; the
+resolution lives in `agent_config.resolve_server_command` and the wording in
+`agent_config.command_note` — this file gained the call, the wrap and a comment
+saying why that one line may not be broken on hyphens.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -1233,7 +1241,7 @@ it.
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(690, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
-    "cli.py": Recorded(1683, CLI),
+    "cli.py": Recorded(1694, CLI),
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

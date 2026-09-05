@@ -31,6 +31,13 @@ from openstategraph.agent_config import (
     render_all,
 )
 
+#: The bare-name descriptor, and since `docs-onramp/10` it is passed
+#: *explicitly* wherever a test asserts the literal `openstategraph`: the
+#: default command is now resolved from the environment `init` runs in, so on a
+#: machine without the console script on `PATH` the files carry an absolute
+#: path and a literal here would be asserting a fact about the test runner.
+#: What this file is about is the rendering — one command line, four files,
+#: never a clobbered one.
 SERVER = ServerDescriptor()
 
 #: Where each agent looks, and under which key. The research note's table,
@@ -45,7 +52,7 @@ EXPECTED = {
 
 
 def _by_agent(project: Path) -> dict[str, object]:
-    return {action.agent: action for action in render_all(project)}
+    return {action.agent: action for action in render_all(project, SERVER)}
 
 
 class TestCreated:
@@ -62,7 +69,7 @@ class TestCreated:
     def test_each_json_file_carries_our_entry_under_the_key_that_agent_reads(
         self, tmp_path: Path
     ) -> None:
-        render_all(tmp_path)
+        render_all(tmp_path, SERVER)
 
         for _agent, (relative, servers_key) in EXPECTED.items():
             if servers_key is None:
@@ -76,7 +83,7 @@ class TestCreated:
     def test_the_codex_file_is_a_toml_table_under_mcp_servers(self, tmp_path: Path) -> None:
         import tomllib
 
-        render_all(tmp_path)
+        render_all(tmp_path, SERVER)
 
         text = (tmp_path / ".codex" / "config.toml").read_text(encoding="utf-8")
         assert "[mcp_servers.openstategraph]" in text
@@ -153,7 +160,7 @@ class TestMerged:
 
 class TestCurrent:
     def test_a_second_render_changes_nothing_and_says_so(self, tmp_path: Path) -> None:
-        render_all(tmp_path)
+        render_all(tmp_path, SERVER)
         before = {
             relative: (tmp_path / relative).read_text(encoding="utf-8")
             for relative, _key in EXPECTED.values()
