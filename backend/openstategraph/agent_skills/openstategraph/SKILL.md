@@ -58,7 +58,7 @@ the card is the one record — a decision left in the conversation is lost with 
 
 | Size | The ask | The ritual, whole |
 | --- | --- | --- |
-| **tweak** | one setting, one field, one line | one confirming question · no map, no interview, no triage · one card filed from the ask · one failing test · make it pass · commit · `finished` · no break-the-fix |
+| **tweak** | one setting, one field, one line | one confirming question · no map, no interview, no triage · one card filed from the ask, `attended` · one failing test, `red` · make it pass, `green` · commit · `finished` · no break-the-fix |
 | **change** | one node or one tool added, one rule edited | two or three questions (step 5) · one card · the full loop of step 9, break-the-fix included |
 | **feature or slice** | a workflow, several nodes, anything you cannot finish in one sitting | the whole path — the interview, a decision map, a card per decision, triage, then step 9 for each |
 
@@ -177,8 +177,8 @@ priority; blocked last. Take the top one, or name the rule you are overriding.
 
 ## 9. The build loop, once per card
 
-Every card, in this order, no step merged into another. A tweak runs 2, 4, 7
-and 8 of it and files its card at 1's place (step 3).
+Every card, in this order, no step merged into another. A tweak runs 1, 2, 3,
+4, 6, 7 and 8 of it — every step but the deliberate break.
 
 1. **Attend it.** `kanban_attend_card` / `openstategraph kanban attend`. First
    caller wins; if somebody else holds it, take the next card.

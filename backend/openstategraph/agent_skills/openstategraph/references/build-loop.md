@@ -2,8 +2,10 @@
 
 Read this when step 9 of `SKILL.md` is the step you are on. One card at a
 time, start to finish, before the next card is attended. A **tweak** (step 3)
-runs a short form of this page: the failing test, the fix, the commit, and
-`finished` — no attend, no `red`/`green`, no deliberate break.
+runs every step of this page but 5, the deliberate break. It is not exempt from
+the two stage writes: the board's `finished` gate reads the test id, the reason
+it failed and the green off the card, so a card that skipped them is refused at
+the last step with nothing to show for the work.
 
 Two doors this page owns because step 2's table no longer lists them: a
 judgement card is answered with `kanban_answer_card` /
