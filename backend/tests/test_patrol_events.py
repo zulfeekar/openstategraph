@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from openstategraph.api.main import create_app
 from openstategraph.api.patrol_events import PatrolBroadcaster, PatrolEvent
@@ -96,16 +96,19 @@ class TestFanOut:
         assert asyncio.run(scenario()) is True
 
 
-# The default `_Surface.next_frame` deadline (2.0s) is for the fast, no
-# real background work cases — a fan-out unit test, or an endpoint check
-# with a stubbed/instant patrol. `test_a_real_patrol_emits_started_progressed_and_finished`
-# and `test_a_failing_patrol_emits_failed_with_the_reason` are different: the
-# POST spawns a genuine `asyncio` background task through the real ASGI app,
-# and CI run 33993202005 (stable-beta-public/32) showed that under `--cov`
-# on a loaded shared runner the first frame can take longer than 2s to
-# arrive even though nothing is actually hung. This ceiling is sized so only
-# a hung server — one that never publishes at all — reaches it; a healthy
-# run finishes in a small fraction of it.
+# The default `_Surface.next_frame` deadline (2.0s) is for the fast, no real
+# background work cases — a fan-out unit test, or an endpoint check with a
+# stubbed/instant patrol. The two real-patrol cases wait under this larger
+# ceiling instead, because the POST spawns a genuine `asyncio` background task
+# through the real ASGI app.
+#
+# **It is a hung-server ceiling and nothing else, and that correction is the
+# substance of `stable-beta-public/32`.** That ticket first read CI run
+# 33993202005 as a loaded runner missing a 2s wall clock and raised the
+# deadline to 30s; run 33995697649 then failed *with the 30s ceiling already
+# in place*, which no amount of runner load explains. The real cause was the
+# transport, not the clock — see `_call_once` below — and a frame that is
+# never published does not arrive in thirty seconds or in thirty minutes.
 REAL_PATROL_FRAME_CEILING = 30.0
 
 
@@ -157,6 +160,28 @@ class _Surface:
                 raise AssertionError("no event frame arrived in time")
             await asyncio.sleep(0.005)
 
+    async def next_frames(self, count: int, *, timeout: float) -> list[dict[str, str]]:
+        """The next `count` frames, or an `AssertionError` naming what did arrive.
+
+        `next_frame`'s own message — *"no event frame arrived in time"* — is
+        true of the third frame and of the first alike, and that is exactly how
+        `stable-beta-public/32` was first misread: the CI log said no frame
+        arrived, the reader inferred a slow *start*, and the run had in fact
+        delivered `started` and `progressed` and lost only `finished`. A
+        failure here says which kinds it already had.
+        """
+        frames: list[dict[str, str]] = []
+        for _ in range(count):
+            try:
+                frames.append(await self.next_frame(timeout=timeout))
+            except AssertionError:
+                kinds = [json.loads(frame["data"])["kind"] for frame in frames]
+                raise AssertionError(
+                    f"waited {timeout}s for frame {len(frames) + 1} of {count}; "
+                    f"received {kinds}"
+                ) from None
+        return frames
+
     async def opened(self, *, timeout: float = 2.0) -> None:
         deadline = asyncio.get_running_loop().time() + timeout
         while self.status is None or not (self._chunks or self._buffer):
@@ -169,12 +194,12 @@ class _Surface:
         await asyncio.wait_for(self.task, timeout=2.0)
 
 
-def _scope(path: str = "/api/kanban/patrol/events") -> dict:
+def _scope(path: str = "/api/kanban/patrol/events", method: str = "GET") -> dict:
     return {
         "type": "http",
         "asgi": {"version": "3.0", "spec_version": "2.4"},
         "http_version": "1.1",
-        "method": "GET",
+        "method": method,
         "scheme": "http",
         "path": path,
         "raw_path": path.encode(),
@@ -184,6 +209,47 @@ def _scope(path: str = "/api/kanban/patrol/events") -> dict:
         "client": ("127.0.0.1", 12345),
         "server": ("testserver", 80),
     }
+
+
+async def _call_once(app, path: str, *, method: str = "POST") -> int:
+    """One request, awaited on the caller's own event loop. Returns the status.
+
+    **Why not `TestClient`, and this is `stable-beta-public/32`'s real cause.**
+    A `TestClient` not held open as a context manager runs each request on a
+    *per-request* `anyio` blocking portal: a fresh event loop, in a fresh
+    thread, torn down the moment the response is returned. `POST
+    /api/kanban/patrol/run` answers `202` and leaves a background task running
+    — that is the whole point of `kanban-patrol/07` — and that task is created
+    on whichever loop served the request. So the portal's teardown reached
+    `asyncio.run`'s `_cancel_all_tasks` and cancelled the patrol coroutine
+    while it sat in `await loop.run_in_executor(...)`.
+
+    The two frames published *outside* that coroutine still arrived — `started`
+    from the request handler itself, `progressed` from the executor thread the
+    loop waits for on shutdown — and `finished` never did. Which is what CI saw
+    twice: not a slow first frame, a third frame that was never published. It
+    is a pure race between the response returning and the executor completing,
+    so it is invisible on a fast machine and reproducible on a loaded one; with
+    a 0.3s patrol it fails every single time.
+
+    Calling the ASGI app directly puts the request, the background task and the
+    subscriber on **one** loop — the scenario's own, which lives until the
+    scenario ends. That is also the production shape: uvicorn's loop outlives
+    any one response, which is why the product seam is right and only the test
+    transport was wrong.
+    """
+    status = 0
+
+    async def receive() -> dict:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict) -> None:
+        nonlocal status
+        if message["type"] == "http.response.start":
+            status = message["status"]
+
+    await app(_scope(path, method), receive, send)
+    return status
 
 
 class TestTheEndpoint:
@@ -230,15 +296,12 @@ class TestTheEndpoint:
             surface = _Surface(app)
             await surface.opened()
 
-            client = TestClient(app)
-            response = await asyncio.to_thread(client.post, "/api/kanban/patrol/run")
+            status = await _call_once(app, "/api/kanban/patrol/run")
 
-            frames = [
-                await surface.next_frame(timeout=REAL_PATROL_FRAME_CEILING) for _ in range(3)
-            ]
+            frames = await surface.next_frames(3, timeout=REAL_PATROL_FRAME_CEILING)
             await surface.hang_up()
             reset_active_config()
-            return response.status_code, frames
+            return status, frames
 
         status_code, frames = asyncio.run(scenario())
         assert status_code == 202
@@ -273,12 +336,9 @@ class TestTheEndpoint:
             surface = _Surface(app)
             await surface.opened()
 
-            client = TestClient(app)
-            await asyncio.to_thread(client.post, "/api/kanban/patrol/run")
+            await _call_once(app, "/api/kanban/patrol/run")
 
-            frames = [
-                await surface.next_frame(timeout=REAL_PATROL_FRAME_CEILING) for _ in range(2)
-            ]
+            frames = await surface.next_frames(2, timeout=REAL_PATROL_FRAME_CEILING)
             await surface.hang_up()
             reset_active_config()
             return frames
@@ -287,3 +347,62 @@ class TestTheEndpoint:
         kinds = [json.loads(frame["data"])["kind"] for frame in frames]
         assert kinds == ["started", "failed"]
         assert "sqlite disk I/O error" in json.loads(frames[1]["data"])["reason"]
+
+    def test_a_patrol_still_running_when_the_response_returns_still_finishes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The ordering `stable-beta-public/32` actually turned on, forced.
+
+        The two cases above stub an *instant* patrol, so whether the background
+        task outlives the `202` is decided by scheduling — green on a fast
+        machine, red on a loaded one, and no wall-clock ceiling can make that
+        determinate. Here the patrol does not return until the test says so,
+        **after** the response has come back. Every frame therefore has to be
+        published by a task that outlived its own response, which is the
+        promise `kanban-patrol/07` makes and the one the old test transport
+        quietly broke: run it through a per-request `TestClient` portal and it
+        loses `finished` every single time.
+        """
+        released = threading.Event()
+
+        def slow_patrol(*, project_id, workflows_root, on_card_filed=None, **_kw):
+            # A bounded wait, never an unbounded one: a broken run must fail
+            # this test, not hang the suite.
+            released.wait(timeout=REAL_PATROL_FRAME_CEILING)
+            if on_card_filed is not None:
+                on_card_filed("proj-x:thread-1", "A finding filed after the response")
+            return PatrolResult(filed=["proj-x:thread-1"], skipped=[], total_findings=1)
+
+        monkeypatch.setattr("openstategraph.patrol.run_patrol", slow_patrol)
+
+        async def scenario():
+            from openstategraph.config_file import render_config_file, reset_active_config
+
+            config_path = tmp_path / "openstategraph.yaml"
+            config_path.write_text(render_config_file(project_id="proj-x"))
+            monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(config_path))
+            reset_active_config()
+
+            workflows_root = tmp_path / "workflows"
+            workflows_root.mkdir()
+            app = create_app(graph_factory=lambda _m: None, workflows_root=workflows_root)
+            surface = _Surface(app)
+            await surface.opened()
+
+            status = await _call_once(app, "/api/kanban/patrol/run")
+            # The response is back and the patrol is provably still inside
+            # `run_patrol` — nothing but `started` can have been published yet.
+            started = await surface.next_frames(1, timeout=REAL_PATROL_FRAME_CEILING)
+            released.set()
+            rest = await surface.next_frames(2, timeout=REAL_PATROL_FRAME_CEILING)
+            await surface.hang_up()
+            reset_active_config()
+            return status, started + rest
+
+        status, frames = asyncio.run(scenario())
+        assert status == 202
+        assert [json.loads(frame["data"])["kind"] for frame in frames] == [
+            "started",
+            "progressed",
+            "finished",
+        ]
