@@ -926,21 +926,22 @@ def load_workflow(
     from openstategraph.api.model_resolution import resolve_model, workflow_default_model
     from openstategraph.api.registries import runtime_failure_warnings, runtime_warnings
     from openstategraph.api.services import WorkflowServices
-    from openstategraph.api.workflow_store import slugify
+    from openstategraph.api.workflow_store import slug_refusal
     from openstategraph.compile.node_runtime import RunState, drives_a_model
     from openstategraph.model_readiness import would_reach_no_model
     from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
     slug = directory.name
-    if slug != slugify(slug):
+    refusal = slug_refusal(slug, subject="workflow package directory")
+    if refusal is not None:
         # The slug is the package's frozen identity and is what scopes tool,
         # function, skill and knowledge discovery. A directory the store
         # cannot address would silently discover nothing — the exact silent
         # degradation this function exists to prevent — so say it instead.
-        raise InvalidPackageName(
-            f"workflow package directory {slug!r} is not a valid slug; "
-            f"rename it to {slugify(slug)!r} (lowercase letters, digits and hyphens)"
-        )
+        # The sentence itself is `slug_refusal`'s, shared with the scaffold
+        # and the root review, so three doors cannot phrase one rule three
+        # ways (`osg-agent-experience/64`).
+        raise InvalidPackageName(refusal)
 
     document = normalize_document(json.loads(manifest.read_text()))
 

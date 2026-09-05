@@ -114,6 +114,37 @@ def is_slug(value: str) -> bool:
     return bool(value) and value == slugify(value) and "/" not in value and "\\" not in value
 
 
+def slug_refusal(value: str, *, subject: str = "slug") -> str | None:
+    """The one sentence every door says about a name that is not a slug, or
+    `None` when it is one — `osg-agent-experience/64`.
+
+    Three sites spelled this rule and only one of them named the correction.
+    `load_workflow` said *rename it to 'site-lens-north-yard'*; the scaffold
+    said only *must be lowercase letters, digits and hyphens*, at the exact
+    moment a name is being chosen and a correction is cheapest to act on. The
+    exemplary wording is the one kept, and it now has a single owner so a
+    fourth door cannot invent a fourth sentence.
+
+    **The rule is not relaxed to admit `_`, and that is a decision.** A domain
+    whose own vocabulary carries underscores (`north_yard`) pays a transform
+    for it, and that cost is real. Admitting the character costs more: a slug
+    is the frozen identity — the directory, the `?w=` value, the prefix of a
+    discovered tool's node type, and `SLUG_PATTERN` published to third-party
+    clients in `docs/openapi.json` — and `slugify` collapses `site_lens` and
+    `site-lens` onto one answer, so admitting both would make two addresses for
+    one identity. That is the second spelling this grammar exists to prevent.
+
+    Nothing here renames anything. The correction is named, never applied: a
+    directory minted under a name nobody typed is the silent case.
+    """
+    if is_slug(value):
+        return None
+    return (
+        f"{subject} {value!r} is not a valid slug; "
+        f"rename it to {slugify(value)!r} (lowercase letters, digits and hyphens)"
+    )
+
+
 def _without_clock(envelope: dict[str, Any]) -> dict[str, Any]:
     """An envelope with `savedAt` dropped — everything a save is *about*.
 

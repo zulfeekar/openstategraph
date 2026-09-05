@@ -63,9 +63,9 @@ class TestTheBasenameCarriesTheSlug:
         """A slug carries hyphens by rule; a module name may not. The
         transform is the whole point of the function, so it is asserted rather
         than left to the caller."""
-        name = package_test_basename("cpl-lens-sm-cargoflow")
+        name = package_test_basename("site-lens-north-yard")
 
-        assert name == "test_cpl_lens_sm_cargoflow_shape.py"
+        assert name == "test_site_lens_north_yard_shape.py"
         assert name.removesuffix(".py").isidentifier()
 
     def test_two_slugs_never_share_a_basename(self) -> None:
@@ -130,7 +130,7 @@ class TestInitPyIsNotTheRemedyHere:
 
     def test_a_slug_cannot_be_a_python_package_name(self) -> None:
         """The reason the qualifying step is unavailable, in one assertion."""
-        assert not "cpl-lens-sm-cargoflow".isidentifier()
+        assert not "site-lens-north-yard".isidentifier()
 
 
 class TestTheLayoutDocumentSaysWhy:

@@ -13,6 +13,14 @@ judgement card is answered with `kanban_answer_card` /
 enabled and the developer has said so — with `run_workflow` /
 `openstategraph run`.
 
+**If triage hands you nothing, ask where the board is before concluding there
+is none.** `openstategraph kanban where` prints the file, the reason that file
+was chosen, and whether it exists yet — the address depends on whether
+OpenStateGraph is installed or run from a checkout, so a board written by one
+and read by the other is two files (`osg-agent-experience/65`). *No board here
+yet* and *the board is empty* are different sentences and only one of them
+means there is no work.
+
 ## 1. Attend
 
 MCP: `kanban_attend_card`. CLI: `openstategraph kanban attend <task_id>

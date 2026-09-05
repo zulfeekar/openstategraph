@@ -40,7 +40,17 @@ from openstategraph import agent_brief, templates
 from openstategraph.agent_config import AgentFileAction
 
 #: A package's directory name is its frozen identity, and it is what scopes
-#: tool, function, skill and knowledge discovery. Same rule as `slugify`.
+#: tool, function, skill and knowledge discovery.
+#:
+#: **Not the rule any more, and kept only because it is exported.**
+#: `osg-agent-experience/64`: "same rule as `slugify`" was the comment above
+#: this line and it was not true — this pattern admits `a--b` and `a-`, which
+#: `slugify` never mints and `is_slug` refuses, so the scaffold and the loader
+#: disagreed about two shapes of name while appearing to share a rule. The
+#: authority is `api.workflow_store.is_slug` (derived from `slugify`, so it
+#: cannot drift from it) and the sentence is `slug_refusal`. Nothing in this
+#: module reads this constant; it stays because it is in `__all__` and an
+#: adopter may import it. Use `is_slug` instead.
 SLUG_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 #: Discovered by convention, so a scaffold that omits them is a scaffold whose
@@ -56,8 +66,18 @@ class ScaffoldError(ValueError):
 
 
 def _prepare(root: Path | str, slug: str, subdirectories: tuple[str, ...]) -> Path:
-    if not SLUG_PATTERN.fullmatch(slug):
-        raise ScaffoldError(f"slug {slug!r} must be lowercase letters, digits and hyphens")
+    # Lazy: `workflow_store` imports `WORKFLOW_DIRECTORIES` from this module,
+    # so a module-level import here is a cycle.
+    from openstategraph.api.workflow_store import slug_refusal
+
+    # `osg-agent-experience/64`: this refusal used to state the rule and stop
+    # there, while `load_workflow`'s stated the rule *and* named the correction
+    # — and this is the door where a name is still being chosen, so it is the
+    # cheaper of the two to act on. One sentence, one owner. Nothing is
+    # renamed: a package minted under a name nobody typed is the silent case.
+    refusal = slug_refusal(slug)
+    if refusal is not None:
+        raise ScaffoldError(refusal)
     target = Path(root) / slug
     if target.exists():
         raise ScaffoldError(f"{target} already exists")
@@ -604,6 +624,14 @@ class FoundPackage:
     node_count: int
     #: Why it could not be read, or `None`.
     error: str | None
+    #: Why this directory name cannot address a package, or `None` —
+    #: `osg-agent-experience/64`. Distinct from `error`, which is about the
+    #: *document*: a directory called `site_lens_north_yard` holds a
+    #: `workflow.json` that parses perfectly and still cannot be loaded, and
+    #: reporting that as a parse failure sends a reader to the one file that
+    #: is not wrong. Defaulted so an existing caller constructing a
+    #: `FoundPackage` keeps working.
+    slug_error: str | None = None
 
 
 def review_workflows_root(root: Path) -> tuple[FoundPackage, ...]:
@@ -626,7 +654,7 @@ def review_workflows_root(root: Path) -> tuple[FoundPackage, ...]:
     `include_broken=True`, and hidden packages included: this answers "what am
     I about to adopt", and the honest answer names everything the root holds.
     """
-    from openstategraph.api.workflow_store import WorkflowStore
+    from openstategraph.api.workflow_store import WorkflowStore, slug_refusal
 
     if not root.is_dir():
         return ()
@@ -637,6 +665,13 @@ def review_workflows_root(root: Path) -> tuple[FoundPackage, ...]:
             name=row.name or row.slug,
             node_count=row.node_count,
             error=row.error or None,
+            # The one pass this ticket asked for. `validate` answers about one
+            # package, so fifteen unaddressable directories was fifteen runs
+            # to find fifteen instances of one mistake — while the review that
+            # already reads every package listed them as healthy rows, because
+            # `WorkflowStore.list` never asks whether a directory name is
+            # addressable (`osg-agent-experience/64`).
+            slug_error=slug_refusal(row.slug),
         )
         for row in sorted(rows, key=lambda row: row.slug)
     )
@@ -644,12 +679,19 @@ def review_workflows_root(root: Path) -> tuple[FoundPackage, ...]:
 
 def review_lines(found: tuple[FoundPackage, ...]) -> list[str]:
     """The review, as the refusal and the adoption report both print it."""
+    from openstategraph.api.workflow_store import slugify
+
     if not found:
         return ["  (no packages in it yet)"]
     width = max(len(row.slug) for row in found)
     lines = []
     for row in found:
-        if row.error is not None:
+        if row.slug_error is not None:
+            lines.append(
+                f"  {row.slug.ljust(width)}  cannot be loaded — "
+                f"rename it to {slugify(row.slug)!r}"
+            )
+        elif row.error is not None:
             lines.append(f"  {row.slug.ljust(width)}  will not parse — {row.error}")
         else:
             plural = "" if row.node_count == 1 else "s"
