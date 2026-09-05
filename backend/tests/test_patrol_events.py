@@ -96,6 +96,19 @@ class TestFanOut:
         assert asyncio.run(scenario()) is True
 
 
+# The default `_Surface.next_frame` deadline (2.0s) is for the fast, no
+# real background work cases — a fan-out unit test, or an endpoint check
+# with a stubbed/instant patrol. `test_a_real_patrol_emits_started_progressed_and_finished`
+# and `test_a_failing_patrol_emits_failed_with_the_reason` are different: the
+# POST spawns a genuine `asyncio` background task through the real ASGI app,
+# and CI run 33993202005 (stable-beta-public/32) showed that under `--cov`
+# on a loaded shared runner the first frame can take longer than 2s to
+# arrive even though nothing is actually hung. This ceiling is sized so only
+# a hung server — one that never publishes at all — reaches it; a healthy
+# run finishes in a small fraction of it.
+REAL_PATROL_FRAME_CEILING = 30.0
+
+
 class _Surface:
     """One open `/api/kanban/patrol/events` connection, driven through the
     raw ASGI interface — `test_catalogue_events.py`'s own `_Surface`, aimed
@@ -220,7 +233,9 @@ class TestTheEndpoint:
             client = TestClient(app)
             response = await asyncio.to_thread(client.post, "/api/kanban/patrol/run")
 
-            frames = [await surface.next_frame() for _ in range(3)]
+            frames = [
+                await surface.next_frame(timeout=REAL_PATROL_FRAME_CEILING) for _ in range(3)
+            ]
             await surface.hang_up()
             reset_active_config()
             return response.status_code, frames
@@ -261,7 +276,9 @@ class TestTheEndpoint:
             client = TestClient(app)
             await asyncio.to_thread(client.post, "/api/kanban/patrol/run")
 
-            frames = [await surface.next_frame() for _ in range(2)]
+            frames = [
+                await surface.next_frame(timeout=REAL_PATROL_FRAME_CEILING) for _ in range(2)
+            ]
             await surface.hang_up()
             reset_active_config()
             return frames
