@@ -5,22 +5,29 @@ workflow: the node vocabulary a client composes against, the catalogue event
 stream, the health probe, and the starting templates.
 
 `/api/events` is the only one that needs the app's assembly — it subscribes to
-the broadcaster (reviews-2026-08-14 ticket 15).
+the broadcaster (reviews-2026-08-14 ticket 15), and since
+`osg-agent-experience/71` to as many as four of them at once: it is the single
+long-lived connection an editor tab can afford, so every live subject rides it.
+`live_stream.py` is the table of what those subjects are.
 """
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import AsyncExitStack
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
-from openstategraph.api.catalogue_events import (
-    CATALOGUE_EVENT,
-    CATALOGUE_FRAME_FIELDS,
-    KEEPALIVE_SECONDS,
-)
+from openstategraph.api.broadcast import DEFAULT_BACKLOG_LIMIT, Subscriber
+from openstategraph.api.catalogue_events import KEEPALIVE_SECONDS
 from openstategraph.api.deps import Services
+from openstategraph.api.live_stream import (
+    LIVE_EVENT_NAMES,
+    live_frame_fields,
+    live_frame_name,
+)
 from openstategraph.api.schemas import (
     HealthResponse,
     NodeContractResponse,
@@ -28,6 +35,7 @@ from openstategraph.api.schemas import (
 )
 from openstategraph.api.sse_contract import sse_responses
 from openstategraph.api.streaming import _sse, stop_when_client_leaves_async
+from openstategraph.api.workflow_events import WorkflowChangedEvent
 
 router = APIRouter()
 
@@ -88,55 +96,111 @@ def node_contracts() -> dict[str, NodeContractResponse]:
 
 @router.get(
     "/api/events",
-    summary="Catalogue changes, live (SSE)",
+    summary="Live changes on one connection (SSE)",
     response_class=StreamingResponse,
     responses=sse_responses(
-        (CATALOGUE_EVENT,),
-        "One frame per catalogue change.",
-        # The fields as well as the name — `kanban-patrol/34`. Passed rather
-        # than typed, so the published contract cannot disagree with what
-        # `CatalogueEvent.as_dict()` puts on the wire.
-        {CATALOGUE_EVENT: CATALOGUE_FRAME_FIELDS},
+        LIVE_EVENT_NAMES,
+        "One frame per change, on whichever subjects this connection asked for.",
+        # The names and the fields, both passed rather than typed —
+        # `kanban-patrol/34`, now from the one registry that also decides what
+        # this route attaches, so the published contract cannot name a frame
+        # the stream does not send or omit one it does.
+        live_frame_fields(),
     ),
     tags=["Catalogue"],
 )
-async def catalogue_events(http: Request, services: Services) -> StreamingResponse:
-    """Catalogue changes, live — `event: workflows.changed`.
+async def catalogue_events(
+    http: Request,
+    services: Services,
+    slug: str | None = Query(
+        default=None,
+        description="Also carry `workflow.changed` for this package's document.",
+    ),
+    patrol: bool = Query(default=False, description="Also carry `patrol.status`."),
+    kanban: bool = Query(default=False, description="Also carry `kanban.changed`."),
+) -> StreamingResponse:
+    """Every live subject this surface asked for, on **one** connection.
 
-    Not expressible in OpenAPI beyond its media type; the frame shape and
-    the reconnect behaviour are in `docs/api.md`.
+    Not expressible in OpenAPI beyond its media type; the frame shapes and the
+    reconnect behaviour are in `docs/api.md`.
 
-    Why this exists: `/chat` fetched its picker once, on load, so a
-    customer sitting on the page never saw a newly published workflow
-    until they reloaded. The editor's Workflows panel had the same blind
-    spot with respect to a second tab.
+    Why this exists at all: `/chat` fetched its picker once, on load, so a
+    customer sitting on the page never saw a newly published workflow until
+    they reloaded, and the editor's Workflows panel had the same blind spot
+    with respect to a second tab.
 
-    **SSE, not WebSocket, not polling.** This process already speaks SSE
-    (`/api/runs/stream`), the flow is one-way, and `EventSource` reconnects
-    by itself. Framed by `_sse` — the one framer.
+    **Why it carries four subjects rather than one**
+    (`osg-agent-experience/71`). A browser allows six concurrent HTTP/1.1
+    connections per origin. An editor tab spent two of them on long-lived
+    streams — this one and `/api/kanban/patrol/events` — before `69` added a
+    third for the per-package watcher, and with two tabs on one workflow the
+    budget was gone: the last stream opened sat at `readyState 0` for minutes
+    and ordinary `fetch` calls in that tab stopped completing. HTTP/2 raises
+    the limit and is a property of somebody's proxy, not of this project, so
+    it must not be the answer. A subject is a frame here, not a socket.
 
-    The payload is a **hint, not a catalogue**: `{reason, slug,
-    surface_visible}`. A client refetches `/api/workflows` on it, so there
-    is exactly one spelling of the catalogue and it cannot go stale in a
-    cache built from events.
+    **Opt-in, and that is the cost model rather than a nicety.** The catalogue
+    is always carried, because that is what every existing caller opens this
+    endpoint for. `patrol=1`, `kanban=1` and `slug=<slug>` each attach one
+    more fan-out, and the last two own **poll tasks whose lifetime is the set
+    of subscribers** — so a connection that does not ask for the board does
+    not start the store poll, which is exactly the property `kanban_events.py`
+    gave as its reason for being a sibling stream. A plain `GET /api/events`
+    sees and costs what it always did.
+
+    **No frame is renamed.** Each subject keeps its own `event:` name, so the
+    sibling endpoints and this one speak one vocabulary; `live_stream.py` is
+    the single table saying which name belongs to which payload. Framed by
+    `_sse` — the one framer.
+
+    A connection that named a slug is handed frames about **that** slug only,
+    filtered here rather than in the client: one watcher serves every open
+    package, and handing a connection traffic about packages it never named
+    would make this endpoint's own contract a half-truth.
+
+    The payloads are **hints, never documents**: a client refetches
+    `/api/workflows`, `/api/kanban/cards` or `/api/workflows/{slug}` on them,
+    so there is exactly one spelling of each thing and no cache built from
+    events that could disagree with it. **No replay**, on every subject: a
+    subscriber sees what happens while it is connected, and its refetch on
+    open is what recovers the rest.
 
     Limits, stated rather than discovered (full reasoning in
     `catalogue_events`): the fan-out is **in-process**, so it covers one
-    worker — which is the documented ceiling (`uvicorn --workers 1`, for
-    sqlite's per-instance write lock); a multi-worker deployment needs
-    Redis pub/sub or Postgres LISTEN/NOTIFY behind the same
-    publish/subscribe pair. And only writes **through this API** emit: a
-    `workflow.json` hand-edited on disk or arriving by `git pull` produces
-    nothing. A filesystem watch would close that gap and is recorded as
-    future work rather than implied.
+    worker — the documented ceiling (`uvicorn --workers 1`, for sqlite's
+    per-instance write lock); a multi-worker deployment needs Redis pub/sub or
+    Postgres LISTEN/NOTIFY behind the same publish/subscribe pair. And the
+    catalogue subject still only emits for writes **through this API**: a
+    `workflow.json` hand-edited on disk or arriving by `git pull` produces no
+    `workflows.changed`. The `slug` subject is the one that covers those
+    writers, because it watches the file (`osg-agent-experience/69`).
     """
-    broadcaster = services.events
 
     async def frames() -> Any:
-        # The subscription's lifetime IS this generator's: the `with` block
-        # unsubscribes on a normal end, on a disconnect (the wrapper closes
-        # this generator) and on a raise alike. Nothing has to remember to.
-        with broadcaster.subscribe() as subscriber:
+        # One subscriber, several fan-outs — the whole ticket in three lines.
+        # It is built here rather than by each broadcaster's own `subscribe()`
+        # because this connection owns it: `attach` deliberately does not
+        # close a subscriber it did not make, so the first detach cannot end
+        # the other three subjects mid-sentence.
+        subscriber: Subscriber[Any] = Subscriber(
+            asyncio.get_running_loop(), DEFAULT_BACKLOG_LIMIT
+        )
+        # The subscription's lifetime IS this generator's: the stack unwinds on
+        # a normal end, on a disconnect (the wrapper closes this generator) and
+        # on a raise alike. Nothing has to remember to.
+        async with AsyncExitStack() as stack:
+            # Registered first so it runs last: the fan-outs let go of the
+            # subscriber before the subscriber is ended.
+            stack.callback(subscriber.close)
+            stack.enter_context(services.events.attach(subscriber))
+            if patrol:
+                stack.enter_context(services.patrol_events.attach(subscriber))
+            if kanban:
+                await stack.enter_async_context(services.kanban_events.attach(subscriber))
+            if slug:
+                await stack.enter_async_context(
+                    services.workflow_events.attach(slug, subscriber)
+                )
             # A first comment, immediately: it flushes response headers so
             # `EventSource` fires `onopen` now rather than whenever the
             # first change happens to occur — and the client's refetch on
@@ -150,8 +214,10 @@ async def catalogue_events(http: Request, services: Services) -> StreamingRespon
                     # on the wait rather than by a companion task, so there
                     # is no task that could outlive this connection.
                     yield ": keepalive\n\n"
-                else:
-                    yield _sse(CATALOGUE_EVENT, event.as_dict())
+                    continue
+                if isinstance(event, WorkflowChangedEvent) and event.slug != slug:
+                    continue
+                yield _sse(live_frame_name(event), event.as_dict())
 
     return StreamingResponse(
         # Wrapped for the same reason run streaming is: Starlette does not

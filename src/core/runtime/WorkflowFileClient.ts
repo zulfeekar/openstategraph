@@ -1,5 +1,6 @@
 import { Err, Ok, type Result } from '@core/kernel/Result';
 import { formatMountAddress, isInstance, type MountAddress } from '@core/model/MountAddress';
+import { LiveEventStream, liveEvents } from './LiveEventStream';
 import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
 
 /**
@@ -450,25 +451,49 @@ export interface ICatalogueEvents {
   watchCatalogue(onChange: (change: CatalogueChange) => void): () => void;
 }
 
+/** One package's `workflow.json` now holds different bytes. */
+export interface WorkflowDocumentChange {
+  readonly slug: string;
+  /** The revision — the digest a save quotes back as `base_digest`. */
+  readonly digest: string;
+}
+
+/**
+ * A different subject from `ICatalogueEvents`, and so a different interface.
+ *
+ * A catalogue change says a package appeared, vanished or changed visibility
+ * and every open surface cares; this says one package's document has new
+ * bytes and only a tab editing that package cares. `/chat` implements neither
+ * and consumes only the first — which is the Interface Segregation reason
+ * these are not one wider `ILiveEvents` (`osg-agent-experience/71`).
+ */
+export interface IWorkflowDocumentEvents {
+  /** Subscribe until the returned function is called. */
+  watchWorkflow(slug: string, onChange: (change: WorkflowDocumentChange) => void): () => void;
+}
+
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
-/** Just enough of `EventSource` to be faked in a test with no DOM. */
-export interface EventSourceLike {
-  addEventListener(type: string, listener: (event: MessageEvent) => void): void;
-  close(): void;
-}
-export type EventSourceFactory = (url: string) => EventSourceLike;
-
 export class WorkflowFileClient
-  implements IWorkflowFileClient, ICatalogueEvents, IWorkflowTemplates, IWorkflowExamples
+  implements
+    IWorkflowFileClient,
+    ICatalogueEvents,
+    IWorkflowDocumentEvents,
+    IWorkflowTemplates,
+    IWorkflowExamples
 {
   constructor(
     private readonly baseUrl: string = runtimeBaseUrl(),
     private readonly fetchImpl: FetchLike = (url, init) => fetch(url, init),
-    /** Injected only by tests — Vitest's node environment has no `EventSource`. */
-    private readonly eventSourceImpl: EventSourceFactory | null = typeof EventSource === 'undefined'
-      ? null
-      : (url) => new EventSource(url),
+    /**
+     * The tab's one live connection, shared with every other client object
+     * — `osg-agent-experience/71`. This used to be an `EventSourceFactory`
+     * and this class used to open its own socket; a browser allows six per
+     * origin and an editor tab spent three, so two tabs on one workflow
+     * saturated the budget and the last stream never left `CONNECTING`.
+     * Injected only by tests, and `null` where `EventSource` does not exist.
+     */
+    private readonly live: LiveEventStream | null = liveEvents,
   ) {}
 
   /**
@@ -482,30 +507,49 @@ export class WorkflowFileClient
    * returns a no-op unsubscribe and the panel keeps its refresh-on-open
    * behaviour — a live update is an improvement, never a dependency.
    *
+   * **The socket is not this object's** (`osg-agent-experience/71`).
+   * `LiveEventStream` owns the tab's one connection and this asks it for the
+   * catalogue subject; the parsing stays here, because the wire shape of a
+   * catalogue frame is this client's knowledge and not the connection's.
+   *
    * Limits inherited from the backend, worth knowing at the call site: the
    * fan-out is in-process, so it covers one worker (the documented ceiling),
-   * and a `workflow.json` edited by hand on disk emits nothing — the editor
-   * writes through the API, a text editor does not.
+   * and a `workflow.json` edited by hand on disk emits no *catalogue* event —
+   * the editor writes through the API, a text editor does not. That gap is
+   * what `watchWorkflow` below covers, on the same connection.
    */
   watchCatalogue(onChange: (change: CatalogueChange) => void): () => void {
-    if (!this.eventSourceImpl) return () => {};
-    const source = this.eventSourceImpl(`${this.baseUrl}/api/events`);
-    source.addEventListener('workflows.changed', (event) => {
-      try {
-        const record = JSON.parse(event.data as string) as Record<string, unknown>;
-        onChange({
-          reason: asString(record['reason']) as CatalogueChangeReason,
-          slug: asString(record['slug']),
-          surfaceVisible: record['surface_visible'] === true,
-        });
-      } catch {
-        // One unparseable frame is not a reason to tear the stream down — the
-        // next is very likely fine, and the listener refetches regardless.
-      }
+    if (!this.live) return () => {};
+    return this.live.subscribe({ topic: 'catalogue' }, (record) => {
+      onChange({
+        reason: asString(record['reason']) as CatalogueChangeReason,
+        slug: asString(record['slug']),
+        surfaceVisible: record['surface_visible'] === true,
+      });
     });
-    // Closing here is what frees the server's subscription, rather than
-    // leaving it for a socket timeout that may never come.
-    return () => source.close();
+  }
+
+  /**
+   * One package's document changing on disk, whoever wrote it —
+   * `osg-agent-experience/69`, reaching the editor at last through `71`.
+   *
+   * A `workflow.json` has four kinds of writer — this tab, a second tab, the
+   * CLI, a coding agent through the MCP server — and only the first of them
+   * goes through the save route, so `watchCatalogue` above hears one in four.
+   * The backend watches the **file**, which covers all of them by
+   * construction.
+   *
+   * The frame carries the slug and the digest and nothing else: the digest is
+   * the revision, the same string a save quotes back as `base_digest`, so a
+   * tab can tell its own write from somebody else's without diffing
+   * documents. A caller that decides to take the change refetches through
+   * `load`, the one spelling of a document.
+   */
+  watchWorkflow(slug: string, onChange: (change: WorkflowDocumentChange) => void): () => void {
+    if (!this.live) return () => {};
+    return this.live.subscribe({ topic: 'workflow', slug }, (record) => {
+      onChange({ slug: asString(record['slug']), digest: asString(record['digest']) });
+    });
   }
 
   /**

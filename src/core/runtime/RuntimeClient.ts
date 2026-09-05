@@ -2,7 +2,7 @@ import { Err, Ok, type Result } from '@core/kernel/Result';
 import { browserSessionId } from './browserSession';
 import { McpRegistryClient } from './McpRegistryClient';
 import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
-import type { EventSourceFactory } from './WorkflowFileClient';
+import { LiveEventStream, liveEvents } from './LiveEventStream';
 
 /**
  * The editor's only route to a runtime.
@@ -1423,16 +1423,19 @@ export class RuntimeClient implements IRuntimeClient {
      */
     private readonly sessionId: () => string = browserSessionId,
     /**
-     * Injected exactly as `WorkflowFileClient`'s own `eventSourceImpl` is,
-     * and for the same reason: Vitest's node environment has no
-     * `EventSource`. `null` (an old browser, a unit test) makes
-     * `watchPatrolEvents` a no-op that returns a no-op unsubscribe —
-     * `07`'s stream is an improvement, never a dependency, exactly as
-     * `watchCatalogue`'s own default already treats its own stream.
+     * The tab's one live connection, shared with `WorkflowFileClient` and
+     * with every other client object — `osg-agent-experience/71`. It used to
+     * be an `EventSourceFactory` and this class used to open two sockets of
+     * its own; a browser allows six per origin, so three long-lived streams
+     * meant two tabs on one workflow saturated the budget and the last one
+     * opened never left `CONNECTING`.
+     *
+     * Injected only by tests (Vitest's node environment has no
+     * `EventSource`). `null` makes `watchPatrolEvents` and
+     * `watchKanbanEvents` no-ops returning no-op unsubscribes — a live
+     * stream is an improvement, never a dependency.
      */
-    private readonly eventSourceImpl: EventSourceFactory | null = typeof EventSource === 'undefined'
-      ? null
-      : (url) => new EventSource(url),
+    private readonly live: LiveEventStream | null = liveEvents,
   ) {
     this.mcp = new McpRegistryClient(baseUrl, fetchImpl);
   }
@@ -2157,13 +2160,17 @@ export class RuntimeClient implements IRuntimeClient {
   }
 
   /**
-   * Patrol progress as it happens, over `GET /api/kanban/patrol/events` —
-   * kanban-patrol/07. The same `EventSource` wiring `WorkflowFileClient
-   * .watchCatalogue` already uses against its own stream: one
-   * `addEventListener` for the one event name the backend sends
+   * Patrol progress as it happens — kanban-patrol/07, and since
+   * `osg-agent-experience/71` on the `/api/events` connection this tab
+   * already holds rather than a socket of its own. One event name
    * (`patrol.status`, `kind` inside the payload), a no-op where
-   * `EventSource` is unavailable, and a returned unsubscribe that closes
-   * the connection rather than waiting on a socket timeout.
+   * `EventSource` is unavailable, and a returned unsubscribe that lets the
+   * subject go — which is what stops the backend carrying it.
+   *
+   * The endpoint `GET /api/kanban/patrol/events` is unchanged and still the
+   * right door for a client with a connection to spare. This editor had
+   * none: six per origin, and three long-lived streams meant *two* tabs
+   * saturated the budget.
    *
    * **No replay**, inherited from the backend without a word added here: a
    * caller that opens this after `patrol.started` already went out learns
@@ -2171,57 +2178,40 @@ export class RuntimeClient implements IRuntimeClient {
    * up.
    */
   watchPatrolEvents(onEvent: (event: PatrolStreamEvent) => void): () => void {
-    if (!this.eventSourceImpl) return () => {};
-    const source = this.eventSourceImpl(`${this.baseUrl}/api/kanban/patrol/events`);
-    source.addEventListener('patrol.status', (event) => {
-      try {
-        const record = JSON.parse(event.data as string) as Record<string, unknown>;
-        onEvent({
-          kind: asString(record['kind']) as PatrolStreamEvent['kind'],
-          taskId: asString(record['task_id']),
-          title: asString(record['title']),
-          filed: typeof record['filed'] === 'number' ? record['filed'] : 0,
-          skipped: typeof record['skipped'] === 'number' ? record['skipped'] : 0,
-          totalFindings:
-            typeof record['total_findings'] === 'number' ? record['total_findings'] : 0,
-          reason: asString(record['reason']),
-        });
-      } catch {
-        // One unparseable frame is not a reason to tear the stream down —
-        // `watchCatalogue`'s own rule.
-      }
+    if (!this.live) return () => {};
+    return this.live.subscribe({ topic: 'patrol' }, (record) => {
+      onEvent({
+        kind: asString(record['kind']) as PatrolStreamEvent['kind'],
+        taskId: asString(record['task_id']),
+        title: asString(record['title']),
+        filed: typeof record['filed'] === 'number' ? record['filed'] : 0,
+        skipped: typeof record['skipped'] === 'number' ? record['skipped'] : 0,
+        totalFindings: typeof record['total_findings'] === 'number' ? record['total_findings'] : 0,
+        reason: asString(record['reason']),
+      });
     });
-    return () => source.close();
   }
 
   /**
-   * Card writes as they happen, over `GET /api/kanban/events` —
-   * `osg-agent-experience/36`. The same `EventSource` wiring
-   * `watchPatrolEvents` uses against its sibling stream.
+   * Card writes as they happen — `osg-agent-experience/36`, on the tab's one
+   * connection since `71`.
    *
-   * **A separate stream from the patrol one on purpose**, and the reason
-   * matters to this client too: the backend polls `kanban.sqlite` only while
-   * somebody holds this connection open, so a caller opens it while a board
-   * is on screen and closes it when the board goes away. Holding it for the
-   * life of the tab would make the server poll for the life of the tab.
+   * **Subscribed while a board is on screen and not for the life of the tab**,
+   * and that is a cost model rather than a habit: the backend polls
+   * `kanban.sqlite` only while somebody asks for this subject, so the
+   * `kanban=1` this adds to the connection is what makes the poll exist. Drop
+   * it when the board closes and the poll stops, exactly as when this was its
+   * own socket.
    *
    * **The frame is a hint**: refetch `kanbanCards()` on it. **No replay** —
    * a caller that connects after a write learns nothing about it, and needs
    * nothing, because opening a board reads the cards anyway.
    */
   watchKanbanEvents(onEvent: (event: KanbanStreamEvent) => void): () => void {
-    if (!this.eventSourceImpl) return () => {};
-    const source = this.eventSourceImpl(`${this.baseUrl}/api/kanban/events`);
-    source.addEventListener('kanban.changed', (event) => {
-      try {
-        const record = JSON.parse(event.data as string) as Record<string, unknown>;
-        onEvent({ digest: asString(record['digest']) });
-      } catch {
-        // One unparseable frame is not a reason to tear the stream down —
-        // `watchPatrolEvents`' own rule.
-      }
+    if (!this.live) return () => {};
+    return this.live.subscribe({ topic: 'kanban' }, (record) => {
+      onEvent({ digest: asString(record['digest']) });
     });
-    return () => source.close();
   }
 
   async health(): Promise<Result<RuntimeHealth, string>> {

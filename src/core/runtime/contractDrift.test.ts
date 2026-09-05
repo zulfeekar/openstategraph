@@ -43,6 +43,11 @@ const client = [
   'McpRegistryClient.ts',
   'WorkflowFileClient.ts',
   'RecordedRunsClient.ts',
+  // `osg-agent-experience/71`: the socket every live subject arrives on moved
+  // out of the two clients into one module, so a list naming only the clients
+  // would have gone quiet about the endpoint and the event names on the day
+  // they were folded together.
+  'LiveEventStream.ts',
 ]
   .map((name) => readFileSync(fileURLToPath(new URL(`src/core/runtime/${name}`, REPO)), 'utf8'))
   .join('\n');
@@ -406,163 +411,103 @@ describe('the client and the published contract', () => {
   });
 
   /**
-   * The **second** SSE stream this client parses, and the one nothing watched.
+   * The **live stream** — one endpoint, four subjects, and the pin that used
+   * to be three (`osg-agent-experience/71`).
    *
-   * `kanban-patrol/31` asked which of three hand-mirrored kanban wire types
-   * were pinned, and the answer was measured before anything was written.
-   * Rename `KanbanCardResponse.priority_reason`, regenerate
-   * `docs/openapi.json`, and `reads every field the endpoints it calls can
-   * send back` goes red; rename `PatrolStatusResponse.total_findings` and it
-   * goes red again. Both are response bodies of endpoints this client calls,
-   * so the census above already covers them and there is nothing here to add.
+   * There were four SSE endpoints and the editor opened three of them, one
+   * socket each. A browser allows six concurrent HTTP/1.1 connections per
+   * origin, so two tabs on one workflow saturated the budget and the last
+   * stream opened never left `CONNECTING`. `GET /api/events` now carries every
+   * subject a surface asks for — the catalogue always, `patrol.status`,
+   * `kanban.changed` and one package's `workflow.changed` on request — and the
+   * editor holds exactly one connection. `src/oneStreamPerTab.test.ts` counts
+   * the doors; this pins what arrives through the one that is left.
    *
-   * `PatrolStreamEvent` is neither. It is an SSE frame, and renaming
-   * `patrol_events.PatrolEvent.task_id` changed **not one byte** of
-   * `docs/openapi.json` — the patrol endpoint published its event *name* and
-   * stopped there, so seven wire fields the editor reads by hand were outside
-   * the contract entirely. That is the same one-level-short shape
-   * framework-packaging ticket 10 found on the run stream, on the sibling
-   * stream, and it is fixed the same way: `sse_responses` writes the fields
-   * into the description, derived from `PatrolEvent.as_dict()` rather than
-   * typed a second time, and this reads them back out of the artifact.
+   * The sibling endpoints are unchanged and still published: `69`'s
+   * `/api/workflows/{slug}/events` and both kanban streams are the right door
+   * for a client with connections to spare. They are simply not doors *this*
+   * client opens any more, so pinning them here would be pinning a contract
+   * against a mirror that no longer exists — which is the vacuity every
+   * `is a door this client actually opens` assertion in this file exists to
+   * refuse.
+   *
+   * What the three retired sections were about is kept, because it is the
+   * whole reason this pin is field-level: `kanban-patrol/31` and `/34`
+   * measured that renaming `PatrolEvent.task_id` or
+   * `CatalogueEvent.surface_visible` changed **not one byte** of
+   * `docs/openapi.json` while the editor went on reading a key nobody sent.
+   * Every frame's fields are derived from its own `as_dict()`, gathered by
+   * `api/live_stream.py`, and read back out of the artifact here.
    */
-  describe('the patrol stream', () => {
-    const PATROL = '/api/kanban/patrol/events';
+  describe('the live stream', () => {
+    const LIVE = '/api/events';
 
     it('is a door this client actually opens', () => {
       // Anti-vacuity: every assertion below is about a contract for an
       // endpoint nobody calls unless this holds.
-      expect(pathsCalledByTheClient()).toContain(PATROL);
+      expect(pathsCalledByTheClient()).toContain(LIVE);
     });
 
-    it('declares its one event name, and the client listens for it', () => {
-      // One name with a `kind` inside it, deliberately — `patrol_events.py`
-      // says why. The dot is the part the matchers above had to learn.
-      expect(eventNamesDeclaredFor(PATROL, 'get')).toEqual(['patrol.status']);
-      expect(client, 'RuntimeClient no longer listens for `patrol.status`').toContain(
-        "'patrol.status'",
-      );
-    });
-
-    it('is parsed field for field by the hand-written client', () => {
-      const declared = frameFieldsDeclaredFor(PATROL, 'get');
-
-      // Anti-vacuity: an extractor that matched nothing would make the loop
-      // below a statement about no frames and no fields — which is exactly
-      // the state this endpoint was in before the ticket.
-      expect(Object.keys(declared)).toEqual(['patrol.status']);
-      expect(declared['patrol.status']).toContain('task_id');
-      expect(declared['patrol.status']?.length).toBeGreaterThan(5);
-
-      const missing = (declared['patrol.status'] as string[]).filter(
-        (field) => !clientReads(field),
-      );
-
-      expect(
-        missing,
-        `RuntimeClient never reads ${missing.join(', ')} off a \`patrol.status\` frame — ` +
-          `the backend emits it, the contract publishes it, and the board cannot see it.`,
-      ).toEqual([]);
-    });
-  });
-
-  /**
-   * The **third** SSE stream this client parses, and the sibling gap
-   * `kanban-patrol/31` named but did not fix — filed as `kanban-patrol/34`.
-   *
-   * `GET /api/events` published its event *name* and stopped there, exactly
-   * like the patrol stream before it: renaming `CatalogueEvent.surface_visible`
-   * and regenerating `docs/openapi.json` changed not one byte, while
-   * `WorkflowFileClient.watchCatalogue` went on reading `reason`, `slug` and
-   * `surface_visible` off a `workflows.changed` frame the contract never
-   * described. Fixed the same way — `catalogue_events.CATALOGUE_FRAME_FIELDS`
-   * derived from `CatalogueEvent.as_dict()`, passed into `sse_responses` —
-   * and read back out of the artifact here rather than trusted.
-   */
-  describe('the catalogue stream', () => {
-    const CATALOGUE = '/api/events';
-
-    it('is a door this client actually opens', () => {
-      // Anti-vacuity: every assertion below is about a contract for an
-      // endpoint nobody calls unless this holds.
-      expect(pathsCalledByTheClient()).toContain(CATALOGUE);
-    });
-
-    it('declares its one event name, and the client listens for it', () => {
-      expect(eventNamesDeclaredFor(CATALOGUE, 'get')).toEqual(['workflows.changed']);
-      expect(client, 'WorkflowFileClient no longer listens for `workflows.changed`').toContain(
-        "'workflows.changed'",
-      );
+    it('declares every subject it can carry, and the client listens for each', () => {
+      expect(eventNamesDeclaredFor(LIVE, 'get')).toEqual([
+        'workflows.changed',
+        'patrol.status',
+        'kanban.changed',
+        'workflow.changed',
+      ]);
+      for (const name of eventNamesDeclaredFor(LIVE, 'get')) {
+        expect(client, `nothing listens for \`${name}\` any more`).toContain(`'${name}'`);
+      }
     });
 
     it('is parsed field for field by the hand-written client', () => {
-      const declared = frameFieldsDeclaredFor(CATALOGUE, 'get');
+      const declared = frameFieldsDeclaredFor(LIVE, 'get');
 
       // Anti-vacuity: an extractor that matched nothing would make the loop
       // below a statement about no frames and no fields — which is exactly
-      // the state this endpoint was in before the ticket.
-      expect(Object.keys(declared)).toEqual(['workflows.changed']);
+      // the state three of these four endpoints were in before their tickets.
+      expect(Object.keys(declared)).toEqual([
+        'workflows.changed',
+        'patrol.status',
+        'kanban.changed',
+        'workflow.changed',
+      ]);
       expect(declared['workflows.changed']).toContain('surface_visible');
-      expect(declared['workflows.changed']?.length).toBeGreaterThan(2);
-
-      const missing = (declared['workflows.changed'] as string[]).filter(
-        (field) => !clientReads(field),
-      );
-
-      expect(
-        missing,
-        `WorkflowFileClient never reads ${missing.join(', ')} off a \`workflows.changed\` frame — ` +
-          `the backend emits it, the contract publishes it, and the panel cannot see it.`,
-      ).toEqual([]);
-    });
-  });
-
-  /**
-   * The **fourth** SSE stream this client parses — `osg-agent-experience/36`.
-   *
-   * The board's rows went stale the moment an agent moved a card, because
-   * every write door is another process writing `kanban.sqlite` and the
-   * server was told nothing. `GET /api/kanban/events` is the server watching
-   * that file on the board's behalf, and it is a **sibling** of the patrol
-   * stream rather than a fifth `patrol.status` kind: the backend polls only
-   * while somebody holds this connection, and the patrol stream is one every
-   * editor tab holds open whether a board exists or not.
-   *
-   * Pinned the way its three siblings are, in the same order: the client
-   * opens the door, the contract declares the name it listens for, and every
-   * field the contract publishes is a field the client actually reads.
-   */
-  describe('the kanban stream', () => {
-    const KANBAN = '/api/kanban/events';
-
-    it('is a door this client actually opens', () => {
-      expect(pathsCalledByTheClient()).toContain(KANBAN);
-    });
-
-    it('declares its one event name, and the client listens for it', () => {
-      expect(eventNamesDeclaredFor(KANBAN, 'get')).toEqual(['kanban.changed']);
-      expect(client, 'RuntimeClient no longer listens for `kanban.changed`').toContain(
-        "'kanban.changed'",
-      );
-    });
-
-    it('is parsed field for field by the hand-written client', () => {
-      const declared = frameFieldsDeclaredFor(KANBAN, 'get');
-
-      // Anti-vacuity: an extractor that matched nothing would make the loop
-      // below a statement about no frames and no fields.
-      expect(Object.keys(declared)).toEqual(['kanban.changed']);
+      expect(declared['patrol.status']).toContain('task_id');
       expect(declared['kanban.changed']).toContain('digest');
+      expect(declared['workflow.changed']).toContain('slug');
 
-      const missing = (declared['kanban.changed'] as string[]).filter(
-        (field) => !clientReads(field),
+      const missing = Object.entries(declared).flatMap(([name, fields]) =>
+        (fields as string[]).filter((field) => !clientReads(field)).map((f) => `${name}.${f}`),
       );
 
       expect(
         missing,
-        `RuntimeClient never reads ${missing.join(', ')} off a \`kanban.changed\` frame — ` +
-          `the backend emits it, the contract publishes it, and the board cannot see it.`,
+        `The client never reads ${missing.join(', ')} — the backend emits it, the ` +
+          `contract publishes it, and no surface can see it.`,
       ).toEqual([]);
+    });
+
+    it('is the only long-lived stream the editor still opens', () => {
+      // The three endpoints this section replaced. They exist, they are
+      // documented, and a client with a connection budget should use them —
+      // but a second one opened here is what `71` measured the cost of.
+      for (const retired of [
+        '/api/kanban/patrol/events',
+        '/api/kanban/events',
+        '/api/workflows/{}/events',
+      ]) {
+        expect(pathsCalledByTheClient()).not.toContain(retired);
+      }
+      // Anti-vacuity: they are still published, so this is a statement about
+      // the client rather than about three paths nobody serves.
+      for (const path of [
+        '/api/kanban/patrol/events',
+        '/api/kanban/events',
+        '/api/workflows/{slug}/events',
+      ]) {
+        expect(Object.keys(openapi.paths)).toContain(path);
+      }
     });
   });
 

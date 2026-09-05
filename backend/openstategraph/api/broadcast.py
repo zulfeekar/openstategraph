@@ -160,11 +160,13 @@ class Subscriber(Generic[E]):
 
 
 class Broadcaster(Generic[E]):
-    """In-process fan-out of one kind of event. Three public members.
+    """In-process fan-out of one kind of event. Four public members.
 
-    `subscribe()` is a context manager, so unsubscription is structural rather
-    than remembered: the endpoint's `with` block removes the subscriber whether
-    it ended normally, was cancelled by a disconnect, or raised.
+    `subscribe()` and `attach()` are context managers, so unsubscription is
+    structural rather than remembered: the endpoint's `with` block removes the
+    subscriber whether it ended normally, was cancelled by a disconnect, or
+    raised. They differ in one thing only, and it is ownership — see
+    `attach()`.
 
     **In-process is the ceiling, and it is the documented one**:
     `openstategraph.deployment.check_worker_count` refuses a second worker
@@ -192,8 +194,35 @@ class Broadcaster(Generic[E]):
     def subscribe(
         self, *, loop: asyncio.AbstractEventLoop | None = None
     ) -> Iterator[Subscriber[E]]:
-        """Register for events for the duration of the block."""
+        """Register for events for the duration of the block.
+
+        Owns the subscriber it makes, which is what lets it end the stream on
+        the way out. A caller that brings its own uses `attach`.
+        """
         subscriber: Subscriber[E] = Subscriber(loop or asyncio.get_event_loop(), self._backlog_limit)
+        try:
+            with self.attach(subscriber):
+                yield subscriber
+        finally:
+            subscriber.close()
+
+    @contextmanager
+    def attach(self, subscriber: Subscriber[E]) -> Iterator[Subscriber[E]]:
+        """Register a subscriber somebody else owns, for the block.
+
+        `subscribe()` minus the ownership, and the difference is the whole
+        point: **it does not close the subscriber on the way out**
+        (`osg-agent-experience/71`). One browser tab now holds a single
+        connection carrying four subjects, so one `Subscriber` is registered
+        with four fan-outs at once, and a `close()` from the first detach
+        would end the other three mid-sentence. The connection that made the
+        subscriber is the one that closes it.
+
+        The registration itself is unchanged — same lock, same set — so a
+        subscriber attached here is dropped on overflow exactly as one that
+        subscribed, and `subscriber_count` counts it, which is what keeps a
+        watcher's "is anybody looking" answer true.
+        """
         with self._lock:
             self._subscribers.add(subscriber)
         try:
@@ -201,7 +230,6 @@ class Broadcaster(Generic[E]):
         finally:
             with self._lock:
                 self._subscribers.discard(subscriber)
-            subscriber.close()
 
     def publish(self, event: E) -> None:
         """Fan one event out. Drops any subscriber that has fallen behind.

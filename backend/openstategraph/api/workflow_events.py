@@ -10,7 +10,14 @@ server — and until this module only the first of them told anybody. A tab that
 was not the writer learned nothing until its user reloaded, and
 `osg-agent-experience/68` is the ticket about what a reload can cost.
 
-## Why not a frame on `/api/events`
+## Why not a fifth `CatalogueEvent.reason`
+
+**These frames do ride `/api/events` now** — `osg-agent-experience/71` folded
+every live subject onto the one connection a browser tab can afford, and
+`api/live_stream.py` is the table that says so. What follows is the argument
+against making this a *catalogue* event, which that fold did not touch and
+must not be read as having settled: the subject is still its own, the watcher
+is still this one, and the frame is still `workflow.changed`.
 
 `catalogue_events.py` already fans out a `CatalogueEvent`, and adding a fifth
 `reason` to it was the cheaper build and is wrong for the reason that module
@@ -31,8 +38,11 @@ module's shape rather than a third invention.
 A catalogue event is also a different *subject*. It says a package appeared,
 vanished or changed visibility, and every open surface listens to it; this says
 one package's document has new bytes, and only the tabs editing that package
-care. Fanning it to every editor tab in the process would be the app-wide
-subscription `kanban_events.py` refused, one layer up.
+care. Sharing a connection did not make them one subject: a connection asks for
+this one by naming a slug, the sweep still reads only what somebody named, and
+a connection that asked about one package is never handed traffic about
+another. That is the app-wide subscription `kanban_events.py` refused, still
+refused.
 
 ## What a revision is, and why there is not a new one
 
@@ -125,7 +135,7 @@ WORKFLOW_FRAME_FIELDS: tuple[str, ...] = tuple(
 class WorkflowChangeWatcher:
     """Polls the packages somebody is editing, and only those.
 
-    Five public members. `subscribe(slug)` is an async context manager rather
+    Six public members. `subscribe(slug)` is an async context manager rather
     than a sync one, because starting and stopping the poll task is part of
     subscribing: the task's lifetime *is* the set of subscribers, and making a
     caller remember to start it would be the orphan-task discipline this repo
@@ -145,6 +155,7 @@ class WorkflowChangeWatcher:
         #: answer taken before the process was configured.
         self._digest_for = digest_for
         self._interval = POLL_INTERVAL_SECONDS if interval is None else interval
+        self._backlog_limit = backlog_limit
         self._broadcaster: Broadcaster[WorkflowChangedEvent] = Broadcaster(
             backlog_limit=backlog_limit, label="workflow"
         )
@@ -183,10 +194,34 @@ class WorkflowChangeWatcher:
     @asynccontextmanager
     async def subscribe(self, slug: str) -> AsyncIterator[Subscriber[WorkflowChangedEvent]]:
         """Watch one package, and keep the poll alive, for the block."""
+        subscriber: Subscriber[WorkflowChangedEvent] = Subscriber(
+            asyncio.get_running_loop(), self._backlog_limit
+        )
         try:
-            with self._broadcaster.subscribe() as subscriber:
-                self._enter(slug)
+            async with self.attach(slug, subscriber):
                 yield subscriber
+        finally:
+            subscriber.close()
+
+    @asynccontextmanager
+    async def attach(
+        self, slug: str, subscriber: Subscriber[WorkflowChangedEvent]
+    ) -> AsyncIterator[None]:
+        """Watch one package for a subscriber the caller owns.
+
+        `subscribe(slug)` minus the ownership — `osg-agent-experience/71`.
+        The editor could not afford this stream's own socket (six connections
+        per origin, two already spent, so *two* tabs saturated the budget), so
+        its frames ride the connection the tab already holds and the caller
+        brings one `Subscriber` for all four subjects. The per-slug cost model
+        this module was built around is untouched: interest is still counted
+        per slug, the sweep still reads only what somebody named, and the poll
+        still exists only while an editor is connected.
+        """
+        try:
+            with self._broadcaster.attach(subscriber):
+                self._enter(slug)
+                yield
         finally:
             # *Outside* the `with`, not in its own `finally`: the broadcaster
             # discards the subscriber in its exit, so asking "is anybody left"

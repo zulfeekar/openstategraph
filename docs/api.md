@@ -53,8 +53,8 @@ shrug in JSON.
 
 ### What it structurally cannot cover
 
-`POST /api/runs/stream`, `POST /api/runs/resume` and `GET /api/events` are
-Server-Sent Event streams. OpenAPI 3.1 can say a response is
+`POST /api/runs/stream`, `POST /api/runs/resume`, `GET /api/events` and its
+per-subject siblings are Server-Sent Event streams. OpenAPI 3.1 can say a response is
 `text/event-stream` and stops there: it has no vocabulary for a *sequence* of
 frames, for the union of `event:` names that sequence may contain, or for the
 guarantee that exactly one of three names is the last frame. Declaring a JSON
@@ -849,30 +849,67 @@ the compile seam is one-directional and stateless per call. Nothing
 server-side remembers which document a thread belongs to — only LangGraph's
 own checkpointed state.
 
-### `GET /api/events` — the catalogue stream
+### `GET /api/events` — the live stream
 
-One event name: `workflows.changed`.
+**One connection, as many subjects as you ask for.** The catalogue is always
+carried; `patrol=1`, `kanban=1` and `slug=<slug>` each add one more.
 
 ```
+GET /api/events?patrol=1&slug=quarterly-brief
+
 : connected
 
 event: workflows.changed
 data: {"reason": "unpublished", "slug": "quarterly-brief", "surface_visible": false}
+
+event: workflow.changed
+data: {"slug": "quarterly-brief", "digest": "9f2c…"}
 ```
 
-`reason` is one of `published`, `unpublished`, `saved`, `deleted`. Lines
-beginning with `:` are comments — a first one flushes the headers so `onopen`
-fires immediately, and later ones are keepalives. `EventSource` ignores both.
+| Parameter | Adds | Frame |
+| --- | --- | --- |
+| *(none)* | the catalogue | `workflows.changed` |
+| `patrol=1` | a patrol run's progress | `patrol.status` |
+| `kanban=1` | card writes | `kanban.changed` |
+| `slug=<slug>` | that package's document | `workflow.changed` |
 
-The payload is a **hint, not a catalogue**: refetch `/api/workflows` when one
-arrives. That way there is exactly one spelling of the catalogue and it cannot
-go stale in a cache built from events — which is also how a client recovers
-anything it missed while disconnected, since there is no replay.
+Each frame is the one its own endpoint below sends, unrenamed — one wire
+vocabulary, whichever door it arrives through. `reason` on a catalogue frame is
+one of `published`, `unpublished`, `saved`, `deleted`. Lines beginning with `:`
+are comments — a first one flushes the headers so `onopen` fires immediately,
+and later ones are keepalives. `EventSource` ignores both.
+
+**Why it is one connection.** A browser allows six concurrent HTTP/1.1
+connections per origin, and an editor tab held one per subject. Measured on
+2026-09-05 with three: **two** tabs on one workflow saturated the budget, the
+last stream opened sat in `CONNECTING` for minutes, and ordinary `fetch` calls
+in that tab stopped completing — so the five-second file watch stopped
+answering too. HTTP/2 raises the limit and is a property of whatever proxy sits
+in front of this process, not of this project, so it is not the answer here.
+A subject is a frame, not a socket (`osg-agent-experience/71`).
+
+**Ask for what you want and nothing more.** `kanban` and `slug` each start a
+poll on the server that exists only while somebody is subscribed, so a
+connection that does not name them costs nothing — a plain `GET /api/events`
+sees and costs exactly what it always did, which is what a chat client should
+open. A connection that names a slug is sent frames about that slug only.
+
+Every payload is a **hint, not a document**: refetch `/api/workflows`,
+`/api/kanban/cards` or `/api/workflows/{slug}` when one arrives. That way there
+is exactly one spelling of each thing and it cannot go stale in a cache built
+from events — which is also how a client recovers anything it missed while
+disconnected, since there is no replay.
 
 Two limits, stated rather than discovered: the fan-out is **in-process**, so it
-covers one worker (which is the documented deployment ceiling); and only writes
-**through this API** emit — a `workflow.json` edited on disk or arriving by
-`git pull` produces nothing.
+covers one worker (which is the documented deployment ceiling); and the
+*catalogue* subject only emits for writes **through this API** — a
+`workflow.json` edited on disk or arriving by `git pull` produces no
+`workflows.changed`. The `slug` subject is the one that covers those writers,
+because it watches the file.
+
+The endpoints below are these same subjects, one per connection. They are
+unchanged and still the right door for a client that has connections to spare;
+the editor uses this one.
 
 ### `GET /api/kanban/patrol/events` — the patrol stream
 
@@ -881,6 +918,10 @@ belongs to the editor's patrol board, not to running a workflow. It is
 described here anyway because every SSE endpoint's own OpenAPI description
 sends a reader to this page, and until now this one arrived at a page that
 did not mention it.
+
+**The editor reads these frames off `/api/events?patrol=1`** and no longer
+opens this endpoint. It is unchanged and still correct — use it from a client
+that wants this subject and nothing else.
 
 One event name, `patrol.status`, with a `kind` inside it rather than five
 event names — `started`, `progressed`, `finished`, `failed`. The frame
@@ -917,9 +958,12 @@ card. A client refetches `GET /api/kanban/cards` on it, so there is one
 spelling of a row and no cache built from events.
 
 **The poll costs nothing while nobody is connected**, which is why this is not
-a fifth `patrol.status` kind: the patrol stream is one every editor tab holds
-open whether a board exists or not, and a poll hung off that would run for the
-life of every tab. This connection is held while a board is on screen.
+a fifth `patrol.status` kind: `patrol.status` is a subject every editor tab
+carries whether a board exists or not, and a poll hung off that would run for
+the life of every tab. That argument survived the fold onto `/api/events`
+intact: the editor adds `kanban=1` while a board is on screen and drops it when
+the board closes, so the poll still exists only while somebody is looking at
+cards.
 
 No terminal frame and no replay, as on the catalogue and patrol streams: a
 client that connects after a write learns nothing about it, and needs nothing, because
@@ -945,13 +989,15 @@ An unknown slug is not refused: a package created underneath an open tab is a
 change like any other, and a stream that 404'd at connect time would leave
 exactly that tab with no way to be told.
 
-**The editor deliberately does not open this one.** A browser allows six
-concurrent HTTP/1.1 connections per origin, each editor tab already holds two
-of them for the streams above, and a third saturates the budget at two open
-tabs — measured on 2026-09-05, with the last stream stuck in `CONNECTING` and
-ordinary requests no longer completing. The editor reads the same revision out
-of the `savedAt` poll it already runs. Use this stream from a client that is
-not already holding two.
+**The editor reads these frames off `/api/events?slug=<slug>`**, not from
+here. It could not open this endpoint at all when `69` shipped it: a browser
+allows six concurrent HTTP/1.1 connections per origin, each editor tab already
+held one for the catalogue and another for the patrol board, and a third
+saturated the budget with two tabs open — measured on 2026-09-05, with the last
+connection stuck in `CONNECTING` and ordinary requests no longer completing. Folding every subject onto one
+connection (`osg-agent-experience/71`) is what let the editor have this
+without a third socket. This endpoint is unchanged and is the right door for a
+client that wants one package and nothing else.
 
 No terminal frame, no replay, one worker — as on all five siblings.
 

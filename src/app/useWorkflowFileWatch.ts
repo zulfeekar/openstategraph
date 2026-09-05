@@ -97,10 +97,12 @@ export function useWorkflowFileWatch(onNotify: (message: string) => void): void 
       // say what is true.
       // **Every successful poll says what revision the file holds**
       // (`osg-agent-experience/69`). The row already carries the digest, so
-      // this costs nothing and no connection — which is the point: two editor
-      // tabs saturate a browser's six-per-origin HTTP/1.1 budget, and the
-      // package's own SSE stream is the third connection each tab wants. This
-      // path is the one that works however many tabs are open.
+      // this costs nothing and no connection at all. That was the whole
+      // mechanism when three long-lived streams meant two editor tabs
+      // saturated a browser's six-per-origin HTTP/1.1 budget; since `71` the
+      // tab holds one connection and hears `workflow.changed` on it, and this
+      // is the floor underneath — five seconds, no socket, true however many
+      // tabs are open and whether or not the stream is up.
       //
       // Published unconditionally rather than only on a change, because the
       // consumer deduplicates against the revision *it* holds — which is a

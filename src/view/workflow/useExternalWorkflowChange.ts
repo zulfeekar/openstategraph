@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useWorkbench } from '@app/WorkbenchContext';
 import { diskDocumentStatus, forgetDiskDocument, rememberDiskDocument } from '@app/diskAutosave';
 import { decideExternalChange, subscribeRevisionSeen } from '@app/externalWorkflowChange';
+import { getOpenSlug, subscribeOpenSlug } from '@app/openWorkflow';
 import { offerRestoredDraftChoice } from '@app/restoredDraftConflict';
 import { CURRENT_SLUG_KEY, getKnownDigest, recordKnownVersion } from '@app/workflowFileWatch';
 import { subscribeWorkflowSaved } from '@app/workflowSaveBroadcast';
@@ -18,9 +19,9 @@ import { workflowRefreshedFromDisk } from './restoredDraftChoiceCopy';
  * Workflows and Load it* — which asks a user to perform a reload, the exact
  * gesture `68` is the ticket about.
  *
- * ## Two transports, one decision — and the third one this tab cannot afford
+ * ## Three transports, one decision
  *
- * `subscribeRevisionSeen` is the mechanism: the five-second `savedAt` poll
+ * `subscribeRevisionSeen` is the floor: the five-second `savedAt` poll
  * `useWorkflowFileWatch` already runs receives the file's digest in the row it
  * already reads, so it covers **every** writer — a second tab, the command
  * line, a coding agent, a `git pull` — and costs no connection.
@@ -28,24 +29,29 @@ import { workflowRefreshedFromDisk } from './restoredDraftChoiceCopy';
  * browser: strictly fewer writers, reached instantly, which is what stops two
  * tabs of one person writing inside each other's blind window.
  *
- * **The backend's own `workflow.changed` stream is deliberately not opened
- * here, and that is a measurement rather than a preference.** It exists, it is
- * correct, and any client with connections to spare should use it — but this
- * editor has none. A browser allows six concurrent HTTP/1.1 connections per
- * origin and each tab already holds two long-lived ones (`/api/events`,
- * `/api/kanban/patrol/events`). Staged on 2026-09-05 against the running
- * editor with a third: two tabs saturated the budget, the last stream sat at
- * `readyState 0` for minutes, and ordinary `fetch` calls stopped completing —
- * so adding it made *two* tabs worse in order to make one tab faster. Two tabs
- * on one workflow is this ticket's own scenario. `osg-agent-experience/71`
- * carries the fix that keeps both: fold the frames onto the `/api/events`
- * connection this tab is already holding.
+ * **And `watchWorkflow` is the backend's own `workflow.changed`, which this
+ * hook can afford at last** (`osg-agent-experience/71`). It could not before,
+ * and the reason was measured rather than assumed: a browser allows six
+ * concurrent HTTP/1.1 connections per origin, each tab already held two
+ * long-lived streams, and staging a third on 2026-09-05 made *two* tabs on one
+ * workflow saturate the budget — the last stream opened sat at `readyState 0`
+ * for minutes and ordinary `fetch` calls in that tab stopped completing. Two
+ * tabs on one workflow is `69`'s own scenario, so it shipped without this. The
+ * fix was not a fourth transport: `/api/events` now carries every live
+ * subject, so asking for this package's document adds a query parameter to the
+ * one connection the tab already holds and opens no socket at all.
  *
- * Both live transports end in `decideExternalChange` against the same
- * `getKnownDigest(slug)`, so hearing one save twice is one action and one
- * ignore in either order. There is no sequence number and there must not be:
+ * Every live transport ends in `decideExternalChange` against the same
+ * `getKnownDigest(slug)`, so hearing one save three times is one action and
+ * two ignores in any order. There is no sequence number and there must not be:
  * the revision is the digest, and it is the same string the 409 checks
  * (`osg-agent-experience/45`).
+ *
+ * The ordering is the design: the `BroadcastChannel` is instant and covers
+ * other tabs of this browser, the stream is sub-second and covers every
+ * writer, the poll is five seconds and needs nothing of the backend but a row
+ * it was already reading. Each is a strict fallback for the one above it, so
+ * losing the top two costs latency rather than correctness.
  *
  * ## Why a clean tab is not asked, and a dirty one is not refreshed
  *
@@ -147,10 +153,9 @@ export function useExternalWorkflowChange(notify: (message: string) => void): vo
       notifyRef.current(workflowRefreshedFromDisk(fileName));
     };
 
-    // The mechanism, and the one that costs no connection: the five-second
+    // The floor, and the one that costs no connection at all: the five-second
     // `savedAt` poll `useWorkflowFileWatch` already runs publishes the digest
-    // out of the row it already reads. See the header for what happened when
-    // a third `EventSource` was opened here instead.
+    // out of the row it already reads.
     const offPoll = subscribeRevisionSeen((slug, digest) => {
       void react(slug, digest);
     });
@@ -161,10 +166,39 @@ export function useExternalWorkflowChange(notify: (message: string) => void): vo
       void react(announcement.slug, announcement.digest);
     });
 
+    // The push half — a subject on the connection this tab already holds,
+    // never a socket of its own (`osg-agent-experience/71`).
+    //
+    // Re-tuned when the open workflow changes, because the backend watches
+    // *one named package* per connection: that is what keeps a root of a
+    // hundred packages costing nothing while one tab is open, and it means
+    // the stream has to be told which one. `subscribeOpenSlug` fires when
+    // this tab adopts a slug; the poll above is the backstop, so a path that
+    // wrote the slug without announcing it costs five seconds of latency
+    // rather than silence.
+    let watching: string | null = null;
+    let offStream: (() => void) | null = null;
+    const tune = (slug: string | null) => {
+      if (slug === watching) return;
+      watching = slug;
+      offStream?.();
+      offStream = null;
+      if (!slug) return;
+      offStream = client.watchWorkflow(slug, (change) => {
+        void react(change.slug, change.digest);
+      });
+    };
+    tune(getOpenSlug());
+    const offSlug = subscribeOpenSlug(tune);
+    const offPollTune = subscribeRevisionSeen((slug) => tune(slug));
+
     return () => {
       cancelled = true;
       offPoll();
       offBroadcast();
+      offSlug();
+      offPollTune();
+      offStream?.();
     };
   }, []);
 }

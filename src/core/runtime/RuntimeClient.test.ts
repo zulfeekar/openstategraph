@@ -6,7 +6,7 @@ import {
   type RunStreamEvent,
   type PatrolStreamEvent,
 } from './RuntimeClient';
-import type { EventSourceLike } from './WorkflowFileClient';
+import { LiveEventStream, type EventSourceLike } from './LiveEventStream';
 
 /**
  * The editor's route to the runtime.
@@ -1793,53 +1793,66 @@ describe('RuntimeClient.patrolStatus', () => {
 });
 
 describe('RuntimeClient.watchPatrolEvents', () => {
-  /** A stand-in for `EventSource` — Vitest's node environment has none,
-   * same reason `WorkflowFileClient.test.ts`'s own `fakeSource` exists. */
+  /**
+   * A stand-in for `EventSource` — Vitest's node environment has none, same
+   * reason `WorkflowFileClient.test.ts`'s own `fakeSource` exists.
+   *
+   * It is handed to a `LiveEventStream` rather than to the client itself
+   * since `osg-agent-experience/71`: the socket belongs to the tab, not to
+   * one client object, so the seam a test drives is the stream.
+   */
   const fakeSource = () => {
     const listeners = new Map<string, (event: MessageEvent) => void>();
     let closed = false;
     const source: EventSourceLike = {
-      addEventListener: (type, listener) => listeners.set(type, listener),
+      addEventListener: (type: string, listener: (event: MessageEvent) => void) =>
+        listeners.set(type, listener),
       close: () => {
         closed = true;
       },
     };
+    const urls: string[] = [];
     return {
-      factory: (url: string) => {
+      urls,
+      live: new LiveEventStream('http://rt', (url: string) => {
         urls.push(url);
         return source;
-      },
+      }),
       emit: (data: string) => listeners.get('patrol.status')?.({ data } as MessageEvent),
       isClosed: () => closed,
       listens: () => [...listeners.keys()],
     };
   };
-  const urls: string[] = [];
 
-  it('subscribes to the patrol event stream', () => {
-    const fake = fakeSource();
-    urls.length = 0;
+  /**
+   * The stream reconciles on a microtask, so a subscription is one tick old
+   * before a connection exists — see `LiveEventStream` for why it coalesces.
+   */
+  const settled = () => Promise.resolve().then(() => {});
 
+  const clientFor = (fake: ReturnType<typeof fakeSource> | null) =>
     new RuntimeClient(
       'http://rt',
       () => Promise.reject(new Error('unused')),
       () => '',
-      fake.factory,
-    ).watchPatrolEvents(() => {});
+      fake ? fake.live : null,
+    );
 
-    expect(urls).toEqual(['http://rt/api/kanban/patrol/events']);
-    expect(fake.listens()).toEqual(['patrol.status']);
+  it("asks the tab's one connection for the patrol subject", async () => {
+    const fake = fakeSource();
+
+    clientFor(fake).watchPatrolEvents(() => {});
+    await settled();
+
+    expect(fake.urls).toEqual(['http://rt/api/events?patrol=1']);
+    expect(fake.listens()).toContain('patrol.status');
   });
 
-  it('maps a progressed frame to an event', () => {
+  it('maps a progressed frame to an event', async () => {
     const fake = fakeSource();
     const seen: PatrolStreamEvent[] = [];
-    new RuntimeClient(
-      'http://rt',
-      () => Promise.reject(new Error('unused')),
-      () => '',
-      fake.factory,
-    ).watchPatrolEvents((event) => seen.push(event));
+    clientFor(fake).watchPatrolEvents((event) => seen.push(event));
+    await settled();
 
     fake.emit(
       JSON.stringify({
@@ -1866,15 +1879,11 @@ describe('RuntimeClient.watchPatrolEvents', () => {
     ]);
   });
 
-  it('survives a frame it cannot parse rather than tearing the stream down', () => {
+  it('survives a frame it cannot parse rather than tearing the stream down', async () => {
     const fake = fakeSource();
     const seen: PatrolStreamEvent[] = [];
-    new RuntimeClient(
-      'http://rt',
-      () => Promise.reject(new Error('unused')),
-      () => '',
-      fake.factory,
-    ).watchPatrolEvents((event) => seen.push(event));
+    clientFor(fake).watchPatrolEvents((event) => seen.push(event));
+    await settled();
 
     fake.emit('not json');
     fake.emit(
@@ -1893,29 +1902,25 @@ describe('RuntimeClient.watchPatrolEvents', () => {
     expect(fake.isClosed()).toBe(false);
   });
 
-  it('closes the connection when the caller unsubscribes', () => {
+  it('lets the subject go when the caller unsubscribes', async () => {
     const fake = fakeSource();
-    const stop = new RuntimeClient(
-      'http://rt',
-      () => Promise.reject(new Error('unused')),
-      () => '',
-      fake.factory,
-    ).watchPatrolEvents(() => {});
+    const stop = clientFor(fake).watchPatrolEvents(() => {});
+    await settled();
 
     expect(fake.isClosed()).toBe(false);
     stop();
+    await settled();
+    // The last interest in the connection has gone, so the connection goes.
+    // With another subject still wanted it would be reopened without this
+    // one rather than closed — `oneStreamPerTab.test.ts` pins that half.
     expect(fake.isClosed()).toBe(true);
   });
 
-  it('degrades to a no-op where EventSource does not exist', () => {
-    const stop = new RuntimeClient(
-      'http://rt',
-      () => Promise.reject(new Error('unused')),
-      () => '',
-      null,
-    ).watchPatrolEvents(() => {
+  it('degrades to a no-op where EventSource does not exist', async () => {
+    const stop = clientFor(null).watchPatrolEvents(() => {
       throw new Error('nothing can arrive');
     });
+    await settled();
 
     expect(() => stop()).not.toThrow();
   });

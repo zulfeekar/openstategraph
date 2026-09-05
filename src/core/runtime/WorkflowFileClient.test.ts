@@ -1,11 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { LiveEventStream, type EventSourceLike } from './LiveEventStream';
 import { parseMountAddress } from '@core/model/MountAddress';
-import {
-  WorkflowFileClient,
-  type CatalogueChange,
-  type EventSourceLike,
-  type FetchLike,
-} from './WorkflowFileClient';
+import { WorkflowFileClient, type CatalogueChange, type FetchLike } from './WorkflowFileClient';
 
 const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -641,97 +637,125 @@ describe('the base URL a real page gets', () => {
 });
 
 describe('WorkflowFileClient.watchCatalogue', () => {
-  /** A stand-in for `EventSource`, which Vitest's node environment lacks. */
+  /**
+   * A stand-in for `EventSource`, which Vitest's node environment lacks.
+   *
+   * Handed to a `LiveEventStream` rather than to the client since
+   * `osg-agent-experience/71`: one connection belongs to the tab, not to one
+   * client object, so that is the seam a test drives.
+   */
   const fakeSource = () => {
     const listeners = new Map<string, (event: MessageEvent) => void>();
     let closed = false;
     const source: EventSourceLike = {
-      addEventListener: (type, listener) => listeners.set(type, listener),
+      addEventListener: (type: string, listener: (event: MessageEvent) => void) =>
+        listeners.set(type, listener),
       close: () => {
         closed = true;
       },
     };
+    const urls: string[] = [];
     return {
-      factory: (url: string) => {
+      urls,
+      live: new LiveEventStream('http://rt', (url: string) => {
         urls.push(url);
         return source;
-      },
-      emit: (data: string) => listeners.get('workflows.changed')?.({ data } as MessageEvent),
+      }),
+      emit: (name: string, data: string) => listeners.get(name)?.({ data } as MessageEvent),
       isClosed: () => closed,
       listens: () => [...listeners.keys()],
     };
   };
-  const urls: string[] = [];
 
-  it('subscribes to the runtime event stream', () => {
+  /** The stream reconciles on a microtask — see `LiveEventStream`. */
+  const settled = () => Promise.resolve().then(() => {});
+
+  const clientFor = (fake: ReturnType<typeof fakeSource> | null) =>
+    new WorkflowFileClient('http://rt', stubFetch(jsonResponse([])).fetch, fake ? fake.live : null);
+
+  it("asks the tab's one connection for the catalogue subject", async () => {
     const fake = fakeSource();
-    urls.length = 0;
 
-    new WorkflowFileClient(
-      'http://rt',
-      stubFetch(jsonResponse([])).fetch,
-      fake.factory,
-    ).watchCatalogue(() => {});
+    clientFor(fake).watchCatalogue(() => {});
+    await settled();
 
-    expect(urls).toEqual(['http://rt/api/events']);
-    expect(fake.listens()).toEqual(['workflows.changed']);
+    expect(fake.urls).toEqual(['http://rt/api/events']);
+    expect(fake.listens()).toContain('workflows.changed');
   });
 
-  it('maps the snake_case event to a change', () => {
+  it('maps the snake_case event to a change', async () => {
     const fake = fakeSource();
     const seen: CatalogueChange[] = [];
-    new WorkflowFileClient(
-      'http://rt',
-      stubFetch(jsonResponse([])).fetch,
-      fake.factory,
-    ).watchCatalogue((change) => seen.push(change));
+    clientFor(fake).watchCatalogue((change) => seen.push(change));
+    await settled();
 
-    fake.emit(JSON.stringify({ reason: 'published', slug: 'billing', surface_visible: true }));
+    fake.emit(
+      'workflows.changed',
+      JSON.stringify({ reason: 'published', slug: 'billing', surface_visible: true }),
+    );
 
     expect(seen).toEqual([{ reason: 'published', slug: 'billing', surfaceVisible: true }]);
   });
 
-  it('survives a frame it cannot parse rather than tearing the stream down', () => {
+  it('survives a frame it cannot parse rather than tearing the stream down', async () => {
     const fake = fakeSource();
     const seen: CatalogueChange[] = [];
-    new WorkflowFileClient(
-      'http://rt',
-      stubFetch(jsonResponse([])).fetch,
-      fake.factory,
-    ).watchCatalogue((change) => seen.push(change));
+    clientFor(fake).watchCatalogue((change) => seen.push(change));
+    await settled();
 
-    fake.emit('not json');
-    fake.emit(JSON.stringify({ reason: 'deleted', slug: 'gone', surface_visible: false }));
+    fake.emit('workflows.changed', 'not json');
+    fake.emit(
+      'workflows.changed',
+      JSON.stringify({ reason: 'deleted', slug: 'gone', surface_visible: false }),
+    );
 
     expect(seen).toEqual([{ reason: 'deleted', slug: 'gone', surfaceVisible: false }]);
     expect(fake.isClosed()).toBe(false);
   });
 
-  it('closes the connection when the caller unsubscribes', () => {
+  it('lets the connection go when the caller unsubscribes', async () => {
     const fake = fakeSource();
-    const stop = new WorkflowFileClient(
-      'http://rt',
-      stubFetch(jsonResponse([])).fetch,
-      fake.factory,
-    ).watchCatalogue(() => {});
+    const stop = clientFor(fake).watchCatalogue(() => {});
+    await settled();
 
     expect(fake.isClosed()).toBe(false);
     stop();
+    await settled();
     expect(fake.isClosed()).toBe(true);
   });
 
-  it('degrades to a no-op where EventSource does not exist', () => {
+  it('degrades to a no-op where EventSource does not exist', async () => {
     // The whole feature is additive: a browser (or a test) without
     // `EventSource` must keep the panel working exactly as before.
-    const stop = new WorkflowFileClient(
-      'http://rt',
-      stubFetch(jsonResponse([])).fetch,
-      null,
-    ).watchCatalogue(() => {
+    const stop = clientFor(null).watchCatalogue(() => {
       throw new Error('nothing can arrive');
     });
+    await settled();
 
     expect(() => stop()).not.toThrow();
+  });
+
+  /**
+   * `osg-agent-experience/69`'s subject, reaching the editor through `71`.
+   *
+   * The point of the whole ticket is in the URL: asking for a package's
+   * document adds a parameter to the connection this tab already holds
+   * rather than opening a second one.
+   */
+  it('asks for one package on the same connection, and reads its revision', async () => {
+    const fake = fakeSource();
+    const seen: { slug: string; digest: string }[] = [];
+    const client = clientFor(fake);
+    client.watchCatalogue(() => {});
+    client.watchWorkflow('billing', (change) => seen.push(change));
+    await settled();
+
+    expect(fake.urls).toEqual(['http://rt/api/events?slug=billing']);
+
+    fake.emit('workflow.changed', JSON.stringify({ slug: 'billing', digest: 'sha-2' }));
+    fake.emit('workflow.changed', JSON.stringify({ slug: 'someone-else', digest: 'sha-9' }));
+
+    expect(seen).toEqual([{ slug: 'billing', digest: 'sha-2' }]);
   });
 });
 

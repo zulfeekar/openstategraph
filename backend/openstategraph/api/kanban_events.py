@@ -116,7 +116,7 @@ KANBAN_FRAME_FIELDS: tuple[str, ...] = tuple(KanbanChangedEvent(digest="").as_di
 class KanbanChangeWatcher:
     """Polls the store's digest while somebody is watching, and only then.
 
-    Four public members. `subscribe()` is an async context manager rather than
+    Five public members. `subscribe()` is an async context manager rather than
     the sync one its siblings use, because starting and stopping the poll task
     is part of subscribing: the task's lifetime *is* the set of subscribers,
     and making a caller remember to start it would be the orphan-task
@@ -136,6 +136,7 @@ class KanbanChangeWatcher:
         #: must not freeze an answer taken before the process was configured.
         self._db_path = db_path
         self._interval = POLL_INTERVAL_SECONDS if interval is None else interval
+        self._backlog_limit = backlog_limit
         self._broadcaster: Broadcaster[KanbanChangedEvent] = Broadcaster(
             backlog_limit=backlog_limit, label="kanban"
         )
@@ -161,10 +162,33 @@ class KanbanChangeWatcher:
     @asynccontextmanager
     async def subscribe(self) -> AsyncIterator[Subscriber[KanbanChangedEvent]]:
         """Register for changes, and keep the poll alive, for the block."""
+        subscriber: Subscriber[KanbanChangedEvent] = Subscriber(
+            asyncio.get_running_loop(), self._backlog_limit
+        )
         try:
-            with self._broadcaster.subscribe() as subscriber:
-                self._start()
+            async with self.attach(subscriber):
                 yield subscriber
+        finally:
+            subscriber.close()
+
+    @asynccontextmanager
+    async def attach(self, subscriber: Subscriber[KanbanChangedEvent]) -> AsyncIterator[None]:
+        """Keep the poll alive for a subscriber the caller owns.
+
+        `subscribe()` minus the ownership — `osg-agent-experience/71`, where
+        an editor tab folded four subjects onto the one connection it can
+        afford. What matters here is that the *cost* model is unchanged: the
+        poll still starts on the first watcher and stops when the last one
+        leaves, so a board that is not open still costs nothing even though
+        the connection carrying its frames is now the one every tab holds.
+        That is the property this module's own docstring wrote down as the
+        reason it is a sibling stream, and folding the frame must not spend
+        it.
+        """
+        try:
+            with self._broadcaster.attach(subscriber):
+                self._start()
+                yield
         finally:
             # *Outside* the `with`, not in its own `finally`: the broadcaster
             # discards the subscriber in its exit, so asking "is anybody left"

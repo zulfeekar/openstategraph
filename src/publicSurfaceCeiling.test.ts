@@ -212,8 +212,8 @@ const SUBJECTS: readonly Subject[] = [
   {
     file: './core/runtime/WorkflowFileClient.ts',
     className: 'WorkflowFileClient',
-    members: 18,
-    exception: `Eleven reads, six writes and one subscription over the file API — a flat
+    members: 19,
+    exception: `Eleven reads, six writes and two subscriptions over the file API — a flat
       HTTP adapter where every member is its own fetch and there is nothing to
       delegate to. Width here is the width of the endpoint surface, and the
       class does not get to be narrower than the API it adapts.
@@ -235,11 +235,27 @@ const SUBJECTS: readonly Subject[] = [
       the catalogue view, and neither knows about the other's methods.
 
       Splitting the class to match would mean four objects each holding the same
-      baseUrl, fetchImpl and eventSourceImpl, constructed together at one call
+      baseUrl, fetchImpl and live stream, constructed together at one call
       site, so the consumer's view would not change and the wiring would grow.
       Recorded rather than done, and the next person should check the interface
-      list first: if a fifth interface appears here, that is the signal this
-      became a bucket.`,
+      list first: if a sixth interface appears here, that is the signal this
+      became a bucket.
+
+      **Eighteen -> nineteen** (\`osg-agent-experience/71\`). 'watchWorkflow',
+      the second subscription: one package's \`workflow.json\` changing on
+      disk, whoever wrote it — the subject \`69\` built and this editor could
+      not afford, because a browser allows six connections per origin and a tab
+      already held three streams. It costs no connection now (every live
+      subject rides one), and it is the same shape as 'watchCatalogue' beside
+      it: parse the frame, hand over a change, return the unsubscribe.
+      **A fifth interface did appear** — IWorkflowDocumentEvents — and it is
+      the paragraph above being honest rather than ignored: it is there because
+      a catalogue change and a document change are different subjects with
+      different consumers (/chat implements neither and reads only the first),
+      which is the Interface Segregation reason for a second narrow interface
+      rather than a wider one. The signal that sentence was watching for is a
+      *bucket*: an interface that shares no baseUrl, no fetch and no subject
+      with its neighbours. The next person still checks the list first.`,
   },
   {
     file: './core/providers/ProviderRegistry.ts',

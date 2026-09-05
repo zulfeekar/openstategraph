@@ -216,7 +216,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       part of it this module knows. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 909,
+    lines: 900,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -370,7 +370,19 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       \`watchPatrolEvents\` beside it already has. Not a new kind of
       responsibility: the backend grew a stream because a card moved by
       another process was invisible until somebody pressed Refresh, and this
-      is the client's one thin method per door.`,
+      is the client's one thin method per door.
+
+      **909 -> 900** (\`osg-agent-experience/71\`), and it is the rarer
+      direction: the file **shrank** because two doors stopped being doors.
+      \`watchPatrolEvents\` and \`watchKanbanEvents\` no longer open sockets —
+      they ask \`LiveEventStream\` for a subject on the one connection a tab
+      holds — so the \`EventSource\` wiring, the \`addEventListener\` and the
+      unsubscribe that closed a connection came out and a two-line delegation
+      went in. Nothing was mirrored away: \`KanbanStreamEvent\` and
+      \`PatrolStreamEvent\` are still parsed field for field here, which is what
+      \`contractDrift.test.ts\` reads. Nine lines is what a browser's
+      six-connections-per-origin budget cost this file, recorded rather than
+      quietly pocketed.`,
   },
 };
 

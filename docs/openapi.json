@@ -2699,8 +2699,52 @@
   "paths": {
     "/api/events": {
       "get": {
-        "description": "Catalogue changes, live \u2014 `event: workflows.changed`.\n\nNot expressible in OpenAPI beyond its media type; the frame shape and\nthe reconnect behaviour are in `docs/api.md`.\n\nWhy this exists: `/chat` fetched its picker once, on load, so a\ncustomer sitting on the page never saw a newly published workflow\nuntil they reloaded. The editor's Workflows panel had the same blind\nspot with respect to a second tab.\n\n**SSE, not WebSocket, not polling.** This process already speaks SSE\n(`/api/runs/stream`), the flow is one-way, and `EventSource` reconnects\nby itself. Framed by `_sse` \u2014 the one framer.\n\nThe payload is a **hint, not a catalogue**: `{reason, slug,\nsurface_visible}`. A client refetches `/api/workflows` on it, so there\nis exactly one spelling of the catalogue and it cannot go stale in a\ncache built from events.\n\nLimits, stated rather than discovered (full reasoning in\n`catalogue_events`): the fan-out is **in-process**, so it covers one\nworker \u2014 which is the documented ceiling (`uvicorn --workers 1`, for\nsqlite's per-instance write lock); a multi-worker deployment needs\nRedis pub/sub or Postgres LISTEN/NOTIFY behind the same\npublish/subscribe pair. And only writes **through this API** emit: a\n`workflow.json` hand-edited on disk or arriving by `git pull` produces\nnothing. A filesystem watch would close that gap and is recorded as\nfuture work rather than implied.",
+        "description": "Every live subject this surface asked for, on **one** connection.\n\nNot expressible in OpenAPI beyond its media type; the frame shapes and the\nreconnect behaviour are in `docs/api.md`.\n\nWhy this exists at all: `/chat` fetched its picker once, on load, so a\ncustomer sitting on the page never saw a newly published workflow until\nthey reloaded, and the editor's Workflows panel had the same blind spot\nwith respect to a second tab.\n\n**Why it carries four subjects rather than one**\n(`osg-agent-experience/71`). A browser allows six concurrent HTTP/1.1\nconnections per origin. An editor tab spent two of them on long-lived\nstreams \u2014 this one and `/api/kanban/patrol/events` \u2014 before `69` added a\nthird for the per-package watcher, and with two tabs on one workflow the\nbudget was gone: the last stream opened sat at `readyState 0` for minutes\nand ordinary `fetch` calls in that tab stopped completing. HTTP/2 raises\nthe limit and is a property of somebody's proxy, not of this project, so\nit must not be the answer. A subject is a frame here, not a socket.\n\n**Opt-in, and that is the cost model rather than a nicety.** The catalogue\nis always carried, because that is what every existing caller opens this\nendpoint for. `patrol=1`, `kanban=1` and `slug=<slug>` each attach one\nmore fan-out, and the last two own **poll tasks whose lifetime is the set\nof subscribers** \u2014 so a connection that does not ask for the board does\nnot start the store poll, which is exactly the property `kanban_events.py`\ngave as its reason for being a sibling stream. A plain `GET /api/events`\nsees and costs what it always did.\n\n**No frame is renamed.** Each subject keeps its own `event:` name, so the\nsibling endpoints and this one speak one vocabulary; `live_stream.py` is\nthe single table saying which name belongs to which payload. Framed by\n`_sse` \u2014 the one framer.\n\nA connection that named a slug is handed frames about **that** slug only,\nfiltered here rather than in the client: one watcher serves every open\npackage, and handing a connection traffic about packages it never named\nwould make this endpoint's own contract a half-truth.\n\nThe payloads are **hints, never documents**: a client refetches\n`/api/workflows`, `/api/kanban/cards` or `/api/workflows/{slug}` on them,\nso there is exactly one spelling of each thing and no cache built from\nevents that could disagree with it. **No replay**, on every subject: a\nsubscriber sees what happens while it is connected, and its refetch on\nopen is what recovers the rest.\n\nLimits, stated rather than discovered (full reasoning in\n`catalogue_events`): the fan-out is **in-process**, so it covers one\nworker \u2014 the documented ceiling (`uvicorn --workers 1`, for sqlite's\nper-instance write lock); a multi-worker deployment needs Redis pub/sub or\nPostgres LISTEN/NOTIFY behind the same publish/subscribe pair. And the\ncatalogue subject still only emits for writes **through this API**: a\n`workflow.json` hand-edited on disk or arriving by `git pull` produces no\n`workflows.changed`. The `slug` subject is the one that covers those\nwriters, because it watches the file (`osg-agent-experience/69`).",
         "operationId": "catalogue_events_api_events_get",
+        "parameters": [
+          {
+            "description": "Also carry `workflow.changed` for this package's document.",
+            "in": "query",
+            "name": "slug",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Also carry `workflow.changed` for this package's document.",
+              "title": "Slug"
+            }
+          },
+          {
+            "description": "Also carry `patrol.status`.",
+            "in": "query",
+            "name": "patrol",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Also carry `patrol.status`.",
+              "title": "Patrol",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Also carry `kanban.changed`.",
+            "in": "query",
+            "name": "kanban",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Also carry `kanban.changed`.",
+              "title": "Kanban",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2712,10 +2756,20 @@
                 }
               }
             },
-            "description": "One frame per catalogue change.\n\nA `text/event-stream`. Event names: `workflows.changed`. Frame fields: `workflows.changed`: `reason`, `slug`, `surface_visible`. This stream sends no terminal frame: it ends when the connection closes \u2014 see `docs/api.md`."
+            "description": "One frame per change, on whichever subjects this connection asked for.\n\nA `text/event-stream`. Event names: `workflows.changed`, `patrol.status`, `kanban.changed`, `workflow.changed`. Frame fields: `workflows.changed`: `reason`, `slug`, `surface_visible`; `patrol.status`: `kind`, `task_id`, `title`, `filed`, `skipped`, `total_findings`, `reason`; `kanban.changed`: `digest`; `workflow.changed`: `slug`, `digest`. This stream sends no terminal frame: it ends when the connection closes \u2014 see `docs/api.md`."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
-        "summary": "Catalogue changes, live (SSE)",
+        "summary": "Live changes on one connection (SSE)",
         "tags": [
           "Catalogue"
         ]
@@ -4377,7 +4431,7 @@
     },
     "/api/workflows/{slug}/events": {
       "get": {
-        "description": "This package's document changed, live \u2014 `event: workflow.changed`.\n\n**Push, for a client that can afford a connection** (`osg-agent-experience\n/69`). Three tabs on one workflow, plus the CLI and a coding agent through\nthe MCP server, are five writers of one file, and until this endpoint only\na save through this API told anybody. The watcher behind it observes the\n**file**, so every writer is covered by construction \u2014 which is why this is\na sibling stream rather than a fifth `CatalogueEvent.reason`, a fan-out\n`catalogue_events.py` says in its own docstring that only API writes reach.\nSee `workflow_events.py` for the full argument.\n\n**This editor does not hold it, and that is measured rather than an\noversight.** A browser allows six concurrent HTTP/1.1 connections per\norigin and each editor tab already holds two long-lived ones (`/api/events`\nand `/api/kanban/patrol/events`); a third saturates the budget at *two*\ntabs, which is this ticket's own scenario. Staged 2026-09-05: the last\nstream opened sat at `readyState 0` for minutes and ordinary `fetch` calls\nstopped completing. The editor learns a revision from the `savedAt` poll it\nalready runs, which costs no connection at all;\n`osg-agent-experience/71` carries the fix that would let it use this \u2014\nfolding the frames onto the `/api/events` connection it already holds.\n\n**The frame is a hint**: it carries the slug and the digest \u2014 the same\nrevision a save quotes as `base_digest` \u2014 and the client refetches\n`GET /api/workflows/{slug}`, the one spelling of a document. A tab\ncompares the digest against the one it is editing, so it can tell its own\nwrite from somebody else's without diffing.\n\n**No replay**, as on all three sibling streams: a client that connects\nafter a write learns nothing about it and needs to learn nothing, because\nopening a workflow reads it anyway.\n\nAn unknown slug is not refused. A package is created, deleted and\nre-created underneath an open tab, and a stream that 404s at connect time\nwould leave exactly that tab the one with no way to be told; the digest of\na package that is not there is `\"\"`, so its arrival is a change like any\nother.",
+        "description": "This package's document changed, live \u2014 `event: workflow.changed`.\n\n**Push, for a client that can afford a connection** (`osg-agent-experience\n/69`). Three tabs on one workflow, plus the CLI and a coding agent through\nthe MCP server, are five writers of one file, and until this endpoint only\na save through this API told anybody. The watcher behind it observes the\n**file**, so every writer is covered by construction \u2014 which is why this is\na sibling stream rather than a fifth `CatalogueEvent.reason`, a fan-out\n`catalogue_events.py` says in its own docstring that only API writes reach.\nSee `workflow_events.py` for the full argument.\n\n**The editor reads this subject off `GET /api/events?slug=<slug>`, not\nhere** (`osg-agent-experience/71`). It could not hold this endpoint at all\nwhen `69` shipped it, and that was measured rather than assumed: a browser\nallows six concurrent HTTP/1.1 connections per origin and each editor tab\nalready held two long-lived ones (`/api/events` and\n`/api/kanban/patrol/events`); a third saturated the budget at *two* tabs,\nwhich is `69`'s own scenario. Staged 2026-09-05: the last stream opened sat\nat `readyState 0` for minutes and ordinary `fetch` calls stopped\ncompleting. The fix was to make a subject a frame rather than a socket, so\nthis endpoint stayed exactly as it is and the editor stopped needing its\nown connection for it.\n\nSo this route is for a client that wants **one package and nothing else**\n\u2014 the CLI, a custom integration, anything with connections to spare. The\nwatcher, the frame and the filtering are the same objects the merged stream\nuses; there is one implementation and two doors onto it.\n\n**The frame is a hint**: it carries the slug and the digest \u2014 the same\nrevision a save quotes as `base_digest` \u2014 and the client refetches\n`GET /api/workflows/{slug}`, the one spelling of a document. A tab\ncompares the digest against the one it is editing, so it can tell its own\nwrite from somebody else's without diffing.\n\n**No replay**, as on all three sibling streams: a client that connects\nafter a write learns nothing about it and needs to learn nothing, because\nopening a workflow reads it anyway.\n\nAn unknown slug is not refused. A package is created, deleted and\nre-created underneath an open tab, and a stream that 404s at connect time\nwould leave exactly that tab the one with no way to be told; the digest of\na package that is not there is `\"\"`, so its arrival is a change like any\nother.",
         "operationId": "workflow_events_stream_api_workflows__slug__events_get",
         "parameters": [
           {

@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 from openstategraph.api.catalogue_events import CATALOGUE_EVENT
+from openstategraph.api.live_stream import LIVE_EVENT_NAMES
 from openstategraph.api.streaming import FRAME_FIELDS, RUN_EVENTS, TERMINAL_EVENTS
 
 REPO = Path(__file__).resolve().parents[2]
@@ -286,7 +287,11 @@ class TestEveryExampleIsAFrameTheServerCouldSend:
         assert len(_examples(guide)) >= 10
 
     def test_each_names_a_frame_that_exists(self, guide: str) -> None:
-        known = set(FRAME_FIELDS) | {CATALOGUE_EVENT}
+        # The live stream's whole vocabulary, from the registry that decides
+        # it (`api/live_stream.py`) rather than one name picked out of it:
+        # `/api/events` carries four subjects since `osg-agent-experience/71`,
+        # and a hand-listed set here would go stale on the fifth.
+        known = set(FRAME_FIELDS) | set(LIVE_EVENT_NAMES)
         for example in _examples(guide):
             assert example.event in known, (
                 f"{GUIDE}:{example.line} shows an `{example.event}` frame and "

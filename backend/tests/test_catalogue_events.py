@@ -21,6 +21,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from openstategraph.api.broadcast import DEFAULT_BACKLOG_LIMIT
 from openstategraph.api.catalogue_events import (
     KEEPALIVE_SECONDS,
     CatalogueBroadcaster,
@@ -516,16 +517,23 @@ class TestTheConnectionCleansUpOnBothEnds:
     def test_a_dropped_subscriber_ends_its_connection(self, tmp_path) -> None:
         """Overflow is not a silent state: the endpoint's generator must end so
         the socket closes and `EventSource` reconnects (and refetches) rather
-        than holding a connection nothing will ever write to again."""
+        than holding a connection nothing will ever write to again.
+
+        **The bound belongs to the connection, not to one fan-out**
+        (`osg-agent-experience/71`). This used to shrink
+        `broadcaster._backlog_limit` to 1 and publish three times; the endpoint
+        now brings its own `Subscriber`, because one connection carries four
+        subjects and a queue per subject would let a dead client sit on three
+        of them. So the real bound is exercised instead — the publishes run
+        with no `await` between them, so nothing drains and
+        `DEFAULT_BACKLOG_LIMIT + 1` is enough to trip it."""
 
         async def scenario() -> bool:
             app = create_app(graph_factory=lambda _m: None, workflows_root=tmp_path)
             broadcaster = app.state.services.events
-            # A tiny bound, reached without needing 32 publishes.
-            broadcaster._backlog_limit = 1  # noqa: SLF001 — the bound is the subject
             surface = _Surface(app)
             await surface.opened()
-            for i in range(3):
+            for i in range(DEFAULT_BACKLOG_LIMIT + 1):
                 broadcaster.publish(CatalogueEvent("saved", f"w{i}", False))
             await asyncio.wait_for(surface.task, timeout=2.0)
             return broadcaster.subscriber_count == 0

@@ -88,12 +88,14 @@ async function stubBackend(
   // the catch-all has to go in before the specific one or it swallows every
   // workflow request (`68`'s spec paid for this).
   //
-  // There is no stub for `GET /api/workflows/{slug}/events`, and its absence
-  // is the point: the editor deliberately does not open that stream, because
-  // a third long-lived connection per tab saturates a browser's six-per-origin
-  // budget at two tabs — see `useExternalWorkflowChange`'s header for the
-  // measurement. The catch-all answers it as JSON, an `EventSource` would
-  // refuse that outright, and every assertion below still passes.
+  // There is no `text/event-stream` stub here, and its absence is the point:
+  // this spec is about the transport that costs no connection at all. The
+  // editor does hold one live stream since `osg-agent-experience/71` —
+  // `/api/events?patrol=1&slug=<slug>`, counted in
+  // `e2e/oneStreamPerTab.spec.ts` — and the catch-all answers it as JSON,
+  // which an `EventSource` refuses outright. So what runs below is the
+  // five-second `savedAt` poll with the push half unavailable, which is the
+  // floor this feature promises and the one a spec should assert.
   await context.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
   );

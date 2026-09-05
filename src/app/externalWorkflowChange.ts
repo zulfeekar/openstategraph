@@ -96,27 +96,30 @@ export function decideExternalChange(input: ExternalChangeInput): ExternalChange
  * **This exists because of a connection budget, measured rather than
  * anticipated** (`osg-agent-experience/69`, staged on 2026-09-05 against the
  * running editor). A browser allows six concurrent HTTP/1.1 connections per
- * origin, and each editor tab holds a long-lived one for `/api/events` and
- * another for `/api/kanban/patrol/events`. The package stream this ticket
- * added is a third — so **two** tabs saturate the budget and the last stream
- * opened never leaves `CONNECTING`. Observed exactly that: with two tabs on
- * one workflow the second tab's `EventSource` sat at `readyState 0` for
- * minutes, and opened within a second of the other tab closing.
+ * origin, and each editor tab held a long-lived one for `/api/events` and
+ * another for `/api/kanban/patrol/events`. The package stream `69` added was a
+ * third — so **two** tabs saturated the budget and the last stream opened
+ * never left `CONNECTING`. Observed exactly that: with two tabs on one
+ * workflow the second tab's `EventSource` sat at `readyState 0` for minutes,
+ * and opened within a second of the other tab closing.
  *
- * Two tabs on one workflow is this ticket's own scenario, so a mechanism that
- * fails there is not a mechanism. The answer is not a fourth transport but a
- * seam: the five-second `savedAt` poll `useWorkflowFileWatch` already runs
- * receives the file's digest in the same row it already reads, costs no
- * connection at all, and works however many tabs are open. It publishes here;
- * the stream and the `BroadcastChannel` publish here; `decideExternalChange`
- * deduplicates all three against the revision this tab holds, so hearing one
- * change three times is one action and two ignores.
+ * Two tabs on one workflow is `69`'s own scenario, so a mechanism that fails
+ * there is not a mechanism — and this seam is what let the editor have a
+ * *third* source without a third socket. The five-second `savedAt` poll
+ * `useWorkflowFileWatch` already runs receives the file's digest in the same
+ * row it already reads, costs no connection at all, and works however many
+ * tabs are open. It publishes here; the `BroadcastChannel` publishes here;
+ * and since `osg-agent-experience/71` folded every live subject onto the one
+ * connection a tab holds, `workflow.changed` publishes here too.
+ * `decideExternalChange` deduplicates all three against the revision this tab
+ * holds, so hearing one change three times is one action and two ignores.
  *
  * The ordering is worth stating because it is the whole design: the
  * `BroadcastChannel` is instant and covers other tabs of this browser, the
  * stream is sub-second and covers every writer, the poll is five seconds and
- * covers every writer with no connection. Each is a strict fallback for the
- * one above it, and losing the top two costs latency rather than correctness.
+ * covers every writer with nothing of the backend but a row it was already
+ * reading. Each is a strict fallback for the one above it, and losing the top
+ * two costs latency rather than correctness.
  */
 const revisionListeners = new Set<(slug: string, digest: string) => void>();
 
