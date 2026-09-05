@@ -44,10 +44,21 @@ export const GRADER_DEFAULT_CRITERIA = [
     'it cannot make the missing capability appear.',
 ].join('\n');
 
-/** Locked, and rendered **last** so criteria cannot countermand it. */
+/**
+ * Locked, and rendered **last** so criteria cannot countermand it.
+ *
+ * The final sentence is `osg-agent-experience/50`, and it is locked rather
+ * than a criterion for exactly that reason: a developer's own criteria may
+ * say a reported tool failure is an acceptable answer — `web-research-digest`
+ * ships criteria that do — and criteria render before this. Python is the
+ * source of truth for this string; `test_prompt_mirror_contract.py` fails if
+ * the two drift.
+ */
 export const GRADER_OUTPUT_CONTRACT =
   'Reply with PASS or FAIL on the first line. If FAIL, add one short line ' +
-  'saying exactly what to change. Nothing else.';
+  'saying exactly what to change. Nothing else. ' +
+  'A candidate whose every tool call this run failed is a FAIL however well ' +
+  'it reads, and the line must name the tool and what it reported.';
 
 export class GraderNodeModel extends AbstractNodeModel {
   /**

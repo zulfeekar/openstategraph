@@ -65,6 +65,7 @@ from openstategraph.compile.diagnostics import (
     Finding,
 )
 from openstategraph.grounded_numbers import MODEL_AUTHORED
+from openstategraph.run_summary import RunSummary, summarise_run
 from openstategraph.compile.workflow_compiler import (
     CompiledPlan,
     failure_marker,
@@ -78,6 +79,40 @@ from openstategraph.compile.state import (
     _upstream_text,
 )
 from openstategraph.compile.grounding import _PRODUCES_CONTENT
+
+
+def _wants_the_summary(fn: Any) -> bool:
+    """Whether this check's function takes the run summary as well as the text.
+
+    `osg-agent-experience/50`. The contract is still `fn(text) -> str` and a
+    one-argument function is still the whole of it — the second parameter is
+    an **opt-in**, read off the signature rather than announced by a flag,
+    which is what makes every function anybody has already written keep
+    working with no edit.
+
+    Read once at build time, not per lap. Tolerant: a callable whose signature
+    cannot be inspected at all (a C builtin, an exotic partial) is taken as
+    the one-argument shape — the shape it has always had.
+
+    Strict about what counts as room for a second argument: a keyword-only
+    parameter is not it, and neither is `**kwargs`. `*args` is, because a
+    function written `def check(*args)` genuinely accepts one.
+    """
+    import inspect
+
+    try:
+        parameters = list(inspect.signature(fn).parameters.values())
+    except (TypeError, ValueError):
+        return False
+    positional = [
+        p
+        for p in parameters
+        if p.kind
+        in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    if any(p.kind is inspect.Parameter.VAR_POSITIONAL for p in parameters):
+        return True
+    return len(positional) >= 2
 
 if TYPE_CHECKING:
     # The class these functions are methods of. Type-only: the import that
@@ -286,6 +321,10 @@ def _guard_check(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: 
     # supplies it, with the wider signature, and a package function of the
     # same name still wins — an adopter overrides by writing one.
     built_in = _BUILT_IN_CHECKS.get(check_name) if fn is None else None
+    #: Whether the package function asked for the run's record beside the
+    #: candidate (`osg-agent-experience/50`). Resolved once, here, because a
+    #: signature does not change during a run.
+    summarised = fn is not None and _wants_the_summary(fn)
     model_authored = frozenset(
         candidate_id
         for candidate_id, candidate_type in self._types.items()
@@ -300,6 +339,15 @@ def _guard_check(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: 
     if not revise_wired:
         self.diagnostics.record(Finding.UNWIRED_REVISE, node_id)
     floor = step_budget_floor_for(plan, node_id)
+
+    def _summary(state: RunState) -> RunSummary:
+        """The whole run, not this guard's upstream.
+
+        A grader judges a named producer's output and narrows to it; a guard
+        stands at the confluence and its candidate is whatever reached it, so
+        the honest scope here is every node that called a tool.
+        """
+        return summarise_run(state.get("tool_use"))
 
     def run(state: RunState) -> dict[str, Any]:
         candidate = _upstream_text(state, upstream + conditional_upstream) or state.get(
@@ -317,7 +365,14 @@ def _guard_check(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: 
             if built_in is not None:
                 reason = built_in(candidate, state, model_authored)
             elif fn is not None:
-                reason = fn(candidate)
+                # The second argument is the run's own record — which tools
+                # this run reached, how many came back, and the last thing one
+                # of them said. A check can then answer *"no evidence
+                # arrived"* instead of arguing with the prose about units,
+                # which is what the live Mongstad run's honesty check spent
+                # two laps doing while three warehouse calls sat timed out in
+                # state, unread.
+                reason = fn(candidate, _summary(state)) if summarised else fn(candidate)
             else:  # pragma: no cover - the branch above returns first
                 reason = ""
         except Exception as exc:

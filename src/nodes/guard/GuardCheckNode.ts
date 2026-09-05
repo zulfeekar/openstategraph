@@ -83,7 +83,12 @@ export const guardCheckNode: INodeDefinition = defineNode(
           'came from a bare COUNT(*) is published as rows, not as things) and ' +
           '`zero_outside_coverage` (an answer reporting none of something asked about a ' +
           'period the table says it does not hold — so the zero is not a measurement). ' +
-          'A package function of the same name still wins.',
+          'A package function of the same name still wins. Write it with a ' +
+          'second parameter — `fn(text, summary)` — and it also receives this ' +
+          'run’s record of its own tool calls: how many were made, how many ' +
+          'came back, and the last failure’s tool and message, so a check can ' +
+          'say “no evidence arrived” instead of arguing with the prose. One ' +
+          'parameter still works and is still the contract.',
         defaultValue: '',
         onCard: true,
       },

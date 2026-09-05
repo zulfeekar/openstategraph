@@ -1184,6 +1184,13 @@ Three facts, all load-bearing, recorded at `_discovered_function` in
   not widen the signature to `fn(state)` as a convenience; that is precisely
   what was refused, and any future runtime-context work inherits this as a
   constraint rather than an oversight.
+- **A `guard.check` function may take a second parameter, and only that node
+  passes one.** `fn(text, summary)` receives a `RunSummary` — how many tool
+  calls this run made, how many came back, and the last failure's tool and
+  message. It is a small frozen value object, not graph state, which is why it
+  does not reopen the bullet above: a check can answer *"no evidence arrived"*
+  without a place to hide control flow in. One parameter is still the contract
+  and still works unchanged (`osg-agent-experience/50`).
 - **A raised exception becomes readable output**, the same errors-are-data rule
   `BaseTool.run` applies: retrying a deterministic function reproduces the same
   failure, so the useful move is to carry the message downstream where a grader

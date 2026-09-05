@@ -144,7 +144,19 @@ class TestWhatTheRuntimeRecords:
         from openstategraph.compile.node_runtime import tool_report
 
         update = tool_report("agent-1", [self._tool("chinook_query", "3 rows")], ["chinook_query"])
-        assert update["tool_use"] == {"agent-1": {"bound": ["chinook_query"], "ran": ["chinook_query"]}}
+        # The four counters are `osg-agent-experience/50`, and they are
+        # asserted here rather than filtered out: this test pins the *whole*
+        # row on purpose, so a field added to the record has to be declared.
+        assert update["tool_use"] == {
+            "agent-1": {
+                "bound": ["chinook_query"],
+                "ran": ["chinook_query"],
+                "calls": 1,
+                "failed": 0,
+                "last_error": "",
+                "last_error_tool": "",
+            }
+        }
 
     def test_a_tool_that_ran_and_errored_still_ran(self) -> None:
         """`the-agent-asks-for-what-it-cannot-get` 01: errors are data. A bound
@@ -154,6 +166,11 @@ class TestWhatTheRuntimeRecords:
 
         update = tool_report("a1", [self._tool("email_send", "Error: no recipient")], ["email_send"])
         assert update["tool_use"]["a1"]["ran"] == ["email_send"]
+        # And it is a call that *failed*, which is the distinction
+        # `osg-agent-experience/50` added: still a use, still wired, and
+        # nothing came back. Both readings are true and only one was sayable.
+        assert update["tool_use"]["a1"]["failed"] == 1
+        assert update["tool_use"]["a1"]["last_error_tool"] == "email_send"
 
     def test_a_name_the_runtime_refused_did_not_run(self) -> None:
         """The refusal comes back as a `ToolMessage` too, and counting it as a

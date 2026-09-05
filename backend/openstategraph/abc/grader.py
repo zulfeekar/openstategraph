@@ -104,7 +104,24 @@ class BaseGrader(ABC):
         ),
         output_contract=(
             "Reply with PASS or FAIL on the first line. If FAIL, add one short line "
-            "saying exactly what to change. Nothing else."
+            "saying exactly what to change. Nothing else. "
+            # `osg-agent-experience/50`. Locked rather than a default
+            # criterion, and it belongs here for the reason this layer exists:
+            # a developer's own criteria may say — `web-research-digest`'s
+            # actually do — that a reported tool failure is an acceptable
+            # answer, and criteria are rendered *before* this and so cannot
+            # countermand it. That rule is right about the prose and wrong
+            # about the run: an answer explaining that nothing could be
+            # reached is honest, and it is not a graded answer.
+            #
+            # The platform makes the same judgement as a **fact** where it
+            # can, off the run's own record, with no model call at all
+            # (`run_summary.every_tool_call_failed`). This sentence covers
+            # what a record cannot see — a tool that answers its own failure
+            # in prose the platform never marked as one.
+            "A candidate whose every tool call this run failed is a FAIL "
+            "however well it reads, and the line must name the tool and what "
+            "it reported."
         ),
         default_rules=(
             "- The answer must address the question that was asked.\n"

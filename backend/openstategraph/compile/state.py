@@ -212,6 +212,15 @@ class RunState(TypedDict, total=False):
     #: so a repeat lap's row is merged into the standing one rather than
     #: overwriting it.
     #:
+    #: The row also carries `calls`/`failed`/`last_error`/`last_error_tool`
+    #: (`osg-agent-experience/50`) — how many calls reached a tool this lap and
+    #: how many came back with nothing. **Scalars, and that is deliberate under
+    #: MERGE_ROWS**: the lists above accumulate over a run because what happened
+    #: does not un-happen, and these four must *not*, because a judge asking
+    #: "did the work behind this candidate arrive" is asking about one lap.
+    #: `run_summary.py` is the reader; no second state key was added, because
+    #: `tool_use` is already this knowledge's one home.
+    #:
     #: `ran` names tools in our own vocabulary, and a deep agent's delegation
     #: appears there as `delegate:<worker>` rather than as `deepagents`' one
     #: `task` tool (`launch-readiness` 178, `openstategraph/delegations.py`).

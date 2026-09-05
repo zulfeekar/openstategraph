@@ -503,6 +503,21 @@ def _recorded(result: ToolResult) -> ToolResult:
     return result
 
 
+#: How this platform renders a failed `ToolResult` to the model.
+#:
+#: Declared here, beside the one line that writes it, because
+#: `osg-agent-experience/50` needed a *reader*: a `ToolResult.failure` reaches
+#: the loop as ordinary prose on an ordinary `ToolMessage`, never as
+#: LangChain's `status="error"` (that marker belongs to a tool whose body
+#: raised, and this platform's rule is that errors are data). A record that
+#: watched only the status field therefore counted three timed-out warehouse
+#: calls as three clean ones. `compile/reporting.py` reads it; the harness's
+#: own identical prefix stays `tool_findings._HARNESS_ERROR_PREFIX`, because
+#: that one is a third-party library's wording and this one is ours — two
+#: spellings that agree today and are owned by different people.
+TOOL_FAILURE_PREFIX = "Error: "
+
+
 def _with_notes(result: ToolResult) -> str:
     """What the `ToolMessage` carries: the content, then anything the tool
     said about the call (`launch-readiness/117`).
@@ -511,7 +526,7 @@ def _with_notes(result: ToolResult) -> str:
     every tool in this repository today and every adopter's until they write
     one.
     """
-    body = result.content if result.ok else f"Error: {result.error}"
+    body = result.content if result.ok else f"{TOOL_FAILURE_PREFIX}{result.error}"
     addendum = notes_for_model(result.notes)
     return f"{body}\n\n{addendum}" if addendum else body
 

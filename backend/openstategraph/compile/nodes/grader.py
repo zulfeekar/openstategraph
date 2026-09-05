@@ -24,8 +24,15 @@ if TYPE_CHECKING:
     pass
 from openstategraph.abc.grader import Grader, Verdict
 from openstategraph.abc.tool_notes import (
+    UnverifiedAnswer,
     notes_for_grader,
     peek_notes,
+    record_notes,
+)
+from openstategraph.run_summary import (
+    evidence_for_grader,
+    every_tool_call_failed,
+    summarise_run,
 )
 from openstategraph.compile.diagnostics import (
     Finding,
@@ -207,9 +214,16 @@ def _grader(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
         # *Context* layer, never in the candidate: what this node publishes
         # is still exactly what the producer wrote.
         seen = peek_notes()
+        # The run's own record of its tool calls, when any of them failed
+        # (`osg-agent-experience/50`). Generated **Context**, never a rule and
+        # never part of the candidate: it is a fact this judgement is entitled
+        # to, not an instruction about what to do with it. Silent on an
+        # ordinary run, so every existing grader composes exactly the prompt
+        # it always did.
         sections = (
             self._run_context_section(),
             notes_for_grader(seen, unsent_values=_values_never_sent(state, seen)),
+            evidence_for_grader(summarise_run(state.get("tool_use"), upstream)),
         )
         grader = grader_for(
             _wired_skill(state, skills, self.static_sources),
@@ -240,12 +254,27 @@ def _grader(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
         # to notice it would be slower, costlier and less reliable — and a
         # model can be talked out of a fact.
         blocked = unbound_capability_claim(state.get("tool_use"), upstream)
+        # The third fact of the same kind, and the one the live Mongstad run
+        # needed (`osg-agent-experience/50`). Three T-SQL statements, three
+        # *Login timeout expired*, and a `pass` on the paragraph that
+        # explained it — because both judges read the text and the text was an
+        # honest decline, which `BaseGrader`'s refusal clause correctly calls
+        # a PASS.
+        #
+        # Ordered **after** `blocked` and before `unrun`: an unbound
+        # capability is the more specific fact and the one where retrying
+        # genuinely cannot help. A timeout is neither, which is why this one
+        # rejects onto the revise edge like any other judgement rather than
+        # forcing the pass branch.
+        starved_of_evidence = every_tool_call_failed(state.get("tool_use"), upstream)
         # Spelled as a statement rather than the conditional expression it
         # was: `await` is legal in a ternary and reads as though both arms
         # might be awaited, and the whole point of the `unrun` arm is that
         # no model is asked.
         if blocked:
             verdict = Verdict.reject(blocked, check="unbound_capability")
+        elif starved_of_evidence:
+            verdict = Verdict.reject(starved_of_evidence, check="tools_all_failed")
         elif unrun:
             verdict = Verdict.reject(unrun, check="unrun_query")
         else:
@@ -392,6 +421,21 @@ def _grader(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
                 update["budget_stops"] = {node_id: remaining}
             else:
                 update["forced"] = {node_id: verdict.feedback or ""}
+            if verdict.failed_check == "tools_all_failed":
+                # The reader's own rail, on the one standing objection a
+                # reader cannot possibly infer from the answer they are given
+                # (`osg-agent-experience/50`, through `launch-readiness/167`'s
+                # existing mechanism rather than a second one). `forced` and
+                # `budget_stops` are the developer channel; a customer meets a
+                # fluent paragraph and, without this, nothing at all.
+                #
+                # Narrow on purpose: only this check. A model grader that
+                # merely disliked the answer is a judgement, and announcing
+                # every forced pass would turn a note that means something
+                # into one people learn to skip.
+                record_notes(
+                    [UnverifiedAnswer(check="tools_all_failed", starved=bool(starved))]
+                )
         # A verdict with nowhere to go. `_router_for` will fall back to the
         # first declared destination — correct, and it must not be the only
         # thing that happens. Only on `revise`: at the cap the branch is

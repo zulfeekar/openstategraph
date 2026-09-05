@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from openstategraph.abc.tool import TOOL_FAILURE_PREFIX
 from openstategraph.compile.state import RunState
 from openstategraph.messages import content_text
 from openstategraph.table_coverage import declarations_in_result
@@ -47,6 +48,13 @@ from openstategraph.compile.workflow_compiler import values_no_statement_carried
 #: every row, and none for one about a `COUNT(*)`, whose whole answer is one
 #: cell.
 QUERY_RESULT_RECORD_CAP = 2000
+
+#: How much of a failed call's message the run's record keeps
+#: (`osg-agent-experience/50`). A driver's timeout is one line; past this a
+#: message is a stack trace, and the record is not the place for one. Bounded
+#: for the same reason `QUERY_RESULT_RECORD_CAP` is — state is checkpointed —
+#: and short because the *only* consumer is a sentence a judge reads.
+TOOL_ERROR_RECORD_CAP = 300
 
 #: How many table declarations one node's row may carry. A lens's bulk schema
 #: dump is a handful of tables; past this a payload is not declaring, it is
@@ -187,6 +195,15 @@ def tool_report(
     the harness refused — an undeclared worker's name, answered with a sentence
     and no run — records nothing at all, exactly as an invented tool name does.
 
+    **`ran` is a set of names, and that is what it could not say**
+    (`osg-agent-experience/50`). Three timed-out calls to one warehouse and one
+    clean call to it leave the identical entry, because an errored call is a
+    use. So `calls`, `failed`, `last_error` and `last_error_tool` ride beside
+    it: scalars, written together, and only when this node reached a tool at
+    all. Scalars because `merge_rows` overwrites them and unions the lists —
+    which is what makes them the record of *this* lap, the reading a judge
+    needs, and the one a growing list of names cannot give.
+
     Returns no `unmet_tools` key rather than an empty map when nothing was
     refused, so a clean run writes nothing there — a node that reports `[]` and
     a node that reports nothing must not look the same to the reducer.
@@ -272,6 +289,19 @@ def tool_report(
     queries: list[dict[str, str]] = []
     #: Table declarations this node's loop was shown (`launch-readiness/166`).
     declares: list[dict[str, Any]] = []
+    #: How many calls this node's loop actually reached a tool with, and how
+    #: many of them came back with nothing (`osg-agent-experience/50`).
+    #:
+    #: `ran` was the nearest thing to this and it is a **set of names**: three
+    #: timed-out calls to one warehouse and one clean call to it leave the
+    #: identical entry, because an errored call is a use (the tool is wired,
+    #: and errors are data). So neither judge could tell a run whose every
+    #: call failed from a run that worked — the grader passed a paragraph
+    #: explaining it could not connect.
+    calls = 0
+    failed = 0
+    last_error = ""
+    last_error_tool = ""
     for message in messages or []:
         for call in getattr(message, "tool_calls", None) or []:
             args = call.get("args") if isinstance(call, dict) else None
@@ -358,6 +388,24 @@ def tool_report(
             used = delegations.get(str(getattr(message, "tool_call_id", "") or ""), "")
         if used and used not in ran:
             ran.append(used)
+        if used:
+            # Counted here, past every filter above, so the two things that
+            # never reached a tool are never counted as calls: a name the
+            # runtime refused (`production-ready` 98) and a delegation that
+            # reached nobody (`launch-readiness` 178).
+            calls += 1
+            body = content_text(getattr(message, "content", ""))
+            # Two shapes, and the first is the one that was invisible. Our own
+            # `ToolResult.failure` is prose on an ordinary message
+            # (`TOOL_FAILURE_PREFIX`); LangChain's `status="error"` marks a
+            # tool whose body raised. Reading only the second saw the live
+            # run's three *Login timeout expired* answers as three successes.
+            if getattr(message, "status", None) == "error" or body.startswith(
+                TOOL_FAILURE_PREFIX
+            ):
+                failed += 1
+                last_error = body[:TOOL_ERROR_RECORD_CAP].strip()
+                last_error_tool = used
     # A tool the runtime refused never ran, so it never sent anything either.
     queried = [name for name in queried if name in ran]
     row: dict[str, Any] = {"bound": list(bound), "ran": ran}
@@ -380,6 +428,22 @@ def tool_report(
     # as *undeclared* and says so to the reader, which is the whole of 166.
     if declares:
         row["declares"] = declares
+    # **Written together, and as scalars, which is what makes them per-lap.**
+    # `merge_rows` unions a row's lists and overwrites its scalars, so a
+    # revision lap's `failed: 0` replaces the lap before it rather than
+    # accumulating with it — which is the reading a judge needs ("did the work
+    # behind *this* candidate arrive"), and the reading `ran` cannot give.
+    #
+    # `last_error` is written even when it is empty, deliberately breaking
+    # this row's absent-rather-than-empty rule and for that same reason: an
+    # absent key would leave the previous lap's error standing beside a lap
+    # that had none. Absence still means "this node called nothing", because
+    # all four are withheld together when it did.
+    if calls:
+        row["calls"] = calls
+        row["failed"] = failed
+        row["last_error"] = last_error
+        row["last_error_tool"] = last_error_tool
     update: dict[str, Any] = {"tool_use": {node_id: row}}
     if refused:
         update["unmet_tools"] = {node_id: refused}
@@ -388,6 +452,7 @@ def tool_report(
 
 __all__ = [
     "DECLARATION_RECORD_CAP",
+    "TOOL_ERROR_RECORD_CAP",
     "QUERY_RESULT_RECORD_CAP",
     "tool_report",
 ]

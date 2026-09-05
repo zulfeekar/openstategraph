@@ -136,6 +136,10 @@ input → agent → grader ──(pass)──→ output
 ```
 
 The grader's `revise` output connects back to the agent's `feedback` input.
+**A grader is shown the run as well as the answer:** when tool calls failed
+this run it is handed that record, and a candidate whose every tool call failed
+cannot pass on how well it reads — the verdict names the tool and what it
+reported, and an exhausted loop publishes with the answer marked unverified.
 That is the whole mechanism. There is no Loop node, and there does not need to
 be — a loop is a **cycle in the graph**, not a wrapper around one.
 
@@ -183,6 +187,12 @@ question and answers it by running one of your package's `functions/` against
 the candidate — the function returns an empty string to pass, or the sentence
 that goes back over `revise`. Same two ceilings as a grader (*Max attempts*,
 and the step budget below), same feedback port, same loop.
+
+Write the function with a second parameter — `fn(text, summary)` — and it also
+receives this run's own record of its tool calls (how many were made, how many
+returned anything, and the last failure's tool and message), so a check can say
+*"no evidence arrived"* rather than arguing with the prose; one parameter is
+still the contract.
 
 Reach for it whenever the check is **decidable without judgement**: a schema
 rule, a lookup against a known set, a format. Routing a deterministic check
