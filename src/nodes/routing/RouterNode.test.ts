@@ -187,11 +187,16 @@ describe('routerNode ports', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('lets a branch fan out to several nodes', () => {
-    // One branch legitimately feeds two downstream nodes; capping it at one
-    // would force a pointless pass-through node.
+  it('caps a branch at one edge', () => {
+    // **This used to assert the opposite**, on the argument that one branch
+    // legitimately feeds two downstream nodes and a cap would force a pointless
+    // pass-through. The runtime cannot keep that promise and never could:
+    // `plan.conditional[node][branch]` is a dict, so the second edge replaces
+    // the first and the rest are dropped with nothing to report the loss
+    // (`osg-agent-experience/38` — fifteen drawn, one run). An affordance the
+    // compiler silently discards is worse than the pass-through node.
     const out = portsFor({ branches: [{ id: 'x', name: 'a' }] }).find((p) => p.direction === 'out');
-    expect(maxConnectionsOf(out!)).toBeNull();
+    expect(maxConnectionsOf(out!)).toBe(1);
   });
 
   it('marks the fallback branch, so an unmatched question is visibly handled', () => {

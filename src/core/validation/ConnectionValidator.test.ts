@@ -149,6 +149,22 @@ describe('ConnectionValidator', () => {
       // here would defeat its purpose.
       if (verdict.ok) expect(verdict.replaces).not.toContain(first.id);
     });
+
+    it('refuses a second wire from one conditional branch', () => {
+      // `osg-agent-experience/38`: the try-folder session drew a grader's
+      // `revise` to fifteen agents' `feedback`. The compiled plan keys its
+      // conditional destinations by branch, so fourteen of them were dropped
+      // in silence. A branch is one way out, so the canvas refuses the second.
+      const first = addNode(workbench, TYPE.agent);
+      const second = addNode(workbench, TYPE.agent);
+      const grader = addNode(workbench, TYPE.grader);
+      connect(workbench, grader, 'revise', first, 'feedback');
+
+      const verdict = validate(grader, 'revise', second, 'feedback');
+
+      expect(verdict.ok).toBe(false);
+      if (!verdict.ok) expect(verdict.reason).toMatch(/1 connection/);
+    });
   });
 
   describe('acyclic rule', () => {

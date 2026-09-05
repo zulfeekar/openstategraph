@@ -128,7 +128,12 @@ describe('generated node/port catalogue', () => {
         prefix: 'branch:',
         direction: 'out',
         type: 'text',
-        max_connections: null,
+        // One branch, one edge — `osg-agent-experience/38`. Published as
+        // `branch` too, because "may it carry two edges" and "are these two
+        // producers exclusive" are different questions and only the second
+        // one is answered by knowing *why* the cap is 1.
+        max_connections: 1,
+        branch: true,
         accepts: ['text'],
       },
     ]);

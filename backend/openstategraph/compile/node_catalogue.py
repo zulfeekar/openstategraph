@@ -34,7 +34,12 @@ from typing import Any
 #: 4 added `options` and `path_root` to a field record — the two things
 #: `document_checks.py` needs to tell a wrong value from a right one
 #: (`osg-agent-experience/32`).
-SCHEMA_VERSION = 4
+#: 5 added `branch` to a port record and to a dynamic port group — which of a
+#: node's outputs are mutually exclusive ways out. `max_connections` says how
+#: many edges a port takes; `branch` says why, and only the second answers
+#: whether two producers can arrive in the same run
+#: (`osg-agent-experience/38`, `43`).
+SCHEMA_VERSION = 5
 
 #: Ships inside the package, not at the repo root: an installed wheel has no
 #: repository around it.

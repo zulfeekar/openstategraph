@@ -75,6 +75,12 @@ export interface IPortDescriptor {
    * Only conditional outputs earn a label. A typed edge — tool, skill,
    * feedback, worker — already carries colour plus a dash signature and has a
    * legend; labelling those too is noise that hides the labels that matter.
+   *
+   * It also settles the port's cardinality: a branch carries **one** edge, so
+   * `maxConnectionsOf` answers 1 for it unless the port says otherwise. The
+   * compiled plan keys a conditional destination by branch, so a second edge
+   * out of one branch replaces the first with nothing to report the loss
+   * (`osg-agent-experience/38`).
    */
   readonly branch?: boolean;
   /** Tooltip / inspector help text. */
@@ -146,6 +152,12 @@ export const portRefKey = (ref: PortRef): string => `${ref.nodeId}/${ref.portId}
  */
 export function maxConnectionsOf(port: IPortDescriptor): number | null {
   if (port.maxConnections !== undefined) return port.maxConnections;
+  // A conditional branch is one way out, so it carries one edge
+  // (`osg-agent-experience/38`). Derived from `branch` rather than written out
+  // nine times beside it: the two would be one fact in two places, and the
+  // tenth conditional output — a plugin's own — would be the one that forgets.
+  // An explicit `maxConnections` still wins, so this stays a default.
+  if (port.direction === 'out' && port.branch) return 1;
   return port.direction === 'in' ? 1 : null;
 }
 

@@ -86,10 +86,20 @@ ports of different cardinality at once: an agent's `prompt` takes exactly one
 link, its `tools` bus takes many, its `result` fans out to many.
 
 ```
-maxConnections omitted  →  in: 1,  out: unlimited
+maxConnections omitted  →  in: 1,  out: unlimited (but a branch output: 1)
 maxConnections: null    →  unlimited, explicitly
 maxConnections: 3       →  three
 ```
+
+**A conditional branch output takes one edge**, and it is derived from
+`branch` rather than written out beside each of the nine that declare it
+(`osg-agent-experience/38`). A grader's `revise` drawn to fifteen agents.
+`feedback` saved, validated, compiled and ran — with fourteen of the fifteen
+gone, because `plan.conditional[node][branch]` is a dict and the last edge
+planned wins. The canvas refuses the second wire now, and a document naming
+both is a `branch-fan-out` finding that names the port and every destination.
+Fanning a branch out to several nodes at once is `Send`, which is a decision
+somebody makes rather than a side effect of a dict.
 
 `null`, never `Infinity`: a port descriptor is data that reaches
 `workflow.json`, and `JSON.stringify(Infinity)` is `"null"` — the value would

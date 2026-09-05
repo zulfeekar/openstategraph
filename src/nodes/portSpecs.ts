@@ -38,7 +38,7 @@ import { LEGACY_SKILL_BODY_KEY } from './inputs/SkillNode';
  */
 
 /** Bumped when the artifact's shape changes in a way Python must notice. */
-export const PORT_SPEC_SCHEMA_VERSION = 4;
+export const PORT_SPEC_SCHEMA_VERSION = 5;
 
 /** Where the emitted artifact lives, relative to the repository root. */
 export const PORT_SPEC_ARTIFACT_PATH = 'backend/openstategraph/compile/port_specs.json';
@@ -58,6 +58,17 @@ export interface GeneratedPort {
    * serialisable field, and this one crosses a language boundary as JSON.
    */
   readonly max_connections: number | null;
+  /**
+   * One of several mutually exclusive ways out — `IPortDescriptor.branch`.
+   *
+   * Published because Python needs the same fact the canvas needs and cannot
+   * derive it: a checker asking "may this port carry two edges" reads
+   * `max_connections`, but one asking "are these two producers exclusive"
+   * (`osg-agent-experience/43`) has to know which outputs are branches, and
+   * inferring that from a cap of 1 would be reading a consequence as if it
+   * were the cause.
+   */
+  readonly branch: boolean;
   /** Effective source port types accepted here, port-level widening included. */
   readonly accepts: readonly string[];
 }
@@ -73,6 +84,8 @@ export interface GeneratedDynamicPortGroup {
   readonly direction: 'in' | 'out';
   readonly type: string;
   readonly max_connections: number | null;
+  /** As `GeneratedPort.branch`: a router's `branch:<id>` outputs are branches. */
+  readonly branch: boolean;
   readonly accepts: readonly string[];
 }
 
@@ -320,6 +333,7 @@ function serializePort(registry: ModelRegistry, port: IPortDescriptor): Generate
     label: port.label,
     required: port.required ?? false,
     max_connections: maxConnectionsOf(port),
+    branch: port.branch ?? false,
     accepts: acceptsOf(registry, port),
   };
 }
@@ -365,6 +379,7 @@ function splitPorts(
         direction: template.direction,
         type: template.type,
         max_connections: maxConnectionsOf(template),
+        branch: template.branch ?? false,
         accepts: acceptsOf(registry, template),
       },
     ],

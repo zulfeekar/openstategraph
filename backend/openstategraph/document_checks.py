@@ -73,6 +73,9 @@ class FindingClass(str, Enum):
     NO_BRANCHES = "no-branches"
     #: An edge naming a port the node's type does not declare, in or out.
     UNKNOWN_PORT = "unknown-port"
+    #: More than one edge leaving a conditional branch, of which the compiled
+    #: plan keeps exactly one.
+    BRANCH_FAN_OUT = "branch-fan-out"
 
 
 @dataclass(frozen=True)
@@ -199,6 +202,48 @@ _KIND_TYPES: dict[str, tuple[tuple[type, ...], str]] = {
     "toggle": ((bool,), "true or false"),
     "repeatable-group": ((list,), "a list of rows"),
 }
+
+
+def _record_for(node_type: str) -> Mapping[str, Any] | None:
+    """The catalogue's raw record for a type, or `None` if it publishes none."""
+    return next((n for n in CATALOGUE.nodes if str(n["type"]) == node_type), None)
+
+
+def _dynamic_groups(
+    record: Mapping[str, Any], direction: str
+) -> list[Mapping[str, Any]]:
+    """The config-generated port families a record declares in one direction."""
+    return [
+        group
+        for group in record.get("dynamic_ports") or ()
+        if group.get("direction") == direction and group.get("prefix")
+    ]
+
+
+def _configured_row_ids(context: CheckContext, node_id: str, node_type: str) -> set[str]:
+    """Every `id` in this node's own `repeatable-group` rows.
+
+    A dynamic port id is its group's prefix plus one of these — a router's
+    `branch:<row id>` — so this is what turns the catalogue's *prefix* into the
+    set of ports the node actually has. Read off the document rather than
+    declared a second time: the row list is the only place the ids exist.
+    """
+    node = context.nodes.get(node_id) or {}
+    data = node.get("data")
+    if not isinstance(data, dict):
+        return set()
+    schema = context.schema_for(node_type) or {}
+    found: set[str] = set()
+    for key, spec in schema.items():
+        if spec.kind != "repeatable-group":
+            continue
+        rows = data.get(key)
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if isinstance(row, dict) and row.get("id"):
+                found.add(str(row["id"]))
+    return found
 
 
 def _typed_nodes(context: CheckContext) -> Iterable[tuple[str, str, dict[str, Any]]]:
@@ -437,10 +482,7 @@ def unknown_ports(context: CheckContext) -> Iterable[DocumentFinding]:
             if node is None or not port_id:
                 continue
             node_type = str(node.get("type") or "")
-            record = next(
-                (n for n in CATALOGUE.nodes if str(n["type"]) == node_type),
-                None,
-            )
+            record = _record_for(node_type)
             if record is None:
                 continue
             declared = {
@@ -452,11 +494,21 @@ def unknown_ports(context: CheckContext) -> Iterable[DocumentFinding]:
                 continue
             prefixes = [
                 str(group.get("prefix") or "")
-                for group in record.get("dynamic_ports") or ()
-                if group.get("direction") == direction and group.get("prefix")
+                for group in _dynamic_groups(record, direction)
             ]
-            if any(port_id.startswith(prefix) for prefix in prefixes):
-                continue
+            matched = next(
+                (prefix for prefix in prefixes if port_id.startswith(prefix)),
+                None,
+            )
+            if matched is not None:
+                rows = _configured_row_ids(context, node_id, node_type)
+                # The row list *is* the port list, so an id nothing matches is
+                # a port that does not exist — the acceptance `32` left open
+                # and `38` closed. A node with no rows at all is a different
+                # finding (`no-branches`) about the same one mistake, so it is
+                # left to say it once rather than once per edge.
+                if not rows or port_id.removeprefix(matched) in rows:
+                    continue
             listed = ", ".join(sorted(declared)) or "none"
             grown = "".join(f", or one beginning {prefix!r}" for prefix in sorted(prefixes))
             yield DocumentFinding(
@@ -466,6 +518,77 @@ def unknown_ports(context: CheckContext) -> Iterable[DocumentFinding]:
                 f"which declares no such {direction} port. Its {direction} ports are: "
                 f"{listed}{grown}.",
             )
+
+
+@register_document_check
+def branch_fan_out(context: CheckContext) -> Iterable[DocumentFinding]:
+    """More than one edge leaving one conditional branch.
+
+    `osg-agent-experience/38`. `WorkflowCompiler.plan` stores a conditional
+    destination as `plan.conditional[node][branch] = dst`, a dict keyed by
+    branch — so a second edge out of one branch replaces the first and nothing
+    reports the loss. Fifteen were drawn from one grader's `revise`; one
+    survived, and `validate`, the package's own shape assertion and the
+    compiler were all green about it.
+
+    **Read off `branch`, not off the cap.** A port's `max_connections` is 1 for
+    a branch *because* it is a branch, and inferring the second from the first
+    would call an agent's `prompt` a branch. The editor declares `branch` on
+    the descriptor and the generated catalogue publishes it (schema 5), so this
+    asks the same question the canvas's `capacityRule` asks, of the same table.
+
+    Fan-out from a conditional branch is a real thing — `Send` — and it is a
+    decision somebody makes, not a side effect of a dict. Nothing here forbids
+    building it; it forbids drawing it and being told it was built.
+    """
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for edge in context.document.get("edges") or []:
+        if not isinstance(edge, dict):
+            continue
+        source = edge.get("source")
+        target = edge.get("target")
+        if not isinstance(source, dict) or not isinstance(target, dict):
+            continue
+        node_id = str(source.get("nodeId") or "")
+        port_id = str(source.get("portId") or "")
+        if not node_id or not port_id:
+            continue
+        grouped.setdefault((node_id, port_id), []).append(
+            str(target.get("nodeId") or "?")
+        )
+
+    for (node_id, port_id), destinations in grouped.items():
+        if len(destinations) < 2:
+            continue
+        node = context.nodes.get(node_id)
+        if node is None:
+            continue
+        record = _record_for(str(node.get("type") or ""))
+        if record is None:
+            continue
+        static = {
+            str(port["id"]): bool(port.get("branch"))
+            for port in record.get("ports") or ()
+            if port.get("direction") == "out"
+        }
+        if port_id in static:
+            is_branch = static[port_id]
+        else:
+            is_branch = any(
+                port_id.startswith(str(group.get("prefix") or "")) and group.get("branch")
+                for group in _dynamic_groups(record, "out")
+            )
+        if not is_branch:
+            continue
+        listed = ", ".join(f'"{destination}"' for destination in destinations)
+        yield DocumentFinding(
+            FindingClass.BRANCH_FAN_OUT,
+            f"{node_id}.{port_id}",
+            f'Port "{port_id}" on node "{node_id}" is one branch — one way out — and '
+            f"{len(destinations)} edges leave it, to {listed}. The compiled graph keeps "
+            "one destination per branch, so all but one of these are dropped without "
+            "being run. Wire one, or send the work to a node that fans out.",
+        )
 
 
 __all__ = [

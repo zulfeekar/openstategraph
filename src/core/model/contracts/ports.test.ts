@@ -48,6 +48,21 @@ describe('maxConnectionsOf', () => {
     expect(maxConnectionsOf(port({ direction: 'in', maxConnections: 0 }))).toBe(0);
   });
 
+  it('caps a conditional branch output at one connection', () => {
+    // `osg-agent-experience/38`: `plan.conditional[node][branch]` is a dict, so
+    // a second edge from one branch silently replaces the first. A branch is a
+    // single way out, and the number of edges it may carry is one.
+    expect(maxConnectionsOf(port({ direction: 'out', branch: true }))).toBe(1);
+  });
+
+  it('lets a branch output declare its own cap anyway', () => {
+    // The derived default is a default, not a law: an explicit declaration on
+    // the port still wins, which is what keeps this a port fact.
+    expect(
+      maxConnectionsOf(port({ direction: 'out', branch: true, maxConnections: null })),
+    ).toBeNull();
+  });
+
   it('never returns a non-finite number', () => {
     for (const direction of ['in', 'out'] as const) {
       const cap = maxConnectionsOf(port({ direction }));

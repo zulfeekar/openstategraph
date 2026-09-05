@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "generated_by": "npm run generate:ports",
   "source": "src/nodes/portSpecs.ts",
   "warning": "GENERATED FILE — DO NOT EDIT. The TypeScript node catalogue is authoritative; run `npm run generate:ports` after changing a node type or a port.",
@@ -68,6 +68,7 @@
           "label": "prompt",
           "required": true,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -80,6 +81,7 @@
           "label": "skill",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "skill"
           ]
@@ -91,6 +93,7 @@
           "label": "agent tools",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -102,6 +105,7 @@
           "label": "feedback",
           "required": false,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "feedback"
           ]
@@ -113,6 +117,7 @@
           "label": "result",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -341,6 +346,7 @@
           "label": "candidate",
           "required": true,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -353,6 +359,7 @@
           "label": "report",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -418,6 +425,7 @@
           "label": "candidate",
           "required": false,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -429,7 +437,8 @@
           "type": "result",
           "label": "pass",
           "required": false,
-          "max_connections": null,
+          "max_connections": 1,
+          "branch": true,
           "accepts": [
             "result",
             "text"
@@ -441,7 +450,8 @@
           "type": "feedback",
           "label": "revise",
           "required": false,
-          "max_connections": null,
+          "max_connections": 1,
+          "branch": true,
           "accepts": [
             "feedback"
           ]
@@ -515,6 +525,7 @@
           "label": "content",
           "required": false,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -526,7 +537,8 @@
           "type": "result",
           "label": "allowed",
           "required": false,
-          "max_connections": null,
+          "max_connections": 1,
+          "branch": true,
           "accepts": [
             "result",
             "text"
@@ -538,7 +550,8 @@
           "type": "result",
           "label": "blocked",
           "required": false,
-          "max_connections": null,
+          "max_connections": 1,
+          "branch": true,
           "accepts": [
             "result",
             "text"
@@ -634,6 +647,7 @@
           "label": "candidate",
           "required": false,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -645,7 +659,8 @@
           "type": "result",
           "label": "approved",
           "required": false,
-          "max_connections": null,
+          "max_connections": 1,
+          "branch": true,
           "accepts": [
             "result",
             "text"
@@ -657,7 +672,8 @@
           "type": "feedback",
           "label": "rejected",
           "required": false,
-          "max_connections": null,
+          "max_connections": 1,
+          "branch": true,
           "accepts": [
             "feedback"
           ]
@@ -722,6 +738,7 @@
           "label": "skill",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "skill"
           ]
@@ -796,6 +813,7 @@
           "label": "skill",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "skill"
           ]
@@ -878,6 +896,7 @@
           "label": "text",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "text"
           ]
@@ -942,6 +961,7 @@
           "label": "crossing",
           "required": false,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -954,6 +974,7 @@
           "label": "onward",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -1036,6 +1057,7 @@
           "label": "instruction",
           "required": true,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -1048,6 +1070,7 @@
           "label": "feedback",
           "required": false,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "feedback"
           ]
@@ -1059,6 +1082,7 @@
           "label": "skill",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "skill"
           ]
@@ -1070,6 +1094,7 @@
           "label": "workers",
           "required": true,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "worker"
           ]
@@ -1180,6 +1205,7 @@
           "label": "dispatch",
           "required": true,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "worker"
           ]
@@ -1191,6 +1217,7 @@
           "label": "skill",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "skill"
           ]
@@ -1202,6 +1229,7 @@
           "label": "worker tools",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -1213,6 +1241,7 @@
           "label": "result",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -1324,6 +1353,7 @@
           "label": "result",
           "required": true,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -1403,6 +1433,7 @@
           "label": "question",
           "required": true,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -1415,6 +1446,7 @@
           "label": "result",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -1498,6 +1530,7 @@
           "label": "question",
           "required": true,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -1510,6 +1543,7 @@
           "label": "result",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -1593,6 +1627,7 @@
           "label": "question",
           "required": false,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -1605,6 +1640,7 @@
           "label": "skill",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "skill"
           ]
@@ -1616,6 +1652,7 @@
           "label": "feedback",
           "required": false,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "feedback"
           ]
@@ -1626,7 +1663,8 @@
           "prefix": "branch:",
           "direction": "out",
           "type": "text",
-          "max_connections": null,
+          "max_connections": 1,
+          "branch": true,
           "accepts": [
             "text"
           ]
@@ -1808,6 +1846,7 @@
           "label": "candidate",
           "required": false,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -1820,6 +1859,7 @@
           "label": "skill",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "skill"
           ]
@@ -1830,7 +1870,8 @@
           "type": "result",
           "label": "pass",
           "required": false,
-          "max_connections": null,
+          "max_connections": 1,
+          "branch": true,
           "accepts": [
             "result",
             "text"
@@ -1842,7 +1883,8 @@
           "type": "feedback",
           "label": "revise",
           "required": false,
-          "max_connections": null,
+          "max_connections": 1,
+          "branch": true,
           "accepts": [
             "feedback"
           ]
@@ -1985,6 +2027,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2049,6 +2092,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2104,6 +2148,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2159,6 +2204,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2223,6 +2269,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2278,6 +2325,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2369,6 +2417,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2451,6 +2500,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2506,6 +2556,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2561,6 +2612,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2616,6 +2668,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2671,6 +2724,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2726,6 +2780,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2799,6 +2854,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2854,6 +2910,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2919,6 +2976,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -2984,6 +3042,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -3058,6 +3117,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -3113,6 +3173,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -3168,6 +3229,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -3223,6 +3285,7 @@
           "label": "tool",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "tool"
           ]
@@ -3305,6 +3368,7 @@
           "label": "input",
           "required": true,
           "max_connections": 1,
+          "branch": false,
           "accepts": [
             "result",
             "text"
@@ -3317,6 +3381,7 @@
           "label": "result",
           "required": false,
           "max_connections": null,
+          "branch": false,
           "accepts": [
             "result",
             "text"
