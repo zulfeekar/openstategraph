@@ -472,7 +472,7 @@
           "key": "check",
           "kind": "text",
           "label": "Check",
-          "hint": "The package function to run, named the way `function.<name>` names it — this node calls that same function, not a model. It returns \"\" for pass or a non-empty string for the feedback sent back on `revise`. Three checks need no function behind them: `numbers_in_prose` (every figure in the answer came from something this run retrieved), `row_counts_in_prose` (a figure that came from a bare COUNT(*) is published as rows, not as things) and `zero_outside_coverage` (an answer reporting none of something asked about a period the table says it does not hold — so the zero is not a measurement). A package function of the same name still wins. Write it with a second parameter — `fn(text, summary)` — and it also receives this run’s record of its own tool calls: how many were made, how many came back, and the last failure’s tool and message, so a check can say “no evidence arrived” instead of arguing with the prose. One parameter still works and is still the contract.",
+          "hint": "The package function to run, named the way `function.<name>` names it — this node calls that same function, not a model. It is called as `fn(text)`, or as `fn(text, summary)` when you write a second parameter. It returns \"\" for pass or a non-empty string for the feedback sent back on `revise`. Three checks need no function behind them: `numbers_in_prose` (every figure in the answer came from something this run retrieved), `row_counts_in_prose` (a figure that came from a bare COUNT(*) is published as rows, not as things) and `zero_outside_coverage` (an answer reporting none of something asked about a period the table says it does not hold — so the zero is not a measurement). A package function of the same name still wins. Write it with a second parameter — `fn(text, summary)` — and it also receives this run’s record of its own tool calls: how many were made, how many came back, and the last failure’s tool and message, so a check can say “no evidence arrived” instead of arguing with the prose. One parameter still works and is still the contract.",
           "required": false,
           "defaultValue": ""
         },
@@ -1535,7 +1535,7 @@
           "key": "catalogue",
           "kind": "text",
           "label": "Catalogue",
-          "hint": "The package function this node asks, named the way `function.<name>` names it. It is called once with the question and returns the systems of record that could answer it — a name is enough, and a row that marks itself the default settles which one is used.",
+          "hint": "The package function this node asks, named the way `function.<name>` names it. It is called as `fn(question)`, once, and returns the systems of record that could answer it — a name is enough, and a row that marks itself the default settles which one is used.",
           "required": true,
           "defaultValue": ""
         },
@@ -1632,7 +1632,7 @@
           "key": "source",
           "kind": "text",
           "label": "Source",
-          "hint": "The package function this node searches, named the way `function.<name>` names it. It is called once per derived phrase, concurrently, and returns the entries it holds for that phrase. Give it a `coverage` attribute and this node can say a term is genuinely uncovered instead of merely unmatched.",
+          "hint": "The package function this node searches, named the way `function.<name>` names it. It is called as `fn(phrase)`, once per derived phrase, concurrently, and returns the entries it holds for that phrase. Give it a `coverage` attribute and this node can say a term is genuinely uncovered instead of merely unmatched.",
           "required": true,
           "defaultValue": ""
         },
@@ -1740,7 +1740,7 @@
           "key": "check",
           "kind": "text",
           "label": "Check",
-          "hint": "The package function to run, named the way `function.<name>` names it — this node calls that same function, not a model. It returns the name of one of the branches below; anything else, including nothing at all, takes the fallback. A branch’s own id is accepted as well as its name, and case and surrounding space are forgiven.",
+          "hint": "The package function to run, named the way `function.<name>` names it — this node calls that same function, not a model. It is called as `fn(text)`. It returns the name of one of the branches below; anything else, including nothing at all, takes the fallback. A branch’s own id is accepted as well as its name, and case and surrounding space are forgiven.",
           "required": false,
           "defaultValue": ""
         },

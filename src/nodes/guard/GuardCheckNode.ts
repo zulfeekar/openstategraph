@@ -76,7 +76,8 @@ export const guardCheckNode: INodeDefinition = defineNode(
         placeholder: 'validate_sql',
         hint:
           'The package function to run, named the way `function.<name>` names it — this ' +
-          'node calls that same function, not a model. It returns "" for pass or a ' +
+          'node calls that same function, not a model. It is called as `fn(text)`, or ' +
+          'as `fn(text, summary)` when you write a second parameter. It returns "" for pass or a ' +
           'non-empty string for the feedback sent back on `revise`. Three checks need no ' +
           'function behind them: `numbers_in_prose` (every figure in the answer came ' +
           'from something this run retrieved), `row_counts_in_prose` (a figure that ' +

@@ -325,9 +325,78 @@ def unresolved_tool_bindings(document: dict[str, Any], package_dir: Path) -> lis
     return list(dict.fromkeys(findings))
 
 
+def uncallable_functions(document: dict[str, Any], package_dir: Path) -> list[str]:
+    """Package functions this document names whose signature no caller fits.
+
+    `osg-agent-experience/59`, and the third thing a plan cannot answer — the
+    same shape as `unresolved_tool_bindings` above and outside
+    `document_checks` for the same reason: *how is this function written* needs
+    the package's Python, which a document does not carry.
+
+    It costs an import of `functions/*.py` and no model call, which is the
+    whole argument for doing it here: the alternative surface is a `TypeError`
+    reported as a review's last reason, after the run has been paid for.
+
+    **Narrow on purpose, twice.** A name nothing resolves is left to
+    `UNRESOLVED_FUNCTION`, which already reports it at this surface — two
+    sentences about one absence is how a list stops being read. And a variadic
+    signature is a finding only where the node type *chooses* by inspection
+    (`guard.check`); everywhere else one argument is passed unconditionally and
+    `def check(*args)` genuinely works.
+    """
+    from openstategraph.api.capability_discovery import discover_function_callables
+    from openstategraph.function_contracts import (
+        CALL_CONVENTIONS,
+        FUNCTION_NODE_SHAPES,
+        signature_finding,
+    )
+
+    nodes = [node for node in (document.get("nodes") or []) if isinstance(node, dict)]
+    if not nodes:
+        return []
+    by_field = {convention.node_type: convention for convention in CALL_CONVENTIONS}
+    try:
+        registry = discover_function_callables(package_dir, package_dir.name)
+    except Exception:
+        # Discovery failing loses every function, which is reported by the
+        # channel that owns it. This check answers about signatures.
+        return []
+
+    findings: list[str] = []
+    for node in nodes:
+        node_type = str(node.get("type") or "")
+        node_id = str(node.get("id") or "")
+        data = node.get("data") if isinstance(node.get("data"), dict) else {}
+        convention = by_field.get(node_type)
+        if convention is not None:
+            name = str((data or {}).get(convention.field) or "").strip()
+            shapes = convention.shapes
+            inspects = convention.chooses_by_inspection
+        elif node_type.startswith("function."):
+            name = node_type.split(".", 1)[1]
+            shapes = FUNCTION_NODE_SHAPES
+            inspects = False
+        else:
+            continue
+        fn = registry.get(f"function.{name}") if name else None
+        if fn is None:
+            continue
+        finding = signature_finding(
+            fn,
+            shapes,
+            subject=f'Node "{node_id}" ({node_type})',
+            name=name,
+            chooses_by_inspection=inspects,
+        )
+        if finding:
+            findings.append(finding)
+    return list(dict.fromkeys(findings))
+
+
 __all__ = [
     "MOUNT_NODE_TYPES",
     "mount_targets",
+    "uncallable_functions",
     "unresolved_mounts",
     "unresolved_tool_bindings",
     "validate_document",

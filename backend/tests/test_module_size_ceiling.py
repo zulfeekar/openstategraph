@@ -518,6 +518,13 @@ sentence either door had ever printed about it was `nothing to triage`.
 because two doors now say the same two sentences, and two spellings of "no
 board here yet" is the defect one directory away from the one being fixed.
 
+**1679 -> 1684** (`osg-agent-experience/59`, 2026-09-05). Five lines, and all
+five are `cmd_validate` calling one more thing and printing what it answered:
+`uncallable_functions`, the third question an in-memory plan cannot ask, beside
+the two already here. The rule it applies lives in `function_contracts.py` and
+the resolution in `validation.py` — this file gained a call and a comment
+saying what it costs, which is the shape both of its neighbours already have.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -1206,7 +1213,7 @@ it.
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(690, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
-    "cli.py": Recorded(1679, CLI),
+    "cli.py": Recorded(1684, CLI),
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

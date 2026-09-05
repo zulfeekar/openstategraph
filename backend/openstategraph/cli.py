@@ -657,7 +657,11 @@ def cmd_validate(args: argparse.Namespace) -> int:
     from openstategraph.document_checks import document_findings
     from openstategraph.prebuilt_architect import ValidateWorkflowTool
     from openstategraph.schema import normalize_document
-    from openstategraph.validation import unresolved_mounts, unresolved_tool_bindings
+    from openstategraph.validation import (
+        uncallable_functions,
+        unresolved_mounts,
+        unresolved_tool_bindings,
+    )
     from openstategraph.workflows_root import has_project_root, resolve_package
 
     # A bare slug resolves against `workflows_root()` — the same directory
@@ -714,6 +718,14 @@ def cmd_validate(args: argparse.Namespace) -> int:
     # reporting it under a VALID heading (which is the shape ticket 53 removed
     # from this command one paragraph above).
     tools = unresolved_tool_bindings(document, manifest.parent)
+    # The same shape once more, one layer in (`osg-agent-experience/59`): the
+    # implementation is here, and the question is whether this node type can
+    # *call* it. `guard.check` picks between `fn(text)` and `fn(text, summary)`
+    # by inspecting the signature, so a parameter list is a protocol — and a
+    # mismatch was a run-time `TypeError`, reported as a review's last reason
+    # after the model had been paid. It costs the import this command already
+    # pays for `UNRESOLVED_FUNCTION` and no model call.
+    functions = uncallable_functions(document, manifest.parent)
     # The third thing the in-memory plan cannot answer, and the largest of them
     # (`organisms-first-class` 66): everything the compiler noticed while
     # actually building the graph. Only for a real package — `validate` also
@@ -739,7 +751,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     # `plan.warnings` reaches this command twice — through the seam above and
     # again on `failure_warnings` — and one problem said once is the point.
     findings = [f for f in findings if f not in found]
-    problems = [*found, *mounts, *tools, *findings, *schema]
+    problems = [*found, *mounts, *tools, *functions, *findings, *schema]
     topology = report.split("\n\n", 1)[1] if "\n\n" in report else ""
     if problems:
         # Folded into the verdict rather than printed after it: one command,

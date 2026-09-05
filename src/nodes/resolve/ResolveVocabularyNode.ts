@@ -104,7 +104,8 @@ export const resolveVocabularyNode: INodeDefinition = defineNode(
         placeholder: 'glossary_index',
         hint:
           'The package function this node searches, named the way `function.<name>` names ' +
-          'it. It is called once per derived phrase, concurrently, and returns the entries ' +
+          'it. It is called as `fn(phrase)`, once per derived phrase, concurrently, and ' +
+          'returns the entries ' +
           'it holds for that phrase. Give it a `coverage` attribute and this node can say ' +
           'a term is genuinely uncovered instead of merely unmatched.',
         defaultValue: '',

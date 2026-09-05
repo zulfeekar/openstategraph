@@ -107,7 +107,7 @@ export const resolveSourceNode: INodeDefinition = defineNode(
         placeholder: 'balance_sources',
         hint:
           'The package function this node asks, named the way `function.<name>` names it. ' +
-          'It is called once with the question and returns the systems of record that could ' +
+          'It is called as `fn(question)`, once, and returns the systems of record that could ' +
           'answer it — a name is enough, and a row that marks itself the default settles ' +
           'which one is used.',
         defaultValue: '',

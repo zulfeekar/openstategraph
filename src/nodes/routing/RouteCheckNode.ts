@@ -118,7 +118,8 @@ export const routeCheckNode: INodeDefinition = defineNode(
         placeholder: 'needs_a_date_range',
         hint:
           'The package function to run, named the way `function.<name>` names it — this ' +
-          'node calls that same function, not a model. It returns the name of one of the ' +
+          'node calls that same function, not a model. It is called as `fn(text)`. It ' +
+          'returns the name of one of the ' +
           'branches below; anything else, including nothing at all, takes the fallback. ' +
           'A branch’s own id is accepted as well as its name, and case and surrounding ' +
           'space are forgiven.',

@@ -1258,6 +1258,20 @@ Two things about it that are not guesses:
   from outside the workflows root contributes nothing at all, and now says so
   by name — at `validate`, on the same channel every other lost capability
   travels.
+- **The parameter list is the protocol, and `validate` reads it.** A
+  `function.<name>` node calls `fn(text)`; so do `route.check`,
+  `resolve.vocabulary` (once per phrase) and `resolve.source` (once with the
+  question). `guard.check` is the one that *chooses*: write a second parameter
+  and it also receives the run's record of its own tool calls, and it decides
+  which shape to use by inspecting your signature. So `def check(*args,
+  **kwargs)` — the obvious way to write a delegating wrapper — reads as room
+  for the second argument, gets two, and raises `TypeError` inside whatever it
+  forwards to. That was a run-time failure reported as a review's last reason,
+  after the model had been paid (`osg-agent-experience/59`); `validate` now
+  refuses both shapes it can see — a signature no call fits, and a variadic one
+  where the platform picks by inspection — naming the function, how it is
+  written and the shapes that node type calls. The table both the check and the
+  field hints are asserted against is `openstategraph/function_contracts.py`.
 - **The card has no fields.** The compiled step reads nothing from `data`, so a
   control here would be one the compiler ignores. The signature and the first
   line of the docstring become the card's subtitle instead, where they cannot
