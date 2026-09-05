@@ -189,6 +189,23 @@ DEEPER: tuple[tuple[str, str, str], ...] = (
     ("tool.databricks-query", "on-the-canvas.md", "the SQL atoms"),
     ("tool.mssql-query", "on-the-canvas.md", "the SQL atoms"),
     ("tool.mcp", "mcp.md", "the MCP layer"),
+    # `docs-onramp/12`. The ten rows `docs-onramp/11` left on the CLI door,
+    # because no page was their right home. One now is: `prebuilt-tools.md`
+    # is the counterpart of `building-an-atom.md` — that page is for the
+    # reader *writing* a tool, this one for the reader *using* one, and it
+    # answers per card the three things a one-line brief cannot carry (what
+    # it is configured with, what it refuses, what it costs).
+    ("tool.web-", "prebuilt-tools.md", "the prebuilt tools"),
+    ("tool.email-send", "prebuilt-tools.md", "the prebuilt tools"),
+    ("tool.youtube-transcript", "prebuilt-tools.md", "the prebuilt tools"),
+    ("tool.reddit-search", "prebuilt-tools.md", "the prebuilt tools"),
+    ("tool.session-identity", "prebuilt-tools.md", "the prebuilt tools"),
+    # Workflow-scoped: the `chinook-assistant` package's own tools, covered
+    # on that page as the demo package's, said plainly, rather than left on
+    # the CLI door — `openstategraph nodes` cannot print a type the install
+    # does not carry.
+    ("tool.chinook-", "prebuilt-tools.md", "the demo package's tools"),
+    ("guard.policy", "prebuilt-tools.md", "the Guardrail"),
     ("tool.platform-", "mcp.md", "the platform's own tools"),
     ("tool.validate-workflow", "mcp.md", "the platform's own tools"),
     ("route.grader", "evaluation.md", "grading"),

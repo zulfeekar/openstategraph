@@ -40,7 +40,7 @@ This is where the thinking and the branching live. An **AI Agent** is one model 
 | `agent.llm` | AI Agent | Runs an LLM with tool calling. | [on the canvas](on-the-canvas.md) |
 | `function.format_report` | Format Report | Joins worker results into one Markdown report. | [on the canvas](on-the-canvas.md) |
 | `guard.check` | Guard | Runs a package function against the candidate and routes pass/revise. No model. | [the guard on a path](on-the-canvas.md) |
-| `guard.policy` | Guardrail | Applies a PII policy to whatever passes through, and refuses what it must. | `openstategraph nodes guard.policy` |
+| `guard.policy` | Guardrail | Applies a PII policy to whatever passes through, and refuses what it must. | [the Guardrail](prebuilt-tools.md) |
 | `human.approval` | Human approval | Pauses the run and waits for a person to approve or reject the candidate. | [approval in the loop](patterns.md) |
 | `orchestrate.supervisor` | Orchestrator | Splits an instruction into subtasks and fans them out to workers. | [orchestrator/worker](patterns.md) |
 | `orchestrate.worker` | Worker | Runs one subtask dispatched by an orchestrator. | [orchestrator/worker](patterns.md) |
@@ -54,11 +54,11 @@ A tool is a capability you plug into an agent's `tools` bus; the agent decides w
 
 | Type | Name | What it does | Read more |
 | --- | --- | --- | --- |
-| `tool.chinook-execute-sql` † | Execute SQL Query | Executes a SQL SELECT query against the Chinook database and returns results. | `openstategraph nodes tool.chinook-execute-sql` |
-| `tool.chinook-get-all-tables` † | List All Tables | Returns every table in the Chinook database, with row counts. | `openstategraph nodes tool.chinook-get-all-tables` |
-| `tool.chinook-get-schema` † | Get Table Schema | Retrieves the schema (columns, types and foreign keys) of whichever Chinook table the agent asks about. | `openstategraph nodes tool.chinook-get-schema` |
+| `tool.chinook-execute-sql` † | Execute SQL Query | Executes a SQL SELECT query against the Chinook database and returns results. | [the demo package's tools](prebuilt-tools.md) |
+| `tool.chinook-get-all-tables` † | List All Tables | Returns every table in the Chinook database, with row counts. | [the demo package's tools](prebuilt-tools.md) |
+| `tool.chinook-get-schema` † | Get Table Schema | Retrieves the schema (columns, types and foreign keys) of whichever Chinook table the agent asks about. | [the demo package's tools](prebuilt-tools.md) |
 | `tool.databricks-query` | Run Databricks Query | Runs one read-only SELECT against a Databricks SQL warehouse and returns the rows as a table. Only tables the allowlist pinned may be named. | [the SQL atoms](on-the-canvas.md) |
-| `tool.email-send` | Email Send | Sends a report to the address configured here — the model writes subject and body, never the recipient. Dry-run (.eml to workflows/_outbox) unless SMTP is configured. | `openstategraph nodes tool.email-send` |
+| `tool.email-send` | Email Send | Sends a report to the address configured here — the model writes subject and body, never the recipient. Dry-run (.eml to workflows/_outbox) unless SMTP is configured. | [the prebuilt tools](prebuilt-tools.md) |
 | `tool.knowledge-lookup` | Knowledge | The workflow’s second brain: agents look up per-topic procedural knowledge (table meanings, column semantics, JOIN rules) on demand — never stuffed into the prompt. “Build second brain” on the card writes the docs at build time; a run only ever reads them. The lookup binds to every agent in the package automatically whenever knowledge/ is non-empty — this card is where you see and build the docs, not what connects them. | [the second brain](second-brain.md) |
 | `tool.mcp` | MCP server | Binds every tool a Model Context Protocol server offers onto an agent — the LangChain docs, an internal service, anything that speaks MCP over HTTP. | [the MCP layer](mcp.md) |
 | `tool.mssql-query` | Run T-SQL Query | Runs one read-only T-SQL SELECT against an MSSQL database and returns the rows as a table. Only tables the allowlist pinned may be named. | [the SQL atoms](on-the-canvas.md) |
@@ -67,15 +67,15 @@ A tool is a capability you plug into an agent's `tools` bus; the agent decides w
 | `tool.platform-list-workflows` | List Workflows | Lists every workflow on this platform (read-only). | [the platform's own tools](mcp.md) |
 | `tool.platform-ls` | Repo ls | Lists a repository directory (read-only, jailed). | [the platform's own tools](mcp.md) |
 | `tool.platform-read-file` | Repo Read File | Reads one repository text file (read-only, jailed, capped). | [the platform's own tools](mcp.md) |
-| `tool.reddit-search` | Search Reddit | Finds trending posts in a subreddit. | `openstategraph nodes tool.reddit-search` |
-| `tool.session-identity` | Session Identity | Who the run belongs to — the user, the session and the thread id. Read-only, and taken from the run rather than from anything said in it. | `openstategraph nodes tool.session-identity` |
+| `tool.reddit-search` | Search Reddit | Finds trending posts in a subreddit. | [the prebuilt tools](prebuilt-tools.md) |
+| `tool.session-identity` | Session Identity | Who the run belongs to — the user, the session and the thread id. Read-only, and taken from the run rather than from anything said in it. | [the prebuilt tools](prebuilt-tools.md) |
 | `tool.sql-get-schema` | Get Schema | Columns, types and foreign keys for one table in the configured SQL database. | [the SQL atoms](on-the-canvas.md) |
 | `tool.sql-list-tables` | List Tables | Every table in the configured SQL database, with row counts. Orientation first — an agent calls this before it knows what exists. | [the SQL atoms](on-the-canvas.md) |
 | `tool.sql-query` | Run Query | Runs one read-only SELECT against the configured SQL database and returns the rows as a table. | [the SQL atoms](on-the-canvas.md) |
 | `tool.validate-workflow` | Validate Workflow | Compile-checks a workflow document an agent has composed: entry points, routes, tool bindings, warnings and unknown node types. Plans a graph in memory and throws it away — nothing is saved or run. | [the platform's own tools](mcp.md) |
-| `tool.web-fetch` | Web Fetch | Reads one public web page as text (SSRF-guarded). | `openstategraph nodes tool.web-fetch` |
-| `tool.web-search` | Web Search | Keyless web search (DuckDuckGo); pair with Web Fetch. | `openstategraph nodes tool.web-search` |
-| `tool.youtube-transcript` | YouTube Transcript | Reads one YouTube video’s captions as plain text (keyless, no timestamps). | `openstategraph nodes tool.youtube-transcript` |
+| `tool.web-fetch` | Web Fetch | Reads one public web page as text (SSRF-guarded). | [the prebuilt tools](prebuilt-tools.md) |
+| `tool.web-search` | Web Search | Keyless web search (DuckDuckGo); pair with Web Fetch. | [the prebuilt tools](prebuilt-tools.md) |
+| `tool.youtube-transcript` | YouTube Transcript | Reads one YouTube video’s captions as plain text (keyless, no timestamps). | [the prebuilt tools](prebuilt-tools.md) |
 
 ### Memory — what survives a step (1)
 
