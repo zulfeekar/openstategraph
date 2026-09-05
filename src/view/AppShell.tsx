@@ -56,6 +56,7 @@ import { ArrivalDialog } from './overlays/ArrivalDialog';
 import { RestoredDraftChoicePrompt } from './overlays/RestoredDraftDialog';
 import { DrillBanner } from './workflow/DrillBanner';
 import { useWorkflowFileWatch } from '@app/useWorkflowFileWatch';
+import { useExternalWorkflowChange } from '@view/workflow/useExternalWorkflowChange';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import { RuntimeClient } from '@core/runtime/RuntimeClient';
 import { browserSessionId } from '@core/runtime/browserSession';
@@ -129,6 +130,15 @@ export function AppShell() {
   // hand-edit) — independent of whether "Manage Workflows" happens to be
   // open, since an external change can land at any time.
   useWorkflowFileWatch(notify);
+
+  // `osg-agent-experience/69`: the *other* tabs on this workflow. The watch
+  // above polls `savedAt` every five seconds and answers with a sentence
+  // asking the user to reload — the gesture `68` is the ticket about. This
+  // one holds the package's own SSE stream and a `BroadcastChannel`, and
+  // *acts*: a tab with no unsaved edits takes the new revision silently, a tab
+  // with unsaved edits is asked through `68`'s dialog, and nothing is written
+  // before the answer.
+  useExternalWorkflowChange(notify);
 
   // Ticket 20: `?w=<slug>` in the address bar opens that workflow. After
   // `useWorkflowSession`, and never fighting it — the two agree in advance

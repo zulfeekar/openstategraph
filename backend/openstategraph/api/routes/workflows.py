@@ -1026,15 +1026,25 @@ async def workflow_events_stream(
 ) -> StreamingResponse:
     """This package's document changed, live — `event: workflow.changed`.
 
-    **The stream an open editor holds for the workflow it is editing**
-    (`osg-agent-experience/69`). Three tabs on one workflow, plus the CLI and a
-    coding agent through the MCP server, are five writers of one file, and
-    until this endpoint only a save through this API told anybody. The watcher
-    behind it observes the **file**, so every writer is covered by construction
-    — which is why this is a sibling stream rather than a fifth
-    `CatalogueEvent.reason`, a fan-out `catalogue_events.py` says in its own
-    docstring that only API writes reach. See `workflow_events.py` for the
-    full argument.
+    **Push, for a client that can afford a connection** (`osg-agent-experience
+    /69`). Three tabs on one workflow, plus the CLI and a coding agent through
+    the MCP server, are five writers of one file, and until this endpoint only
+    a save through this API told anybody. The watcher behind it observes the
+    **file**, so every writer is covered by construction — which is why this is
+    a sibling stream rather than a fifth `CatalogueEvent.reason`, a fan-out
+    `catalogue_events.py` says in its own docstring that only API writes reach.
+    See `workflow_events.py` for the full argument.
+
+    **This editor does not hold it, and that is measured rather than an
+    oversight.** A browser allows six concurrent HTTP/1.1 connections per
+    origin and each editor tab already holds two long-lived ones (`/api/events`
+    and `/api/kanban/patrol/events`); a third saturates the budget at *two*
+    tabs, which is this ticket's own scenario. Staged 2026-09-05: the last
+    stream opened sat at `readyState 0` for minutes and ordinary `fetch` calls
+    stopped completing. The editor learns a revision from the `savedAt` poll it
+    already runs, which costs no connection at all;
+    `osg-agent-experience/71` carries the fix that would let it use this —
+    folding the frames onto the `/api/events` connection it already holds.
 
     **The frame is a hint**: it carries the slug and the digest — the same
     revision a save quotes as `base_digest` — and the client refetches

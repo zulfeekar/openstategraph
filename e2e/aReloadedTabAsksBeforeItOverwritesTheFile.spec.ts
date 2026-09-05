@@ -61,7 +61,7 @@ function documentWith(name: string, prompt: string): unknown {
  */
 async function stubBackend(
   page: Page,
-  state: { onDisk: unknown; writes: unknown[] },
+  state: { onDisk: unknown; digest: string; writes: unknown[] },
 ): Promise<void> {
   const json = (route: Route, body: unknown): Promise<void> =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
@@ -84,14 +84,24 @@ async function stubBackend(
 
     if (route.request().method() === 'PUT') {
       state.writes.push(route.request().postDataJSON());
-      return json(route, { slug: SLUG, digest: 'after-the-write' });
+      state.digest = `after-write-${state.writes.length}`;
+      return json(route, { slug: SLUG, digest: state.digest });
     }
     if (path.endsWith('/summary')) {
       return json(route, {
         slug: SLUG,
         name: 'Probe',
         savedAt: '2026-09-05T10:10:00+00:00',
-        digest: 'the-file-digest',
+        // **Moves with the document, because a real one does.**
+        // `workflow_store.digest_of` is a content hash, so a stub holding one
+        // constant while `state.onDisk` is reassigned describes a backend that
+        // does not exist — and `osg-agent-experience/69` gave that difference
+        // a consequence: a draft records the revision it was taken from, and a
+        // file still holding that revision is a file nobody else touched, so
+        // the draft is restored silently. Against the frozen digest this spec
+        // asserted a dialog for a file the backend was claiming had not
+        // changed.
+        digest: state.digest,
         nodes: 1,
         edges: 0,
       });
@@ -115,7 +125,11 @@ async function stubBackend(
 }
 
 test('a reload writes nothing to the file until the user chooses', async ({ page }) => {
-  const state = { onDisk: documentWith('Probe', 'ORIGINAL PROMPT.'), writes: [] as unknown[] };
+  const state = {
+    onDisk: documentWith('Probe', 'ORIGINAL PROMPT.'),
+    digest: 'rev-1',
+    writes: [] as unknown[],
+  };
   await stubBackend(page, state);
 
   // 1 — open it, and make an unsaved edit. Disk autosave writes that edit, so
@@ -129,6 +143,7 @@ test('a reload writes nothing to the file until the user chooses', async ({ page
 
   // 2 — a CLI session rewrites the file. The tab knows nothing about it.
   state.onDisk = documentWith('CLI Rewrote The File', 'CLI REWROTE THIS PROMPT.');
+  state.digest = 'rev-2';
   const before = state.writes.length;
 
   // 3 — the reload. This is the whole defect: no drag, no keystroke, no Save.

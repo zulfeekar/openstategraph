@@ -9,6 +9,7 @@ import {
   carryDraftToFreshKey,
   currentDraftId,
   discardDraftAfterDelete,
+  draftBaseDigest,
   type DraftRestoreReport,
 } from './workflowDrafts';
 import {
@@ -26,6 +27,8 @@ import {
 } from './restoredDraftConflict';
 import { saveFailureMessage } from '@core/runtime/WorkflowFileClient';
 import { writeHostPackage } from './hostPackageWrite';
+import type { DiskDocumentStatus } from './externalWorkflowChange';
+import { announceWorkflowSaved } from './workflowSaveBroadcast';
 
 /**
  * Whether an edit should be written to `workflows/<slug>/` right now.
@@ -314,9 +317,38 @@ export async function ensureDiskBaseline(
     onDisk,
     comparable(model.name, serializer.serialize(model), serializer),
   );
+  // **The draft's own base narrows `ask` back down** — `osg-agent-experience/69`.
+  //
+  // The byte comparison above answers *do these two documents differ*, which
+  // is a superset of the question `68` needed answered: *did the file move
+  // under this draft*. Every edit made while the backend was unreachable, or
+  // while autosave had stood down, leaves a draft that legitimately differs
+  // from a file nobody else touched — and `68` shipped asking about all of
+  // them, because nothing recorded what the draft was derived from.
+  //
+  // A draft now carries the revision it started from (`saveWorkflow`'s
+  // `baseDigest`), so when that revision is still the one the file holds, the
+  // file did not move and the draft is ordinary unsaved work: restore it and
+  // baseline, exactly as opening the workflow would. `null` — a draft from
+  // before this existed, or a tab that never learned a revision — means
+  // *cannot tell*, and cannot-tell keeps `68`'s question.
+  //
+  // This cannot weaken `68`. Its reproduction has a CLI session rewriting the
+  // file, so the file's digest is *not* the one the draft recorded, and the
+  // comparison below is false.
+  const base = draftBaseDigest(slug);
+  const fileMovedUnderTheDraft = !(base !== null && row.ok && row.value?.digest === base);
   if (decision.kind === 'baselined') lastWritten.set(slug, onDisk);
-  else if (decision.kind === 'ask') {
-    offerRestoredDraftChoice({ slug, file: disk.value, fileName: document.name ?? slug });
+  else if (decision.kind === 'ask' && !fileMovedUnderTheDraft) {
+    lastWritten.set(slug, onDisk);
+    return { kind: 'baselined' };
+  } else if (decision.kind === 'ask') {
+    offerRestoredDraftChoice({
+      slug,
+      cause: 'restored-draft',
+      file: disk.value,
+      fileName: document.name ?? slug,
+    });
   }
   return decision;
 }
@@ -324,6 +356,36 @@ export async function ensureDiskBaseline(
 /** Drop a slug's baseline — for tests, and for a package that was deleted. */
 export function forgetDiskDocument(slug: string): void {
   lastWritten.delete(slug);
+}
+
+/**
+ * How the document on screen stands to the file this tab last knew about —
+ * `osg-agent-experience/69`.
+ *
+ * **The same comparison `writeOpenWorkflowToDisk` makes, and deliberately not
+ * a second one.** That function decides whether there is anything to write;
+ * this decides whether a tab told its file changed elsewhere may take the new
+ * version silently. Two answers to "has this document been edited since it
+ * came off disk" is exactly the drift `comparable`'s own docstring is about —
+ * a measured `size` is not an edit, defaults are merged during `importJSON`,
+ * and a caller reducing the model any other way would report every clean tab
+ * as dirty and refuse to refresh any of them.
+ *
+ * `unbaselined` is its own answer rather than `differs` because the two mean
+ * different things to a reader, even though this module's callers currently
+ * treat both as "ask": no baseline is a tab that has been *disarmed*, and
+ * `writeOpenWorkflowToDisk` reads it as *never write this package*.
+ */
+export function diskDocumentStatus(
+  slug: string,
+  model: WorkflowModel,
+  serializer: Pick<WorkflowSerializer, 'serialize' | 'sizeIsMeasured'>,
+): DiskDocumentStatus {
+  const prev = lastWritten.get(slug);
+  if (prev === undefined) return 'unbaselined';
+  return prev === comparable(model.name, serializer.serialize(model), serializer)
+    ? 'matches'
+    : 'differs';
 }
 
 /**
@@ -580,6 +642,11 @@ export async function writeOpenWorkflowToDisk(
   // quotes our own work rather than conflicting with it.
   recordKnownDigest(slug, result.value.digest);
   forgetKnownSavedAt(slug);
+  // …and the other tabs of this browser, which is the head start the SSE
+  // stream cannot give them (`osg-agent-experience/69`). After the backend
+  // answered, never before: announcing an intention would send them to a
+  // revision that may have been refused.
+  announceWorkflowSaved(slug, result.value.digest);
   return { kind: 'saved' };
 }
 

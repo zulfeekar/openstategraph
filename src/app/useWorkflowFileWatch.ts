@@ -3,6 +3,7 @@ import { invalidateSlug } from '@core/runtime/SlugCache';
 import { workflowCatalogue } from '@core/runtime/workflowCatalogue';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
 import { abandonDeletedWorkflow } from './diskAutosave';
+import { announceRevisionSeen } from './externalWorkflowChange';
 import {
   BLIND_AFTER_FAILED_POLLS,
   CURRENT_SLUG_KEY,
@@ -94,6 +95,19 @@ export function useWorkflowFileWatch(onNotify: (message: string) => void): void 
       // while a deletion produced a toast and health produced nothing. Two of
       // the three states were one output, on the surface whose whole job is to
       // say what is true.
+      // **Every successful poll says what revision the file holds**
+      // (`osg-agent-experience/69`). The row already carries the digest, so
+      // this costs nothing and no connection — which is the point: two editor
+      // tabs saturate a browser's six-per-origin HTTP/1.1 budget, and the
+      // package's own SSE stream is the third connection each tab wants. This
+      // path is the one that works however many tabs are open.
+      //
+      // Published unconditionally rather than only on a change, because the
+      // consumer deduplicates against the revision *it* holds — which is a
+      // different question from "did `savedAt` move", and the only one that
+      // decides whether a document should be replaced.
+      if (outcome.ok) announceRevisionSeen(slug, outcome.value?.digest);
+
       const step = decideWatchStep(outcome, getKnownSavedAt(slug), reach);
       reach = step.reach;
       publishWatchReach(reach);
@@ -126,9 +140,25 @@ export function useWorkflowFileWatch(onNotify: (message: string) => void): void 
             );
             break;
           case 'notify-changed':
-            onNotify(
-              'This workflow changed on disk — open Manage Workflows and Load it to see the latest version.',
-            );
+            // **Deliberately silent now** (`osg-agent-experience/69`). This
+            // used to say *"open Manage Workflows and Load it to see the
+            // latest version"*, which asked the user to perform a reload — the
+            // exact gesture `68` is the ticket about, and a sentence that told
+            // somebody with unsaved edits to go and lose them.
+            //
+            // The revision published above reaches `useExternalWorkflowChange`,
+            // which does the thing the sentence was asking for: a tab with no
+            // unsaved edits takes the new version and says so, and a tab with
+            // unsaved edits is asked which one to keep. Saying both would be
+            // two notices for one event, and the older one names a door that
+            // is now the wrong answer.
+            //
+            // The verdict itself is kept rather than removed: it is what
+            // re-baselines `knownSavedAt`, and a future surface that wants to
+            // show "changed at 10:42" has something to read.
+            if (outcome.ok && outcome.value?.savedAt) {
+              recordKnownSavedAt(slug, outcome.value.savedAt);
+            }
             break;
           case 'notify-blind':
             // Named as a **wait**, never as work — `launch-readiness/141`'s

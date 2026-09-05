@@ -501,6 +501,23 @@ export function hasDraftFor(subject: string | null, store?: KeyValueStore): bool
  * A tab that is about to load a draft has, by any honest reading, *seen* it.
  * Call this whenever the autosave key adopts a slug.
  */
+/**
+ * The revision of `workflow.json` this browser's draft of `slug` was taken
+ * from — `osg-agent-experience/69`.
+ *
+ * `null` means *cannot tell*: no draft, an unreadable one, one written before
+ * the envelope carried this, or a tab that never learned a revision. Every
+ * caller must treat all four the same way, because the safe answer when a
+ * comparison cannot be made is the one `68` already ships — ask.
+ */
+export function draftBaseDigest(
+  slug: string,
+  store: KeyValueStore = browserStore(),
+): string | null {
+  const draft = readWorkflow(store, draftIdForSlug(slug));
+  return draft.status === 'ok' ? draft.baseDigest : null;
+}
+
 export function draftSavedAt(slug: string, store: KeyValueStore = browserStore()): string | null {
   const draft = readWorkflow(store, draftIdForSlug(slug));
   return draft.status === 'ok' ? draft.savedAt : null;

@@ -74,8 +74,18 @@ export const MAX_PAYLOAD_BYTES = 4_000_000;
  */
 export const CLAIM_STALE_MS = 30_000;
 
-/** The envelope version this module writes. v2 added `writerId`. */
-const ENVELOPE_VERSION = 2;
+/**
+ * The envelope version this module writes. v2 added `writerId`; v3 added
+ * `baseDigest` (`osg-agent-experience/69`).
+ *
+ * Nothing reads the number to decide how to parse — `readWorkflow` reads the
+ * fields it finds and answers `null` for the ones a v2 entry does not carry,
+ * which is what makes a draft written yesterday still restorable today. The
+ * version is here so a future change that genuinely *cannot* be read
+ * field-by-field has something to branch on, and so an entry in a browser's
+ * storage says which editor wrote it.
+ */
+const ENVELOPE_VERSION = 3;
 
 /** Just the slice of `Storage` used here, so a test can supply a Map. */
 export interface KeyValueStore {
@@ -107,7 +117,18 @@ export interface SaveOutcome {
 }
 
 export type LoadOutcome =
-  | { readonly status: 'ok'; readonly json: string; readonly savedAt: string | null }
+  | {
+      readonly status: 'ok';
+      readonly json: string;
+      readonly savedAt: string | null;
+      /**
+       * The revision of `workflow.json` this draft was taken from —
+       * `osg-agent-experience/69`. `null` for a draft written before v3, and
+       * for one written by a tab that never learned a revision; both mean
+       * *cannot tell*, and every caller must treat them as such.
+       */
+      readonly baseDigest: string | null;
+    }
   | { readonly status: 'missing' }
   | { readonly status: 'corrupt'; readonly reason: string };
 
@@ -152,14 +173,44 @@ function read(store: KeyValueStore, key: string): string | null {
  * and — the part the outcome alone never bought — refuses to write at all when
  * writing would destroy someone else's newer save.
  */
+/**
+ * The two things a write may be told beyond the document itself.
+ *
+ * An options object rather than two more positional parameters. `now` was
+ * already the sixth, `baseDigest` would have been the seventh, and a
+ * seven-parameter function is one whose call sites stop being readable —
+ * `osg-agent-experience/59`'s finding, applied before it happens again.
+ */
+export interface SaveWorkflowOptions {
+  /** Injected by tests so a stamp is not a clock read. */
+  readonly now?: () => string;
+  /**
+   * The revision of `workflow.json` this document is derived from —
+   * `osg-agent-experience/69`.
+   *
+   * Recorded so a **reload** can tell two situations apart that look identical
+   * once the draft and the file disagree: a draft that is simply *ahead* of an
+   * unchanged file, which is ordinary unsaved work and must be restored
+   * silently, and a draft whose file has moved underneath it, which is `68`'s
+   * data-loss blocker and must be asked about. Without it every offline edit
+   * raised `68`'s dialog.
+   *
+   * `undefined` is the honest answer for a tab that has never been handed a
+   * revision, and it is stored as absent rather than as an empty string:
+   * "cannot tell" and "based on nothing" would otherwise be the same value.
+   */
+  readonly baseDigest?: string;
+}
+
 export function saveWorkflow(
   store: KeyValueStore,
   id: string,
   model: WorkflowModel,
   serializer: WorkflowSerializer,
   guard: WriteGuard,
-  now: () => string = () => new Date().toISOString(),
+  options: SaveWorkflowOptions = {},
 ): SaveOutcome {
+  const now = options.now ?? (() => new Date().toISOString());
   const conflict = detectConflict(store, id, guard);
   if (conflict != null) return conflict;
 
@@ -172,6 +223,7 @@ export function saveWorkflow(
       writerId: guard.writerId,
       workflowId: id,
       name: model.name,
+      ...(options.baseDigest ? { baseDigest: options.baseDigest } : {}),
       workflow: JSON.parse(serializer.toJSONString(model)),
     });
   } catch (error) {
@@ -274,15 +326,21 @@ export function readWorkflow(store: KeyValueStore, id: string): LoadOutcome {
     const payload = JSON.parse(raw) as Record<string, unknown>;
     if (payload['workflow'] != null) {
       const savedAt = payload['savedAt'];
+      const baseDigest = payload['baseDigest'];
       return {
         status: 'ok',
         json: JSON.stringify(payload['workflow']),
         savedAt: typeof savedAt === 'string' ? savedAt : null,
+        // Read as a field rather than gated on `version`: a v2 entry simply
+        // does not carry one, and `null` is the answer its writer would have
+        // given. Branching on the version number would make every old draft
+        // an error instead of an older draft.
+        baseDigest: typeof baseDigest === 'string' && baseDigest ? baseDigest : null,
       };
     }
     // An entry written before the envelope existed is the document itself.
     if (payload['nodes'] != null || payload['edges'] != null) {
-      return { status: 'ok', json: raw, savedAt: null };
+      return { status: 'ok', json: raw, savedAt: null, baseDigest: null };
     }
     return quarantine(store, id, raw, 'it contained no workflow document');
   } catch (error) {

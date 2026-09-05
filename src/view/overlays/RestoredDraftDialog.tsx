@@ -1,11 +1,12 @@
 import { FileWarning } from 'lucide-react';
 import { Button } from '@design/primitives';
+import type { RestoredDraftCause } from '@app/restoredDraftConflict';
 import {
   RESTORED_DRAFT_KEEP,
-  RESTORED_DRAFT_SUBTITLE,
   RESTORED_DRAFT_TAKE,
   RESTORED_DRAFT_TITLE,
   restoredDraftKeepHint,
+  restoredDraftSubtitle,
   restoredDraftTakeHint,
 } from '@view/workflow/restoredDraftChoiceCopy';
 import { useRestoredDraftChoice } from '@view/workflow/useRestoredDraftChoice';
@@ -15,6 +16,12 @@ import './overlays.css';
 interface RestoredDraftDialogProps {
   /** The name the file on disk carries — what each door is about. */
   readonly fileName: string;
+  /**
+   * Why this is being asked. It reaches the copy module and nothing else —
+   * the two doors, their hints and every consequence are identical, which is
+   * the argument for one dialog rather than two (`osg-agent-experience/69`).
+   */
+  readonly cause: RestoredDraftCause;
   readonly onKeepDraft: () => void;
   readonly onTakeFile: () => void;
   /** Escape and the backdrop — dismiss the question without answering it. */
@@ -55,6 +62,7 @@ interface RestoredDraftDialogProps {
  */
 export function RestoredDraftDialog({
   fileName,
+  cause,
   onKeepDraft,
   onTakeFile,
   onDefer,
@@ -62,7 +70,7 @@ export function RestoredDraftDialog({
   return (
     <Dialog
       title={RESTORED_DRAFT_TITLE}
-      subtitle={RESTORED_DRAFT_SUBTITLE}
+      subtitle={restoredDraftSubtitle(cause)}
       icon={FileWarning}
       onClose={onDefer}
       footer={
@@ -97,6 +105,7 @@ export function RestoredDraftChoicePrompt({ notify }: RestoredDraftChoicePromptP
   return (
     <RestoredDraftDialog
       fileName={choice.offer.fileName}
+      cause={choice.offer.cause}
       onKeepDraft={choice.keepDraft}
       onTakeFile={choice.takeFile}
       onDefer={choice.defer}

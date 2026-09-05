@@ -30,9 +30,28 @@
  * the argument `restoreDraftFor` already records for comparing bytes.
  */
 
+/**
+ * Why the question is being asked — `osg-agent-experience/69`.
+ *
+ * Two occasions, one dialog. `restored-draft` is `68`'s: a reload found the
+ * file had moved under the draft it was about to restore. `changed-elsewhere`
+ * is this tab sitting open while another tab, the CLI or a coding agent
+ * rewrote the file underneath it.
+ *
+ * A field rather than a second offer type, and a second dialog was explicitly
+ * refused: the *choice* is identical — this browser's unsaved edits against
+ * the bytes on disk, with nothing written until the user answers — and two
+ * dialogs would be two places for that choice to drift, on the one screen
+ * standing between two versions of somebody's work. What differs is one
+ * sentence of explanation, which is why the cause reaches
+ * `restoredDraftChoiceCopy` and nothing else.
+ */
+export type RestoredDraftCause = 'restored-draft' | 'changed-elsewhere';
+
 /** Which document a mount of this offer is about, once the user answers. */
 export interface RestoredDraftOffer {
   readonly slug: string;
+  readonly cause: RestoredDraftCause;
   /** The file exactly as the backend served it — what *take the file* loads. */
   readonly file: unknown;
   /** The name the file carries, so the offer can say what it is offering. */

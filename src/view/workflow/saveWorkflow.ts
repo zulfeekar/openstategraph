@@ -1,5 +1,6 @@
 import type { Result } from '@core/kernel/Result';
 import { recordKnownDigest, recordKnownVersion } from '@app/workflowFileWatch';
+import { announceWorkflowSaved } from '@app/workflowSaveBroadcast';
 import { writeHostPackage } from '@app/hostPackageWrite';
 import { getOpenSlug, setOpenSlug } from '@app/openWorkflow';
 import { getOpenAddress } from '@app/openAddress';
@@ -282,6 +283,14 @@ export async function saveWorkflow({
   // bytes this save wrote, while the row is a second read that another writer
   // could already have overtaken (`osg-agent-experience/45`).
   recordKnownDigest(slug, adopted);
+  // The other tabs of this browser, given the head start the SSE stream cannot
+  // (`osg-agent-experience/69`). `adopted ?? row` for the same reason the two
+  // lines above are in that order: the receipt is the digest of the bytes this
+  // save wrote, and the row is a second read somebody could already have
+  // overtaken. A create has no receipt, and announcing it is still right — a
+  // sibling tab that has this brand-new slug open is exactly the case a
+  // duplicate-and-open produces.
+  announceWorkflowSaved(slug, adopted ?? (row.ok ? row.value?.digest : undefined));
 
   return open ? { kind: 'saved', slug, name } : { kind: 'created', slug, name };
 }

@@ -77,7 +77,7 @@ describe('workflowStore', () => {
   });
 
   const saveAs = (writer: WriteGuard, id: string, at: string) =>
-    saveWorkflow(store, id, workbench.model, workbench.serializer, writer, () => at);
+    saveWorkflow(store, id, workbench.model, workbench.serializer, writer, { now: () => at });
   const save = (id: string, at: string) => saveAs(guard, id, at);
 
   describe('round trip', () => {

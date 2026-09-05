@@ -945,6 +945,14 @@ An unknown slug is not refused: a package created underneath an open tab is a
 change like any other, and a stream that 404'd at connect time would leave
 exactly that tab with no way to be told.
 
+**The editor deliberately does not open this one.** A browser allows six
+concurrent HTTP/1.1 connections per origin, each editor tab already holds two
+of them for the streams above, and a third saturates the budget at two open
+tabs — measured on 2026-09-05, with the last stream stuck in `CONNECTING` and
+ordinary requests no longer completing. The editor reads the same revision out
+of the `savedAt` poll it already runs. Use this stream from a client that is
+not already holding two.
+
 No terminal frame, no replay, one worker — as on all five siblings.
 
 ---

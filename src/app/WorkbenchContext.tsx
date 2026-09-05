@@ -1,5 +1,6 @@
 import {
   baselineSlugAfterRestore,
+  diskDocumentStatus,
   ensureDiskBaseline,
   writeOpenMountHostToDisk,
   diskConflictNotice,
@@ -45,8 +46,10 @@ import {
   followOpenSubjectWithDraftKey,
   hasDraftFor,
   restoreSessionDraft,
+  slugOfDraftId,
   type DraftRestoreReport,
 } from './workflowDrafts';
+import { getKnownDigest } from './workflowFileWatch';
 import { followOpenPackage } from './capabilityRefresh';
 import {
   hasPlacedStarter,
@@ -566,6 +569,24 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
           workbench.model,
           workbench.serializer,
           writer,
+          // **The revision this draft is derived from**
+          // (`osg-agent-experience/69`). Recorded here, at the moment the
+          // draft is written, because this is the only moment anything knows
+          // it: after a reload the in-memory version map is empty, which is
+          // the gap `68` had to spend a fetch closing. A draft carrying its
+          // base lets a reload tell an ordinary offline edit — the draft
+          // simply ahead of a file nobody touched — from the file having
+          // moved underneath it, which is the difference between a silent
+          // restore and `68`'s dialog.
+          //
+          // Read from the *slug*, not from `workflowId`: a draft key is
+          // `slug-<slug>` for a saved package and `wf-<timestamp>` for one
+          // that has never been saved, and the second has no file and so no
+          // revision — `slugOfDraftId` answers `null` there, and no base is
+          // recorded, which is exactly right.
+          {
+            baseDigest: baseDigestOfDraft(workflowId, workbench),
+          },
         );
         if (outcome.ok) {
           lastReported = null;
@@ -645,6 +666,34 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
   }, [controller, workbench, workflowId, state.restore]);
 
   return state;
+}
+
+/**
+ * The revision a draft under `draftId` should record as its base.
+ *
+ * A free function rather than an inline expression so the two ways a draft key
+ * can be shaped are answered in one place — and `undefined`, for a canvas that
+ * has never been saved, is a real answer rather than an oversight.
+ */
+function baseDigestOfDraft(draftId: string, workbench: Workbench): string | undefined {
+  const slug = slugOfDraftId(draftId);
+  if (!slug) return undefined;
+  // **Only when this tab's document is known to derive from that revision.**
+  // `getKnownDigest` answers *which revision does this tab believe the file
+  // holds*, which is not the same question, and the difference is a live case:
+  // after a conflict is deferred, this tab knows the file's revision perfectly
+  // well while the canvas holds a document that predates it. Stamping the
+  // draft with it would say the draft was taken from a version it has never
+  // seen — and the next reload would then restore it silently over exactly
+  // the file `68` is about.
+  //
+  // A disk baseline is the standing statement that the document on screen came
+  // from this package's file. Without one the honest answer is "cannot tell",
+  // which keeps `68`'s question.
+  if (diskDocumentStatus(slug, workbench.model, workbench.serializer) === 'unbaselined') {
+    return undefined;
+  }
+  return getKnownDigest(slug);
 }
 
 const SAVE_DELAY_MS = 1000;

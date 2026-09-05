@@ -41,6 +41,23 @@ over the file; *Take the file* loads what is on disk and discards them. Press
 Escape and neither happens — nothing is written, and you are asked again next
 time.
 
+**And you no longer have to reload to find out.** Open the same workflow in
+three tabs, or leave one open while an agent works, and each tab is told the
+moment the file changes — by whoever changed it: another tab, the command line,
+an agent. A tab with **no unsaved edits** simply updates to match, and says so.
+A tab with **unsaved edits** is asked the same question a reload asks, in the
+same words, and nothing is written until you answer.
+
+**What this deliberately does not do is merge.** Two people editing one
+workflow at the same time will not see each other's nodes appear as they are
+drawn, and there is no "both changes were kept" outcome — you choose a version.
+That is a decision rather than an unfinished feature: a JSON graph under two
+live pointers needs operational transforms or CRDTs, a presence layer, and a
+server that owns the document instead of a folder of files, which is a
+different product from the one whose whole promise is that your workflow is
+plain files you can read, diff and commit. What this editor promises instead is
+that no writer's work disappears without somebody being asked.
+
 ---
 
 ## 2. Atoms, molecules, organisms — and only one tier you can get two ways
