@@ -927,7 +927,14 @@ def cmd_init(args: argparse.Namespace) -> int:
     from openstategraph.bundled_skills import BUNDLED_SKILLS
     from openstategraph.config_file import reset_active_config
     from openstategraph.providers import provider_catalogue
-    from openstategraph.scaffold import NEXT_SENTENCE, ScaffoldError, init_project
+    from openstategraph.agent_config import missing_server_note
+    from openstategraph.scaffold import (
+        NEXT_SENTENCE,
+        RESTART_SENTENCE,
+        ScaffoldError,
+        agent_surface_changed,
+        init_project,
+    )
 
     label = args.directory or "."
     try:
@@ -1006,6 +1013,21 @@ def cmd_init(args: argparse.Namespace) -> int:
         print(f"  {relative:<22}  {sentence}")
         if action.note:
             print(f"  {'':<22}  {action.note}")
+    # osg-agent-experience/24: the two things the block above could not say.
+    # Every entry it just wrote runs `openstategraph mcp`, so an installation
+    # without the extra has four files naming a command that exits non-zero
+    # inside the agent's own start-up log — named here, where the install line
+    # is one keystroke away, rather than there. And all of it is read at
+    # start-up by an agent this command was very likely typed inside.
+    indent = " " * 26  # the block's own second column, `  {name:<22}  `
+    absent = missing_server_note()
+    if absent:
+        print(f"{indent}{absent}")
+    if agent_surface_changed(result):
+        # Wrapped like the model line below, and for the same reason: this is
+        # the widest sentence the report prints and the block is already
+        # indented 26 columns into an 88-column page.
+        print(textwrap.fill(RESTART_SENTENCE, width=88, initial_indent=indent, subsequent_indent=indent))
     print()
 
     # The generated config was written before this process had any chance to

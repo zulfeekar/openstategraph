@@ -391,6 +391,18 @@ NEXT_SENTENCE = (
 )
 
 
+#: `osg-agent-experience/24`. Every file `init` writes for a coding agent —
+#: the four MCP configs, both skill roots, `AGENTS.md` — is read when that
+#: agent starts, and `init` is very often typed *inside* the session that will
+#: use them. So the agent that just ran it has seen none of them, and the
+#: sentence above this one tells the developer to address it. One copy, here,
+#: beside `NEXT_SENTENCE`, which has the same reason.
+RESTART_SENTENCE = (
+    "restart your coding agent so it re-scans this directory — it reads the"
+    " files above only at start-up."
+)
+
+
 @dataclass(frozen=True)
 class InitResult:
     """What `init_project` made, and what it found already there.
@@ -449,6 +461,27 @@ class InitResult:
     #: Same reason as `agents_md_action`: `init` prints a sentence per file
     #: and two of those four sentences say it wrote nothing.
     agent_files: tuple[AgentFileAction, ...] = ()
+
+
+def agent_surface_changed(result: InitResult) -> bool:
+    """Did this run put anything in front of a coding agent that it has not read?
+
+    `osg-agent-experience/24`. The predicate for `RESTART_SENTENCE`, derived
+    from the three states `init` already prints rather than from a flag set at
+    the write: a second `init --force` that reports `current` down the whole
+    block changed nothing an agent could re-scan, and telling a developer to
+    restart for that is advice that teaches them to skip the next one.
+    """
+    from openstategraph.agent_config import AgentFileState
+
+    return (
+        result.agents_md_action != agent_brief.CURRENT
+        or any(state != agent_brief.CURRENT for state in result.skills_installed.values())
+        or any(
+            action.state not in (AgentFileState.CURRENT, AgentFileState.KEPT)
+            for action in result.agent_files
+        )
+    )
 
 
 def _existing_directory_refusal(target: Path, label: str) -> str | None:
@@ -833,9 +866,11 @@ __all__ = [
     "GalleryFootprint",
     "InitResult",
     "NEXT_SENTENCE",
+    "RESTART_SENTENCE",
     "ScaffoldError",
     "SLUG_PATTERN",
     "STARTER_SLUG",
+    "agent_surface_changed",
     "copy_all_examples",
     "copy_example",
     "gallery_footprint",

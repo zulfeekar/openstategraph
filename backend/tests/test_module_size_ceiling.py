@@ -488,6 +488,18 @@ lines. No new logic — it is `plugin_interop.export_toolkit` plus the same two
 argument refusals `cmd_export_plugin` already makes, and the bundle's server
 entry is rendered from `agent_config.ServerDescriptor` in that seam, not here.
 
+
+**1635 -> 1648** (`osg-agent-experience/24`, 2026-09-05). Thirteen lines, and
+the rule this whole entry keeps holds: no logic. `init` writes four MCP config
+files, two skill roots and `AGENTS.md`, all of which a coding agent reads only
+at start-up, and it wrote them without saying so — and without saying when the
+command those entries name is not installed. Both sentences live where their
+facts do (`scaffold.RESTART_SENTENCE` with `agent_surface_changed`,
+`agent_config.missing_server_note`); what grew here is the six-line import
+block those two names cost, two conditional prints and the comment saying why
+they are conditional. This command says what it did, and until now it did not
+say the last two things it did.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -1176,7 +1188,7 @@ it.
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(660, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(581, NODE_RUNTIME),
-    "cli.py": Recorded(1635, CLI),
+    "cli.py": Recorded(1648, CLI),
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

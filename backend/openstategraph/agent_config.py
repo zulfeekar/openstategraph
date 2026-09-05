@@ -52,6 +52,7 @@ import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from importlib.util import find_spec
 from pathlib import Path
 from types import MappingProxyType
 
@@ -111,6 +112,37 @@ class AgentFileAction:
     state: AgentFileState
     #: Why, when the answer is `KEPT`. Empty otherwise.
     note: str = ""
+
+
+def missing_server_note(server: ServerDescriptor | None = None) -> str | None:
+    """The sentence for a config file naming a command that cannot start.
+
+    `osg-agent-experience/24`, and `19`'s failure caught at the friendliest
+    possible moment. Every rendered entry runs `openstategraph mcp`, which
+    lives behind the `[mcp]` extra; on an installation without it the four
+    files are written, `init` reports that the agent can reach this project's
+    server, and the developer finds out from a non-zero exit inside their
+    agent's own start-up log, where our name appears and our install line does
+    not.
+
+    A spec lookup rather than an import: this runs on the happy path of every
+    `init`, and importing the SDK to find out whether it is there would cost
+    every reader the start-up of a server nobody asked to run. `None` when
+    there is nothing to say — a report that always prints its advice is one a
+    reader learns to skip.
+    """
+    server = server or ServerDescriptor()
+    try:
+        present = find_spec("mcp") is not None
+    except (ImportError, ValueError):  # a broken or half-installed distribution
+        present = False
+    if present:
+        return None
+
+    from openstategraph._extras import install_hint
+
+    command = " ".join((server.command, *server.args))
+    return f"`{command}` is not installed here yet — {install_hint('mcp')}"
 
 
 #: One row per agent: the file, and the top-level key its servers live under.
@@ -297,6 +329,7 @@ __all__ = [
     "AgentFileState",
     "ServerDescriptor",
     "merge_codex_toml",
+    "missing_server_note",
     "merge_json_servers",
     "render_all",
 ]

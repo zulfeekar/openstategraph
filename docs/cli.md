@@ -117,6 +117,16 @@ would replacing a file that will not parse. Both are reported as `kept`, with
 the reason. [`mcp.md`](mcp.md) §1 covers what the entry contains and how to
 enable runs.
 
+**Two things the report says that this table cannot.** Every file above — and
+`AGENTS.md`, and both skill roots — is read by a coding agent **at start-up**,
+and `init` is usually typed inside the session that will use them, so the run
+ends by telling you to restart it. Only when it actually wrote or changed one:
+a second `init` that reports `current` down the whole block has given your
+agent nothing new to read. And each entry runs `openstategraph mcp`, which
+lives behind the `[mcp]` extra — on an installation without it, the report
+names `pip install 'openstategraph[mcp]'` right there, instead of leaving you
+to find a non-zero exit inside your agent's own start-up log.
+
 | Flag | Effect |
 | --- | --- |
 | `--workflows-dir NAME` | name the packages folder something other than `workflows`, and record it in the config |
