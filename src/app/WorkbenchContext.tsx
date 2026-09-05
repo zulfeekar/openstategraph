@@ -533,12 +533,21 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     // slug in `sessionStorage` from a previous visit. Baselining there would
     // hand autosave a package it is allowed to write while the model holds a
     // demo, and the next tick would write the demo into that package.
+    //
+    // …and it **compares** before it baselines (`osg-agent-experience/68`).
+    // Seeding it unconditionally is what let a reload write an overnight draft
+    // back over a file a CLI session had rewritten that morning: the restore's
+    // own `importJSON` fires `controller.onChange`, so the reload was the
+    // edit. When the file has moved, `ensureDiskBaseline` records no baseline
+    // and raises the choice instead; the model on screen is untouched either
+    // way, because it is the one copy of those edits that still exists.
     const restoredSlug = baselineSlugAfterRestore(state.restore, getOpenSlug());
     if (restoredSlug) {
       void ensureDiskBaseline(
         restoredSlug,
         (diskClientRef.current ??= new WorkflowFileClient()),
         workbench.serializer,
+        workbench.model,
       );
     }
 

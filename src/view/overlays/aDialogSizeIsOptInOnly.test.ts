@@ -125,6 +125,10 @@ describe('the callers that were here first', () => {
         'overlays/ArrivalDialog.tsx',
         'overlays/CredentialsDialog.tsx',
         'overlays/McpServersDialog.tsx',
+        // `osg-agent-experience/68` — the choice a reload owes the user when
+        // the file moved under its draft. At the default: two sentences and
+        // two buttons, which is the narrowest thing in this list.
+        'overlays/RestoredDraftDialog.tsx',
         'board/PatrolBoard.tsx',
         // `stable-beta-public/03` slice 5 — the spend breakdown, at the
         // default: three tables of figures, drawn against the same 520px

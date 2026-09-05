@@ -206,7 +206,8 @@ describe('production-ready 71 — a blank canvas must not own a package', () => 
     // itself. Verified by mutation: blanking the guard inside
     // `baselineSlugAfterRestore` turns the first case below red.
     const baseline = baselineSlugAfterRestore(outcome, getOpenSlug());
-    if (baseline !== null) await ensureDiskBaseline(baseline, client, workbench.serializer);
+    if (baseline !== null)
+      await ensureDiskBaseline(baseline, client, workbench.serializer, workbench.model);
     return workbench;
   }
 
@@ -239,7 +240,8 @@ describe('production-ready 71 — a blank canvas must not own a package', () => 
       local,
     );
     const baseline = baselineSlugAfterRestore(report, getOpenSlug());
-    if (baseline !== null) await ensureDiskBaseline(baseline, client, workbench.serializer);
+    if (baseline !== null)
+      await ensureDiskBaseline(baseline, client, workbench.serializer, workbench.model);
 
     // The user, seeing a blank canvas, drags one node in to find out why.
     addNode(workbench, TYPE.textInput, { at: { x: 0, y: 0 } });
@@ -257,10 +259,22 @@ describe('production-ready 71 — a blank canvas must not own a package', () => 
   it('still writes when a draft really was restored', async () => {
     // The exception `ensureDiskBaseline` exists for must survive the fix: a
     // reload that genuinely restores this browser's edits still autosaves.
-    const onDisk = aPreviousVisitTo(SLUG, 13);
+    //
+    // **The draft is the file here, and since `osg-agent-experience/68` that
+    // is load-bearing rather than incidental.** It used to be a second
+    // thirteen-node Workbench, which reads as the same document and is not
+    // one — the node ids are minted per model — so this case was silently
+    // exercising a draft that differed from disk. That is now the conflict
+    // path, which writes nothing until the user chooses, and it is covered by
+    // `aReloadedTabAsksBeforeItOverwritesTheFile.test.ts`. What belongs here
+    // is the ordinary reload: a tab whose last edit was autosaved, whose draft
+    // and file agree, and which must go on saving in silence.
     const drafted = new Workbench();
     drafted.model.setName('Chinook Assistant');
     for (let i = 0; i < 13; i += 1) addNode(drafted, TYPE.textInput, { at: { x: i * 200, y: 0 } });
+    const onDisk = JSON.parse(drafted.serializer.toJSONString(drafted.model)) as unknown;
+    setOpenSlug(SLUG);
+    session.setItem(DRAFT_SESSION_KEY, draftIdForSlug(SLUG));
     const writer = newWriteGuard();
     claimSession(local, draftIdForSlug(SLUG), writer);
     expect(

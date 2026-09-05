@@ -53,6 +53,7 @@ import { interruptedRunNotice, takeInterruptedRun } from './ask/interruptedRun';
 import { useDeepLinkedWorkflow } from './workflow/useDeepLinkedWorkflow';
 import { useArrivalOffer } from './workflow/useArrivalOffer';
 import { ArrivalDialog } from './overlays/ArrivalDialog';
+import { RestoredDraftChoicePrompt } from './overlays/RestoredDraftDialog';
 import { DrillBanner } from './workflow/DrillBanner';
 import { useWorkflowFileWatch } from '@app/useWorkflowFileWatch';
 import { WorkflowFileClient } from '@core/runtime/WorkflowFileClient';
@@ -1062,6 +1063,12 @@ export function AppShell() {
           onClose={arrival.dismiss}
         />
       ) : null}
+      {/* `osg-agent-experience/68`: a reload that restored this browser's
+          draft over a file which has since changed on disk writes nothing
+          until the user says which version survives. The prompt owns its own
+          question — there is no state here to hold, because the offer is
+          raised inside the autosave effect rather than by anything on screen. */}
+      <RestoredDraftChoicePrompt notify={notify} />
       {credentialsOpen ? <CredentialsDialog onClose={() => setCredentialsOpen(false)} /> : null}
       {mcpServersOpen ? <McpServersDialog onClose={() => setMcpServersOpen(false)} /> : null}
       {patrolBoardOpen ? (

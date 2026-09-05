@@ -17,7 +17,13 @@ import {
   forgetKnownSavedAt,
   getKnownDigest,
   recordKnownDigest,
+  recordKnownVersion,
 } from './workflowFileWatch';
+import {
+  decideRestoredDraft,
+  offerRestoredDraftChoice,
+  type RestoredDraftDecision,
+} from './restoredDraftConflict';
 import { saveFailureMessage } from '@core/runtime/WorkflowFileClient';
 import { writeHostPackage } from './hostPackageWrite';
 
@@ -253,23 +259,66 @@ export function baselineSlugAfterRestore(
   return openSlug !== null && openSlug !== '' ? openSlug : null;
 }
 
+/**
+ * ## It compares before it baselines — `osg-agent-experience/68`
+ *
+ * The paragraph above is still the reason this function exists, and it was
+ * also the delivery mechanism for a data-loss blocker. Seeding the baseline
+ * unconditionally makes the restored draft a legitimate write, and
+ * `importJSON` on that restore fires `controller.onChange`, so **the reload
+ * itself was the edit**: a tab left open overnight put its pre-rewrite
+ * document back over a file a CLI session had rewritten that morning, with no
+ * gesture from anybody.
+ *
+ * So the file is fetched, reduced by the same rules as the model, and
+ * compared. Equal is the ordinary reload — every tab whose last edit was
+ * autosaved — and stays exactly as silent as it was. Different means the file
+ * moved under a draft this browser is about to resurrect, and **no baseline is
+ * recorded**, so the refusal is the "never write a package this page has not
+ * opened" rule already stated at `writeOpenWorkflowToDisk` rather than a
+ * second copy of it. `restoredDraftConflict` then carries the question.
+ *
+ * ## …and it arms the guard that should have caught it
+ *
+ * `writeOpenWorkflowToDisk` quotes `getKnownDigest(slug)` as `base_digest`, and
+ * that map is in-memory: after a reload it is empty, so this was the one path
+ * where a save asked the backend for an *unconditional* write and got a 200.
+ * `recordKnownVersion` here is the whole of the second half — one seam, the
+ * `osg-agent-experience/45` guard reused, not a second conflict mechanism —
+ * and it runs on every branch that read the file, because whichever way the
+ * user answers, the write that follows should quote a version.
+ */
 export async function ensureDiskBaseline(
   slug: string,
-  client: Pick<IWorkflowFileClient, 'load'>,
-  serializer: Pick<WorkflowSerializer, 'canonicalise' | 'sizeIsMeasured'>,
-): Promise<void> {
-  if (lastWritten.has(slug)) return;
+  client: Pick<IWorkflowFileClient, 'load' | 'summary'>,
+  serializer: Pick<WorkflowSerializer, 'canonicalise' | 'serialize' | 'sizeIsMeasured'>,
+  model: WorkflowModel,
+): Promise<RestoredDraftDecision> {
+  if (lastWritten.has(slug)) return { kind: 'baselined' };
   const disk = await client.load(slug);
-  if (!disk.ok) return;
+  if (!disk.ok) return decideRestoredDraft(null, '');
   const document = disk.value as { name?: string };
-  if (lastWritten.has(slug)) return; // a load may have landed while we waited
+  if (lastWritten.has(slug)) return { kind: 'baselined' }; // a load may have landed while we waited
+
+  // The version the file actually has, adopted before anything can be written
+  // against it. `recordKnownVersion` rather than `recordKnownDigest` so this
+  // path leaves the watch in the same state a cold load does.
+  const row = await client.summary(slug);
+  recordKnownVersion(slug, row.ok ? row.value : null);
+
   // Canonicalised for the same reason `rememberDiskDocument` is: what came back
   // is the file's authored form, and what it will be compared against is the
   // model's. See that function for what comparing the two raw cost.
-  lastWritten.set(
-    slug,
-    comparable(document.name ?? '', serializer.canonicalise(disk.value), serializer),
+  const onDisk = comparable(document.name ?? '', serializer.canonicalise(disk.value), serializer);
+  const decision = decideRestoredDraft(
+    onDisk,
+    comparable(model.name, serializer.serialize(model), serializer),
   );
+  if (decision.kind === 'baselined') lastWritten.set(slug, onDisk);
+  else if (decision.kind === 'ask') {
+    offerRestoredDraftChoice({ slug, file: disk.value, fileName: document.name ?? slug });
+  }
+  return decision;
 }
 
 /** Drop a slug's baseline — for tests, and for a package that was deleted. */

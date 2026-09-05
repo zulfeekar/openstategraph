@@ -476,3 +476,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* osg-agent-experience/68 — the two sentences under the reload's choice. The
+   arrival hint's tokens exactly: this is the same weight of aside, and a
+   second set of values for one role is how a design system stops being one. */
+.restored-draft__hint {
+  margin: 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}

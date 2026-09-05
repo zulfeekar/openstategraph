@@ -32,6 +32,15 @@ unsaved edits back, because they are the thing you just chose against. Or
 **press Save** to overwrite the file with what is on screen. Nothing is decided
 for you, and neither version is thrown away until you say which one you want.
 
+**Reloading the tab asks the same question.** Your unsaved edits live in this
+browser, so a reload puts them back on the canvas rather than fetching the
+file — that is what stops a stray refresh costing you an afternoon. But if the
+file has changed since you made those edits, the editor now says so and writes
+nothing: *Keep my edits* leaves them on screen, and the next change writes them
+over the file; *Take the file* loads what is on disk and discards them. Press
+Escape and neither happens — nothing is written, and you are asked again next
+time.
+
 ---
 
 ## 2. Atoms, molecules, organisms — and only one tier you can get two ways
