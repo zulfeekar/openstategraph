@@ -62,6 +62,7 @@ from openstategraph.compile.context import (
 )
 from openstategraph.compile.diagnostics import Finding
 from openstategraph.compile.nodes.named_check import call_check
+from openstategraph.compile.upstream import upstream_sources
 from openstategraph.compile.state import (
     RunState,
     _upstream_text,
@@ -141,19 +142,14 @@ def _route_check(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: 
         # to have been told before it started.
         self.diagnostics.record(Finding.UNRESOLVED_FUNCTION, f"route.check:{check_name}")
     branches = _branch_ids(data.get("branches"))
-    upstream = [src for src, dst in plan.edges if dst == node_id]
     # A fork placed after a grader, a guard, a classifier or another fork
     # arrives over a *conditional* edge, which `plan.edges` does not carry —
     # the same situation `_output`, `_subgraph` and `_guard_check` handle.
-    conditional_upstream = [
-        src for src, dests in plan.conditional.items() if node_id in dests.values()
-    ]
+    sources = upstream_sources(plan, node_id)
     wired = set(plan.conditional.get(node_id) or {})
 
     def run(state: RunState) -> dict[str, Any]:
-        candidate = _upstream_text(state, upstream + conditional_upstream) or state.get(
-            "question", ""
-        )
+        candidate = _upstream_text(state, sources) or state.get("question", "")
         if fn is None:
             answered, reason = "", f'no function named "{check_name}" is discovered here'
         else:

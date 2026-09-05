@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from openstategraph.compile.workflow_compiler import CompiledPlan
+from openstategraph.compile.upstream import upstream_sources
 from openstategraph.compile.state import RunState, _upstream_text
 from openstategraph.compile.context import _text
 
@@ -70,22 +71,17 @@ def _memory_segment(self: "NodeRuntime", node_id: str, node: dict[str, Any], pla
         name=_text(data, "segment"),
         retention=parse_retention(data.get("retention")),
     )
-    upstream = [src for src, dst in plan.edges if dst == node_id]
     # A tollbooth placed after a grader, an approval or a guardrail is
     # reached over a *conditional* edge, which `plan.edges` does not
     # carry — the same gap `_agent`, `_output` and `_guardrail` close.
-    conditional_upstream = [
-        src for src, dests in plan.conditional.items() if node_id in dests.values()
-    ]
+    sources = upstream_sources(plan, node_id)
 
     def run(state: RunState) -> dict[str, Any]:
         from langgraph.config import get_store
 
         from openstategraph.memory import UNSAVED_SLUG, workflow_scope_slug
 
-        text = _upstream_text(state, upstream + conditional_upstream) or state.get(
-            "question", ""
-        )
+        text = _upstream_text(state, sources) or state.get("question", "")
         try:
             store = get_store()
         except Exception:

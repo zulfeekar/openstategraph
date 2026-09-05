@@ -20,6 +20,7 @@ from openstategraph.compile.workflow_compiler import CompiledPlan
 from openstategraph.compile.state import RunState
 from openstategraph.compile.diagnostics import Finding
 from openstategraph.compile.state import _silent_member_note, _upstream_text
+from openstategraph.compile.upstream import upstream_sources
 
 if TYPE_CHECKING:
     # The class these functions are methods of. Type-only: the import that
@@ -49,6 +50,9 @@ def _format_report_function(
     # and this read silently fell through to the "Report" default every
     # time.
     title = (node.get("data") or {}).get("reportTitle") or "Report"
+    #: Static edges and conditional branches alike, resolved once: the
+    #: document's wiring does not change during a run.
+    sources = upstream_sources(plan, node_id)
 
     def run(state: RunState) -> dict[str, Any]:
         results = state.get("worker_results") or {}
@@ -64,7 +68,11 @@ def _format_report_function(
         }
         scoped = {k: v for k, v in results.items() if k in current_ids}
         # No worker fan-out reached this join — so gather what its own
-        # upstream nodes produced instead (`every-workflow-green` 27).
+        # upstream nodes produced instead (`every-workflow-green` 27). Both
+        # edge tables, through the one reader: a source arriving on a
+        # guard's `pass` is in `plan.conditional` and not in `plan.edges`,
+        # so reading only the latter answered "nothing was dispatched to
+        # this join" about a wired, drawn graph (`osg-agent-experience` 51).
         #
         # This is the shape the `empty` message below has always described
         # and refused: "an edge into `candidate` from anything else
@@ -83,8 +91,8 @@ def _format_report_function(
             outputs = state.get("outputs") or {}
             scoped = {
                 src: str(outputs[src])
-                for src, dst in plan.edges
-                if dst == node_id and str(outputs.get(src) or "").strip()
+                for src in sources
+                if str(outputs.get(src) or "").strip()
             }
         # A task that died (retries exhausted → error handler wrote to
         # outputs, which carries no task identity) must appear as a
@@ -135,7 +143,6 @@ def _discovered_function(self: "NodeRuntime", node_id: str, node: dict[str, Any]
         self.diagnostics.record(Finding.UNRESOLVED_FUNCTION, node_type)
         return self._passthrough(node_id, node, plan)
 
-    upstream = [src for src, dst in plan.edges if dst == node_id]
     # A function node fed by a grader's `pass` (or a guard's `pass`, or an
     # approval's `approved`) arrives over a *conditional* edge, which
     # `plan.edges` does not carry — `_agent`, `_output`, `_guardrail` and
@@ -145,14 +152,10 @@ def _discovered_function(self: "NodeRuntime", node_id: str, node: dict[str, Any]
     # instead of its wired upstream — found live, with `execute_sql`
     # reading a natural-language question where SQL should have been, and
     # nothing reporting it.
-    conditional_upstream = [
-        src for src, dests in plan.conditional.items() if node_id in dests.values()
-    ]
+    sources = upstream_sources(plan, node_id)
 
     def run(state: RunState) -> dict[str, Any]:
-        text = _upstream_text(state, upstream + conditional_upstream) or state.get(
-            "question", ""
-        )
+        text = _upstream_text(state, sources) or state.get("question", "")
         try:
             result = fn(text)
         except Exception as exc:

@@ -28,6 +28,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from openstategraph.compile.workflow_compiler import CompiledPlan
+from openstategraph.compile.upstream import upstream_sources
 from openstategraph.compile.state import RunState
 from openstategraph.abc.tool_notes import record_notes
 from openstategraph.compile.context import _text
@@ -89,18 +90,13 @@ def _resolve_vocabulary(self: "NodeRuntime", node_id: str, node: dict[str, Any],
         max_entries = DEFAULT_MAX_ENTRIES
     when_uncovered = _text(data, "whenUncovered").strip() or DEFAULT_WHEN_UNCOVERED
 
-    upstream = [src for src, dst in plan.edges if dst == node_id]
     # A resolver placed behind a routed edge reads its wired upstream, not
     # the turn's original question — the same gap `launch-readiness` 66
     # closed on `_discovered_function`.
-    conditional_upstream = [
-        src for src, dests in plan.conditional.items() if node_id in dests.values()
-    ]
+    sources = upstream_sources(plan, node_id)
 
     def run(state: RunState) -> dict[str, Any]:
-        question = _upstream_text(state, upstream + conditional_upstream) or state.get(
-            "question", ""
-        )
+        question = _upstream_text(state, sources) or state.get("question", "")
         if source is None:
             self.diagnostics.record(
                 Finding.UNRESOLVED_FUNCTION, f"resolve.vocabulary:{source_name}"
@@ -170,15 +166,10 @@ def _resolve_source(self: "NodeRuntime", node_id: str, node: dict[str, Any], pla
     quantity = _text(data, "quantity").strip()
     when_undecided = _text(data, "whenUndecided").strip() or DEFAULT_WHEN_UNDECIDED
 
-    upstream = [src for src, dst in plan.edges if dst == node_id]
-    conditional_upstream = [
-        src for src, dests in plan.conditional.items() if node_id in dests.values()
-    ]
+    sources = upstream_sources(plan, node_id)
 
     def run(state: RunState) -> dict[str, Any]:
-        question = _upstream_text(state, upstream + conditional_upstream) or state.get(
-            "question", ""
-        )
+        question = _upstream_text(state, sources) or state.get("question", "")
         if catalogue is None:
             self.diagnostics.record(
                 Finding.UNRESOLVED_FUNCTION, f"resolve.source:{catalogue_name}"

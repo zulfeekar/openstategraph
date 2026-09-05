@@ -74,6 +74,7 @@ from openstategraph.compile.workflow_compiler import (
 from openstategraph.compile.context import (
     _text,
 )
+from openstategraph.compile.upstream import upstream_sources
 from openstategraph.compile.state import (
     RunState,
     _upstream_text,
@@ -182,13 +183,11 @@ def _guardrail(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Co
         self.diagnostics.record(
             Finding.INVALID_GUARDRAIL_RULE, node_id, entity, problem
         )
-    upstream = [src for src, dst in plan.edges if dst == node_id]
     # A guard placed after another guard, a grader or an approval arrives
     # over a *conditional* edge, which `plan.edges` does not carry — the
-    # same situation `_output` and `_subgraph` already handle.
-    conditional_upstream = [
-        src for src, dests in plan.conditional.items() if node_id in dests.values()
-    ]
+    # same situation `_output` and `_subgraph` already handle, and which
+    # `upstream_sources` now answers once for all of them.
+    sources = upstream_sources(plan, node_id)
     #: The nodes whose `outputs` entry this guard may rewrite — see the
     #: scrub below. Resolved once, at build time, because the document's
     #: types do not change during a run.
@@ -199,9 +198,7 @@ def _guardrail(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Co
     }
 
     def run(state: RunState) -> dict[str, Any]:
-        text = _upstream_text(state, upstream + conditional_upstream) or state.get(
-            "question", ""
-        )
+        text = _upstream_text(state, sources) or state.get("question", "")
         try:
             screening = guardrail.screen(text)
         except ValueError as exc:
@@ -330,10 +327,7 @@ def _guard_check(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: 
         for candidate_id, candidate_type in self._types.items()
         if candidate_type.startswith(MODEL_AUTHORED)
     )
-    upstream = [src for src, dst in plan.edges if dst == node_id]
-    conditional_upstream = [
-        src for src, dests in plan.conditional.items() if node_id in dests.values()
-    ]
+    sources = upstream_sources(plan, node_id)
     cap = int(data.get("maxAttempts") or self.services.max_attempts)
     revise_wired = "revise" in (plan.conditional.get(node_id) or {})
     if not revise_wired:
@@ -350,9 +344,7 @@ def _guard_check(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: 
         return summarise_run(state.get("tool_use"))
 
     def run(state: RunState) -> dict[str, Any]:
-        candidate = _upstream_text(state, upstream + conditional_upstream) or state.get(
-            "question", ""
-        )
+        candidate = _upstream_text(state, sources) or state.get("question", "")
         if fn is None and built_in is None:
             self.diagnostics.record(Finding.UNRESOLVED_FUNCTION, f"guard.check:{check_name}")
             return {

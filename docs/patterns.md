@@ -215,7 +215,11 @@ its incoming edges; it now reads three, and the edges are the third
 (`backend/openstategraph/compile/nodes/functions.py`, `_format_report_function`):
 `worker_results` keyed by subtask id, `subtasks` for the ids the *current* plan
 declared, and — **only when no worker fan-out reached it** — `outputs`, walked
-along the edges that land on this node. It reports the intersection of the
+along the edges that land on this node. **Both kinds of edge**: a source that
+reaches the join on a guard's `pass`, a grader's `pass` or an approval's
+`approved` is a conditional edge, and for a while the walk read only the static
+table and answered *"nothing was dispatched to this join"* about a wired,
+drawn, validated graph (`osg-agent-experience/51`). It reports the intersection of the
 first two, falls back to the third, and when nothing at all was dispatched it
 says so in a named sentence rather than printing `_No results._` and leaving
 you to guess which of the two happened.

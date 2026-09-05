@@ -26,6 +26,7 @@ from openstategraph.compile.diagnostics import Finding
 from openstategraph.compile.context import _text
 from openstategraph.compile.reporting import _values_never_sent
 from openstategraph.compile.run_context import render_run_context
+from openstategraph.compile.upstream import upstream_sources
 from openstategraph.compile.state import (
     NO_ANSWER_PRODUCED,
     RESET,
@@ -172,7 +173,7 @@ def _input(self: "NodeRuntime", node_id: str, node: dict[str, Any], _plan: Compi
 
 def _output(self: "NodeRuntime", node_id: str, _node: dict[str, Any], plan: CompiledPlan) -> Any:
     """Collects whatever reached it as the run's answer."""
-    upstream = [src for src, dst in plan.edges if dst == node_id]
+    sources = upstream_sources(plan, node_id)
     # What this exit is called and where it sits, read from the document
     # once at build time so the run carries no lookup (`launch-readiness/174`).
     # `self._types` is built in document order, which is the order a reader
@@ -181,9 +182,6 @@ def _output(self: "NodeRuntime", node_id: str, _node: dict[str, Any], plan: Comp
         "title": str(_node.get("title") or ""),
         "order": list(self._types).index(node_id) if node_id in self._types else 0,
     }
-    conditional_upstream = [
-        src for src, dests in plan.conditional.items() if node_id in dests.values()
-    ]
     # Guardrails ticket 02: the outbound guard is a node you place, and
     # what makes its absence loud is here. Only reported when the document
     # *has* a policy — see `Finding.UNGUARDED_EXIT` for why the absent
@@ -200,7 +198,7 @@ def _output(self: "NodeRuntime", node_id: str, _node: dict[str, Any], plan: Comp
     def run(state: RunState) -> dict[str, Any]:
         from langchain_core.messages import AIMessage
 
-        text = _upstream_text(state, upstream + conditional_upstream)
+        text = _upstream_text(state, sources)
         answer = text or state.get("answer", "")
 
         # This node is where "the run's answer" is *defined*, so it is the
