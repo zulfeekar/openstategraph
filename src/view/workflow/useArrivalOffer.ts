@@ -65,6 +65,8 @@ export function useArrivalOffer(input: {
   readonly restoredDraft: boolean;
   /** Whether this load handed over ticket 24's first-run starter. */
   readonly placedStarter: boolean;
+  /** Whether a document was already on the canvas when this load settled. */
+  readonly canvasHoldsDocument: boolean;
   readonly notify: (message: string) => void;
 }): ArrivalOffer {
   const workbench = useWorkbench();
@@ -77,7 +79,7 @@ export function useArrivalOffer(input: {
   // second `setOpen` after a dismissal would not.
   const asked = useRef(false);
 
-  const { settled, restoredDraft, placedStarter, notify } = input;
+  const { settled, restoredDraft, placedStarter, canvasHoldsDocument, notify } = input;
 
   useEffect(() => {
     if (!settled || asked.current) return;
@@ -93,6 +95,7 @@ export function useArrivalOffer(input: {
       urlNamedWorkflow: readAddressFromSearch(window.location.search) !== null,
       restoredDraft,
       placedStarter,
+      canvasHoldsDocument,
       dismissed: arrivalWasDismissed(),
     });
 
@@ -106,7 +109,7 @@ export function useArrivalOffer(input: {
       else setError(`Could not list this project's workflows: ${result.error}`);
       if (offering) setOpen(true);
     });
-  }, [settled, restoredDraft, placedStarter, client]);
+  }, [settled, restoredDraft, placedStarter, canvasHoldsDocument, client]);
 
   const dismiss = useCallback(() => {
     // Recorded first: the dialog is gone either way, and a store that refuses

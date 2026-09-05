@@ -22,6 +22,7 @@ const arriving = {
   urlNamedWorkflow: false,
   restoredDraft: false,
   placedStarter: false,
+  canvasHoldsDocument: false,
   dismissed: false,
 } as const;
 
@@ -65,6 +66,17 @@ describe('shouldOfferArrival', () => {
     // "what is this canvas", and two answers at once is the duplication this
     // repository keeps paying for.
     expect(shouldOfferArrival({ ...arriving, placedStarter: true })).toBe(false);
+  });
+
+  it('stays quiet when a document is already on the canvas', () => {
+    // `stable-beta-public/27`. Every other clause names a *route* by which a
+    // document arrives; this one names the outcome all of them share, and it
+    // is the one nothing was checking. `?demo=1` seeds thirteen nodes in
+    // `main.tsx` before React exists — no `?w=`, no draft restored, no
+    // starter — so all four clauses said "bare arrival" over a full canvas
+    // and the modal's backdrop sat on top of the work, swallowing every click
+    // and keystroke aimed at it. Nine e2e tests failed on that backdrop.
+    expect(shouldOfferArrival({ ...arriving, canvasHoldsDocument: true })).toBe(false);
   });
 
   it('stays quiet once this tab has dismissed it', () => {

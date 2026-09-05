@@ -31,6 +31,15 @@
  *   the lesson instead. It costs exactly that one load — the browser then
  *   holds a draft, the starter is never offered again, and the next tab
  *   arrives here — and the Workflows control is on screen throughout.
+ * - **`canvasHoldsDocument`** — something already put a document here, by a
+ *   route none of the clauses above names. `?demo=1` seeds the shipped
+ *   example in `main.tsx` before React exists, which is exactly that: no
+ *   `?w=`, no restored draft, no starter, and thirteen nodes on screen. The
+ *   first four clauses each name a *route* by which the canvas came to be
+ *   occupied; this one names the outcome they share, so a fifth route cannot
+ *   put a modal backdrop over somebody's work again
+ *   (`stable-beta-public/27`, where it swallowed every click and keystroke
+ *   the e2e suite aimed at the canvas).
  * - **`dismissed`** — see below.
  *
  * ## Dismissal is per tab, and that is the deliberate half
@@ -75,11 +84,17 @@ export function shouldOfferArrival(input: {
   readonly restoredDraft: boolean;
   /** Whether this load handed over ticket 24's first-run starter. */
   readonly placedStarter: boolean;
+  /** Whether a document was already on the canvas when this load settled. */
+  readonly canvasHoldsDocument: boolean;
   /** Whether this tab has already dismissed the offer. */
   readonly dismissed: boolean;
 }): boolean {
   return (
-    !input.urlNamedWorkflow && !input.restoredDraft && !input.placedStarter && !input.dismissed
+    !input.urlNamedWorkflow &&
+    !input.restoredDraft &&
+    !input.placedStarter &&
+    !input.canvasHoldsDocument &&
+    !input.dismissed
   );
 }
 

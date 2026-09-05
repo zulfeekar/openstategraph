@@ -114,10 +114,12 @@ export function AppShell() {
   // user must hear about — a full quota, an unreadable autosave, a second tab
   // that already owns this workflow. Autosave previously discarded every one
   // of those outcomes, which made "your work is safe" a claim nothing checked.
-  // `install-experience` 28 reads three of its four gate inputs from here:
-  // whether this tab restored its own draft, and whether this load handed over
-  // ticket 24's starter. Both are decided in that hook's one startup effect,
-  // and `workflowId` turning non-null is how the arrival offer knows it has.
+  // `install-experience` 28 reads every gate input but the dismissal from
+  // here: whether this tab restored its own draft, whether this load handed
+  // over ticket 24's starter, and whether a document was already on the canvas
+  // when the load settled (`stable-beta-public/27`). All three are decided in
+  // that hook's one startup effect, and `workflowId` turning non-null is how
+  // the arrival offer knows it has.
   const session = useWorkflowSession(notify);
 
   // Ticket 16's other half: notices when the saved file changes on disk
@@ -139,6 +141,7 @@ export function AppShell() {
     settled: session.workflowId !== null,
     restoredDraft: session.restore.restored,
     placedStarter: session.placedStarter,
+    canvasHoldsDocument: session.canvasHoldsDocument,
     notify,
   });
 

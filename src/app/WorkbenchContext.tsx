@@ -276,6 +276,13 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
    * and only this effect can tell that visit from every later one.
    */
   placedStarter: boolean;
+  /**
+   * Whether a document was already on the canvas when this load settled — by
+   * any route, including ones no clause above names. `?demo=1` seeds in
+   * `main.tsx` before React exists, so a non-empty model is the only evidence
+   * of it either decision can read (`stable-beta-public/27`).
+   */
+  canvasHoldsDocument: boolean;
 } {
   const controller = useController();
   const workbench = useWorkbench();
@@ -283,10 +290,12 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     restore: DraftRestoreReport;
     workflowId: string | null;
     placedStarter: boolean;
+    canvasHoldsDocument: boolean;
   }>({
     restore: { restored: false },
     workflowId: null,
     placedStarter: false,
+    canvasHoldsDocument: false,
   });
   // StrictMode mounts effects twice; restoring twice would be visible.
   const done = useRef(false);
@@ -393,6 +402,11 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
     // nothing, this tab restored nothing, and nobody's draft is in this
     // browser. What goes on is nobody's — four nodes composed here — unsaved,
     // `Untitled`, one undo away and one delete away, and never offered twice.
+    // Read once, before the starter can add to it, and used by both decisions:
+    // it is what tells a canvas somebody already has a document on from an
+    // empty one, whatever put the document there (`stable-beta-public/27`).
+    const canvasHoldsDocument = workbench.model.nodeCount > 0;
+
     const placedStarter = shouldPlaceStarter({
       opening: request.action,
       restored: restore.restored,
@@ -409,7 +423,7 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
 
     sessionStorage.setItem(DRAFT_SESSION_KEY, session.id);
     claimSession(localStorage, session.id, writer);
-    setState({ restore, workflowId: session.id, placedStarter });
+    setState({ restore, workflowId: session.id, placedStarter, canvasHoldsDocument });
   }, [controller, workbench]);
 
   /**
