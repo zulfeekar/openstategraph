@@ -234,6 +234,16 @@ class NodeVocabulary:
                             "hint": field.get("hint", ""),
                             "required": bool(field.get("required", False)),
                             "default": field.get("defaultValue"),
+                            # The half a `kind` alone does not give you
+                            # (`osg-agent-experience/33`): `select` says a
+                            # string goes here, and the options say *which*
+                            # strings. Without them a client that reads the
+                            # vocabulary still has to guess `matchMode`, and a
+                            # guessed value is a finding rather than a run.
+                            "options": [
+                                {"value": option.get("value"), "label": option.get("label", "")}
+                                for option in field.get("options") or ()
+                            ],
                         }
                         for field in record.get("fields") or ()
                     ],

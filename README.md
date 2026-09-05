@@ -255,6 +255,7 @@ looking up a flag has one place to look.
 | [`init`](docs/cli.md#init) | make a directory you already have into a project |
 | [`new`](docs/cli.md#new) | start a new package from a scaffold (`--list-templates`) |
 | [`examples`](docs/cli.md#examples) | `list` the worked examples in the wheel, `copy` one into your project |
+| [`nodes`](docs/cli.md#nodes) | every node type this install has, and one type's fields, options and ports |
 | [`validate`](docs/cli.md#validate) | check a package compiles, before anything costs money |
 | [`graph`](docs/cli.md#graph) | the topology the compiler actually built, as Mermaid text — no network call |
 | [`run`](docs/cli.md#run) | ask a package a question |

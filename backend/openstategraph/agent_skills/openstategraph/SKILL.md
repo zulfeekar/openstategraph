@@ -35,7 +35,7 @@ anything.
 
 | Step | MCP tool | Command |
 | --- | --- | --- |
-| what can be composed | `get_node_vocabulary` | read the installed `compile/port_specs.json` |
+| what can be composed | `get_node_vocabulary` | `openstategraph nodes [<type>]` |
 | what may be built | `get_engineering_rules` | `references/engineering-rules.md` beside this sheet |
 | compile-check | `compile_workflow`, `validate_workflow` | `openstategraph validate` |
 | draw what compiled | `compile_workflow`'s diagram | `openstategraph graph` |
@@ -71,11 +71,10 @@ conversation is lost at the end of it.
 A tweak's card is filed and finished in one sitting: no `attend`, no
 `red`/`green` — file it, then stage it `finished` with the commit. A
 **decision map** belongs to a feature or a slice only; it is an index of the
-decisions the concept still owes, not a store, and a decision lives in
-exactly one place.
+decisions the concept still owes, and a decision lives in exactly one place.
 
-Unsure between two rows? Take the smaller one and say so: being wrong there
-costs one more question, and guessing larger costs everything in the row.
+Unsure between two rows? Take the smaller one and say so: guessing larger
+costs everything in the row.
 
 ## 4. Before anything: read the ground rules
 
@@ -84,7 +83,11 @@ Two reads, every time, before the first node exists.
 - **The vocabulary** — every node type, every port id and type, what may
   legally connect to what, and the prompt sections that are locked. Guessing
   these produces documents that fail validation for reasons the verdict can
-  only explain afterwards.
+  only explain afterwards. **Then quote the field list for every type you are
+  about to write, in your reply, before you write a line of `data`** — the
+  keys and their kinds, copied from `openstategraph nodes <type>` (or from
+  `get_node_vocabulary`). A field invented is a field the reader can see you
+  did not quote.
 - **The rules** — what may be *built* out of them: the interface → abstract →
   base → concrete ladder, extension by registration, cardinality on the port,
   one field schema, tests first, and the rule that settles most arguments:
@@ -147,7 +150,7 @@ at the end of it. File each with `kanban_file_card` (or
 - **priority and its reason** — one sentence citing evidence from this
   interview. A priority with no reason is a guess with a label.
 - **blocked-by** — the cards this one waits on, by the **full id** filing
-  printed. A bare slug resolves to nothing and strands the card forever.
+  printed. A bare slug strands the card forever.
 - **agent_model / agent_effort** — defaults by shape:
 
 | Shape of the work | model | effort |
@@ -155,18 +158,17 @@ at the end of it. File each with `kanban_file_card` (or
 | mechanical — a rename, a field, a fixture, a doc row | a small model | low |
 | judgement — a design, a prompt, an ambiguous defect | a large model | high |
 
-These two are advice, not a contract. A platform that cannot choose its own
-model treats them as advice and says so.
+These two are advice, not a contract; a platform that cannot choose its own
+model says so.
 
 Long form of the card text: the ticket sheet installed beside this one.
 
 ## 7. Triage — take the top card
 
 Call `kanban_triage` (or `openstategraph kanban triage`). It answers with the
-cards in order and, for each, `why_here` — the rule that put it there.
-Unblocked cards that block others come first, by how many they block; then
-unblocked by priority; blocked last. Take the top one. If you want a different
-card, say which rule you are overriding and why.
+cards in order and, for each, `why_here` — the rule that put it there. Unblocked
+cards that block others come first, by how many they block; then unblocked by
+priority; blocked last. Take the top one, or say which rule you are overriding.
 
 ## 8. The build loop, once per card
 
@@ -197,27 +199,25 @@ Two standing rules inside the loop:
   Never validate a document by running it.
 - **Never `run_workflow` unless runs are enabled and the developer has said
   so.** Runs are off by default (`OPENSTATEGRAPH_MCP_ALLOW_RUNS=0`) because a
-  run costs money. If you do run something while working a card, tag it with
-  the session marker `card:<task_id>`, so the project's own patrol can tell
-  your work from the developer's.
+  run costs money. If you do run one while working a card, tag it with the
+  session marker `card:<task_id>`, so the patrol can tell your work from the
+  developer's.
 
 Long form: `references/build-loop.md`.
 
 ## 9. Helpers
 
 Spawn a subagent for a card only when it passes **all four** gates:
-
-1. **Reproducible without a person** — no question you would have to ask.
-2. **The decision is already made** — the card carries it.
-3. **Blast radius contained** — you can name the files it may touch.
-4. **Cost** — no model calls beyond the budget the card states.
+**reproducible without a person** (no question you would have to ask); **the
+decision is already made** (the card carries it); **blast radius contained**
+(you can name the files it may touch); **cost** (no model calls beyond the
+budget the card states).
 
 Use the card's `agent_model` and `agent_effort`. Brief it with the card's own
 text and the engineering rules, nothing else. When it returns, **verify its
 report against the tree** — the commit, `git status`, the tests — because a
 report is testimony and the filesystem is evidence. Then say what it did, in
-three lines. A platform with no subagents runs the loop inline and says so;
-nothing else changes.
+three lines. A platform with no subagents runs the loop inline and says so.
 
 Long form: `references/subagents.md`.
 
@@ -227,24 +227,24 @@ Explain with **text shapes** by default: a numbered list, a small table, an
 indented tree, a fenced pseudo-graph. Pick the smallest view that makes the
 point.
 
-A Mermaid sketch is allowed for exactly one thing: a **proposed** flow that
-does not exist yet. What exists is drawn by the compiler — `compile_workflow`
-returns the diagram of the graph it actually built, and `openstategraph graph`
-prints it. Never hand-draw a workflow that compiles: your sketch and the
-compiler will disagree eventually and the reader cannot tell which one lied.
+A Mermaid sketch is allowed for one thing only: a **proposed** flow that does
+not exist yet. What exists is drawn by the compiler — `compile_workflow`
+returns the diagram of the graph it built, and `openstategraph graph` prints
+it. Never hand-draw a workflow that compiles: the two disagree eventually and
+the reader cannot tell which one lied.
 
 ## 11. Environments
 
 Three starting points — a fresh folder, an existing project, an existing
-LangGraph codebase — and one fact that settles all three: the tool installs into
-its own environment and shares nothing with the project's pins, while the
-*library* shares them completely and requires `langgraph>=1.0,<2`. Read
+LangGraph codebase — settled by one fact: the tool installs into its own
+environment and shares nothing with the project's pins, while the *library*
+shares them completely and requires `langgraph>=1.0,<2`. Read
 `references/environments.md` before promising anything about an install.
 
 ## 12. Where this shape came from
 
 Nothing here is copied and no name is given — a name is a file on somebody
 else's machine, and a stranger's agent sent looking for one finds nothing. The
-shapes are credited instead: a one-question-per-turn design interview, planning
-as an index of decisions rather than a document, ordinary test-driven
-development, and *a report is testimony, the filesystem is evidence*.
+shapes are credited instead: a one-question-per-turn interview, planning as an
+index of decisions, test-driven development, and *a report is testimony, the
+filesystem is evidence*.

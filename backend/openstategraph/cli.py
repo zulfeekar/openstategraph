@@ -2679,12 +2679,62 @@ def build_parser() -> argparse.ArgumentParser:
     )
     providers_parser.set_defaults(handler=cmd_providers)
 
+    nodes_parser = subparsers.add_parser(
+        "nodes", help="what node types exist, and what fields and ports each one has"
+    )
+    nodes_parser.add_argument(
+        "type",
+        nargs="?",
+        help="a node type id, e.g. route.classifier. Omit it to list every type.",
+    )
+    nodes_parser.set_defaults(handler=cmd_nodes)
+
     env_example = subparsers.add_parser(
         "env-example", help="print the provider block of .env.example (names only)"
     )
     env_example.set_defaults(handler=cmd_env_example)
 
     return parser
+
+
+def cmd_nodes(args: argparse.Namespace) -> int:
+    """The vocabulary, through the door that had none.
+
+    `osg-agent-experience/33`. An MCP client calls `get_node_vocabulary` before
+    it composes anything; a client on the command line had no verb at all, so
+    the sheet sent it to read the installed `compile/port_specs.json` — and the
+    agent that did not read it invented a `systemPrompt` on a classifier whose
+    fields are `rules`, `branches`, `fallback` and `matchMode`.
+
+    It is a **wrapper**, like everything else here: `NodeVocabulary.describe()`
+    supplies the payload and `node_report` formats it. Nothing in this path
+    opens `port_specs.json`, because a second reader is a second place a node
+    type added in the editor has to reach.
+
+    An unknown id exits `EXIT_USAGE` rather than `EXIT_FAILURE`: nothing ran
+    and nothing failed — the word typed is not one of ours, which is the same
+    class of mistake as a flag that does not exist.
+    """
+    from openstategraph.mcp_server import NodeVocabulary
+    from openstategraph.node_report import nearest_types, node_detail_lines, node_list_lines
+
+    vocabulary = NodeVocabulary().describe()
+    if args.type is None:
+        for line in node_list_lines(vocabulary):
+            print(line)
+        return EXIT_OK
+
+    lines = node_detail_lines(vocabulary, args.type)
+    if lines is None:
+        near = nearest_types(args.type, [node["type"] for node in vocabulary["node_types"]])
+        suggestion = f" Did you mean: {', '.join(near)}?" if near else ""
+        return _usage(
+            f"no node type {args.type!r}.{suggestion} "
+            "Run `openstategraph nodes` for every type this installation has."
+        )
+    for line in lines:
+        print(line)
+    return EXIT_OK
 
 
 def cmd_providers(args: argparse.Namespace) -> int:

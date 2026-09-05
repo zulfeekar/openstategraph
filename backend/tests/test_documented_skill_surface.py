@@ -325,3 +325,39 @@ def test_no_page_asks_for_this_repositorys_own_rituals(page: Path) -> None:
     assert not offenders, (
         f"{page.name} asks a stranger's agent for one of this repository's own rituals: {offenders}"
     )
+
+
+class TestTheCliDoorCanAskWhatAFieldIs:
+    """`osg-agent-experience/33`. Both doors are supposed to answer the sheet's
+    first rule — *read the vocabulary before composing anything* — and one of
+    them could not: the CLI row of the routing table sent the agent to read the
+    installed `compile/port_specs.json` by eye. A Haiku agent that did not read
+    it invented a `systemPrompt` on a classifier whose fields are `rules`,
+    `branches`, `fallback` and `matchMode`.
+
+    Two claims are pinned, and the second is the one that changes behaviour: a
+    verb exists, **and** the sheet tells the agent to write the field list down
+    before it writes `data`. A small model does what it is told to quote."""
+
+    def _text(self) -> str:
+        return SHEET.read_text(encoding="utf-8")
+
+    def test_the_cli_row_of_the_routing_table_names_the_verb(self) -> None:
+        row = next((line for line in self._text().splitlines() if "what can be composed" in line), None)
+        assert row is not None, "the routing table lost its vocabulary row"
+        assert "openstategraph nodes" in row, f"the CLI door still has no verb for the vocabulary: {row!r}"
+
+    def test_the_verb_the_sheet_names_is_one_argparse_accepts(self) -> None:
+        """The other direction. `test_every_command_the_pages_name_is_real`
+        covers it for every page; stated here too because this row was a
+        filesystem path for as long as the sheet existed."""
+        assert "nodes" in _verbs()
+
+    def test_the_ground_rules_require_quoting_the_fields_before_writing_data(self) -> None:
+        section = next((block for block in self._text().split("\n\n") if "**The vocabulary**" in block), None)
+        assert section is not None, "the sheet no longer opens with the two reads"
+        assert "quote" in section.lower(), (
+            "the sheet asks the agent to read the vocabulary and never to write any "
+            "of it down; reading is what the Haiku agent believed it had done"
+        )
+        assert "`data`" in section, f"the instruction does not say before *what*: {section!r}"

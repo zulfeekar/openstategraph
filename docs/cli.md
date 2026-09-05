@@ -33,6 +33,7 @@ the directory you are standing in.
 | make a directory I already have into a project | [`init`](#init) |
 | start a new package from a scaffold | [`new`](#new) |
 | start from a worked example instead | [`examples`](#examples) |
+| find out what node types exist, and what each one's fields are | [`nodes`](#nodes) |
 | check a package compiles, before anything costs money | [`validate`](#validate) |
 | see the topology the compiler actually built | [`graph`](#graph) |
 | ask a package a question | [`run`](#run) |
@@ -188,6 +189,32 @@ A copied example arrives as a **draft** (`published: false`), so the `/chat`
 picker skips it until you publish it. The command says so.
 
 ## Checking things
+
+### `nodes`
+
+```
+openstategraph nodes [<type>]
+```
+
+**Read this before you write a `data` block.** With no argument it lists every
+node type this installation has, with its label and the line the editor's
+palette shows. With a type it prints that type's fields — key, kind, whether it
+is required, a picker's accepted values, and the hint the inspector shows — and
+its ports, each with its direction, its port type and how many links it takes
+(`unlimited` is a bus, such as an agent's `tools`). A type whose out-ports are
+generated from its config, like a router's `branch:<name>`, says so.
+
+No model is called and no provider extra is needed: this is the same
+vocabulary the MCP tool `get_node_vocabulary` publishes, rendered for a
+terminal, and it is generated from the node catalogue rather than written
+down — so a node type added in the editor appears here without anybody
+editing this page.
+
+Exit **2** on a type id nothing resolves, with the nearest real ids named. The
+question it exists to stop being guessed at is the one
+[`validate`](#validate)'s *unknown field* finding reports after the fact:
+`route.classifier` takes `branches`, `rules`, `fallback` and `matchMode`, and
+never a `systemPrompt`.
 
 ### `validate`
 

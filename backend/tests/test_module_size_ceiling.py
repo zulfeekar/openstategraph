@@ -440,6 +440,16 @@ same split `cmd_kanban_file` already keeps from `file_idea_card`.
 check, every sentence and the finding classes are `document_checks.py`, and
 what is here is the command folding one more list into the `problems` it
 already builds from four.
+
+**1573 -> 1601** (`osg-agent-experience/33`, 2026-09-05). Twenty-eight lines:
+`cmd_nodes` and its parser, the vocabulary verb the CLI door did not have —
+an MCP client calls `get_node_vocabulary` before composing anything and a
+client at a terminal was sent to read the installed `port_specs.json` by eye.
+The rule holds and was the reason for the size: the payload is
+`NodeVocabulary.describe()` and every line of formatting is `node_report.py`,
+so what is here is an argparse declaration, two calls and the one decision
+that is genuinely the command's — that an id nothing resolves is a *usage*
+error rather than a failure, because nothing ran.
 """
 
 WORKFLOW_COMPILER = """
@@ -741,6 +751,14 @@ here," this answers "what first." No new logic: `kanban_store.triage` owns
 the ordering and the `why_here` sentence entirely; this filters `list_cards`
 by board and adds `rank`/`why_here` onto the same `_card_payload` row every
 other kanban tool already answers with.
+
+**959 -> 963** (`osg-agent-experience/33`, 2026-09-05). Four lines, and they
+are a field the vocabulary was already the source of and did not publish: a
+`select` field's `options`. `kind: select` tells a composing client a string
+goes here and not *which* strings, so `matchMode` was still a guess — and a
+guessed picker value is `validate`'s *not an option* finding rather than a
+run. Read off the same catalogue record as every other key beside it; no new
+reader, and nothing here decides anything.
 """
 
 ROUTES_WORKFLOWS = """
@@ -1056,11 +1074,11 @@ in `api/` would be a second place that has to be told when one is added.
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(600, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1573, CLI),
+    "cli.py": Recorded(1601, CLI),
     "compile/workflow_compiler.py": Recorded(957, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(959, MCP_SERVER),
+    "mcp_server.py": Recorded(963, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(534, SCHEMAS),
