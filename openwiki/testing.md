@@ -49,7 +49,8 @@ backend.
   `backend/openstategraph/examples/` brings a `tests/test_<slug>_document.py`
   whose basename collides with the original's under two roots and no
   `__init__.py`. A package's own tests run under
-  `openstategraph test <package>`; its *document* is read by the every-package
+  plain `pytest` from inside the package (`pytest workflows/<slug>/tests`);
+  its *document* is read by the every-package
   sweep in `backend/tests/test_the_one_example.py`. Pinned by
   `backend/tests/test_collection_policy.py`.
 - **Live-network tests are opt-in.** Mark them `@pytest.mark.live`; the default

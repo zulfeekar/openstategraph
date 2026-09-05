@@ -70,5 +70,6 @@ python3 -m pytest -q                # from the repo root — backend AND workflo
 Run pytest from the repo root. Only there does pytest read the root
 `pytest.ini` (`testpaths = backend workflows/chinook-assistant`); `cd backend
 && pytest` skips the curated workflow half of the suite. A package of your own
-is run with `openstategraph test <package>` rather than by the root sweep (see
+is run with plain `pytest` from inside it (`pytest workflows/<slug>/tests`)
+rather than by the root sweep (see
 [Testing](testing.md) for how CI runs these same suites).

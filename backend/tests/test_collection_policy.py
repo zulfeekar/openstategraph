@@ -16,9 +16,22 @@ which is why "don't copy a broken one" is not a fix.
 So collection names what it collects. `backend` is our suite; the curated
 example is named by path, exactly as `pythonpath` already names it; the
 `workflows/` root is never swept. Nothing is lost by that — a package's
-`tests/` are run by `openstategraph test <package>` and its *document* is
-read by the every-package sweep (`backend/tests/test_the_one_example.py`),
-neither of which needs pytest to collect a user's files.
+`tests/` are run with plain `pytest` from inside the package directory
+(`pytest workflows/<slug>/tests`, which is what `docs/adoption.md` tells its
+author to do) and its *document* is read by the every-package sweep
+(`backend/tests/test_the_one_example.py`), neither of which needs pytest to
+collect a user's files.
+
+This paragraph used to say a package's tests are run by `openstategraph test
+<package>`. **There is no `test` verb and there never has been**, and the
+sentence was not confined to this file: OpenWiki read this docstring and
+stamped the claim onto `openwiki/testing.md` and `openwiki/quickstart.md`,
+where the first command a stranger copies now returned exit 2
+(`docs-onramp/07`). It is corrected here, at the source the generator reads,
+rather than on the generated pages — and
+`backend/tests/test_a_documented_verb_is_one_the_parser_accepts.py` now holds
+every documented `openstategraph <verb>` against the real argparse, so the
+next one is a red test rather than a stranger's usage error.
 
 This file fails the day `workflows` goes back in as a bare root.
 """
