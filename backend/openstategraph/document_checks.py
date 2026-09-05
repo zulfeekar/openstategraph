@@ -22,14 +22,20 @@ about one property of one context. The next one due is
 the compiled plan keeps one — which needs the same nodes, the same edges and
 the same catalogue, and so needs no new machinery here.
 
-Seven of them are defined in this module, beside the registry they register into.
+Eight of them are defined in this module, beside the registry they register into.
 `test_a_dispatch_table_does_not_hold_its_targets.py` does not see that — it
 looks for `registry.register(key, target)`, and a decorator has no such pair —
 so the claim is made here rather than left to a census that cannot check it:
-these seven are one reason to change, in the sense that module's docstring grants
+these eight are one reason to change, in the sense that module's docstring grants
 `compile/reducers.py` its four named reducers. They are the *same* question
-asked of six properties, they share `_typed_nodes` and one skip rule, and a
-seventh registers from wherever it is written.
+asked of seven properties, they share `_typed_nodes` and one skip rule, and a
+ninth registers from wherever it is written.
+
+The eighth (`no_backend_implementation`, `osg-agent-experience/72`) is the same
+question asked of the type itself rather than of the document's use of it: a
+placed type this runtime has no implementation for. It reads the catalogue's
+mark and nothing else, for the reason its own docstring gives — this door also
+answers for a stateless MCP client with no workflow library.
 
 **Where it stops.** These checks describe *this* document against *this*
 build's catalogue. A node type the catalogue has no field schema for is
@@ -87,6 +93,9 @@ class FindingClass(str, Enum):
     #: no branch — including the empty answer a raised check produces — has
     #: nowhere to go.
     UNWIRED_FALLBACK = "unwired-fallback"
+    #: A placed node type the editor executes and this runtime has no
+    #: implementation for, so a run reports it by name after the model is paid.
+    NO_BACKEND = "no-backend"
 
 
 @dataclass(frozen=True)
@@ -783,6 +792,45 @@ def unwired_fallback(context: CheckContext) -> Iterable[DocumentFinding]:
             "destination happens to be first and records the loss instead of routing it. "
             'Wire "fallback" to the node that should handle an answer this fork did not '
             "recognise.",
+        )
+
+
+@register_document_check
+def no_backend_implementation(context: CheckContext) -> Iterable[DocumentFinding]:
+    """A placed type the editor executes and this runtime cannot.
+
+    `osg-agent-experience/72`. `tool.reddit-search` has a TypeScript executor
+    and labelled sample rows, so on the canvas it looks alive; a backend run
+    answers `No implementation for tool "tool.reddit-search"` on the developer
+    channel — by name, correctly, and only *after* the model was paid.
+    `validate` said VALID. This is `CLAUDE.md`'s fourth-channel rule ("an id
+    nothing resolves is reported by name") satisfied at the last possible
+    moment instead of the first.
+
+    **Read off the catalogue's mark, not off the tool registry, and that is a
+    decision rather than a shortcut.** `validate` also answers for a document
+    posted to the stateless MCP door, which carries no workflow library;
+    building the registry there would walk every installed distribution's
+    entry points to answer a question about a document. So the descriptor
+    declares it once (`editorOnly` in `src/nodes/**`, emitted as
+    `editor_only`), and
+    `backend/tests/test_a_card_with_no_backend_says_so.py` censuses the mark
+    against the `*_TOOLS` registries `api/registries.py` assembles — derived,
+    never a literal list — so a card cannot wear the mark falsely or go
+    without it.
+    """
+    marked = CATALOGUE.editor_only
+    for node_id, node in context.nodes.items():
+        node_type = str(node.get("type") or "")
+        if node_type not in marked:
+            continue
+        yield DocumentFinding(
+            FindingClass.NO_BACKEND,
+            node_id,
+            f'Node "{node_id}" is a {node_type}, which the editor runs with sample '
+            "data and this runtime has no implementation for. A backend run binds "
+            "every other tool on the agent and reports this one as missing, after "
+            "the model has been paid. Remove it, or run the workflow in the editor.",
         )
 
 

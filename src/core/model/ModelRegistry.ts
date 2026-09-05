@@ -123,6 +123,8 @@ export interface NodeSpec {
   readonly scope?: INodeDefinition['scope'];
   /** See `INodeDefinition.bindsWithoutWiring`. Omitted means "needs an edge". */
   readonly bindsWithoutWiring?: boolean;
+  /** See `INodeDefinition.editorOnly`. Omitted means the backend runs it. */
+  readonly editorOnly?: boolean;
 }
 
 type NodeConstructor = new (definition: INodeDefinition, init: NodeInit) => AbstractNodeModel;
@@ -251,6 +253,7 @@ export function defineNode(spec: NodeSpec, Model: NodeConstructor): INodeDefinit
     ...(spec.keywords ? { keywords: spec.keywords } : {}),
     ...(spec.scope ? { scope: spec.scope } : {}),
     ...(spec.bindsWithoutWiring ? { bindsWithoutWiring: true } : {}),
+    ...(spec.editorOnly ? { editorOnly: true } : {}),
     // Self-referencing on purpose — every instance reports the definition it
     // was built from. `extendFields` below exists because of this line.
     create: (init) => new Model(definition, init),

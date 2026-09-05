@@ -168,6 +168,16 @@ def node_detail_lines(vocabulary: Mapping[str, Any], node_type: str) -> list[str
         lines.append(description)
     if not node.get("executes", True):
         lines.append("(a note on the canvas; the compiler never schedules it)")
+    if node.get("editor_only"):
+        # The one thing a reader composing a document for the *backend* has to
+        # know about this type, and until `osg-agent-experience/72` no door
+        # said it: the editor runs the card with sample data and this runtime
+        # has no implementation, so a run reports it missing after the model
+        # has been paid.
+        lines.append(
+            "(editor-only: the editor runs this card with sample data; this "
+            "runtime has no implementation, so a backend run reports it missing)"
+        )
     lines.append("")
     lines.extend(_field_lines(node))
     lines.append("")

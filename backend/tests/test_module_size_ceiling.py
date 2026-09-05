@@ -889,6 +889,14 @@ the sentence and every number in it are `step_budget.py`'s — this door calls
 the budget is decided here. A literal typed into this payload is exactly the
 defect the ticket closed, one layer along.
 
+**993 -> 994** (`osg-agent-experience/72`). One line, plus its comment: the
+`editor_only` mark on each published node type. A composing client that placed
+`tool.reddit-search` got a document that validated and ran and then reported
+the tool missing, after the model had been paid. The value is read off
+`CATALOGUE.editor_only`, which reads the mark the editor's own descriptor
+declares — this door decides nothing about it, exactly as it decides nothing
+about the step budget one paragraph up.
+
 """
 
 ROUTES_WORKFLOWS = """
@@ -1245,7 +1253,7 @@ RECORDED: dict[str, Recorded] = {
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(993, MCP_SERVER),
+    "mcp_server.py": Recorded(994, MCP_SERVER),
     "api/routes/workflows.py": Recorded(619, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(556, SCHEMAS),

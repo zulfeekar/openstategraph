@@ -28,6 +28,16 @@ export const redditSearchNode: INodeDefinition = defineToolNode(
     iconId: 'node-reddit',
     accent: 'orange',
     keywords: ['reddit', 'search', 'trending', 'social', 'community'],
+    // The editor runs this card; the backend has no implementation for it in
+    // any `*_TOOLS` registry, so a backend run reports `No implementation for
+    // tool "tool.reddit-search"` — correctly, by name, and only after the
+    // model has been paid (`osg-agent-experience/72`). Nothing below is
+    // deleted: the executor and its labelled sample rows are what makes the
+    // card work in the editor, and whether Reddit gets a real read-only
+    // backend tool is the owner's call. Until then the mark travels to every
+    // door — palette, `get_node_vocabulary`, `openstategraph nodes`,
+    // `docs/modules.md`, and a `validate` finding — from this one line.
+    editorOnly: true,
     defaultSize: { width: 252, height: 190 },
     fields: [
       {

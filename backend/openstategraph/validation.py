@@ -309,11 +309,20 @@ def unresolved_tool_bindings(document: dict[str, Any], package_dir: Path) -> lis
             f'declares node_type = "{tool_type}".'
         )
 
+    # A type the *editor* executes and this runtime does not is unresolved here
+    # too, and every remedy above is wrong for it: there is no `tools/` folder
+    # to copy and no plugin to install, because the implementation is
+    # TypeScript and it is not missing — it was never on this side
+    # (`osg-agent-experience/72`). `document_checks.no_backend_implementation`
+    # names those by node id, with the sentence that is actually true, and it
+    # does so on every door rather than only where there is a package on disk.
+    from openstategraph.compile.node_catalogue import CATALOGUE
+
     findings: list[str] = []
     seen: set[str] = set()
     for node_id in bound:
         tool_type = types.get(node_id, "")
-        if tool_type in registry or tool_type in seen:
+        if tool_type in registry or tool_type in seen or tool_type in CATALOGUE.editor_only:
             continue
         seen.add(tool_type)
         findings.append(

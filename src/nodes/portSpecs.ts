@@ -40,7 +40,7 @@ import { LEGACY_SKILL_BODY_KEY } from './inputs/SkillNode';
  */
 
 /** Bumped when the artifact's shape changes in a way Python must notice. */
-export const PORT_SPEC_SCHEMA_VERSION = 6;
+export const PORT_SPEC_SCHEMA_VERSION = 7;
 
 /** Where the emitted artifact lives, relative to the repository root. */
 export const PORT_SPEC_ARTIFACT_PATH = 'backend/openstategraph/compile/port_specs.json';
@@ -133,6 +133,22 @@ export interface GeneratedNodeType {
    * source rather than a hand-kept list.
    */
   readonly accepts_skill: boolean;
+
+  /**
+   * Does the **editor alone** execute this type — i.e. is there no Python
+   * implementation for it in any `*_TOOLS` registry?
+   *
+   * True for `tool.reddit-search` and nothing else today. It has a TypeScript
+   * executor with labelled sample rows, so the canvas runs it; a backend run
+   * answered `No implementation for tool "tool.reddit-search"` after the model
+   * had been paid, and every describing surface offered the card with no mark
+   * (`osg-agent-experience/72`). Emitted for the reason `drives_model` is:
+   * TypeScript declares, Python asserts, and
+   * `backend/tests/test_a_card_with_no_backend_says_so.py` censuses the claim
+   * against the registries so the mark cannot be worn falsely in either
+   * direction.
+   */
+  readonly editor_only: boolean;
 
   /**
    * Every key this node type's own configuration writes into `data` —
@@ -464,6 +480,7 @@ export function buildPortSpecArtifact(): NodeCatalogueArtifact {
         // `skill` port too, but it is the provider half, the file being
         // offered rather than a prompt being shaped.
         accepts_skill: ports.some((port) => port.id === SKILL_PORT_ID && port.direction === 'in'),
+        editor_only: definition.editorOnly === true,
         // Through `defaultsFrom` rather than `fields.map(f => f.key)`, because
         // the data record is what the backend reads and a `file` field writes
         // two keys into it. Sorted so the drift diff is about the catalogue.

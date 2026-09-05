@@ -303,7 +303,10 @@ def _table(rows: list[dict]) -> list[str]:
         "| --- | --- | --- | --- |",
     ]
     for node in rows:
+        # Two independent marks, so a row can carry both: † is where the type
+        # comes from, ‡ is whether this runtime can run it.
         mark = " †" if node.get("scope") == "workflow" else ""
+        mark += " ‡" if node.get("editor_only") else ""
         out.append(
             f"| `{node['type']}`{mark} | {_cell(node['label'])} "
             f"| {_cell(node['description'])} | {deeper_for(node['type'])} |"
@@ -330,6 +333,7 @@ def render() -> str:
         f"{name} {len(by_category.get(name, []))}" for name, _, _ in CATEGORIES
     )
     workflow_scoped = [n["type"] for n in types if n.get("scope") == "workflow"]
+    editor_only = [n["type"] for n in types if n.get("editor_only")]
 
     lines: list[str] = [
         STAMP,
@@ -375,7 +379,18 @@ def render() -> str:
         "package rather than by the install, so they appear only in a project that",
         "carries that package. Your own `tools/*.py` become cards the same way — see",
         "[building an atom](building-an-atom.md).",
-        "",
+        "",        *(
+            [
+                f"‡ **Editor-only** — {len(editor_only)} of the {len(types)} "
+                "carry this mark (`" + "`, `".join(editor_only) + "`). The editor "
+                "runs them with sample data and this runtime has no implementation, "
+                "so a backend run reports the tool as missing after the model has "
+                "been paid. `validate` says so first, as a `no-backend` finding.",
+                "",
+            ]
+            if editor_only
+            else []
+        ),
         "## The other built-in families",
         "",
         "Each of these already has a canonical page or a command that prints it, and",

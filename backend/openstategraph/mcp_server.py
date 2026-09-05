@@ -211,6 +211,14 @@ class NodeVocabulary:
                     # `workflow` means the type travels with one workflow's own
                     # package and is not available everywhere.
                     "scope": record.get("scope", "app"),
+                    # True when the **editor** executes this type and this
+                    # runtime has no implementation for it. A composing client
+                    # that places one gets a document that validates, runs, and
+                    # reports the tool as missing after the model has been paid
+                    # (`osg-agent-experience/72`), so the mark is published
+                    # here rather than discovered there. `validate_workflow`
+                    # names it too, as a `no-backend` finding.
+                    "editor_only": node_type in CATALOGUE.editor_only,
                     "ports": [
                         {
                             "id": port_id,

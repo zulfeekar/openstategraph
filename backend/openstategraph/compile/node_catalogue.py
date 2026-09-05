@@ -45,7 +45,11 @@ from typing import Any
 #: factory each, and until it was published the ids a document had to use
 #: existed only in `default_port_resolver`'s fallback
 #: (`osg-agent-experience/46`).
-SCHEMA_VERSION = 6
+#: 7 added `editor_only`: the node types the *editor* executes and this runtime
+#:   has no implementation for. One card had that shape and nothing said so
+#:   until a run did, by which time the model had been paid
+#:   (`osg-agent-experience/72`).
+SCHEMA_VERSION = 7
 
 #: Ships inside the package, not at the repo root: an installed wheel has no
 #: repository around it.
@@ -174,6 +178,25 @@ class NodeCatalogue:
         """
         return frozenset(
             str(node["type"]) for node in self.nodes if node.get("drives_model")
+        )
+
+    @property
+    def editor_only(self) -> frozenset[str]:
+        """The node types the editor executes and this runtime does not.
+
+        A card with a TypeScript executor and no entry in any `*_TOOLS`
+        registry — `tool.reddit-search` today. The backend already reported it
+        by name (`No implementation for tool ...`), but only during a run, and
+        `validate`, `get_node_vocabulary` and `docs/modules.md` all presented
+        the type as one of the real ones (`osg-agent-experience/72`).
+
+        Declared on the descriptor and asserted against the registries by
+        `backend/tests/test_a_card_with_no_backend_says_so.py`, which is the
+        half that keeps the mark honest: this property only reads what the
+        editor said.
+        """
+        return frozenset(
+            str(node["type"]) for node in self.nodes if node.get("editor_only")
         )
 
     @property

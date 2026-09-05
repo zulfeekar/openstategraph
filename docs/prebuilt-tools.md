@@ -107,6 +107,13 @@ the backend does not get this tool. It reports the loss rather than hiding it:
 *"No implementation for tool "tool.reddit-search" — the agent ran without it,
 so its answer may not be grounded in that data source."*
 
+Every door says so now, from one field on the card's own descriptor
+(`osg-agent-experience/72`): the type is marked `editor_only` in the generated
+catalogue, `openstategraph nodes tool.reddit-search` prints it, the MCP
+vocabulary publishes it to a composing agent, it carries a ‡ in [every built-in
+module](modules.md), and `validate` reports a document that places it as a
+`no-backend` finding — before a run, rather than after the model has been paid.
+
 **Configured with:** `subreddit` and `topicLimit`.
 
 **Refuses.** Nothing at run time, because nothing runs. The editor's own

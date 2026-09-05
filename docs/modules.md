@@ -67,7 +67,7 @@ A tool is a capability you plug into an agent's `tools` bus; the agent decides w
 | `tool.platform-list-workflows` | List Workflows | Lists every workflow on this platform (read-only). | [the platform's own tools](mcp.md) |
 | `tool.platform-ls` | Repo ls | Lists a repository directory (read-only, jailed). | [the platform's own tools](mcp.md) |
 | `tool.platform-read-file` | Repo Read File | Reads one repository text file (read-only, jailed, capped). | [the platform's own tools](mcp.md) |
-| `tool.reddit-search` | Search Reddit | Finds trending posts in a subreddit. | [the prebuilt tools](prebuilt-tools.md) |
+| `tool.reddit-search` ‡ | Search Reddit | Finds trending posts in a subreddit. | [the prebuilt tools](prebuilt-tools.md) |
 | `tool.session-identity` | Session Identity | Who the run belongs to — the user, the session and the thread id. Read-only, and taken from the run rather than from anything said in it. | [the prebuilt tools](prebuilt-tools.md) |
 | `tool.sql-get-schema` | Get Schema | Columns, types and foreign keys for one table in the configured SQL database. | [the SQL atoms](on-the-canvas.md) |
 | `tool.sql-list-tables` | List Tables | Every table in the configured SQL database, with row counts. Orientation first — an agent calls this before it knows what exists. | [the SQL atoms](on-the-canvas.md) |
@@ -124,6 +124,8 @@ Neither of these compiles to anything. They are the labels and frames that make 
 package rather than by the install, so they appear only in a project that
 carries that package. Your own `tools/*.py` become cards the same way — see
 [building an atom](building-an-atom.md).
+
+‡ **Editor-only** — 1 of the 43 carry this mark (`tool.reddit-search`). The editor runs them with sample data and this runtime has no implementation, so a backend run reports the tool as missing after the model has been paid. `validate` says so first, as a `no-backend` finding.
 
 ## The other built-in families
 

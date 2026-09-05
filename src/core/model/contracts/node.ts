@@ -259,6 +259,29 @@ export interface INodeDefinition extends IIdentifiable {
    * a node type that never says anything is treated as `'app'`.
    */
   readonly scope?: NodeScope;
+
+  /**
+   * Declared by a node type the **editor** executes and the backend does not.
+   *
+   * `tool.reddit-search` is the one that has it: its executor lives in
+   * `src/nodes/tools/RedditSearchNode.ts` and returns labelled sample rows
+   * when Reddit refuses a browser origin, and there is no Python
+   * implementation in any `*_TOOLS` registry at all. A backend run therefore
+   * answered `No implementation for tool "tool.reddit-search"` — correctly,
+   * by name, and only after the model had been paid — while the palette, the
+   * MCP vocabulary and the generated module index all presented the card as
+   * one of the real ones (`osg-agent-experience/72`).
+   *
+   * So the descriptor says it once and every door reads it from here: emitted
+   * as `editor_only` in `port_specs.json`, surfaced by `get_node_vocabulary`
+   * and `openstategraph nodes <type>`, marked in `docs/modules.md`, and turned
+   * into a `validate` finding by `document_checks.no_backend_implementation`.
+   *
+   * Omitted means "the backend runs it", and
+   * `backend/tests/test_a_card_with_no_backend_says_so.py` censuses the claim
+   * against the registries rather than trusting it.
+   */
+  readonly editorOnly?: boolean;
   /**
    * True when this node type's capability reaches the run **without being
    * wired to anything** (ticket 09).

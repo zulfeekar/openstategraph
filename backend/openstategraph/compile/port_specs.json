@@ -1,5 +1,5 @@
 {
-  "schema_version": 6,
+  "schema_version": 7,
   "generated_by": "npm run generate:ports",
   "source": "src/nodes/portSpecs.ts",
   "warning": "GENERATED FILE — DO NOT EDIT. The TypeScript node catalogue is authoritative; run `npm run generate:ports` after changing a node type or a port.",
@@ -127,6 +127,7 @@
       "dynamic_ports": [],
       "drives_model": true,
       "accepts_skill": true,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -283,6 +284,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "notes",
         "title"
@@ -317,6 +319,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "body"
       ],
@@ -369,6 +372,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -460,6 +464,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "check",
@@ -561,6 +566,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "blockedMessage",
         "cacheTtlSeconds",
@@ -682,6 +688,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -747,6 +754,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "content",
@@ -822,6 +830,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "instruction",
@@ -905,6 +914,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -984,6 +994,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -1103,6 +1114,7 @@
       "dynamic_ports": [],
       "drives_model": true,
       "accepts_skill": true,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -1251,6 +1263,7 @@
       "dynamic_ports": [],
       "drives_model": true,
       "accepts_skill": true,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "default",
@@ -1363,6 +1376,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "format",
@@ -1443,6 +1457,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -1522,6 +1537,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "catalogue",
@@ -1619,6 +1635,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxEntries",
@@ -1728,6 +1745,7 @@
       ],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "branches",
         "cacheTtlSeconds",
@@ -1847,6 +1865,7 @@
       ],
       "drives_model": true,
       "accepts_skill": true,
+      "editor_only": false,
       "field_keys": [
         "branches",
         "cacheTtlSeconds",
@@ -2068,6 +2087,7 @@
       "dynamic_ports": [],
       "drives_model": true,
       "accepts_skill": true,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "criteria",
@@ -2211,6 +2231,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -2276,6 +2297,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -2332,6 +2354,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -2388,6 +2411,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "allowlist",
         "cacheTtlSeconds",
@@ -2499,6 +2523,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -2564,6 +2589,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -2620,6 +2646,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -2712,6 +2739,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "allowlist",
         "cacheTtlSeconds",
@@ -2805,6 +2833,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -2861,6 +2890,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -2917,6 +2947,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -2973,6 +3004,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -3029,6 +3061,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -3085,6 +3118,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": true,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -3159,6 +3193,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -3215,6 +3250,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "database",
@@ -3281,6 +3317,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "database",
@@ -3347,6 +3384,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "database",
@@ -3422,6 +3460,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -3478,6 +3517,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -3534,6 +3574,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
@@ -3590,6 +3631,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "allowAutoCaptions",
         "cacheTtlSeconds",
@@ -3687,6 +3729,7 @@
       "dynamic_ports": [],
       "drives_model": false,
       "accepts_skill": false,
+      "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
