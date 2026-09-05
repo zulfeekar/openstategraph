@@ -35,16 +35,28 @@ describe the workflow. The server's presence is enough.
    what the tools fetch, what may not be invented, the budgets, and what
    "done" looks like. **"We do not know yet" is a legal answer** — an
    explicitly accepted gap is settled; a silent one is not.
-4. **It sizes the work and tells you which way it went.** A one-field change
+4. **It recommends a shape, and says what it rejected.** Before a single card
+   exists it asks the one question the interview does not: *what in this
+   concept is going to multiply?* — specialists, sources, tenants, teams,
+   checks, decisions. It reads your counts against a catalogue of the
+   platform's own idioms (one agent; a router in front of N mounted packages;
+   a revision loop; a supervisor fan-out; a guard gate; ask-back; a primary
+   with a facet; one tool family behind an allowlist), then names the shape it
+   recommends, the two it rejected with a reason each, and what the
+   recommended one costs in calls, folders and test suites — and asks you to
+   confirm. This step exists because a concept with fifteen specialists was
+   once built, correctly, as sixty-six nodes on one canvas: every node right,
+   the shape wrong, and nobody able to say so until it ran.
+5. **It sizes the work and tells you which way it went.** A one-field change
    goes straight to building. A multi-session concept gets a decision map
    first, resolved one decision at a time.
-5. **It files the work as cards on your board** — every task and every
+6. **It files the work as cards on your board** — every task and every
    decision, each with a story, a done-when you can run, a priority carrying
    its own reason, and what it is blocked by.
-6. **It triages and takes the top card.** Cards that unblock other cards come
+7. **It triages and takes the top card.** Cards that unblock other cards come
    first, then priority; blocked cards last. Every card comes back with the
    rule that put it where it is.
-7. **It builds one card at a time, test first.** Claim the card, write the
+8. **It builds one card at a time, test first.** Claim the card, write the
    failing test, watch it fail, make it pass, **break the fix and watch it
    fail again**, commit, mark it finished with the commit. The board refuses a
    finished card that carries no commit.

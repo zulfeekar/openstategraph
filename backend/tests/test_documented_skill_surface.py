@@ -41,6 +41,7 @@ cannot mistake for an instruction to invoke something.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from pathlib import Path
 
@@ -119,6 +120,7 @@ def test_the_sheet_and_its_references_were_found() -> None:
     assert {page.name for page in REFERENCES.glob("*.md")} == {
         "interview.md",
         "build-loop.md",
+        "shapes.md",
         "subagents.md",
         "environments.md",
     }
@@ -361,3 +363,190 @@ class TestTheCliDoorCanAskWhatAFieldIs:
             "of it down; reading is what the Haiku agent believed it had done"
         )
         assert "`data`" in section, f"the instruction does not say before *what*: {section!r}"
+
+
+class TestTheRecommendedShapeStep:
+    """`osg-agent-experience/49`. The interview asked eight questions, filed
+    six cards and never once said *what shape this concept should be*. The
+    owner's concept was built as sixty-six nodes on one canvas — fifteen
+    specialists, fifteen guards, fifteen graders, fifteen outputs — and a
+    ten-minute conversation afterwards reached the shape a senior colleague
+    would have named before the first card: fifteen packages behind one
+    router. Every idiom in that sentence already existed. The sheet knew them
+    by name and never said *when to reach for which*.
+
+    Owner's framing, the same day: *"it is not just about lenses; we are
+    talking about the product's scalability."* So the step asks the scaling
+    question — **what in this concept is going to multiply?** — and reads the
+    answer against a catalogue whose rules a test can run.
+
+    Three claims are pinned here and the third is the one that makes the
+    recommendation checkable rather than a mood:
+
+    - the step exists, after the interview and before the cards are sized and
+      filed;
+    - every node type the catalogue names is a type the registry knows —
+      the sheet's own first rule turned on the sheet's own catalogue;
+    - the catalogue's rules, applied to the interview answers the owner's
+      concept actually gave, pick *router -> N mounts*. No model runs. The
+      table in `shapes.md` is the program.
+
+    On the word *sizing*. The ticket asks for the step "before sizing and
+    filing"; the ask-size gate is pinned first by `osg-agent-experience/31`
+    and stays there. The sizing this step precedes is the one it can
+    precede — the per-card size, model and effort chosen at filing.
+    """
+
+    HEADING = re.compile(r"^##\s+\d+\.\s+(.*)$", re.MULTILINE)
+
+    #: `agent.llm`, `route.classifier`. The prefix must be a category the
+    #: registry itself declares, derived rather than listed, so an ordinary
+    #: dotted filename in prose is not mistaken for a promise about a type.
+    DOTTED = re.compile(r"`([a-z][a-z0-9]*\.[a-z][a-z0-9_-]*)`")
+
+    #: The document is not a node type and shares a category's spelling.
+    NOT_A_TYPE = {"workflow.json"}
+
+    #: A catalogue rule, as a test can run it: an axis and a count.
+    RULE = re.compile(r"^([a-z]+)\s*>=\s*(\d+)$")
+
+    #: The concept, as the interview actually answered it — from a real
+    #: transcript, not invented: fifteen specialists, one warehouse holding
+    #: forty-two pinned tables, one grain each, a question that can name a
+    #: second specialist as a facet, one fact the code checks, one judge that
+    #: can say what is wrong, one axis a question may arrive without.
+    FIFTEEN_SPECIALISTS = {
+        "specialists": 15,
+        "sources": 1,
+        "tables": 42,
+        "parts": 1,
+        "teams": 1,
+        "tenants": 1,
+        "checks": 1,
+        "revisions": 1,
+        "crossings": 1,
+        "gaps": 1,
+    }
+
+    #: The discriminating fixture: one domain, and every axis flat.
+    ONE_DOMAIN = {"specialists": 1, "sources": 1, "tables": 1}
+
+    def _headings(self) -> list[str]:
+        return [m.group(1).strip() for m in self.HEADING.finditer(SHEET.read_text(encoding="utf-8"))]
+
+    def _index_of(self, needle: str) -> int:
+        for position, heading in enumerate(self._headings()):
+            if needle in heading.lower():
+                return position
+        raise AssertionError(f"no numbered section of the sheet mentions {needle!r}: {self._headings()}")
+
+    def _catalogue(self) -> str:
+        page = REFERENCES / "shapes.md"
+        assert page.is_file(), "the catalogue the step reads does not exist"
+        return page.read_text(encoding="utf-8")
+
+    def _table(self, first_header_cell: str) -> list[tuple[str, str]]:
+        """The rows of the table whose header row opens with that cell."""
+        rows: list[tuple[str, str]] = []
+        lines = self._catalogue().splitlines()
+        for position, line in enumerate(lines):
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if cells and cells[0].lower() == first_header_cell:
+                for row in lines[position + 2 :]:
+                    if not row.strip().startswith("|"):
+                        break
+                    body = [cell.strip() for cell in row.strip().strip("|").split("|")]
+                    if len(body) >= 2:
+                        rows.append((body[0], body[1]))
+                break
+        assert rows, f"the catalogue has no table headed {first_header_cell!r} for a test to read"
+        return rows
+
+    def _spine(self, answers: dict[str, int]) -> str:
+        """First match wins, and the catalogue says so in the same words."""
+        for axis, shape in self._table("multiplies"):
+            if axis.lower().startswith("otherwise"):
+                return shape
+            match = self.RULE.match(axis)
+            assert match, f"a catalogue rule a test cannot run: {axis!r}"
+            if answers.get(match.group(1), 0) >= int(match.group(2)):
+                return shape
+        raise AssertionError("the catalogue's rules match nothing and have no otherwise row")
+
+    def _additions(self, answers: dict[str, int]) -> list[str]:
+        found = []
+        for axis, addition in self._table("also true"):
+            match = self.RULE.match(axis)
+            assert match, f"a catalogue rule a test cannot run: {axis!r}"
+            if answers.get(match.group(1), 0) >= int(match.group(2)):
+                found.append(addition)
+        return found
+
+    def test_the_step_is_a_numbered_step_of_its_own(self) -> None:
+        assert self._index_of("shape") >= 0
+
+    def test_it_follows_the_interview_and_precedes_filing(self) -> None:
+        """The whole defect, as one assertion: the cards were filed against a
+        shape nobody had named."""
+        assert self._index_of("interview") < self._index_of("shape") < self._index_of("filing"), (
+            "the shape is recommended somewhere other than between the interview "
+            "and the cards, which is the only place it can change what gets built"
+        )
+
+    def test_the_step_asks_what_multiplies_and_names_what_it_rejected(self) -> None:
+        text = SHEET.read_text(encoding="utf-8")
+        section = text[text.index("## 6."):text.index("## 7.")]
+
+        assert "multiply" in section.lower(), (
+            "the step never asks the scaling question, which is the owner's whole framing"
+        )
+        assert "reject" in section.lower(), (
+            "a recommendation with no rejected alternatives is an assertion; the "
+            "developer cannot weigh what they were not shown"
+        )
+        assert "references/shapes.md" in section, "the step never says where the catalogue is"
+
+    def test_every_node_type_the_catalogue_names_is_one_the_registry_knows(self) -> None:
+        """The sheet's own first rule, turned on the sheet's own catalogue. A
+        shape recommended out of a type nobody registered is the invented node
+        type, arriving one level up where no validator looks."""
+        specs = json.loads((ROOT / "backend" / "openstategraph" / "compile" / "port_specs.json").read_text())
+        known = {node["type"] for node in specs["node_types"]}
+        categories = {name.split(".", 1)[0] for name in known}
+
+        claimed = {
+            name
+            for name in self.DOTTED.findall(self._catalogue())
+            if name.split(".", 1)[0] in categories and name not in self.NOT_A_TYPE
+        }
+        assert claimed, "the catalogue recommends shapes and names no node type at all"
+
+        unknown = sorted(name for name in claimed if name not in known)
+        assert not unknown, f"the catalogue recommends node types the registry does not know: {unknown}"
+
+    def test_the_catalogue_recommends_router_and_mounts_for_the_owners_concept(self) -> None:
+        """The ticket's own done-when, as rules rather than as a model: the
+        interview answers that produced sixty-six nodes on one canvas."""
+        spine = self._spine(self.FIFTEEN_SPECIALISTS).lower()
+
+        assert "router" in spine and "mount" in spine, (
+            f"the catalogue's rules read the owner's own answers and picked {spine!r}; "
+            "fifteen specialists behind one router is the shape the brainstorm reached"
+        )
+
+    def test_the_same_rules_leave_a_single_domain_concept_as_one_agent(self) -> None:
+        """The rules discriminate. A catalogue that answers *router* to
+        everything has recommended nothing."""
+        spine = self._spine(self.ONE_DOMAIN).lower()
+
+        assert "one agent" in spine, f"one domain, and the catalogue still reaches for a router: {spine!r}"
+
+    def test_the_additions_carry_the_facet_and_the_gate(self) -> None:
+        """The spine is not the whole recommendation. The owner's concept also
+        crosses two specialists in one question and has a fact the code can
+        check; both were reached in the brainstorm and both are add-ons rather
+        than rival shapes."""
+        additions = " | ".join(self._additions(self.FIFTEEN_SPECIALISTS)).lower()
+
+        assert "facet" in additions, additions
+        assert "guard" in additions or "gate" in additions, additions
