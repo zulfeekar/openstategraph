@@ -525,6 +525,14 @@ the two already here. The rule it applies lives in `function_contracts.py` and
 the resolution in `validation.py` — this file gained a call and a comment
 saying what it costs, which is the shape both of its neighbours already have.
 
+**1684 -> 1683** (`docs-onramp/08`, 2026-09-05). One line out, and it is a
+deletion of nothing: eleven `help=` strings carrying internal ticket ids —
+`kanban-patrol/19`, `osg-agent-experience/65` and nine more — printed those ids
+at a user who cannot resolve them, since a ticket is a file under `.scratch/`
+and ships in no wheel. The references moved into comments beside the strings,
+which is why the code count fell rather than rose: two of them were
+continuation lines that the shorter help text no longer needs.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -1225,7 +1233,7 @@ it.
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(690, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
-    "cli.py": Recorded(1684, CLI),
+    "cli.py": Recorded(1683, CLI),
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

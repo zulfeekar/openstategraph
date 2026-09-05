@@ -2549,9 +2549,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export_toolkit_cmd.set_defaults(handler=cmd_export_toolkit)
 
+    # `kanban-patrol/19`. The provenance stays here, in the tree, and off the
+    # terminal: a ticket id names a file under `.scratch/`, which ships in no
+    # wheel, so a user who reads one in `--help` cannot resolve it
+    # (`docs-onramp/08`). The same applies to every reference moved into a
+    # comment below.
     kanban = subparsers.add_parser(
         "kanban",
-        help="attend and advance a kanban-board card (kanban-patrol/19) — the CLI door, "
+        help="attend and advance a kanban-board card — the CLI door, "
         "beside the MCP one, for a coding agent that is not attached to this project's server",
     )
     kanban_commands = kanban.add_subparsers(dest="kanban_command", required=True)
@@ -2560,7 +2565,8 @@ def build_parser() -> argparse.ArgumentParser:
         "attend", help="claim a card, exclusively — first caller wins, the second is told who has it"
     )
     kanban_attend.add_argument("task_id")
-    kanban_attend.add_argument("--actor", required=True, help="who is attending — kanban-patrol/20")
+    # `kanban-patrol/20`: an actor is required, so a claim names somebody.
+    kanban_attend.add_argument("--actor", required=True, help="who is attending")
     kanban_attend.add_argument("--workflows-root", dest="workflows_root")
     kanban_attend.set_defaults(handler=cmd_kanban_attend)
 
@@ -2570,9 +2576,11 @@ def build_parser() -> argparse.ArgumentParser:
     kanban_stage.add_argument("task_id")
     kanban_stage.add_argument("stage", choices=["red", "green", "finished"])
     kanban_stage.add_argument("--actor", required=True)
-    kanban_stage.add_argument("--test-id", dest="test_id", default="", help="kanban-patrol/17+21 evidence: the test identifier")
-    kanban_stage.add_argument("--reason", default="", help="kanban-patrol/17+21 evidence: why the test failed, required at red")
-    kanban_stage.add_argument("--commit", default="", help="kanban-patrol/17+21 evidence: the commit/diff carrying the work — required at finished")
+    # `kanban-patrol/17`+`21`: the evidence gate. The three flags below are
+    # what a stage transition must carry.
+    kanban_stage.add_argument("--test-id", dest="test_id", default="", help="evidence: the test identifier")
+    kanban_stage.add_argument("--reason", default="", help="evidence: why the test failed, required at red")
+    kanban_stage.add_argument("--commit", default="", help="evidence: the commit/diff carrying the work — required at finished")
     kanban_stage.add_argument("--workflows-root", dest="workflows_root")
     kanban_stage.set_defaults(handler=cmd_kanban_stage)
 
@@ -2585,11 +2593,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     kanban_answer = kanban_commands.add_parser(
         "answer",
+        # `kanban-patrol/15`.
         help="record the decision on a Needs You card — it returns to Detected, "
-        "carrying the answer (kanban-patrol/15)",
+        "carrying the answer",
     )
     kanban_answer.add_argument("task_id")
-    kanban_answer.add_argument("--actor", required=True, help="who decided — kanban-patrol/20")
+    kanban_answer.add_argument("--actor", required=True, help="who decided")  # kanban-patrol/20
     kanban_answer.add_argument(
         "--answer", required=True, help="the decision itself, in your own words"
     )
@@ -2598,7 +2607,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     kanban_file = kanban_commands.add_parser(
         "file",
-        help="file a card from a conversation, brief and all (osg-agent-experience/25)",
+        # `osg-agent-experience/25`.
+        help="file a card from a conversation, brief and all",
     )
     kanban_file.add_argument(
         "--kind", required=True, choices=["task", "bug", "grilling"],
@@ -2626,13 +2636,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--agent-effort", dest="agent_effort", default="",
         help="advisory: the reasoning effort to give that subagent",
     )
-    kanban_file.add_argument("--actor", required=True, help="who filed it — kanban-patrol/20")
+    kanban_file.add_argument("--actor", required=True, help="who filed it")  # kanban-patrol/20
     kanban_file.add_argument("--workflows-root", dest="workflows_root")
     kanban_file.set_defaults(handler=cmd_kanban_file)
 
     kanban_release = kanban_commands.add_parser(
         "release",
-        help="press the explicit Release on a card the system has already flagged stale (kanban-patrol/19)",
+        # `kanban-patrol/19`: flag, never auto-release.
+        help="press the explicit Release on a card the system has already flagged stale",
     )
     kanban_release.add_argument("task_id")
     kanban_release.add_argument(
@@ -2644,7 +2655,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     kanban_triage = kanban_commands.add_parser(
         "triage",
-        help="which card to pick up next, and why (osg-agent-experience/25) — "
+        # `osg-agent-experience/25`.
+        help="which card to pick up next, and why — "
         "the same order kanban_triage answers over MCP",
     )
     kanban_triage.add_argument(
@@ -2655,15 +2667,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     kanban_where = kanban_commands.add_parser(
         "where",
-        help="where this project's board is, and whether it is there yet "
-        "(osg-agent-experience/65)",
+        # `osg-agent-experience/65`.
+        help="where this project's board is, and whether it is there yet",
     )
     kanban_where.add_argument("--workflows-root", dest="workflows_root")
     kanban_where.set_defaults(handler=cmd_kanban_where)
 
     patrol = subparsers.add_parser(
         "patrol",
-        help="the in-built patrol — read findings, file new kanban cards (kanban-patrol/07)",
+        # `kanban-patrol/07`.
+        help="the in-built patrol — read findings, file new kanban cards",
     )
     patrol_commands = patrol.add_subparsers(dest="patrol_command", required=True)
 
