@@ -62,6 +62,11 @@ that no writer's work disappears without somebody being asked.
 
 ## 2. Atoms, molecules, organisms — and only one tier you can get two ways
 
+This page explains the ones you meet first and the ones that are easy to
+confuse; it is not the list. **[Every built-in module](modules.md)** is the
+list — one line on every card in the palette, generated from the same data the
+palette itself reads, so it is never a type behind.
+
 The palette is ordered by **what a thing is made of**:
 
 | Tier | What it is | How you get one |
@@ -890,6 +895,8 @@ The words this product uses, and what each one must not be mistaken for.
 
 ## Where to go next
 
+- [Every built-in module](modules.md) — one line on every node type this
+  install ships, plus the counts for providers, CLI verbs, MCP tools and skills
 - [Getting started](getting-started.md) — install, first run, the shipped example
 - [Patterns](patterns.md) — seven arrangements and when each earns its keep
 - [Ports and edges](ports-and-edges.md) — the type system, and every rule that
