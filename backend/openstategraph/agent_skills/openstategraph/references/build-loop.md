@@ -122,6 +122,31 @@ have to get right by reading rather than by checking.
 The **step budget** is a different ceiling and is not this: it counts
 supersteps for the whole workflow, and one lap of a loop can cost several.
 
+## Where a tool binding is visible, and where it is not
+
+`openstategraph graph` cannot show you one. A tool binds *into* an agent —
+the edge lands on that node's `tool` port and produces no control flow at all
+— so a diagram of the graph is exactly the wrong place to look for it, and an
+absent tool looks like a correct picture.
+
+`openstategraph validate` is the one that says: its `Tool bindings:` line
+prints the map of tool node to the nodes each one is bound into, and `none`
+when nothing is bound. Read it every time you wire a tool, because "the tool
+is on the canvas" and "the agent can call it" are two different facts and only
+the second one runs anything.
+
+Two things the line will not tell you, both of which refuse at run time:
+
+- **A path field that points at nothing.** `tool.mssql-query`'s `allowlist`
+  and the `tool.sql-*` family's `database` are resolved **under the workflows
+  root**, and a path that lands outside it is refused — a hard refusal, not a
+  convention, so a file one directory above `workflows/` cannot be reached
+  however it is spelled. `validate` checks these against the disk and names
+  the node and the field.
+- **A credential.** The `connection` field holds the *name* of an environment
+  variable. Nothing static can know whether it is set, so an unset one is a
+  refusal at the first call, naming the variable.
+
 ## When a card turns out to be wrong
 
 Two honest outcomes, and both are fine:

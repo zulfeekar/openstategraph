@@ -42,6 +42,24 @@ describe('tool.mssql-query card', () => {
     expect(String(connection?.hint ?? '')).toMatch(/name of an environment variable/i);
   });
 
+  it('says the allowlist path is resolved under the workflows root, not by convention', () => {
+    // `osg-agent-experience/41`. The hint read as a convention — "a YAML file
+    // inside workflows/" — and it is a hard refusal: `_pins()` resolves the
+    // path under the workflows root and calls `relative_to`, so a file one
+    // level above it is refused and the query never runs. A try-folder session
+    // read the sentence as advice and moved a 42 KB file and nine readers.
+    const workbench = makeWorkbench();
+    const allowlist = (workbench.registry.nodeTypes.require('tool.mssql-query').fields ?? []).find(
+      (field) => field.key === 'allowlist',
+    );
+    const hint = String(allowlist?.hint ?? '');
+    expect(hint).toMatch(/outside the workflows root/i);
+    expect(hint).toMatch(/refused/i);
+    // The same fact as data, so `validate` asks the disk instead of a reader —
+    // exactly what `tool.sql-*`'s `database` field already declares.
+    expect(allowlist?.pathRoot).toBe('workflows');
+  });
+
   it('keeps the values a user typed across a save', () => {
     const workbench = makeWorkbench();
     const node = addNode(workbench, 'tool.mssql-query', {

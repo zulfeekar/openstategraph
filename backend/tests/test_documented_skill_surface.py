@@ -230,6 +230,20 @@ def test_the_readers_page_exists_and_is_indexed() -> None:
     assert "the-openstategraph-skill.md" in index
 
 
+def test_the_loop_says_where_a_tool_binding_is_visible() -> None:
+    """`osg-agent-experience/41`. A tool binds *into* an agent, so it produces
+    no control flow and `graph` cannot draw it — an unbound tool looks like a
+    correct picture. Only `validate`'s `Tool bindings:` line says, and a sheet
+    that does not point at it sends an agent to the diagram."""
+    page = (REFERENCES / "build-loop.md").read_text(encoding="utf-8")
+
+    assert "Tool bindings:" in page
+    assert "openstategraph graph` cannot show" in page
+    # The other half of that ticket: the allowlist path is a refusal, not a
+    # convention, and the sheet says so where somebody is wiring the tool.
+    assert "outside it is refused" in page
+
+
 class TestTheSizeGate:
     """`osg-agent-experience/31`. Measured, not opined: a one-field ask cost
     8 developer questions and 20 agent calls against this sheet followed

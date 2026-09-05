@@ -189,8 +189,14 @@ export const PLATFORM_TOOL_NODES = [
         defaultValue: '',
         placeholder: 'my-flow/lenses.yaml',
         mono: true,
-        hint: 'A YAML file inside workflows/ whose resolvers carry “pin:” maps. The pinned values are the only tables a query may name; anything else is refused with the list. Without this the tool refuses every query.',
+        hint: 'A YAML file whose resolvers carry “pin:” maps, given relative to the workflows root. The pinned values are the only tables a query may name; anything else is refused with the list. The path is resolved under the workflows root and one that lands outside the workflows root is refused — this is not a convention, it is where the file has to be. Without this the tool refuses every query.',
         required: true,
+        // The same fact as data (`osg-agent-experience/41`), so `validate` can
+        // ask the disk rather than asking a reader — the move `tool.sql-*`'s
+        // `database` field already made. A path above the root is exactly what
+        // the sentence above is about, and it was a refusal nobody could see
+        // until a run made it.
+        pathRoot: 'workflows',
       },
       {
         key: 'maxRows',

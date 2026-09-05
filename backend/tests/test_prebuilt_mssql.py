@@ -444,3 +444,42 @@ class TestTheLeafCarriesNothingShapedForAFile:
         assert not hasattr(_SqlExplorerBase, "database")
         assert not hasattr(_SqlExplorerBase, "_db")
         assert not hasattr(_SqlExplorerBase, "_refusal")
+
+
+class TestTheAllowlistHintNamesTheRefusal:
+    """`osg-agent-experience/41` — the sentence and the behaviour, one fact.
+
+    The field's hint said *"a YAML file inside `workflows/`"*, which reads as a
+    convention. It is a refusal: `_pins()` resolves the path under the
+    workflows root and calls `relative_to(root)`, so a file one level above it
+    is refused and no query is sent. A session read the sentence as advice,
+    then moved a 42 KB file and nine readers to satisfy it.
+
+    Asserted against the generated catalogue rather than the TypeScript source,
+    because the catalogue is what every non-editor door reads — and against the
+    refusal's own words, so the two cannot drift into two descriptions of one
+    rule.
+    """
+
+    OUTSIDE = "outside the workflows root"
+
+    def _hint(self) -> str:
+        from openstategraph.compile.node_catalogue import CATALOGUE
+
+        schema = CATALOGUE.field_schema["tool.mssql-query"]
+        record = next(
+            node for node in CATALOGUE.nodes if node["type"] == "tool.mssql-query"
+        )
+        assert schema["allowlist"].path_root == "workflows"
+        return next(
+            field["hint"] for field in record["fields"] if field["key"] == "allowlist"
+        )
+
+    def test_the_hint_carries_the_refusals_own_words(self) -> None:
+        assert self.OUTSIDE in self._hint().lower()
+        assert "refused" in self._hint().lower()
+
+    def test_the_refusal_says_the_same_thing(self, tmp_path: Path) -> None:
+        result = MssqlQueryTool(allowlist="../../etc/passwd").run(query="SELECT 1")
+        assert result.ok is False
+        assert self.OUTSIDE in str(result.error).lower()

@@ -2556,9 +2556,10 @@
           "key": "allowlist",
           "kind": "text",
           "label": "Allowlist YAML",
-          "hint": "A YAML file inside workflows/ whose resolvers carry “pin:” maps. The pinned values are the only tables a query may name; anything else is refused with the list. Without this the tool refuses every query.",
+          "hint": "A YAML file whose resolvers carry “pin:” maps, given relative to the workflows root. The pinned values are the only tables a query may name; anything else is refused with the list. The path is resolved under the workflows root and one that lands outside the workflows root is refused — this is not a convention, it is where the file has to be. Without this the tool refuses every query.",
           "required": true,
-          "defaultValue": ""
+          "defaultValue": "",
+          "path_root": "workflows"
         },
         {
           "key": "maxRows",
