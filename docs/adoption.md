@@ -171,8 +171,10 @@ That gives you two processes, supervised by [`scripts/dev.sh`](../scripts/dev.sh
 - **editor** — the Vite SPA on <http://localhost:5273>
 - **runtime** — `uvicorn --reload` on <http://localhost:8000>
 
-Stop with `./start stop`; watch with `scripts/status.sh`. The canvas preview
-defaults to `Mock · Offline` and answers with no credential at all. The backend
+Stop with `./start stop`; watch with `scripts/status.sh`. Anything that calls a
+model needs a credential — `Mock · Offline` is a selectable preview simulator,
+not a default and not a way to get a first answer without one
+(`docs-onramp/03`). The backend
 defaults to Ollama **cloud**, which needs `OLLAMA_API_KEY` in `.env` (or
 `OLLAMA_HOST`, pointing at a daemon you run); `ANTHROPIC_API_KEY` or
 `OPENAI_API_KEY` is preferred over it when set.

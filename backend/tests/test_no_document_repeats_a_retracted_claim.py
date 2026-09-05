@@ -71,6 +71,11 @@ CORPUS = (
     ]
     + sorted((REPO_ROOT / "docs").rglob("*.md"))
     + sorted((REPO_ROOT / "openwiki").rglob("*.md"))
+    # `docs-onramp/03`: the published landing page repeated the `Mock · Offline`
+    # claim in HTML. A reader who has not installed anything reads it *before*
+    # any markdown page, so a corpus that stops at markdown stops one document
+    # short of the front of the funnel.
+    + [REPO_ROOT / "site" / "index.html"]
 )
 
 #: Case-sensitive substrings, each a sentence this repository has retracted.
@@ -102,6 +107,20 @@ RETRACTED_CLAIMS = (
     # `test_collection_policy.py` pins that. `CONTRIBUTING.md` said this while
     # `README.md`, forty lines of argument later, said the opposite.
     "the entire `workflows/` half",
+    # docs-onramp/03 — measured on a fresh 0.3.0rc14 install, 2026-09-05:
+    # selecting `mock/mock-offline` on the agent and pressing Run produced
+    # three `POST /api/runs/stream → 503`. It is not a way to a first answer
+    # and it is not the default — `WORKFLOW_DEFAULT_MODEL` is the empty string
+    # (`src/nodes/modelField.ts`, which records why the mock default was
+    # removed), and `NodeRuntime._resolve_model` reads `mock` as *no override*
+    # exactly as it reads empty. The client-side engine that owned the mock has
+    # had no caller outside a test since the Run button was rewired to stream a
+    # real backend run, which `src/view/overlays/OnboardingHint.tsx` already
+    # recorded and no page had caught up with.
+    "The canvas preview still answers with no credential",
+    "canvas preview defaults to `Mock · Offline` and answers with no credential",
+    "the canvas preview's default model\nis `Mock · Offline`",
+    "The canvas preview defaults\n            to <code>Mock · Offline</code>",
 )
 
 

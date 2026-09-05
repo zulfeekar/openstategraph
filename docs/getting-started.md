@@ -32,9 +32,16 @@ Two people arrive here, and they want different things:
 One provider credential is required before anything calls a model:
 `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OLLAMA_API_KEY` (or `OLLAMA_HOST`, if
 you run your own daemon). Nothing here needs an account with us, a hosted
-control plane, or a credit card. The canvas preview still answers with no
-credential at all — its default is `Mock · Offline` — and a workflow with no
-model-calling node runs with nothing set.
+control plane, or a credit card. **A workflow with no model-calling node runs
+with nothing set** — that is the only thing that answers without a credential.
+
+> `Mock · Offline` is not a second way in. It is a deterministic simulator you
+> can *select* on a card, the editor's credentials dialog labels it **preview
+> only**, and it is not the default: `WORKFLOW_DEFAULT_MODEL` is the empty
+> string (`src/nodes/modelField.ts`), and the backend's `_resolve_model` reads
+> `mock` as *no override* exactly as it reads empty. Selecting it and pressing
+> **Run** reaches the server like any other run and is refused for want of a
+> credential. This page said the opposite until `docs-onramp/03`.
 
 > This said "No API key is required to get a first answer", which was true only
 > because Ollama's provider spec declared no environment variables and so was
@@ -125,10 +132,8 @@ delete is the end of it — deleting the note is always allowed and the three
 nodes stay. It is offered **once per browser**, so getting rid of it is
 permanent.
 
-Open `chinook-assistant` from **Workflows**
-and it runs with **no credentials at all**: the canvas preview's default model
-is `Mock · Offline`, a deterministic simulator that exercises the real
-execution path (it requests a tool, then answers from the tool's result).
+Open `chinook-assistant` from **Workflows**. Running it needs a credential
+like anything else that calls a model — see §3 below.
 
 > **Where the demo went.** `workflows/chinook-assistant/workflow.json` is also
 > compiled into the *dev* bundle, so the browser test suite has a populated
@@ -153,7 +158,7 @@ first-hour confusion.
 | --- | --- | --- |
 | Where the call is made | your browser | the Python process |
 | Credentials | entered in the editor's credentials dialog, kept in this browser's `localStorage` | environment variables on the backend process |
-| Default | `Mock · Offline` | Ollama **cloud** |
+| Default model | none — `WORKFLOW_DEFAULT_MODEL` is the empty string, and `Mock · Offline` is selectable rather than default | Ollama **cloud** |
 
 **Backend environment.** Nothing is required to start the backend, and a
 workflow that calls no model runs with none of this set — a credential is
