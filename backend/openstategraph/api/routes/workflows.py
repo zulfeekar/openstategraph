@@ -17,6 +17,9 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
+
+from openstategraph.api.broadcast import KEEPALIVE_SECONDS
 
 from openstategraph.api.audience import resolve as resolve_audience
 from openstategraph.api.auth import shared_deployment_reason
@@ -54,6 +57,9 @@ from openstategraph.api.schemas import (
     WorkflowSummaryResponse,
 )
 from openstategraph.api.services import WorkflowServices
+from openstategraph.api.sse_contract import sse_responses
+from openstategraph.api.streaming import _sse, stop_when_client_leaves_async
+from openstategraph.api.workflow_events import WORKFLOW_EVENT, WORKFLOW_FRAME_FIELDS
 from openstategraph.api.workflow_store import WorkflowSummary, validate_package
 from openstategraph.sql_reach import reachable_schema
 
@@ -1004,3 +1010,67 @@ def compiled_graph(
     return CompiledGraphResponse(mermaid=mermaid_text)
 
 
+@router.get(
+    "/api/workflows/{slug}/events",
+    summary="One package's document changing, live (SSE)",
+    response_class=StreamingResponse,
+    responses=sse_responses(
+        (WORKFLOW_EVENT,),
+        "One frame each time this package's `workflow.json` changed.",
+        {WORKFLOW_EVENT: WORKFLOW_FRAME_FIELDS},
+    ),
+    tags=["Workflows"],
+)
+async def workflow_events_stream(
+    http: Request, services: Services, slug: str
+) -> StreamingResponse:
+    """This package's document changed, live — `event: workflow.changed`.
+
+    **The stream an open editor holds for the workflow it is editing**
+    (`osg-agent-experience/69`). Three tabs on one workflow, plus the CLI and a
+    coding agent through the MCP server, are five writers of one file, and
+    until this endpoint only a save through this API told anybody. The watcher
+    behind it observes the **file**, so every writer is covered by construction
+    — which is why this is a sibling stream rather than a fifth
+    `CatalogueEvent.reason`, a fan-out `catalogue_events.py` says in its own
+    docstring that only API writes reach. See `workflow_events.py` for the
+    full argument.
+
+    **The frame is a hint**: it carries the slug and the digest — the same
+    revision a save quotes as `base_digest` — and the client refetches
+    `GET /api/workflows/{slug}`, the one spelling of a document. A tab
+    compares the digest against the one it is editing, so it can tell its own
+    write from somebody else's without diffing.
+
+    **No replay**, as on all three sibling streams: a client that connects
+    after a write learns nothing about it and needs to learn nothing, because
+    opening a workflow reads it anyway.
+
+    An unknown slug is not refused. A package is created, deleted and
+    re-created underneath an open tab, and a stream that 404s at connect time
+    would leave exactly that tab the one with no way to be told; the digest of
+    a package that is not there is `""`, so its arrival is a change like any
+    other.
+    """
+    watcher = services.workflow_events
+
+    async def frames() -> Any:
+        async with watcher.subscribe(slug) as subscriber:
+            yield ": connected\n\n"
+            async for event in subscriber.events(idle_timeout=KEEPALIVE_SECONDS):
+                if event is None:
+                    yield ": keepalive\n\n"
+                elif event.slug == slug:
+                    # One broadcaster serves every watched package, so a frame
+                    # about another tab's workflow reaches this generator and
+                    # is dropped here. Filtered server-side rather than in the
+                    # client: a connection asked about one slug, and handing it
+                    # traffic about packages it never named would make the
+                    # endpoint's own contract a half-truth.
+                    yield _sse(WORKFLOW_EVENT, event.as_dict())
+
+    return StreamingResponse(
+        stop_when_client_leaves_async(frames(), http.receive),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )

@@ -75,6 +75,10 @@ class WorkflowServices:
         from openstategraph.kanban_store import kanban_store_path
         from openstategraph.api.patrol_events import PatrolBroadcaster
         from openstategraph.api.patrol_registry import PatrolJobRegistry
+        from openstategraph.api.workflow_events import (
+            WorkflowChangeWatcher,
+            digest_reader,
+        )
 
         self.store = WorkflowStore(root=workflows_root)
         #: Live catalogue changes — the fan-out behind `GET /api/events`, so an
@@ -109,6 +113,18 @@ class WorkflowServices:
         #: open tab.
         self.kanban_events = KanbanChangeWatcher(
             lambda: kanban_store_path(self.store.root)
+        )
+        #: Live document changes, per package — the fan-out behind
+        #: `GET /api/workflows/{slug}/events` (`osg-agent-experience/69`). A
+        #: fourth broadcaster rather than a fifth `CatalogueEvent.reason`, for
+        #: the reason `workflow_events`'s own docstring gives: a catalogue
+        #: event fires only for writes through this API, and three of the four
+        #: writers of a `workflow.json` are other processes. Here for the
+        #: reason `kanban_events` is: it owns a poll task whose lifetime is the
+        #: set of connected editors, so a per-request copy would poll once per
+        #: open tab.
+        self.workflow_events = WorkflowChangeWatcher(
+            digest_reader(lambda slug: self.store.directory_for(slug))
         )
         #: Long-term memory, process-wide (ticket 65): one Store shared by
         #: every run, namespaced per user inside the tools themselves.

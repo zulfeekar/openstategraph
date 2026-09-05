@@ -4375,6 +4375,51 @@
         ]
       }
     },
+    "/api/workflows/{slug}/events": {
+      "get": {
+        "description": "This package's document changed, live \u2014 `event: workflow.changed`.\n\n**The stream an open editor holds for the workflow it is editing**\n(`osg-agent-experience/69`). Three tabs on one workflow, plus the CLI and a\ncoding agent through the MCP server, are five writers of one file, and\nuntil this endpoint only a save through this API told anybody. The watcher\nbehind it observes the **file**, so every writer is covered by construction\n\u2014 which is why this is a sibling stream rather than a fifth\n`CatalogueEvent.reason`, a fan-out `catalogue_events.py` says in its own\ndocstring that only API writes reach. See `workflow_events.py` for the\nfull argument.\n\n**The frame is a hint**: it carries the slug and the digest \u2014 the same\nrevision a save quotes as `base_digest` \u2014 and the client refetches\n`GET /api/workflows/{slug}`, the one spelling of a document. A tab\ncompares the digest against the one it is editing, so it can tell its own\nwrite from somebody else's without diffing.\n\n**No replay**, as on all three sibling streams: a client that connects\nafter a write learns nothing about it and needs to learn nothing, because\nopening a workflow reads it anyway.\n\nAn unknown slug is not refused. A package is created, deleted and\nre-created underneath an open tab, and a stream that 404s at connect time\nwould leave exactly that tab the one with no way to be told; the digest of\na package that is not there is `\"\"`, so its arrival is a change like any\nother.",
+        "operationId": "workflow_events_stream_api_workflows__slug__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "`event: <name>` and `data: <json>` lines, blank-line separated. See `docs/api.md`.",
+                  "title": "Server-sent event frames",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "One frame each time this package's `workflow.json` changed.\n\nA `text/event-stream`. Event names: `workflow.changed`. Frame fields: `workflow.changed`: `slug`, `digest`. This stream sends no terminal frame: it ends when the connection closes \u2014 see `docs/api.md`."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One package's document changing, live (SSE)",
+        "tags": [
+          "Workflows"
+        ]
+      }
+    },
     "/api/workflows/{slug}/graph": {
       "get": {
         "description": "The COMPILED topology as Mermaid text (ticket 54) \u2014 what the\ncompiler actually produced, not a hand-drawn approximation.\n\n**Every mount is opened, to any depth.** LangGraph's own `xray=True`\nexpands nothing here and never will \u2014 a mount compiles to a closure\nover the child's `invoke()`, and a function is opaque \u2014 so the\ncomposition is spliced from what the compiler recorded while it built\neach child (`compile/composition.py`). An agent stays one box either\nway: it has no second document to show. Text, never a PNG \u2014\n`draw_mermaid_png()` posts the graph to a third-party API.\n\n`audience=customer` hides the compiler's own vocabulary \u2014 `__start__`,\n`__default_error_handler__`, `safe_name`d ids, branch ids \u2014 and labels\neach node with the name its author gave it. **Inside an opened mount\nthat means the child's own document**, which is why the child\ndocuments are loaded here and not only compiled: `mount_mid:in1` is a\nname no author chose, and the parent's document cannot answer for it\n(`workflow-gallery` 56). A child that cannot be loaded costs the\nlabels below it and nothing else \u2014 the composition is still drawn.\n\nThe default is **developer**, deliberately: an existing caller keeps\nthe ids, which are what a mount bug gets reported under, and only the\ncustomer page opts out (reviews-2026-08-14 ticket 04).",

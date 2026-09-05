@@ -925,6 +925,18 @@ them across would have cost the module its one-sentence description.
 the paragraphs that say why a save may be refused. All of it is the wire — a
 status code this endpoint can now answer with, and the sentence that goes with
 it — rather than a second reason for this module to change.
+
+`586 -> 619`, 2026-09-05 (`osg-agent-experience/69`). Thirty-three lines: the
+`GET /api/workflows/{slug}/events` SSE endpoint — the stream that tells an open
+tab another writer changed the package it is editing. The canary is worth
+reading honestly here, because a *stream* is arguably a second concern and it
+was weighed as one: the three sibling streams all live in the route module for
+the surface they belong to (`/api/events` in `main`, both kanban streams in
+`routes/kanban.py`), the fan-out itself is a collaborator in
+`api/workflow_events.py` and none of its knowledge is here, and what this route
+holds is a subscription and a filter. Splitting the catalogue's one stream into
+its own route module would have made `workflows.py` shorter and the endpoint
+surface harder to find, which is the trade this table exists to refuse.
 """
 
 RUN_SINKS = """
@@ -1218,7 +1230,7 @@ RECORDED: dict[str, Recorded] = {
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(993, MCP_SERVER),
-    "api/routes/workflows.py": Recorded(586, ROUTES_WORKFLOWS),
+    "api/routes/workflows.py": Recorded(619, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(556, SCHEMAS),
 }

@@ -925,6 +925,28 @@ No terminal frame and no replay, as on the catalogue and patrol streams: a
 client that connects after a write learns nothing about it, and needs nothing, because
 opening a board reads the cards anyway.
 
+### `GET /api/workflows/{slug}/events` — one package's document
+
+The sixth stream, and the card stream's shape aimed at a `workflow.json`
+(`osg-agent-experience/69`). A workflow file has four kinds of writer — an
+editor tab, a *second* editor tab, `openstategraph` on the command line, a
+coding agent through the MCP server — and only the first of them goes through
+this API, so a catalogue event covers a quarter of them. This watcher reads the
+file instead, twice a second, for the packages somebody is actually subscribed
+to and no others.
+
+One event name, `workflow.changed`, carrying `slug` and `digest`. The digest is
+the **revision** — the same string `GET /api/workflows/{slug}` publishes and a
+save quotes back as `base_digest`, not a second stamp — so a client can tell a
+frame about its own write from a frame about somebody else's, and refetch the
+document rather than build a cache from events.
+
+An unknown slug is not refused: a package created underneath an open tab is a
+change like any other, and a stream that 404'd at connect time would leave
+exactly that tab with no way to be told.
+
+No terminal frame, no replay, one worker — as on all five siblings.
+
 ---
 
 ## 3. The six calls a custom chat needs

@@ -41,6 +41,11 @@ EXPECTED_SSE = {
     # `osg-agent-experience/36` — the board's card stream, a sibling of the
     # patrol one because its poll must cost nothing while no board is open.
     "/api/kanban/events",
+    # `osg-agent-experience/69` — one package's document changing, so the other
+    # tabs open on it learn without a reload. The first templated stream path,
+    # which is why `_streaming_block_matches` now translates `{slug}` rather
+    # than matching it literally.
+    "/api/workflows/{slug}/events",
 }
 
 
@@ -91,7 +96,12 @@ def _streaming_block_matches(config: Path, path: str) -> bool:
     text = config.read_text()
     caddy = re.search(r"^\s*@sse\s+path\s+(.+)$", text, re.MULTILINE)
     if caddy is not None:
-        return path in caddy.group(1).split()
+        # Caddy's path matcher has no path parameters, so a templated route is
+        # written with its glob. Translated here rather than a second literal
+        # spelled in `EXPECTED_SSE`: the set is derived from FastAPI's own
+        # paths, and a second form of one path is a second thing to keep in
+        # step (`osg-agent-experience/69`).
+        return re.sub(r"\{[^}]+\}", "*", path) in caddy.group(1).split()
     nginx = re.search(r"^\s*location\s+~\s+(\S+)\s*\{", text, re.MULTILINE)
     assert nginx is not None, f"{config.name} has no streaming block at all"
     return re.search(nginx.group(1), path) is not None

@@ -872,11 +872,22 @@ WORKFLOW_SERVICES = """A recorded exception rather than a split, for the reason 
     and `patrol_events` did, plus one this class has not had before: it owns
     a poll task whose lifetime is the set of connected boards, so a
     per-request copy would poll once per open tab rather than once per
-    process. The same discipline applies to the thirteenth."""
+    process.
+
+    Thirteen is `osg-agent-experience/69`'s `workflow_events` — the watcher
+    behind `GET /api/workflows/{slug}/events`, which tells the other tabs open
+    on a package that the CLI, an agent, or one of their siblings rewrote its
+    `workflow.json`. It lands here for the twelfth's reason exactly: it owns a
+    poll task whose lifetime is the set of connected editors. It is deliberately
+    *not* folded into `events`, the catalogue broadcaster: that one publishes
+    only for writes through this API, which is three of the four writers of a
+    document missing, and it is the same fan-out every open surface subscribes
+    to rather than one per package. The same discipline applies to the
+    fourteenth."""
 
 RECORDED: dict[str, Recorded] = {
     "compile.diagnostics.Finding": Recorded(21, FINDING_KINDS),
-    "api.services.WorkflowServices": Recorded(12, WORKFLOW_SERVICES),
+    "api.services.WorkflowServices": Recorded(13, WORKFLOW_SERVICES),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.DeepAgentNode": Recorded(13, NARRATE_TOGGLE),
