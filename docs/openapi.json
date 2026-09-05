@@ -2880,6 +2880,30 @@
         ]
       }
     },
+    "/api/kanban/events": {
+      "get": {
+        "description": "Card writes, live \u2014 `event: kanban.changed`, carrying a digest.\n\n**The stream the board opens, and the only one that costs anything while\nit is open** (`osg-agent-experience/36`). A coding agent's `openstategraph\nkanban stage` is another process writing `kanban.sqlite`; nothing tells\nthis one, so the watcher behind this endpoint polls the store's digest \u2014\nbut only while at least one connection is held here, which is why this is\na sibling stream rather than a frame on `/api/kanban/patrol/events`, a\nstream every editor tab holds open whether or not a board exists. See\n`kanban_events.py` for the full argument.\n\n**The frame is a hint**: the client refetches `GET /api/kanban/cards`, the\none spelling of a card. **No replay**, as on both sibling streams \u2014 a\nclient that connects after a write learns nothing about it and needs to\nlearn nothing, because opening the board reads the cards anyway.",
+        "operationId": "kanban_events_stream_api_kanban_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "`event: <name>` and `data: <json>` lines, blank-line separated. See `docs/api.md`.",
+                  "title": "Server-sent event frames",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "One frame each time the store changed.\n\nA `text/event-stream`. Event names: `kanban.changed`. Frame fields: `kanban.changed`: `digest`. This stream sends no terminal frame: it ends when the connection closes \u2014 see `docs/api.md`."
+          }
+        },
+        "summary": "Card writes, live (SSE)",
+        "tags": [
+          "Kanban"
+        ]
+      }
+    },
     "/api/kanban/patrol/events": {
       "get": {
         "description": "Patrol progress, live \u2014 `event: patrol.status`, `kind` inside it.\n\nThe same shape as `GET /api/events`, on a sibling broadcaster rather than\nthat endpoint's own \u2014 see `patrol_events.py`'s module docstring for why a\npatrol event does not ride the catalogue's fan-out. Framed by `_sse`, the\none framer this codebase has; no second SSE format is introduced here.\n\n**No replay**, exactly as `/api/events` has none: a subscriber sees what\nhappens while connected. `GET /api/kanban/patrol/status` is how a late\nsubscriber learns what it missed.",

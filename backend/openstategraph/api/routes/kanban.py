@@ -29,9 +29,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from openstategraph.api.broadcast import KEEPALIVE_SECONDS
 from openstategraph.api.deps import PrincipalId, Services
+from openstategraph.api.kanban_events import (
+    KANBAN_EVENT,
+    KANBAN_FRAME_FIELDS,
+)
 from openstategraph.api.patrol_events import (
-    KEEPALIVE_SECONDS,
     PATROL_EVENT,
     PATROL_FRAME_FIELDS,
     PatrolBroadcaster,
@@ -386,6 +390,52 @@ async def patrol_events_stream(http: Request, services: Services) -> StreamingRe
                     yield ": keepalive\n\n"
                 else:
                     yield _sse(PATROL_EVENT, event.as_dict())
+
+    return StreamingResponse(
+        stop_when_client_leaves_async(frames(), http.receive),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get(
+    "/api/kanban/events",
+    summary="Card writes, live (SSE)",
+    response_class=StreamingResponse,
+    responses=sse_responses(
+        (KANBAN_EVENT,),
+        "One frame each time the store changed.",
+        {KANBAN_EVENT: KANBAN_FRAME_FIELDS},
+    ),
+    tags=["Kanban"],
+)
+async def kanban_events_stream(http: Request, services: Services) -> StreamingResponse:
+    """Card writes, live — `event: kanban.changed`, carrying a digest.
+
+    **The stream the board opens, and the only one that costs anything while
+    it is open** (`osg-agent-experience/36`). A coding agent's `openstategraph
+    kanban stage` is another process writing `kanban.sqlite`; nothing tells
+    this one, so the watcher behind this endpoint polls the store's digest —
+    but only while at least one connection is held here, which is why this is
+    a sibling stream rather than a frame on `/api/kanban/patrol/events`, a
+    stream every editor tab holds open whether or not a board exists. See
+    `kanban_events.py` for the full argument.
+
+    **The frame is a hint**: the client refetches `GET /api/kanban/cards`, the
+    one spelling of a card. **No replay**, as on both sibling streams — a
+    client that connects after a write learns nothing about it and needs to
+    learn nothing, because opening the board reads the cards anyway.
+    """
+    watcher = services.kanban_events
+
+    async def frames() -> Any:
+        async with watcher.subscribe() as subscriber:
+            yield ": connected\n\n"
+            async for event in subscriber.events(idle_timeout=KEEPALIVE_SECONDS):
+                if event is None:
+                    yield ": keepalive\n\n"
+                else:
+                    yield _sse(KANBAN_EVENT, event.as_dict())
 
     return StreamingResponse(
         stop_when_client_leaves_async(frames(), http.receive),

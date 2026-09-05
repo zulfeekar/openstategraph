@@ -65,14 +65,15 @@ own subscribers: an event is a hint to go and look, never the record itself.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import threading
-from collections import deque
-from collections.abc import AsyncIterator
-from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator, Literal
+from typing import Literal
+
+from openstategraph.api.broadcast import (
+    DEFAULT_BACKLOG_LIMIT,
+)
+from openstategraph.api.broadcast import KEEPALIVE_SECONDS as BROADCAST_KEEPALIVE_SECONDS
+from openstategraph.api.broadcast import Broadcaster
 
 logger = logging.getLogger(__name__)
 
@@ -134,141 +135,35 @@ class PatrolEvent:
 PATROL_FRAME_FIELDS: tuple[str, ...] = tuple(PatrolEvent(kind="started").as_dict())
 
 
-#: Same bound, same reasoning as `catalogue_events.SUBSCRIBER_BACKLOG_LIMIT`:
-#: a patrol fires a handful of events per run (one per card, plus the two
-#: brackets), so a subscriber banking 32 unread patrol events is not slow,
-#: it is gone.
-SUBSCRIBER_BACKLOG_LIMIT = 32
+#: Same bound and same keepalive as every other stream, taken from the module
+#: that owns both (`broadcast.py`) rather than restated: a patrol fires a
+#: handful of events per run, so a subscriber banking 32 unread patrol events
+#: is not slow, it is gone, and an idle stream still has to look alive to a
+#: proxy. Re-exported under the names this module has always published.
+SUBSCRIBER_BACKLOG_LIMIT = DEFAULT_BACKLOG_LIMIT
 
-#: Same value and the same proxy-timeout argument as
-#: `catalogue_events.KEEPALIVE_SECONDS` — reused rather than re-derived,
-#: because the constraint (the tightest common idle timeout in front of this
-#: process) is a fact about the deployment, not about which stream it is.
-KEEPALIVE_SECONDS = 15.0
-
-
-class _Subscriber:
-    """One connected surface, watching patrol progress — `catalogue_events
-    ._Subscriber`'s own shape, unchanged: a bounded backlog under a
-    `threading.Lock` (because `publish()` runs on whichever thread files the
-    card — the patrol's own background task, dispatched to an executor
-    thread, see `routes/kanban.py`), plus a wakeup that crosses the thread
-    boundary through `loop.call_soon_threadsafe`. See that class's docstring
-    for the full reasoning; it applies here without a word changed.
-    """
-
-    def __init__(self, loop: asyncio.AbstractEventLoop, limit: int) -> None:
-        self._loop = loop
-        self._limit = limit
-        self._lock = threading.Lock()
-        self._pending: deque[PatrolEvent] = deque()
-        self._wakeup = asyncio.Event()
-        self.overflowed = False
-        self.closed = False
-
-    def offer(self, event: PatrolEvent) -> bool:
-        with self._lock:
-            if self.closed:
-                return False
-            if len(self._pending) >= self._limit:
-                self.overflowed = True
-                self.closed = True
-                deliverable = False
-            else:
-                self._pending.append(event)
-                deliverable = True
-        self._wake()
-        return deliverable
-
-    def close(self) -> None:
-        with self._lock:
-            if self.closed:
-                return
-            self.closed = True
-        self._wake()
-
-    def _wake(self) -> None:
-        try:
-            self._loop.call_soon_threadsafe(self._wakeup.set)
-        except RuntimeError:
-            pass
-
-    def _drain(self) -> tuple[list[PatrolEvent], bool]:
-        with self._lock:
-            batch = list(self._pending)
-            self._pending.clear()
-            return batch, self.closed
-
-    async def events(
-        self, *, idle_timeout: float | None = None
-    ) -> AsyncIterator[PatrolEvent | None]:
-        while True:
-            self._wakeup.clear()
-            batch, closed = self._drain()
-            for event in batch:
-                yield event
-            if closed:
-                return
-            if idle_timeout is None:
-                await self._wakeup.wait()
-                continue
-            try:
-                await asyncio.wait_for(self._wakeup.wait(), timeout=idle_timeout)
-            except asyncio.TimeoutError:
-                yield None
+#: Seconds between SSE keepalive comments on an otherwise idle stream — the
+#: constraint is a fact about the deployment, not about which stream it is,
+#: which is why it now has exactly one home.
+KEEPALIVE_SECONDS = BROADCAST_KEEPALIVE_SECONDS
 
 
-class PatrolBroadcaster:
-    """In-process fan-out of patrol events — `CatalogueBroadcaster`'s own
-    shape, for a different kind of event. See that class for the full
-    reasoning; `subscribe()` is a context manager for the same reason: the
-    endpoint's `with` block unsubscribes on a normal end, a disconnect, or a
-    raise, so nothing has to remember to.
+class PatrolBroadcaster(Broadcaster[PatrolEvent]):
+    """In-process fan-out of patrol events.
+
+    The queue is `broadcast.Broadcaster`, shared with the catalogue and kanban
+    streams since `osg-agent-experience/36` — the extraction this module's own
+    docstring asked for on the day a third stream needed the shape. This
+    subclass binds the event type and the log label and adds no member.
+
+    `publish()` is safe from a threadpool worker or an executor thread — where
+    the patrol's background task actually runs, since `patrol.run_patrol` is a
+    blocking, sqlite-writing function driven through `loop.run_in_executor`
+    rather than on the event loop itself (`routes/kanban.py` documents why).
     """
 
     def __init__(self, *, backlog_limit: int = SUBSCRIBER_BACKLOG_LIMIT) -> None:
-        self._backlog_limit = backlog_limit
-        self._lock = threading.Lock()
-        self._subscribers: set[_Subscriber] = set()
-
-    @property
-    def subscriber_count(self) -> int:
-        with self._lock:
-            return len(self._subscribers)
-
-    @contextmanager
-    def subscribe(
-        self, *, loop: asyncio.AbstractEventLoop | None = None
-    ) -> Iterator[_Subscriber]:
-        subscriber = _Subscriber(loop or asyncio.get_event_loop(), self._backlog_limit)
-        with self._lock:
-            self._subscribers.add(subscriber)
-        try:
-            yield subscriber
-        finally:
-            with self._lock:
-                self._subscribers.discard(subscriber)
-            subscriber.close()
-
-    def publish(self, event: PatrolEvent) -> None:
-        """Fan one event out. Safe from a threadpool worker or an executor
-        thread — where the patrol's background task actually runs, since
-        `patrol.run_patrol` is a blocking, sqlite-writing function driven
-        through `loop.run_in_executor` rather than on the event loop itself
-        (`routes/kanban.py` documents why)."""
-        with self._lock:
-            targets = list(self._subscribers)
-        dropped = [s for s in targets if not s.offer(event)]
-        if not dropped:
-            return
-        with self._lock:
-            for subscriber in dropped:
-                self._subscribers.discard(subscriber)
-        logger.warning(
-            "dropped %d patrol subscriber(s) that fell more than %d events behind",
-            len(dropped),
-            self._backlog_limit,
-        )
+        super().__init__(backlog_limit=backlog_limit, label="patrol")
 
 
 # No `__all__` here on purpose — Tier 3, same as `catalogue_events.py`; see

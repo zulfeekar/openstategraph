@@ -386,12 +386,17 @@ const SUBJECTS: readonly Subject[] = [
   {
     file: './core/runtime/RuntimeClient.ts',
     className: 'RuntimeClient',
-    members: 16,
+    members: 17,
     exception: `One thin method per backend door, same shape as every member already
       here — 'run', 'runStream', 'resume', 'health', 'pastRuns', 'pastRun',
-      'providers', 'verifyProvider', 'kanbanCards', and now 'runPatrol'
+      'providers', 'verifyProvider', 'kanbanCards', 'runPatrol'
       (kanban-patrol/27) — a POST to the door the board's "Run Patrol" button
-      calls instead of the placeholder toast it used to show. The class
+      calls instead of the placeholder toast it used to show — and, at
+      seventeen, 'watchKanbanEvents' (osg-agent-experience/36): the fourth SSE
+      door, opened while a board is on screen so a card an agent moved in
+      another process stops being invisible until Refresh. It is a *door*, not
+      a second kind of job: the same nine-line shape as 'watchPatrolEvents'
+      beside it, one event name, one field, one unsubscribe. The class
       itself is not growing a new *kind* of responsibility; it is growing by
       exactly the count of endpoints this backend exposes, which is the
       argument the module's own docstring already makes for why it stays

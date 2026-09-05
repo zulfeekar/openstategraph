@@ -1167,6 +1167,18 @@ export interface PatrolStreamEvent {
   readonly reason: string;
 }
 
+/**
+ * One frame of `GET /api/kanban/events` — `osg-agent-experience/36`.
+ *
+ * Mirrors `kanban_events.KanbanChangedEvent`: a hint that the store moved,
+ * carrying the digest that moved and nothing else. The card itself comes from
+ * `kanbanCards()`, so there is one spelling of a card and no cache built from
+ * events that could disagree with the store.
+ */
+export interface KanbanStreamEvent {
+  readonly digest: string;
+}
+
 export interface KanbanCardRow {
   readonly task_id: string;
   readonly board: string;
@@ -2177,6 +2189,36 @@ export class RuntimeClient implements IRuntimeClient {
       } catch {
         // One unparseable frame is not a reason to tear the stream down —
         // `watchCatalogue`'s own rule.
+      }
+    });
+    return () => source.close();
+  }
+
+  /**
+   * Card writes as they happen, over `GET /api/kanban/events` —
+   * `osg-agent-experience/36`. The same `EventSource` wiring
+   * `watchPatrolEvents` uses against its sibling stream.
+   *
+   * **A separate stream from the patrol one on purpose**, and the reason
+   * matters to this client too: the backend polls `kanban.sqlite` only while
+   * somebody holds this connection open, so a caller opens it while a board
+   * is on screen and closes it when the board goes away. Holding it for the
+   * life of the tab would make the server poll for the life of the tab.
+   *
+   * **The frame is a hint**: refetch `kanbanCards()` on it. **No replay** —
+   * a caller that connects after a write learns nothing about it, and needs
+   * nothing, because opening a board reads the cards anyway.
+   */
+  watchKanbanEvents(onEvent: (event: KanbanStreamEvent) => void): () => void {
+    if (!this.eventSourceImpl) return () => {};
+    const source = this.eventSourceImpl(`${this.baseUrl}/api/kanban/events`);
+    source.addEventListener('kanban.changed', (event) => {
+      try {
+        const record = JSON.parse(event.data as string) as Record<string, unknown>;
+        onEvent({ digest: asString(record['digest']) });
+      } catch {
+        // One unparseable frame is not a reason to tear the stream down —
+        // `watchPatrolEvents`' own rule.
       }
     });
     return () => source.close();

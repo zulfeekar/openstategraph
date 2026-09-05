@@ -149,6 +149,13 @@ is actually asking, so the card says the stage instead:
 | `green` | `In progress — test passing` |
 | `finished` | `Awaiting review` |
 
+**And it says it while you watch.** A coding agent moving a card is another
+process writing the store, so since `osg-agent-experience/36` an open board
+holds a stream (`GET /api/kanban/events`) on which the server reports that the
+store changed, and the board refetches — a card filed or advanced from the CLI
+or over MCP moves in front of you, with no Refresh. Refresh is still there for
+a board that was closed when it happened.
+
 `finished` reads `Awaiting review` and not Resolved on purpose. `finished` is
 a **claim**; the evidence gate in §5 is the only thing that carries a card
 into the Resolved column, so a finished card that has not cleared the gate is

@@ -888,6 +888,30 @@ in-process, so it covers one worker; and there is **no replay** — a client
 that opens the board mid-patrol asks `GET /api/kanban/patrol/status` what it
 missed. [The patrol board](the-patrol-board.md) is what the frames are for.
 
+### `GET /api/kanban/events` — the card stream
+
+The fifth stream, and a sibling of the patrol one rather than a frame on it.
+The board's rows go stale the moment a coding agent moves a card, because
+every write door — `openstategraph kanban stage`, the `kanban_set_stage` MCP
+tool — is a **separate process** writing `kanban.sqlite` directly, and this
+server is one more reader of that file. So the server watches the file: a
+cheap digest (its `mtime_ns` and size plus `count(*)`, `max(last_heartbeat_at)`
+and `max(answered_at)`), checked once a second, published as one frame when it
+moves.
+
+One event name, `kanban.changed`, carrying one field, `digest` — a hint, not a
+card. A client refetches `GET /api/kanban/cards` on it, so there is one
+spelling of a row and no cache built from events.
+
+**The poll costs nothing while nobody is connected**, which is why this is not
+a fifth `patrol.status` kind: the patrol stream is one every editor tab holds
+open whether a board exists or not, and a poll hung off that would run for the
+life of every tab. This connection is held while a board is on screen.
+
+No terminal frame and no replay, as on the catalogue and patrol streams: a
+client that connects after a write learns nothing about it, and needs nothing, because
+opening a board reads the cards anyway.
+
 ---
 
 ## 3. The six calls a custom chat needs

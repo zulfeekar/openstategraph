@@ -518,6 +518,55 @@ describe('the client and the published contract', () => {
   });
 
   /**
+   * The **fourth** SSE stream this client parses — `osg-agent-experience/36`.
+   *
+   * The board's rows went stale the moment an agent moved a card, because
+   * every write door is another process writing `kanban.sqlite` and the
+   * server was told nothing. `GET /api/kanban/events` is the server watching
+   * that file on the board's behalf, and it is a **sibling** of the patrol
+   * stream rather than a fifth `patrol.status` kind: the backend polls only
+   * while somebody holds this connection, and the patrol stream is one every
+   * editor tab holds open whether a board exists or not.
+   *
+   * Pinned the way its three siblings are, in the same order: the client
+   * opens the door, the contract declares the name it listens for, and every
+   * field the contract publishes is a field the client actually reads.
+   */
+  describe('the kanban stream', () => {
+    const KANBAN = '/api/kanban/events';
+
+    it('is a door this client actually opens', () => {
+      expect(pathsCalledByTheClient()).toContain(KANBAN);
+    });
+
+    it('declares its one event name, and the client listens for it', () => {
+      expect(eventNamesDeclaredFor(KANBAN, 'get')).toEqual(['kanban.changed']);
+      expect(client, 'RuntimeClient no longer listens for `kanban.changed`').toContain(
+        "'kanban.changed'",
+      );
+    });
+
+    it('is parsed field for field by the hand-written client', () => {
+      const declared = frameFieldsDeclaredFor(KANBAN, 'get');
+
+      // Anti-vacuity: an extractor that matched nothing would make the loop
+      // below a statement about no frames and no fields.
+      expect(Object.keys(declared)).toEqual(['kanban.changed']);
+      expect(declared['kanban.changed']).toContain('digest');
+
+      const missing = (declared['kanban.changed'] as string[]).filter(
+        (field) => !clientReads(field),
+      );
+
+      expect(
+        missing,
+        `RuntimeClient never reads ${missing.join(', ')} off a \`kanban.changed\` frame — ` +
+          `the backend emits it, the contract publishes it, and the board cannot see it.`,
+      ).toEqual([]);
+    });
+  });
+
+  /**
    * The *response* half, which nothing here watched.
    *
    * Every assertion above is about what the client **sends** — endpoints,

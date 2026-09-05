@@ -807,11 +807,19 @@ WORKFLOW_SERVICES = """A recorded exception rather than a split, for the reason 
     relative, `events`, which is the same in-process, single-worker,
     per-app-instance shape. The next collaborator that lands here needs
     this exception's number updated honestly, the same discipline
-    `CLAUDE.md` already asks of every other entry in this table."""
+    `CLAUDE.md` already asks of every other entry in this table.
+
+    Twelve is `osg-agent-experience/36`'s `kanban_events` — the watcher
+    behind `GET /api/kanban/events`, which tells an open board that an agent
+    in another process moved a card. It lands here for the reason `events`
+    and `patrol_events` did, plus one this class has not had before: it owns
+    a poll task whose lifetime is the set of connected boards, so a
+    per-request copy would poll once per open tab rather than once per
+    process. The same discipline applies to the thirteenth."""
 
 RECORDED: dict[str, Recorded] = {
     "compile.diagnostics.Finding": Recorded(21, FINDING_KINDS),
-    "api.services.WorkflowServices": Recorded(11, WORKFLOW_SERVICES),
+    "api.services.WorkflowServices": Recorded(12, WORKFLOW_SERVICES),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.DeepAgentNode": Recorded(13, NARRATE_TOGGLE),

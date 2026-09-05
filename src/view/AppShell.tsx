@@ -22,6 +22,7 @@ import { McpServersDialog } from './overlays/McpServersDialog';
 import { PatrolBoard } from './board/PatrolBoard';
 import { mapKanbanCardToBoardCard } from './board/kanbanCardMapping';
 import type { BoardCard } from './board/patrolBoardModel';
+import { useKanbanChanges } from './board/useKanbanChanges';
 import { usePatrolStatus } from './board/usePatrolStatus';
 import { patrolStatusLine } from './board/patrolStatusLine';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
@@ -216,9 +217,12 @@ export function AppShell() {
    */
   const [patrolBoardOpen, setPatrolBoardOpen] = useState(false);
   /**
-   * Real rows, `kanban-patrol/19` — not live yet, only read-on-open plus a
-   * manual Refresh (`onRefresh` on `PatrolBoard`): push rides `07`'s SSE fan
-   * -out, which does not exist. `null` until the first read returns, so the
+   * Real rows, `kanban-patrol/19` — read on open, refreshed by hand
+   * (`onRefresh` on `PatrolBoard`), and **live since
+   * `osg-agent-experience/36`**: `useKanbanChanges` below refetches through
+   * this same loader whenever the server sees the store move, so an agent
+   * moving a card no longer needs a click. `null` until the first read
+   * returns, so the
    * board can tell "hasn't asked yet" from "asked, found nothing" — the same
    * three-state honesty `19` already applies to a card's own absent fields.
    */
@@ -234,6 +238,14 @@ export function AppShell() {
   useEffect(() => {
     if (patrolBoardOpen) refreshKanbanCards();
   }, [patrolBoardOpen, refreshKanbanCards]);
+  /**
+   * And live from there on — `osg-agent-experience/36`. An agent attending a
+   * card is another process writing `kanban.sqlite`, so the board's rows go
+   * stale the moment it opens; this subscribes to the server's watch of that
+   * file for exactly as long as the board is on screen, and refetches through
+   * the same loader the manual Refresh uses.
+   */
+  useKanbanChanges(patrolBoardOpen, refreshKanbanCards);
   /**
    * The board's live line — kanban-patrol/07. Mounted unconditionally
    * (not gated on `patrolBoardOpen`) because a patrol started from an

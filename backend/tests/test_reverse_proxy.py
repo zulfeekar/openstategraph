@@ -38,6 +38,9 @@ EXPECTED_SSE = {
     "/api/runs/stream",
     "/api/runs/resume",
     "/api/kanban/patrol/events",
+    # `osg-agent-experience/36` — the board's card stream, a sibling of the
+    # patrol one because its poll must cost nothing while no board is open.
+    "/api/kanban/events",
 }
 
 

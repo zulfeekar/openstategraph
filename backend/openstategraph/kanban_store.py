@@ -961,6 +961,51 @@ def answer_card(
     return SetStageResult(ok=True)
 
 
+def store_digest(db_path: Path) -> str:
+    """A cheap answer to *has anything in this store changed* —
+    `osg-agent-experience/36`.
+
+    The board's live stream watches the file the way `live.LiveWorkflows`
+    watches a package: the store is the truth and the server is one reader of
+    it, so the only honest question a poll can ask is whether the bytes moved.
+    Every write door — this module's `file_card`, `set_stage`, `release_card`,
+    `answer_card`, from this process or from an `openstategraph kanban stage`
+    in another — goes through sqlite, so the file's `mtime_ns` and size move
+    for all of them and for none of the reads.
+
+    **The four aggregates are not redundancy for its own sake.** `mtime_ns`
+    alone is coarse on filesystems that round it, and sqlite can rewrite a
+    page without changing the row count; `count(*)` catches a filing,
+    `max(last_heartbeat_at)` catches every `set_stage` (which always stamps
+    it), `max(answered_at)` catches an answer. Any one of them moving is a
+    change; none of them moving with the same mtime and size is, for the
+    board's purpose, the same store.
+
+    Opaque on purpose: it is compared, never parsed. An absent store has a
+    digest too — asking never creates anything, and a watcher must not raise
+    on a project whose board has never been opened.
+    """
+    if not db_path.is_file():
+        return "absent"
+    stat = db_path.stat()
+    parts: list[str] = [str(stat.st_mtime_ns), str(stat.st_size)]
+    try:
+        ensure_schema(db_path)
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute(
+                "SELECT count(*), max(last_heartbeat_at), max(answered_at) FROM cards"
+            ).fetchone()
+        finally:
+            conn.close()
+        parts.extend(str(value) for value in row)
+    except sqlite3.Error:
+        # A store mid-write (or not one) is not a reason to kill the watcher;
+        # the file stamp above is still a true answer to "did the bytes move".
+        parts.append("unreadable")
+    return "|".join(parts)
+
+
 def list_cards(db_path: Path) -> list[Card]:
     """Every card, current stage included. Empty — never an error — when
     nothing has been filed yet: `ensure_schema` was never called, so the

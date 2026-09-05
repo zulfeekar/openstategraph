@@ -216,7 +216,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       part of it this module knows. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 900,
+    lines: 909,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -361,7 +361,16 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       subagent that takes it. Five lines, no method and no behaviour at all:
       exactly the bill this entry's argument describes, one line per mirrored
       wire field, and the physical count moved by three times as much because
-      each carries its documentation.`,
+      each carries its documentation.
+
+      **900 -> 909** (\`osg-agent-experience/36\`). \`KanbanStreamEvent\` — one
+      declared member — and \`watchKanbanEvents\`, the fourth SSE door this
+      client opens: an \`addEventListener\` for one event name, one field read,
+      and a returned unsubscribe, the same nine lines of shape
+      \`watchPatrolEvents\` beside it already has. Not a new kind of
+      responsibility: the backend grew a stream because a card moved by
+      another process was invisible until somebody pressed Refresh, and this
+      is the client's one thin method per door.`,
   },
 };
 

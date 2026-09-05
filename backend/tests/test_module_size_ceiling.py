@@ -1042,10 +1042,19 @@ write path and no new column — it belongs beside `column_for` for the same
 reason `column_for` is here at all, one function computing where a card
 sits in a rule both doors (MCP `kanban_triage`, CLI `kanban triage`) must
 answer identically.
+
+**2026-09-05, `osg-agent-experience/36`.** `store_digest` added: 582 -> 600.
+Eighteen lines and no new write path — the *opposite* of one: it is a read
+whose whole purpose is to let a watcher outside this module tell whether any
+of the three writes happened, because every one of them arrives from another
+process (a CLI, an MCP tool) and the server that serves the board is one more
+reader of this file. It belongs here rather than beside the stream for the
+reason `column_for` does: it knows this schema's columns, and a digest built
+in `api/` would be a second place that has to be told when one is added.
 """
 
 RECORDED: dict[str, Recorded] = {
-    "kanban_store.py": Recorded(582, KANBAN_STORE),
+    "kanban_store.py": Recorded(600, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
     "cli.py": Recorded(1573, CLI),
     "compile/workflow_compiler.py": Recorded(957, WORKFLOW_COMPILER),

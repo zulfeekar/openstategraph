@@ -71,6 +71,8 @@ class WorkflowServices:
         principals: IPrincipals | None = None,
     ) -> None:
         from openstategraph.api.catalogue_events import CatalogueBroadcaster
+        from openstategraph.api.kanban_events import KanbanChangeWatcher
+        from openstategraph.kanban_store import kanban_store_path
         from openstategraph.api.patrol_events import PatrolBroadcaster
         from openstategraph.api.patrol_registry import PatrolJobRegistry
 
@@ -97,6 +99,17 @@ class WorkflowServices:
         #: -patrol asks this, not the stream, because the stream has no
         #: replay — see `patrol_registry`'s own docstring.
         self.patrol_jobs = PatrolJobRegistry()
+        #: Live card writes — the fan-out behind `GET /api/kanban/events`
+        #: (`osg-agent-experience/36`). A third broadcaster rather than a
+        #: frame on `patrol_events`, for the two reasons `kanban_events`'s own
+        #: docstring gives; here for the reason its two siblings are here, and
+        #: with one extra: it owns a poll task whose lifetime is the set of
+        #: connected boards, so it must outlive any one request rather than be
+        #: rebuilt per connection — a per-request watcher would poll once per
+        #: open tab.
+        self.kanban_events = KanbanChangeWatcher(
+            lambda: kanban_store_path(self.store.root)
+        )
         #: Long-term memory, process-wide (ticket 65): one Store shared by
         #: every run, namespaced per user inside the tools themselves.
         #: Injectable, because its sibling the checkpointer always was: a
