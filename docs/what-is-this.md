@@ -110,6 +110,25 @@ Adopters test this first, so: three parts, not one slogan.
 
 ---
 
+## Why not the four visual tools
+
+Langflow, Flowise, n8n and Dify each own their execution engine: a flow runs
+inside their platform, through their runtime, or it does not run at all. Here
+the output leaves.
+
+- **A flow is a file in git.** `workflow.json`, plus the package's own `tools/`,
+  `functions/` and `tests/` — reviewable in a pull request, diffable, not a blob
+  in someone's database.
+- **The output runs without the editor.** Import it from a script, exercise it
+  with `pytest`, deploy it wherever Python runs. Delete this repository and your
+  workflow still runs.
+
+That is the whole of the comparison, and it is a *shape* difference rather than
+a feature count: the section below is the one that matters more, because
+LangGraph is the thing you would otherwise reach for.
+
+---
+
 ## What it adds over raw LangGraph
 
 Not "an easier `StateGraph`". LangGraph's API is already good. What you get is
@@ -306,6 +325,26 @@ graph = workflow.graph      # a plain compiled LangGraph StateGraph
 - **`as_tool()`** hands the whole workflow to an agent you already have, as one
   LangChain `StructuredTool`.
 - **MIT**, and `requires_dist` is short enough to read in full.
+
+---
+
+## Known limits
+
+Stated here rather than discovered:
+
+- **PNG export** rasterises the SVG through a canvas. Chromium does this with
+  `foreignObject` content; WebKit historically refuses. The failure is reported
+  with a message pointing at SVG export, which always works.
+- **SVG export** inlines the app's stylesheets and resolved theme variables but
+  drops `@font-face` rules, so an external viewer falls back to a system font.
+- **Reddit tool** tries the live endpoint first and falls back to labelled
+  sample data — Reddit rejects browser-origin requests. The fallback is marked
+  in both the payload and the run log rather than passed off as live.
+- **Containers do not auto-fit** their children, by design: an auto-growing
+  frame changes geometry behind the user's back, and geometry belongs to the
+  model. Frames are resized by hand via the corner grip.
+- **Canvas-preview execution is sequential**, so a run is legible on the canvas.
+  Parallelising independent branches is a change to `ExecutionEngine.run` alone.
 
 ---
 

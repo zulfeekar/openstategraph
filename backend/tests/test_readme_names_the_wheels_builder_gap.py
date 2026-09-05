@@ -14,9 +14,18 @@ Two things are pinned so a future edit cannot silently reopen the gap:
    this test fails and says so, rather than the README quietly going stale
    the other direction (claiming "checkout-only" for something the wheel now
    ships).
-2. The README, at the paragraph naming both workflows, actually says they are
+2. The page, at the paragraph naming both workflows, actually says they are
    checkout-only and actually points a wheel reader at the working
    alternative (`docs/mcp.md` §2).
+
+**The page moved, and the claim did not** (`docs-onramp/01`). The paragraph
+lived on `README.md` while the front page carried a section on the example
+workflows *in this checkout*; that section is now
+`CONTRIBUTING.md` § "The example workflows in this checkout", because a
+stranger installing the wheel has no checkout and the paragraph was written
+for the reader who does. The assertion follows the sentence rather than the
+filename — which is why `PAGE` is a name here instead of a literal in the
+body.
 """
 
 from __future__ import annotations
@@ -24,6 +33,9 @@ from __future__ import annotations
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+
+#: The page that carries the paragraph. `README.md` until `docs-onramp/01`.
+PAGE = REPO / "CONTRIBUTING.md"
 
 
 class TestConciergeAndArchitectAreStructurallyCheckoutOnly:
@@ -44,13 +56,13 @@ class TestConciergeAndArchitectAreStructurallyCheckoutOnly:
         assert not (REPO / "backend" / "workflows").exists()
 
 
-class TestTheReadmeSaysSoWhereItNamesThem:
+class TestThePageSaysSoWhereItNamesThem:
     def test_the_paragraph_naming_both_workflows_calls_out_checkout_only(self) -> None:
-        readme = (REPO / "README.md").read_text()
-        idx = readme.index(
+        page = PAGE.read_text()
+        idx = page.index(
             "Two hidden infrastructure workflows (`concierge`, `workflow-architect`)"
         )
-        paragraph = readme[idx : idx + 700]
+        paragraph = page[idx : idx + 700]
 
         assert "checkout" in paragraph
         assert "wheel" in paragraph

@@ -212,6 +212,28 @@ capability gap look identical.
 straight from the page to the vendor. That is an acceptable trade for a
 local-first editor and the dialog says so — use a scoped, revocable key.
 
+### The providers themselves
+
+The canvas preview offers four; the backend offers the same vendors through the
+environment variables above.
+
+| Provider | Credentials | Notes |
+| --- | --- | --- |
+| **Mock · Offline** | none | A deterministic two-phase agent loop (requests a tool, then answers from its result) so the real execution path is exercised. Preview only — see the note below. |
+| **Ollama** | API key **or** a host | Cloud by default (`https://ollama.com`), reached with an `ollama.com` key sent as `Authorization: Bearer`. Naming a base URL instead points it at a daemon you run, which owns its own auth — start that with `OLLAMA_ORIGINS="*"` so the browser can reach it. Either signal is enough; models come from `/api/tags`, cloud first. |
+| **Anthropic** | API key | Official SDK, lazy-loaded. Adaptive thinking; drops to `thinking: disabled` below a 4096-token budget (`max_tokens` caps thinking *and* answer together) with the documented no-thinking guardrails applied. |
+| **OpenAI** | API key | Official SDK, lazy-loaded. Model list refreshed from the account. |
+
+Both vendor SDKs are dynamic imports, so they are separate chunks and cost
+nothing for users who stay on Mock or Ollama.
+
+> Until providers-and-credentials ticket 02, Ollama's credential here read
+> "none" and its default host was `http://localhost:11434`. Neither was right:
+> the cloud was reached through a local daemon holding its own credentials, so
+> "none" described an *ambient* credential rather than the absence of one, and
+> the localhost default made the preview a local provider while the project's
+> standing rule is that Ollama means cloud.
+
 ### Reasoning effort
 
 Every node that drives a model — Agent, Router, Grader, Supervisor, Worker —

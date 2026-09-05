@@ -1,4 +1,4 @@
-"""`README.md` and `CONTRIBUTING.md` name a test-count gap. Measure it.
+"""`CONTRIBUTING.md` names a test-count gap. Measure it.
 
 `stable-beta-public/04`. Both documents warn that `cd backend && pytest`
 misses the root `pytest.ini`, and both quantify the miss. `README.md` goes
@@ -28,6 +28,19 @@ in a subprocess, compared against the figure the documents print. Collecting
 the whole suite twice would measure the same thing for twenty times the
 runtime.
 
+## One page states it now, and that is the point of `docs-onramp/01`
+
+Both `README.md` and `CONTRIBUTING.md` carried the sentence when this file was
+written, and `test_the_two_pages_agree` existed because they had already
+disagreed about the *shape* of the gap. `README.md` § Tests was one of the
+sections addressed to a reader who has already decided, and it moved whole to
+`CONTRIBUTING.md`, which is where the test gate is argued. So there is one
+statement of the fact instead of two, the duplication that produced the
+original disagreement is gone, and `PAGES` is a tuple rather than a literal so
+a second page restating it is one line away from being measured too — but
+nothing restates it today, and `test_the_two_pages_agree` says so rather than
+passing vacuously.
+
 ## Why the number stays in the prose at all
 
 The alternative — delete it, as `docs/mcp.md`'s tool counts were deleted on
@@ -45,7 +58,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_TESTS = ROOT / "workflows" / "chinook-assistant"
-PAGES = (ROOT / "README.md", ROOT / "CONTRIBUTING.md")
+#: Every page that states the gap. `README.md` stated it too until
+#: `docs-onramp/01` moved § Tests to `CONTRIBUTING.md`.
+PAGES = (ROOT / "CONTRIBUTING.md",)
 
 #: The sentence shape both pages use. The bold is theirs; the digits are what
 #: this file checks.
@@ -101,12 +116,19 @@ def test_the_documented_gap_is_the_measured_one() -> None:
     )
 
 
-def test_the_two_pages_agree() -> None:
-    """One fact, two documents. They disagreed on the *shape* of it — one said
-    the curated example package, the other said the entire `workflows/` tree —
-    which is how one of them came to be wrong about something neither had
-    measured."""
+def test_every_page_that_states_it_states_the_same_gap() -> None:
+    """One fact, however many documents. They disagreed on the *shape* of it —
+    one said the curated example package, the other said the entire
+    `workflows/` tree — which is how one of them came to be wrong about
+    something neither had measured.
+
+    `docs-onramp/01` left one page stating it, so this is a one-element check
+    today. It is kept rather than retired because the cheapest way to reopen
+    the original defect is for a second page to restate the number, and this
+    is the assertion that would catch it the moment `PAGES` grows.
+    """
     stated = {
         page.name: GAP_CLAIM.search(page.read_text(encoding="utf-8")).group(1) for page in PAGES
     }
-    assert len(set(stated.values())) == 1, f"the two pages state different gaps: {stated}"
+    assert len(set(stated.values())) == 1, f"these pages state different gaps: {stated}"
+    assert len(stated) == len(PAGES), "a page in PAGES no longer states the gap at all"

@@ -31,6 +31,173 @@ their workflow actually uses (`[anthropic]`, `[openai]`, `[ollama]`, `[deep]`,
 without the accompanying case for it fails
 `backend/tests/test_distribution_metadata.py`, which is the point.
 
+## Running the stack on a checkout
+
+**You cloned this repository.** This is the contributor's path — a reader who
+installed the wheel needs none of it and should follow
+[`README.md`](README.md) instead.
+
+You need Node 20+ (developed against Node 22) and Python 3.11+ (developed
+against 3.12/3.13). Node is needed **only** here: an install from the wheel
+carries the built editor. No local model runtime is needed either — the backend
+defaults to **Ollama cloud** (an Ollama account, not a local `ollama serve`),
+and a credential is required at the moment a model is *used*, not when one is
+built (`UnconfiguredProvider` in
+[`backend/openstategraph/chat_model.py`](backend/openstategraph/chat_model.py)).
+
+Two processes, two languages, run separately. There is deliberately no single
+unified dev command: a Vite process and a uvicorn process have little in common
+to unify, and a Makefile wrapping "run these two things" would be one more
+thing to keep in sync with the two scripts below.
+
+```bash
+npm install
+scripts/dev.sh     # supervised backend + editor; scripts/dev.sh stop; scripts/status.sh
+
+# — or by hand —
+# Terminal 1 — the editor
+npm run dev        # http://localhost:5273
+
+# Terminal 2 — the runtime (optional: the editor works read-only without it,
+# but Chat and saving workflows both need it).
+#
+# Both lines run from the REPO ROOT. `pip install -e .` inside backend/ gives
+# you the lean core, which has no fastapi and no uvicorn; and after a
+# `cd backend` both PYTHONPATH entries below resolve to nothing — silently,
+# not with an error, so the workflow's tools/ and functions/ just never import.
+pip install -e "backend[all,dev]"   # fastapi + uvicorn are in the [server] extra
+PYTHONPATH=backend:workflows/chinook-assistant \
+  uvicorn openstategraph.api.main:app --port 8000 --app-dir backend
+
+npm run build      # tsc -b && vite build
+npm run typecheck
+```
+
+This backend serves `/chat`, `/docs`, `/openapi.json` and everything under
+`/api`. **`GET /` is a 404 here, on purpose**: in the two-process dev setup
+Vite owns the editor, on :5273. Only the single-origin modes —
+`openstategraph serve` (which `openstategraph .` calls) and the Docker image,
+which set `OPENSTATEGRAPH_SERVE_STATIC=1` — mount the built editor at `/`, and
+there a checkout with no `npm run build` gets a page explaining that rather
+than a bare 404.
+
+### What the canvas opens on
+
+Opens on a **blank canvas**: an address that names no workflow opens no
+workflow, whoever last used this browser (`install-experience` 23). Blank is
+not the same as silent, though — the canvas **offers the workflows this project
+holds**, most recently opened or edited first, in a dialog you can dismiss
+(`install-experience` 28). Dismissing selects nothing, and the canvas behind it
+carries the same list under **Start** and **Recent**. `?w=<slug>` still wins:
+it opens that workflow and shows no dialog, so a link a colleague sends lands
+where it says.
+
+The one exception is the **first** visit in a browser that has never held any
+work, which is handed a starter — Input → Agent → Output, wired, with a note
+saying what it is (`install-experience` 24), and is not also asked to pick.
+It is unsaved and called `Untitled`, nobody else's document, and deleting it is
+permanent: it is offered once. Otherwise open one from the arrival list or from
+**Workflows**, start from a template, or copy an example.
+
+### Docker
+
+One command, either way:
+
+```bash
+./start        # production stack in Docker — build + run, then http://localhost:8000/
+./start dev    # local dev with hot reload — Vite :5273 + uvicorn --reload :8000
+./start stop   # stop whichever is running
+./start logs   # follow the container logs
+```
+
+`./start` builds a multi-stage image (Node compiles the editor, a throwaway
+stage builds the Python wheels) whose final layer is Python slim plus runtime
+deps, the built `dist/`, `backend/` and `workflows/`. The backend serves the
+editor, `/chat` and the API from a single origin on port 8000. Map it to any
+host port you like: the editor's API calls are **same-origin relative**, so
+they follow the page wherever it is published (`src/core/runtime/runtimeBaseUrl.ts`
+— an absolute `http://localhost:8000` used to make port 8000 mandatory).
+`./workflows` is bind-mounted, so workflows saved in the container land in the
+repo.
+
+**Approvals persist by default.** The human-in-the-loop checkpointer is a
+SQLite saver on `<workflows root>/.openstategraph/checkpoints.sqlite`, so a
+`human.approval` pause survives a restart — including the restart `--reload`
+performs every time you save a file. The server logs which one it got at
+startup: `approvals persist at …`, or `approvals are in-memory and will NOT
+survive a restart`. Set `OPENSTATEGRAPH_CHECKPOINT_PATH` to move the file, or
+to `memory` to opt out of durability on purpose.
+
+**One worker, and a second one is refused.** Durability is fixed; concurrency
+is not. `SqliteSaver` and the long-term memory `SqliteStore` serialise writes
+with a `threading.Lock` held per instance, which two OS processes do not share;
+the live catalogue-event fan-out behind `GET /api/events` is an in-process
+queue. So `--workers 2`, `WEB_CONCURRENCY` and friends are refused before a
+socket is bound, and an exclusive lock on the state directory refuses
+`uvicorn --workers 4` and `gunicorn -w 4` too, which leave no environment
+trace. `[postgres]` + `OPENSTATEGRAPH_POSTGRES_URL` puts checkpoints and
+memories in a real database — worth doing, and deliberately **not** a lift on
+the ceiling, because the event fan-out still has no cross-process transport.
+[`docs/deploying.md`](docs/deploying.md) has the whole story, plus the threat
+model and a committed reverse proxy.
+
+Rationale for each choice is commented inline in `Dockerfile`,
+`docker-compose.yml`, `start` and `scripts/dev.sh`.
+
+### The example workflows in this checkout
+
+`chinook-assistant` is the checkout's worked example, evaluated against
+`workflows/chinook-assistant/data/Chinook_Sqlite.sqlite`, the standard Chinook
+music store. One database per package is the single source of truth: every
+figure the example produces can be checked against the same file. (The wheel's
+`sql-qa` example ships its own copy of the same database, for the same reason
+an example is copied whole rather than mounted where it lies.) The rest of
+`workflows/` in this checkout is the app spine — the concierge and the
+architect — plus whatever is being drafted; `openstategraph examples list` is
+the gallery.
+
+- **`chinook-assistant`** ("Chinook Assistant") — a router with five intents
+  in front of three destinations. A **data question** goes to a SQL analyst;
+  a **greeting**, an **off-topic** request or a **general-knowledge**
+  question is answered directly by a tool-less Front Desk agent; a **web
+  lookup** goes to an agent holding web search and web fetch. Thirteen
+  nodes, one document, nothing mounted.
+
+The analyst is the `data_query` branch, not a separate package: an agent
+bound to three Chinook tools (list tables → schema → read-only query), taking
+its rules from a wired Markdown skill file, behind a grader that sends a bad
+answer back for another attempt, up to three times. It is inline rather than a
+mount because **there was a second Chinook document and it was the one the
+editor opened** — so a reader met a graph with no router in it. Nothing is
+mounted here either, and the reason is the *package* a mount would point at,
+not the card: a supervisor-plus-workers package buys a planning call and a
+fan-out, and there is exactly one worker role to plan for. The revision loop is
+what the branch needs; the planner is what it would pay for and not use.
+(`Team` and `Workflow` are the same builder — the card changes nothing about
+what runs.)
+
+The recorded cost: no *visible* example demonstrates composition any more.
+The hidden `concierge` still mounts this workflow and `workflow-architect` as
+subgraphs, and `docs/patterns.md` documents the atom, but nothing a first-time
+reader opens does.
+
+Two hidden infrastructure workflows (`concierge`, `workflow-architect`) power
+the chat gateway and the build-me-a-workflow flow — **in this checkout.**
+Both live under this repository's `workflows/`, outside `backend/`, so
+neither one is in the wheel: a `pip install` gives you no in-app "describe
+what you want" surface. The same capability for a wheel install is
+[`docs/mcp.md`](docs/mcp.md) §2 — `openstategraph mcp` turns your own MCP
+client's model into the composer, talking to this server as the ground truth
+and the artifact factory. `openstategraph new <slug>
+[--template loop|minimal|routed-qa|team]` (or `scripts/new_workflow.py` /
+`scripts/new_team.py`, which call the same code) scaffolds your own packages
+from templates that ship inside the wheel.
+
+> Previously this section listed three examples. `page-analytics` ("Store
+> Analytics") and `chinook-metrics-team` were deleted: a diagram nobody can
+> read has failed regardless of what it does, and one example that is read is
+> worth more than three that are skipped.
+
 ## The non-negotiables your pull request is judged against
 
 These are the rules a maintainer will block on. They are argued in
@@ -197,12 +364,146 @@ name any page you missed.
 
 ## Adding things
 
-Everything is a registry; extending never edits `core/`. See README's
-"Extension points" table. A new workflow is a package under
+Everything is a registry; extending never edits `core/` — the
+[extension-point table](#extension-points) below says what to register for
+each kind of capability. A new workflow is a package under
 `workflows/<slug>/` — `workflow.json` + `AGENTS.md` required; `tools/`,
 `functions/`, `middlewares/`, `skills/`, `knowledge/`, `evals/`, `tests/` and
 `data/` discovered by convention. The full contract is
 [`openwiki/workflows/package-contract.md`](openwiki/workflows/package-contract.md).
+
+## The architecture
+
+Strict MVC with a framework-agnostic core. **`core/` imports neither React nor
+JointJS** — it is plain TypeScript that could run in Node or a worker. The
+arguments behind all of it are in [`CLAUDE.md`](CLAUDE.md); this is the map.
+
+```
+src/
+├── design/        Design system — tokens, themes, primitives. No app logic.
+├── core/          MODEL + engine. No React. No JointJS.
+│   ├── kernel/        IDisposable, typed EventBus, generic Registry<T>, Result, geometry
+│   ├── model/         contracts/ (interfaces) · AbstractNodeModel · WorkflowModel · ModelRegistry
+│   ├── commands/      ICommand · CommandStack · node/edge commands
+│   ├── validation/    ConnectionValidator (rule chain) · WorkflowValidator (diagnostics)
+│   ├── serialization/ Versioned JSON + migration chain
+│   ├── execution/     INodeExecutor · ExecutionEngine (topological scheduler)
+│   └── providers/     ILLMProvider + Mock / Anthropic / OpenAI / Ollama adapters
+├── controller/    WorkflowController façade · SelectionModel · ClipboardService
+├── canvas/        VIEW (JointJS) — adapter, viewport, installable features
+├── nodes/         Self-contained node modules (model + schema + ports + executor)
+├── view/          VIEW (React) — shell, panels, node cards
+└── app/           Composition root (Workbench) + React context + demo seed
+```
+
+### The one rule that makes it work
+
+**The canvas is a projection of the model, never a peer.**
+
+```
+gesture → WorkflowController → ICommand → WorkflowModel → event → JointGraphAdapter → paper
+```
+
+`JointGraphAdapter` is strictly one-way (model → graph). No user gesture writes
+to the graph and hopes the model catches up. Consequences:
+
+- **Undo is generic.** It replays commands; no feature implements its own undo.
+- **The graph is disposable.** Rebuilding it from the model is always correct —
+  which is exactly what import does.
+- **They cannot disagree.** There is no code path that mutates one without the
+  other.
+
+Drags are the interesting case: JointJS moves the element continuously while the
+pointer is down (the graph leads), then `DragCommitFeature` rewinds the graph and
+writes **one** `MoveNodesCommand` on release. Smooth drag, single undo entry.
+
+### Extension points
+
+Everything is a `Registry<T>`. Adding a capability is a registration, never an
+edit to the engine.
+
+| To add… | Register a… | Engine changes |
+| --- | --- | --- |
+| A node type | `INodeDefinition` + `INodeExecutor` | none |
+| A tool the agent can call | `IToolExecutor` | none |
+| An LLM vendor | `ILLMProvider` | none |
+| A connection rule | `IConnectionRule` | none |
+| A validation check | `IWorkflowRule` | none |
+| A canvas behaviour | `IPaperFeature` | none |
+| A bespoke card body | `NodeBody` | none |
+
+That table is the TypeScript half. On the Python side there is a further step
+that needs **no edit to this repository at all**: publish your own distribution
+declaring `[project.entry-points."openstategraph.tools"]`, and your tools
+register in every workflow the moment someone `pip install`s it — layered
+built-in < your plugin < the workflow's own `tools/`, jailed so a broken plugin
+warns and is skipped rather than taking the registry down. The exact stanza is
+in [Building an atom](docs/building-an-atom.md#publishing-an-atom-as-your-own-distribution).
+
+A node module is one file: model class, field schema, ports, executor. See
+[`nodes/tools/RedditSearchNode.ts`](src/nodes/tools/RedditSearchNode.ts) — a
+complete tool in ~90 lines. `nodes/index.ts` is the only file that knows the
+full catalogue.
+
+### Content-driven cards
+
+Node bodies are real HTML (React) inside a `foreignObject`, which is what makes
+the typography, form controls and Markdown tables possible. Cards therefore
+size *themselves*: after layout each card measures its height and the centre of
+every port row and reports both to the adapter, which writes them onto the
+JointJS cell so link endpoints land exactly on the dot the user sees.
+
+That is a feedback loop, so it is made convergent deliberately — heights round to
+whole model units and identical measurements are dropped before reaching the
+model. See the comment block in
+[`view/nodes/NodeCard.tsx`](src/view/nodes/NodeCard.tsx).
+
+### The compile seam
+
+The seam that keeps the two halves independent is `ILLMProvider` +
+`INodeExecutor` on the editor side, and one directional compile step on the
+runtime side. The serialized document
+([`core/serialization`](src/core/serialization/WorkflowSerializer.ts)) is
+versioned with a migration chain and is the wire format the Python side turns
+into a LangGraph `StateGraph`.
+
+It stays one-directional on purpose: `workflow.json` → runtime, never back.
+Nothing reads runtime objects into the model, expressions are a serialisable
+JSON AST rather than host-language lambdas, reducers are a named enum, and
+LangGraph type names never leak into `workflow.json` or `core/`. That keeps
+`workflow.json` the vendor-neutral layer without paying for an orchestration
+abstraction nothing else could implement.
+
+### What had to be rebuilt
+
+`@joint/plus` ships the editor scaffolding; the open-source core ships only the
+diagram primitives. Everything in the right column here is written from scratch
+in this repo.
+
+| JointJS+ feature | Open-source replacement |
+| --- | --- |
+| `ui.Stencil` | [`view/palette/Palette.tsx`](src/view/palette/Palette.tsx) — registry-driven, searchable, drag + click to add |
+| `ui.PaperScroller` | [`canvas/Viewport.ts`](src/canvas/Viewport.ts) — transform-based infinite canvas, zoom about the pointer |
+| `ui.Navigator` | [`view/minimap/Minimap.tsx`](src/view/minimap/Minimap.tsx) — draws model rects, not a second paper |
+| `ui.Selection` | [`canvas/features/SelectionFeature.ts`](src/canvas/features/SelectionFeature.ts) — click, shift-click, rubber band |
+| `ui.Snaplines` | [`canvas/features/SnaplinesFeature.ts`](src/canvas/features/SnaplinesFeature.ts) — 3×3 edge/centre alignment + snapping |
+| `ui.Inspector` | [`view/inspector/Inspector.tsx`](src/view/inspector/Inspector.tsx) — rendered from field schemas |
+| `ui.Toolbar` | [`view/topbar/TopBar.tsx`](src/view/topbar/TopBar.tsx) |
+| `ui.Keyboard` | [`canvas/features/KeyboardFeature.ts`](src/canvas/features/KeyboardFeature.ts) — one binding table, shared with the help drawer |
+| `dia.CommandManager` | [`core/commands/CommandStack.ts`](src/core/commands/CommandStack.ts) — undo/redo with coalescing + transactions |
+| `format.*` (PNG/SVG/JSON) | [`view/export/exportWorkflow.ts`](src/view/export/exportWorkflow.ts) |
+| `layout.DirectedGraph` | [`canvas/AutoLayout.ts`](src/canvas/AutoLayout.ts) — dagre via the MPL-2.0 `@joint/layout-directed-graph` |
+| HTML-in-shape | [`canvas/shapes/HtmlNode.ts`](src/canvas/shapes/HtmlNode.ts) — `foreignObject` + React portals |
+
+### Accessibility
+
+The **Check accessibility** button runs a live DOM audit — accessible names on
+every control, labelled node cards, keyboard reachability of canvas content,
+reduced-motion support, and a measured WCAG contrast ratio for body text. It
+inspects what is actually rendered, so it can genuinely fail.
+
+Every canvas action has a keyboard equivalent; the bindings table drives both
+the dispatcher and the shortcuts drawer, so the documentation cannot drift.
 
 ## What happens to your pull request
 
