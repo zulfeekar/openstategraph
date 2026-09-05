@@ -9,6 +9,8 @@ import { maxConnectionsOf } from '@core/model/contracts/ports';
 import type { INodeExecutor } from '@core/execution/INodeExecutor';
 
 import { registerNodeCatalogue } from './index';
+import { createDiscoveredToolNode } from './tools/DiscoveredToolNode';
+import { createDiscoveredFunctionNode } from './functions/DiscoveredFunctionNode';
 import { workflowScopedFamilies } from './workflowScoped';
 import { MODEL_FIELD_KEY } from './modelField';
 import { LEGACY_RULES_MODE_KEY, SKILL_PORT_ID } from './skillLayer';
@@ -38,7 +40,7 @@ import { LEGACY_SKILL_BODY_KEY } from './inputs/SkillNode';
  */
 
 /** Bumped when the artifact's shape changes in a way Python must notice. */
-export const PORT_SPEC_SCHEMA_VERSION = 5;
+export const PORT_SPEC_SCHEMA_VERSION = 6;
 
 /** Where the emitted artifact lives, relative to the repository root. */
 export const PORT_SPEC_ARTIFACT_PATH = 'backend/openstategraph/compile/port_specs.json';
@@ -220,6 +222,32 @@ export interface GeneratedPortType {
   readonly accepts: readonly string[];
 }
 
+/**
+ * A whole *namespace* of node types, and the ports every member of it has.
+ *
+ * `tool.<name>` and `function.<name>` are minted at runtime from what a
+ * workflow package was discovered to contain, so no static artifact can list
+ * the types — but their **shape** is fixed by one factory each, and that is
+ * what a composing client actually needs. Until `osg-agent-experience/46`
+ * nothing published it: the ids a document had to use existed only through
+ * `default_port_resolver`'s unknown-type fallback, which accepts any in-port
+ * id and treats `result` as the way out, so a document could name a port the
+ * editor cannot draw and still compile.
+ *
+ * Probed, never declared, exactly as `splitPorts` probes a router's branches:
+ * the factory is called with a synthetic capability and the ports it returns
+ * are serialised. A second hand-written table on either side of the boundary
+ * is the mirror this whole file exists to delete.
+ */
+export interface GeneratedTypePrefix {
+  readonly prefix: string;
+  /** The synthetic type id the ports below were probed from. */
+  readonly probe_type: string;
+  /** One sentence naming what the suffix is. */
+  readonly hint: string;
+  readonly ports: readonly GeneratedPort[];
+}
+
 export interface NodeCatalogueArtifact {
   readonly schema_version: number;
   readonly generated_by: string;
@@ -240,6 +268,8 @@ export interface NodeCatalogueArtifact {
   readonly legacy_data_keys: readonly string[];
   readonly port_types: readonly GeneratedPortType[];
   readonly node_types: readonly GeneratedNodeType[];
+  /** Namespaces whose members are minted per workflow package. */
+  readonly dynamic_type_prefixes: readonly GeneratedTypePrefix[];
 }
 
 /**
@@ -462,7 +492,50 @@ export function buildPortSpecArtifact(): NodeCatalogueArtifact {
     legacy_data_keys: [LEGACY_RULES_MODE_KEY, LEGACY_SKILL_BODY_KEY].sort(),
     port_types: portTypes,
     node_types: nodeTypes,
+    dynamic_type_prefixes: typePrefixes(registry),
   };
+}
+
+/**
+ * The two runtime-minted namespaces, probed from their own factories.
+ *
+ * The capabilities are synthetic and their contents do not reach the output:
+ * neither factory's `ports()` reads anything from the capability, which is why
+ * the shape is publishable at all. `probe_type` is emitted so a reader can see
+ * what was asked rather than trust that the answer generalises.
+ */
+function typePrefixes(registry: ModelRegistry): GeneratedTypePrefix[] {
+  const tool = createDiscoveredToolNode({
+    id: 'tool.example',
+    name: 'example',
+    description: 'A tool discovered in a workflow package.',
+    argsSchema: {},
+    nodeType: '',
+  }).definition;
+  const fn = createDiscoveredFunctionNode({
+    id: 'example',
+    name: 'example',
+    docstring: '',
+    signature: '(text: str) -> str',
+  }).definition;
+  return [
+    {
+      prefix: 'tool.',
+      probe_type: tool.id,
+      hint:
+        'a tool node; the suffix names a tool discovered in the workflow ' +
+        "package's tools/ folder",
+      ports: splitPorts(registry, tool).ports,
+    },
+    {
+      prefix: 'function.',
+      probe_type: fn.id,
+      hint:
+        'a function node; the suffix names a callable in the workflow ' +
+        "package's functions/ folder",
+      ports: splitPorts(registry, fn).ports,
+    },
+  ];
 }
 
 /** The exact bytes written to disk, so the drift check compares like with like. */

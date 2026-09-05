@@ -187,8 +187,25 @@ The gist of what comes back:
     //  absent from this payload is a tool no agent can be wired to.
   ],
   "dynamic_type_prefixes": {
-    "tool.": "a tool node; the suffix names a tool discovered in the workflow package's tools/ folder",
-    "function.": "a function node; the suffix names a callable in the workflow package's functions/ folder"
+    //  A namespace whose members are minted per workflow package. The types
+    //  cannot be listed — the suffix is whatever that package was found to
+    //  contain — but every member has the same ports, so those are published
+    //  (`osg-agent-experience/46`). Wire `text` in and `result` out on a
+    //  function node; the compiler's fallback resolver accepts other in-port
+    //  ids and the editor cannot draw them.
+    "tool.": {
+      "hint": "a tool node; the suffix names a tool discovered in the workflow package's tools/ folder",
+      "probe_type": "tool.example",
+      "ports": [{ "id": "tool", "type": "tool", "direction": "out", "max_connections": null }]
+    },
+    "function.": {
+      "hint": "a function node; the suffix names a callable in the workflow package's functions/ folder",
+      "probe_type": "function.example",
+      "ports": [
+        { "id": "text", "type": "result", "direction": "in", "max_connections": 1 },
+        { "id": "result", "type": "result", "direction": "out", "max_connections": null }
+      ]
+    }
   },
   "port_semantics": {
     "control": ["result", "text"],

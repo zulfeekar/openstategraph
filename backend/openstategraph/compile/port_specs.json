@@ -1,5 +1,5 @@
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "generated_by": "npm run generate:ports",
   "source": "src/nodes/portSpecs.ts",
   "warning": "GENERATED FILE — DO NOT EDIT. The TypeScript node catalogue is authoritative; run `npm run generate:ports` after changing a node type or a port.",
@@ -3580,6 +3580,60 @@
           "hint": "Blank means never cached. Only safe when the same input must give the same result.",
           "required": false,
           "defaultValue": ""
+        }
+      ]
+    }
+  ],
+  "dynamic_type_prefixes": [
+    {
+      "prefix": "tool.",
+      "probe_type": "tool.example",
+      "hint": "a tool node; the suffix names a tool discovered in the workflow package's tools/ folder",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": "function.",
+      "probe_type": "function.example",
+      "hint": "a function node; the suffix names a callable in the workflow package's functions/ folder",
+      "ports": [
+        {
+          "id": "text",
+          "direction": "in",
+          "type": "result",
+          "label": "text",
+          "required": true,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
         }
       ]
     }

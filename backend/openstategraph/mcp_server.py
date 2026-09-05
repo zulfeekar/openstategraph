@@ -291,17 +291,34 @@ class NodeVocabulary:
 
         return {
             "node_types": node_types,
+            # A namespace whose members are minted per workflow package, and —
+            # since `osg-agent-experience/46` — the ports every member of it
+            # has. The sentence alone was what a composing client got, so the
+            # ids had to be found by reading `default_port_resolver`, whose
+            # fallback accepts any in-port id and treats `result` alone as the
+            # way out: a document naming a port the editor cannot draw
+            # compiled clean. Generated, never typed here — the factory that
+            # mints these nodes is the declaration, exactly as it is for a
+            # router's branches.
             "dynamic_type_prefixes": {
-                prefix: hint
-                for prefix, hint in zip(
-                    KNOWN_PREFIXES,
-                    (
-                        "a tool node; the suffix names a tool discovered in the "
-                        "workflow package's tools/ folder",
-                        "a function node; the suffix names a callable in the "
-                        "workflow package's functions/ folder",
-                    ),
-                )
+                str(entry["prefix"]): {
+                    "hint": str(entry.get("hint") or ""),
+                    "probe_type": str(entry.get("probe_type") or ""),
+                    "ports": [
+                        {
+                            "id": port["id"],
+                            "type": port["type"],
+                            "direction": port["direction"],
+                            "label": port.get("label", ""),
+                            "required": bool(port.get("required")),
+                            "max_connections": port.get("max_connections"),
+                            "accepts": list(port.get("accepts") or ()),
+                        }
+                        for port in entry.get("ports") or ()
+                    ],
+                }
+                for entry in CATALOGUE.type_prefixes
+                if str(entry["prefix"]) in KNOWN_PREFIXES
             },
             "port_semantics": {
                 "control": sorted(CONTROL_PORT_TYPES),

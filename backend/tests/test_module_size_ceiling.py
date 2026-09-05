@@ -802,6 +802,14 @@ port group publishes its own `max_connections`, off the same catalogue record
 the static ports beside it already read it from. The renderer had been
 printing the literal `unlimited` for a branch port that takes one edge,
 because the payload gave it nothing to print instead.
+**971 -> 979** (`osg-agent-experience/46`, 2026-09-05). Eight lines: the two
+runtime-minted namespaces (`tool.<name>`, `function.<name>`) publish the ports
+every member of them has, where a one-line hint stood. Same shape as the line
+above and the same reason — the payload gave a composing client a sentence and
+no port ids, so the ids had to be read out of `default_port_resolver`'s
+fallback, which accepts any in-port id and draws none of them. The ports are
+generated (probed from the factory that mints these nodes) and this door only
+reshapes them; no new reader, nothing decided here.
 
 """
 
@@ -1136,7 +1144,7 @@ RECORDED: dict[str, Recorded] = {
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(971, MCP_SERVER),
+    "mcp_server.py": Recorded(979, MCP_SERVER),
     "api/routes/workflows.py": Recorded(586, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(556, SCHEMAS),

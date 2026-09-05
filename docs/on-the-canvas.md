@@ -263,6 +263,16 @@ question was classified onto a data branch and never asked.
 
 Each branch takes **one** edge, like every other conditional way out.
 
+**An Output prints what reaches it, and nothing else.** It has no text field,
+which is the one thing to know before you draw the ask-back: the sentence a
+user reads has to be *produced* by something upstream, so a branch that exists
+to ask a question runs a package function returning that sentence
+(`function.<name>`) and the Output renders it. Wiring the branch straight to an
+Output publishes whatever the branch was carrying — the user's own question,
+usually, handed back to them. The one thing an Output supplies on its own is
+the floor beneath an empty run: a run that reaches it with nothing at all says
+so, rather than reporting a success that says nothing (`osg-agent-experience/46`).
+
 The safety net underneath is the **step budget**. It is counted in
 *supersteps*, not laps: with a fan-out, one lap can cost several. Do not read
 it as "maximum retries" — the grader's own attempt limit is that.

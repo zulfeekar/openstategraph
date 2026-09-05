@@ -197,6 +197,39 @@ Seven of them, in this order:
 
 ---
 
+## The two node types no catalogue can list
+
+`tool.<name>` and `function.<name>` are minted per workflow package: the suffix
+is a tool found in that package's `tools/` folder, or a callable found in its
+`functions/` folder. So the *types* are not enumerable — but the **ports** are,
+because one factory mints every member of each namespace.
+
+| Type | Port | Direction | Type | Edges |
+| --- | --- | --- | --- | --- |
+| `tool.<name>` | `tool` | out | `tool` | unlimited |
+| `function.<name>` | `text` | in | `result` | 1 |
+| `function.<name>` | `result` | out | `result` | unlimited |
+
+`function.<name>`'s input takes **one** link, and that is the contract rather
+than a default: the compiled step reads one upstream node's output, so a second
+edge would be a coin toss rather than a fan-in. It is required — a function
+node with nothing wired in reads the run's original question. The node takes no
+config at all; every input is the upstream text.
+
+**The compiler is more tolerant than this table, and that is not permission.**
+A `function.*` type is not in the generated catalogue by name, so the compiler
+resolves its ports by fallback: any in-port id is accepted and `result` alone
+is read as the way out. A document naming `in` therefore compiles — and then
+draws an edge the editor cannot render, because the port it names does not
+exist on the card. Wire `text` and `result`.
+
+Both rows are published rather than left to be discovered:
+`get_node_vocabulary` carries them under `dynamic_type_prefixes`, and
+`openstategraph nodes function.summarise` prints them for a name nothing has
+heard of (`osg-agent-experience/46`).
+
+---
+
 ## Edge categories
 
 Four kinds of edge, distinguished by what the target port *means* — not by any

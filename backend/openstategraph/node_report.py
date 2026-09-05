@@ -126,11 +126,41 @@ def _port_lines(node: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+def _prefix_detail_lines(vocabulary: Mapping[str, Any], node_type: str) -> list[str] | None:
+    """One member of a runtime-minted namespace, or `None` when it is not one.
+
+    `osg-agent-experience/46`. `function.summarise` is a real type id in a real
+    document and no catalogue can list it — it exists because somebody wrote
+    `def summarise` in a package's `functions/` folder. Asking this door about
+    one used to be a usage error, so the ids to wire it with had to be read out
+    of the compiler's fallback resolver. The ports are the same for every
+    member of the namespace, which is exactly why they can be printed for a
+    name nothing has heard of.
+    """
+    prefixes = vocabulary.get("dynamic_type_prefixes") or {}
+    entry = next(
+        (body for prefix, body in prefixes.items() if node_type.startswith(prefix)),
+        None,
+    )
+    if entry is None or not isinstance(entry, Mapping):
+        return None
+    lines = [f"{node_type} — {_one_line(entry.get('hint') or '')}"]
+    lines.append(
+        "Not in the catalogue by name: this type is minted per workflow package, "
+        "so every member of the namespace has the ports below and no others."
+    )
+    lines.append("")
+    lines.extend(_field_lines({"fields": []}))
+    lines.append("")
+    lines.extend(_port_lines(entry))
+    return lines
+
+
 def node_detail_lines(vocabulary: Mapping[str, Any], node_type: str) -> list[str] | None:
     """One type in full, or `None` when the vocabulary does not know it."""
     node = next((item for item in vocabulary["node_types"] if item["type"] == node_type), None)
     if node is None:
-        return None
+        return _prefix_detail_lines(vocabulary, node_type)
 
     lines = [f"{node['type']} — {node.get('label') or '(no label)'}"]
     description = _one_line(node.get("description") or "")

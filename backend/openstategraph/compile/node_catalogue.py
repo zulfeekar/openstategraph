@@ -39,7 +39,13 @@ from typing import Any
 #: many edges a port takes; `branch` says why, and only the second answers
 #: whether two producers can arrive in the same run
 #: (`osg-agent-experience/38`, `43`).
-SCHEMA_VERSION = 5
+#: 6 added `dynamic_type_prefixes`: the ports every member of a runtime-minted
+#: namespace has (`tool.<name>`, `function.<name>`). The types cannot be
+#: listed — they are discovered per package — but their shape is fixed by one
+#: factory each, and until it was published the ids a document had to use
+#: existed only in `default_port_resolver`'s fallback
+#: (`osg-agent-experience/46`).
+SCHEMA_VERSION = 6
 
 #: Ships inside the package, not at the repo root: an installed wheel has no
 #: repository around it.
@@ -137,6 +143,12 @@ class NodeCatalogue:
     #: Full records, for surfaces that describe rather than compile (MCP).
     nodes: tuple[dict[str, Any], ...]
     port_types: tuple[dict[str, Any], ...]
+    #: Namespaces whose members are minted per workflow package, and the ports
+    #: every member has. Full records, like `nodes`: this is read by surfaces
+    #: that *describe* — a composing client needs the port ids and nothing in
+    #: the compiler does, because `default_port_resolver` resolves an
+    #: unrecognised type by fallback rather than by lookup.
+    type_prefixes: tuple[dict[str, Any], ...] = ()
     #: Data keys a saved document may still carry that no field declares —
     #: today only the Grader's superseded `criteriaMode`, kept as a migration
     #: fallback. Declared in `src/nodes/skillLayer.ts`, emitted here so the
@@ -311,6 +323,7 @@ def load_catalogue(path: Path | None = None) -> NodeCatalogue:
         nodes=nodes,
         port_types=tuple(payload.get("port_types") or ()),
         legacy_data_keys=frozenset(payload.get("legacy_data_keys") or ()),
+        type_prefixes=tuple(payload.get("dynamic_type_prefixes") or ()),
     )
 
 
