@@ -638,3 +638,90 @@ class TestTheClosingBrief:
         assert "AGENTS.md" in self._section(), (
             "the brief is spoken and never written down beside the workflow it describes"
         )
+
+
+class TestTheProposedName:
+    """`osg-agent-experience/35`. An agent handed a concept built the workflow
+    and saved it: the editor said *Untitled*, and the folder was whatever the
+    agent happened to type. The owner, 2026-09-04: *"instead of Untitled the
+    agent can suggest a name from the concept itself — a sensible short name
+    related to the concept."*
+
+    Cosmetic on the document, permanent on the folder. A slug is minted from
+    the name at the first save and frozen, because a slug that moves renames a
+    directory — so the moment to get it right is **before** the first save, not
+    after, and there is no later moment at all.
+
+    Pinned here:
+
+    - some numbered step proposes a name, and it is one the developer sees
+      before the cards are filed and long before anything is saved;
+    - it says what the name *costs* — the slug it would mint,
+      `workflows/<slug>/` — because that is the half the developer cannot undo
+      and the half an agent would not think to mention;
+    - it is **proposed**, never silently chosen. A name an agent picks without
+      saying so is the same defect as *Untitled* with better spelling: the
+      developer still did not choose their own folder.
+
+    Not pinned: the words of the proposal, or the example names.
+    """
+
+    HEADING = re.compile(r"^##\s+\d+\.\s+(.*)$", re.MULTILINE)
+
+    def _sections(self) -> list[tuple[str, str]]:
+        text = SHEET.read_text(encoding="utf-8")
+        found = list(self.HEADING.finditer(text))
+        out = []
+        for position, match in enumerate(found):
+            end = found[position + 1].start() if position + 1 < len(found) else len(text)
+            out.append((match.group(1).strip(), text[match.start() : end]))
+        return out
+
+    def _index_of(self, needle: str) -> int:
+        for position, (heading, _) in enumerate(self._sections()):
+            if needle in heading.lower():
+                return position
+        raise AssertionError(f"no numbered section of the sheet mentions {needle!r}")
+
+    def _naming_step(self) -> tuple[int, str]:
+        """The step that proposes the workflow's name, found by what it does."""
+        for position, (_, body) in enumerate(self._sections()):
+            lowered = body.lower()
+            if "name" in lowered and "slug" in lowered and "propos" in lowered:
+                return position, body
+        raise AssertionError(
+            "no step of the sheet proposes a name for the workflow: the agent saves "
+            f"whatever it typed, and the editor prints Untitled. {[h for h, _ in self._sections()]}"
+        )
+
+    def test_a_step_proposes_the_workflows_name(self) -> None:
+        position, _ = self._naming_step()
+        assert position >= 0
+
+    def test_it_is_proposed_before_the_cards_and_before_any_save(self) -> None:
+        """The slug is frozen at the first save, so a naming step that runs
+        after the build loop is a step that can only apologise."""
+        position, _ = self._naming_step()
+        assert position <= self._index_of("filing"), (
+            "the name is proposed after the cards are filed, by which point the "
+            "developer has already agreed to build something nameless"
+        )
+        assert position < self._index_of("build loop"), (
+            "the name is proposed after the build loop, and the first save inside it "
+            "has already minted and frozen the slug"
+        )
+
+    def test_it_states_the_slug_the_name_would_mint(self) -> None:
+        _, body = self._naming_step()
+        assert "workflows/<slug>/" in body, (
+            "the step proposes a name without saying it mints a directory, which is "
+            f"the half the developer cannot change afterwards: {body}"
+        )
+
+    def test_the_name_is_proposed_and_never_silently_chosen(self) -> None:
+        _, body = self._naming_step()
+        lowered = body.lower()
+        assert "never" in lowered, (
+            "the step suggests a name and does not say the developer gets to refuse it"
+        )
+        assert "propos" in lowered, lowered

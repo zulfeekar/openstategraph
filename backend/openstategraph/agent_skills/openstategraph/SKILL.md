@@ -16,8 +16,8 @@ Answer this from the ask itself. Two asks, two directories.
 - **A change to OpenStateGraph itself** — a node family, the compiler, the
   editor — belongs in an OpenStateGraph checkout. If this is not one, say so and stop.
 
-Never edit files inside an installed package: the next upgrade deletes them
-and nothing warns anybody.
+Never edit files inside an installed package: the next upgrade deletes them and
+nothing warns anybody.
 
 ## 2. Which door do you have?
 
@@ -53,8 +53,8 @@ no other. **Size decides the ritual, never the rules.**
 Non-negotiable at every size, and this paragraph is the whole of it: read the
 ground rules once per session (step 4); never a node type the registry does not
 know, and when nothing registered fits, extend through the family's base, register
-it, and only then use it; the failing test is written before the code that passes
-it; the card is the one record, because a decision left in the conversation is lost at the end of it.
+it, and only then use it; the failing test is written before the code that passes it;
+the card is the one record — a decision left in the conversation is lost with it.
 
 | Size | The ask | The ritual, whole |
 | --- | --- | --- |
@@ -62,9 +62,8 @@ it; the card is the one record, because a decision left in the conversation is l
 | **change** | one node or one tool added, one rule edited | two or three questions (step 5) · one card · the full loop of step 9, break-the-fix included |
 | **feature or slice** | a workflow, several nodes, anything you cannot finish in one sitting | the whole path — the interview, a decision map, a card per decision, triage, then step 9 for each |
 
-A tweak's card is filed and finished in one sitting. A **decision map** — an
-index of the decisions a concept still owes, each in exactly one place — belongs
-to a feature or a slice only. Unsure between two rows? Take the smaller one.
+A **decision map** — an index of the decisions a concept still owes, each in one
+place — belongs to a feature or a slice. Unsure between two rows? Take the smaller.
 
 ## 4. Before anything: read the ground rules
 
@@ -82,8 +81,8 @@ Two reads, every time, before the first node exists.
   new types, a rule about order: when nothing fits, extend the family's base,
   register it, and only then use it.
 
-`references/engineering-rules.md` is that text, installed beside this sheet as
-a copy of the file the package ships, so the two doors cannot disagree.
+`references/engineering-rules.md` is that text, installed beside this sheet as a
+copy of the file the package ships, so the two doors cannot disagree.
 
 ## 5. The interview
 
@@ -122,20 +121,25 @@ The interview says what this workflow *does*, not what shape it should *be* — 
 the shape decides whether the fifteenth of anything is a new folder or an edit to
 the other fourteen. So ask one more question before any card exists:
 
-> **What in this concept is going to multiply?** Specialists, sources,
-> tenants, teams, checks, decisions — and how many of each, today.
+> **What in this concept is going to multiply?** Specialists, sources, tenants,
+> teams, checks, decisions — and how many of each, today.
 
 Read those counts against the catalogue in `references/shapes.md` — its first
 table picks the spine, its second names the additions — then say, in one turn:
 
 - **the shape you recommend**, in the platform's own idioms, naming the node
   types it uses, and **what it costs** in calls, folders and test suites;
-- **the two you rejected**, one reason each — a recommendation with no
-  rejected alternatives is an assertion, and the developer cannot weigh what
-  they were not shown.
+- **the two you rejected**, one reason each — a recommendation with no rejected
+  alternatives is an assertion; the developer cannot weigh what they never saw.
 
-Then ask them to confirm: one question, one turn. Only when they have answered
-do you size the cards and file them.
+**Name it in the same turn.** Two to four words from the concept's own nouns (*CPL
+Analyst*, *Support Triage*), stated with the slug it would mint — `workflows/<slug>/`.
+A slug is a directory, minted at the first save and frozen there, so this is the only
+moment it is free. Proposed, **never silently chosen**: one word from the developer
+changes it, and it is the document's `name` when you first save.
+
+Then ask them to confirm the shape and the name: one question, one turn. Only
+when they have answered do you size the cards and file them.
 
 A concept with one of everything is one agent, and recommending that is a correct
 outcome. The failure this step prevents is the other one: fifteen specialists
@@ -149,9 +153,8 @@ the end of it. File each with `kanban_file_card` / `openstategraph kanban file`:
 
 - **kind** — `task` or `bug` for work an agent may take; the judgement kind for
   anything a human must weigh, which lands in Needs You.
-- **title** — the symptom or the want, never the fix; **story** — the
-  plain-English want, in the developer's own words; **done-when** — the check
-  that settles it, something you can run.
+- **title** — the symptom or the want, never the fix; **story** — the plain-English
+  want, in the developer's own words; **done-when** — a check you can run.
 - **priority and its reason** — one sentence citing this interview's own
   evidence. A priority with no reason is a guess with a label.
 - **blocked-by** — the cards this one waits on, by the **full id** filing
@@ -163,8 +166,7 @@ the end of it. File each with `kanban_file_card` / `openstategraph kanban file`:
 | mechanical — a rename, a field, a fixture, a doc row | a small model | low |
 | judgement — a design, a prompt, an ambiguous defect | a large model | high |
 
-These two are advice, not a contract; a platform that cannot choose its own model
-says so. Long form of the card text: the ticket sheet installed beside this one.
+Advice, not a contract. Long form of the card text: the ticket sheet beside this.
 
 ## 8. Triage — take the top card
 
@@ -181,8 +183,7 @@ and 8 of it and files its card at 1's place (step 3).
 1. **Attend it.** `kanban_attend_card` / `openstategraph kanban attend`. First
    caller wins; if somebody else holds it, take the next card.
 2. **Write the failing test first**, at the layer the defect lives; run it and
-   watch it fail. A test written after its code asserts what the code does,
-   which is not what it should do.
+   watch it fail. A test written after its code asserts what the code does.
 3. **`set_stage red`** with the test id and the reason it failed.
 4. **Make it pass.** The smallest change that does it.
 5. **Break the fix on purpose** and watch the test go red again: that is what
@@ -222,12 +223,11 @@ memory, and two pictures leave the reader no way to tell which one lied.
 ## 11. Helpers
 
 Spawn a subagent for a card only when it passes **all four** gates: **reproducible
-without a person**; **the decision is already made** (the card carries it);
-**blast radius contained** (you can name the files it may touch); **cost** (no
-calls beyond the card's stated budget). Use the card's `agent_model` and
-`agent_effort`, and when it returns **verify its report against the tree** — a
-report is testimony, the filesystem is evidence. A platform with no subagents runs
-the loop inline and says so. Long form: `references/subagents.md`.
+without a person**; **the decision is already made** (the card carries it); **blast
+radius contained** (name the files it may touch); **cost** (nothing beyond the card's
+budget). Use its `agent_model` and `agent_effort`, and when it returns **verify the
+report against the tree** — a report is testimony, the filesystem is evidence. No
+subagents? Run the loop inline and say so. `references/subagents.md`.
 
 ## 12. Explaining
 
