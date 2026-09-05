@@ -2481,7 +2481,7 @@
       "category": "tools",
       "scope": "app",
       "label": "Email Send",
-      "description": "Sends a report to the address configured here — the model writes subject and body, never the recipient. Dry-run (.eml to workflows/_outbox) unless SMTP is configured.",
+      "description": "Sends a report to the address configured here — the model writes subject and body, never the recipient. Dry-run (.eml to the outbox in the state directory, named in the result) unless SMTP is configured.",
       "ports": [
         {
           "id": "tool",

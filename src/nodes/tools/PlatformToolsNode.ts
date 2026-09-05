@@ -441,8 +441,18 @@ export const PLATFORM_TOOL_NODES = [
   backendTool({
     id: 'tool.email-send',
     label: 'Email Send',
+    // The dry-run location is deliberately NOT spelled out here. It was
+    // `workflows/_outbox` for as long as this sentence existed and the code
+    // stopped writing there when the `.eml` moved to `state_dir() / "outbox"`
+    // — diagnostic output does not belong in the tree we were asked to read
+    // — so the card sent a developer to an empty directory. Where the file
+    // lands depends on the install (checkout, `OPENSTATEGRAPH_STATE_DIR`, or
+    // the platform's per-user state directory), and the tool's own result
+    // already prints the file it wrote, so this is one description too many.
+    // Pinned by `test_a_card_names_the_directory_it_writes_to.py`
+    // (`docs-onramp/13`).
     description:
-      'Sends a report to the address configured here — the model writes subject and body, never the recipient. Dry-run (.eml to workflows/_outbox) unless SMTP is configured.',
+      'Sends a report to the address configured here — the model writes subject and body, never the recipient. Dry-run (.eml to the outbox in the state directory, named in the result) unless SMTP is configured.',
     keywords: ['email', 'send', 'report', 'delivery', 'smtp'],
     fields: [
       {

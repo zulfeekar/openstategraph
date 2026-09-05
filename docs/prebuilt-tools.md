@@ -163,9 +163,9 @@ run. So the whole workflow is testable end to end without a packet leaving the
 machine.
 
 The file lands in an `outbox` directory inside this install's **state
-directory** — in a checkout, that is `workflows/.openstategraph/outbox`. The
-card's own one-line brief still says `workflows/_outbox`, which is where it
-used to go; that stale sentence is `docs-onramp/13`.
+directory** — in a checkout, that is `workflows/.openstategraph/outbox`;
+installed, it is under the platform's per-user state directory. The result the
+agent receives names the file it wrote, so you never have to guess.
 
 ---
 

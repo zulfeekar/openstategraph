@@ -162,7 +162,8 @@ cd "$ROOT"
 #
 #   1. Something writes inside a watched tree while an SSE run is streaming.
 #      This is not only a developer typing — the app writes there ITSELF:
-#      `prebuilt_email.OUTBOX` is `workflows/_outbox/`, so the store-analytics
+#      `prebuilt_email.outbox()` is `<state dir>/outbox`, which in a checkout
+#      is `workflows/.openstategraph/outbox` — so the store-analytics
 #      report's own happy path (send the approved report) drops an `.eml` into
 #      a --reload-dir and reloads the server that is mid-send. Compiling a
 #      mounted workflow package writes `workflows/<slug>/__pycache__/*.pyc`
