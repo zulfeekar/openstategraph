@@ -1,5 +1,9 @@
 # OpenStateGraph
 
+> **Who this page is for:** you are adding OpenStateGraph to a project you already have,
+> from a package index. This is the distribution's own page; there is no
+> checkout in it.
+
 **A compiler from a vendor-neutral `workflow.json` to a LangGraph
 `StateGraph`.** Not an execution engine — the thing it produces is a plain
 compiled LangGraph object that runs, streams, checkpoints and deploys

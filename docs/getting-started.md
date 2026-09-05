@@ -1,16 +1,18 @@
-# Getting started
+# Getting started on a checkout
+
+> **Who this page is for:** you cloned this repository. This is the
+> contributor's path, where the editor is built from source and hot-reloads.
+> Installed the wheel instead? You need none of it: the path that works from
+> nothing is [the project README](../README.md), and the walk into a service
+> you already run is
+> [Adding it to a project you already have](adding-openstategraph-to-your-project.md).
+> The one-process version of everything below is `openstategraph .` — the wheel
+> ships the built editor as package data, so Node, Docker and this checkout are
+> all optional
+> ([Using OpenStateGraph in your project](adoption.md#the-shortest-path--one-install-one-command-the-whole-product)).
 
 You cloned the repository. This page takes you from that to a workflow you
 authored yourself, running against a real database, answering a real question.
-
-> **Not cloning?** Then you need none of it. `pip install
-> "openstategraph[server,ollama]"` followed by `openstategraph serve --open`
-> gives you the same product from one process — the canvas at `/`, the customer
-> chat at `/chat`, the API under `/api` — because the wheel ships the built
-> editor as package data. Node, Docker and this checkout are all optional; see
-> [Using OpenStateGraph in your project](adoption.md#the-shortest-path--one-install-one-command-the-whole-product).
-> The rest of this page is the *contributor's* path, where the editor is built
-> from source and hot-reloads.
 
 Two people arrive here, and they want different things:
 

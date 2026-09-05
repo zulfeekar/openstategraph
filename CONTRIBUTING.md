@@ -1,5 +1,8 @@
 # Contributing to OpenStateGraph
 
+> **Who this page is for:** you cloned this repository and intend to change
+> OpenStateGraph itself.
+
 Two stacks, one repo: a TypeScript editor (`src/`) and a Python LangGraph
 runtime (`backend/`). Architecture rules live in `CLAUDE.md` — read the
 "Non-negotiables" section before designing anything.

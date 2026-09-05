@@ -4,6 +4,14 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.3.0%20unreleased-informational.svg)](CHANGELOG.md)
 
+> **Who this page is for:** you have installed nothing yet, and you want the
+> stack running. Read straight down — Install, First run, Where to read next —
+> and everything after that is reference. The whole documentation set is
+> indexed by intent at [`docs/README.md`](docs/README.md). Changing
+> OpenStateGraph itself is [CONTRIBUTING.md](CONTRIBUTING.md); adding it to a
+> service you already run is
+> [docs/adding-openstategraph-to-your-project.md](docs/adding-openstategraph-to-your-project.md).
+
 **Draw an agent workflow on a canvas. Get a plain LangGraph `StateGraph` you
 can import, test and deploy without this project.**
 
@@ -17,11 +25,6 @@ from openstategraph import load_workflow
 workflow = load_workflow("./workflows/chinook-assistant")
 workflow.graph          # a langgraph CompiledStateGraph. Yours now.
 ```
-
-**Start here and read straight down.** Install → First run → Where to read
-next. Everything after that section is reference you can come back for, and the
-whole documentation set is indexed by intent at
-[`docs/README.md`](docs/README.md).
 
 ---
 
@@ -182,8 +185,7 @@ hands off to.
 ## Where to read next
 
 **[`docs/README.md`](docs/README.md) is the documentation index** — one
-canonical page per intent, routed by what you came to do. The five most people
-want first:
+canonical page per intent. The five most people want first:
 
 | I want to… | Read |
 | --- | --- |

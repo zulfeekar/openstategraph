@@ -1,5 +1,10 @@
 # Using OpenStateGraph in your project
 
+> **Who this page is for:** you are adding OpenStateGraph to a project you already have
+> and want to choose *how* — three consumption modes, priced against each
+> other. For the ordered walk rather than the choice, see
+> [Adding it to a project you already have](adding-openstategraph-to-your-project.md).
+
 On a fine day a developer decides to use this in their project. What do they
 actually do?
 

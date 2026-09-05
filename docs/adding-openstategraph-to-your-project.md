@@ -1,5 +1,8 @@
 # Adding OpenStateGraph to a project you already have
 
+> **Who this page is for:** you are adding OpenStateGraph to a project you already have —
+> a Python service that runs today. Nothing here assumes a clone.
+
 You have a Python service. It has an endpoint that answers a message. You want
 that answer to come from a workflow you can draw, version and test, instead of
 from a prompt string in a handler.
