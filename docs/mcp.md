@@ -144,7 +144,10 @@ The gist of what comes back:
       ],
       // Every entry also carries `fields` — the config schema, derived from the
       // same declaration the editor's card renders from — plus `executes`,
-      // `scope` and `generated_ports`. `fields` is the list the fifth rule
+      // `scope` and `generated_ports` (a family of ports a node grows from its
+      // own config — a router's `branch:<name>` outputs — carrying that
+      // family's own `max_connections`, which is 1 for a branch and not the
+      // number of branches you may configure). `fields` is the list the fifth rule
       // below tells you to read before setting anything in `data`:
       "fields": [
         { "key": "model", "kind": "select", "label": "Model", "required": false, "default": "" },

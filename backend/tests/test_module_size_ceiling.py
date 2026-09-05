@@ -797,6 +797,11 @@ reader, and nothing here decides anything.
 readiness refusal, returned in the `error`/`findings` shape an uncompilable
 document already gets. No new decision here — `model_readiness` holds the
 predicate and the sentence; this door only says it in its own shape.
+**970 -> 971** (`osg-agent-experience/53`, 2026-09-05). One line: a generated
+port group publishes its own `max_connections`, off the same catalogue record
+the static ports beside it already read it from. The renderer had been
+printing the literal `unlimited` for a branch port that takes one edge,
+because the payload gave it nothing to print instead.
 
 """
 
@@ -1131,7 +1136,7 @@ RECORDED: dict[str, Recorded] = {
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(970, MCP_SERVER),
+    "mcp_server.py": Recorded(971, MCP_SERVER),
     "api/routes/workflows.py": Recorded(586, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(556, SCHEMAS),

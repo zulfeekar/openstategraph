@@ -252,6 +252,13 @@ class NodeVocabulary:
                             "prefix": group.prefix,
                             "type": group.type,
                             "direction": group.direction,
+                            # How many edges *one* generated port takes — not
+                            # how many ports there are. A branch takes one
+                            # (`osg-agent-experience/38`); publishing it is
+                            # what lets a renderer stop guessing
+                            # (`osg-agent-experience/53`). `null` is a bus,
+                            # exactly as on a static port.
+                            "max_connections": group.max_connections,
                         }
                         for group in CATALOGUE.dynamic_ports.get(node_type, ())
                     ],

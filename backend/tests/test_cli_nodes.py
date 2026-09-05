@@ -123,6 +123,51 @@ class TestWithATypeItPrintsTheFieldsAndThePorts:
 
         assert "branch:" in out
 
+    def test_a_branch_groups_cap_is_the_one_the_catalogue_publishes(self, capsys) -> None:
+        """`osg-agent-experience/53`. A branch carries **one** edge (`38`), and
+        `port_specs.json` has said so since. This line hardcoded `unlimited`,
+        so the one door that exists to advise a composing agent gave the exact
+        advice that produced `38`: fifteen edges out of a port that refuses the
+        second. Asserted against the catalogue in both directions, so neither
+        word can be a literal here again."""
+        from openstategraph.compile.node_catalogue import CATALOGUE
+        from openstategraph.node_report import UNLIMITED
+
+        for node_type in ("route.classifier", "route.check"):
+            _, out, _ = _run(capsys, node_type)
+            groups = CATALOGUE.dynamic_ports.get(node_type) or ()
+            assert groups, f"{node_type} declares no generated port group"
+            for group in groups:
+                row = next(
+                    line
+                    for line in out.splitlines()
+                    if line.strip().startswith(group.prefix)
+                )
+                cap = (
+                    UNLIMITED
+                    if group.max_connections is None
+                    else str(group.max_connections)
+                )
+                assert f"max {cap}" in row, (
+                    f"{node_type} {group.prefix} prints {row!r}, "
+                    f"but the catalogue says max_connections={group.max_connections}"
+                )
+
+    def test_a_branch_takes_one_edge_today_and_the_row_says_so(self, capsys) -> None:
+        """The direction the assertion above cannot fail in on its own: if the
+        catalogue ever published `null` here, the paired test would agree with
+        it and say nothing. This is the fact `38` settled, stated once."""
+        from openstategraph.compile.node_catalogue import CATALOGUE
+
+        for node_type in ("route.classifier", "route.check"):
+            assert all(
+                group.max_connections == 1
+                for group in CATALOGUE.dynamic_ports[node_type]
+            )
+            _, out, _ = _run(capsys, node_type)
+            row = next(line for line in out.splitlines() if line.strip().startswith("branch:"))
+            assert "max 1" in row and "unlimited" not in row, row
+
     def test_it_renders_the_same_vocabulary_the_mcp_door_publishes(self, capsys) -> None:
         """One source. If this command ever grows its own reader of
         `port_specs.json`, a type added in the editor reaches one door and not

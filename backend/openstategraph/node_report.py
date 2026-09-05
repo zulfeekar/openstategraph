@@ -88,10 +88,25 @@ def _field_lines(node: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+def _cap(max_connections: Any) -> str:
+    """How many edges a port takes, in the two words a reader may act on.
+
+    One reader for a static port and a generated group alike
+    (`osg-agent-experience/53`): the group's line printed the literal
+    `UNLIMITED` while `port_specs.json` had said `1` since
+    `osg-agent-experience/38`, so the door whose whole job is to advise a
+    composing agent gave the advice that produced that ticket — fifteen edges
+    drawn out of a port that takes one, fourteen dropped in silence. The
+    static rows on the same listing were right, which is why nobody noticed:
+    the wrong line looks exactly like the right ones.
+    """
+    return UNLIMITED if max_connections is None else str(max_connections)
+
+
 def _port_lines(node: Mapping[str, Any]) -> list[str]:
     lines = ["ports:"]
     for port in node.get("ports") or ():
-        cap = UNLIMITED if port.get("max_connections") is None else str(port["max_connections"])
+        cap = _cap(port.get("max_connections"))
         row = f"  {port['id']:<20}{port['direction']:<4}{port['type']:<10}max {cap}"
         if port.get("required"):
             row = f"{row}  (required)"
@@ -104,7 +119,7 @@ def _port_lines(node: Mapping[str, Any]) -> list[str]:
         # never had.
         lines.append(
             f"  {group['prefix'] + '<name>':<20}{group['direction']:<4}{group['type']:<10}"
-            f"max {UNLIMITED}  (one per branch you configure)"
+            f"max {_cap(group.get('max_connections'))}  (one per branch you configure)"
         )
     if len(lines) == 1:
         lines.append("  (none — this type is never scheduled)")
