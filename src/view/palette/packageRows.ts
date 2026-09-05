@@ -29,6 +29,24 @@ export interface PackageRow extends WorkflowChoice {
    * environment, and keeps `core/` free of the row's presentation.
    */
   readonly refusalRow: PackageRowRefusal | null;
+  /**
+   * The accessible name of the row's **Open** control — `stable-beta-public/29`.
+   *
+   * Here rather than in `Palette.tsx` for the reason {@link PackageRow.refusalRow}
+   * gives: an icon-only control's label is copy, and copy is testable in a
+   * `node` environment only if it is not spelled inside JSX.
+   *
+   * Every package row has one — a *package* row, which is why this lives here
+   * and not on the palette's other two row kinds: a node type and a starting
+   * shape are not documents of the user's and have nothing to open.
+   *
+   * A refused row keeps it and greys it, carrying `refusal` verbatim as the
+   * reason. Two arguments were weighed and the ticket settled on this one: a
+   * row that is half-live reads as a rendering fault rather than as a rule,
+   * and a reader who meets the mount cycle by dragging, by Entering and by
+   * hovering the Open control should meet one sentence rather than three.
+   */
+  readonly openLabel: string;
 }
 
 /** A refused row's two readable parts — see {@link PackageRow.refusalRow}. */
@@ -87,6 +105,7 @@ export function packageRows(
       return {
         ...choice,
         refusal: mountGestureRefusal(choice.slug, ancestry),
+        openLabel: `Open ${choice.name}`,
         // Both from `mountCycleChain`, so the row and the sentence cannot
         // print two different paths for one comparison.
         refusalRow:

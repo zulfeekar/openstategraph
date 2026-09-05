@@ -903,7 +903,14 @@ export function AppShell() {
           // rather than left describing code that does not exist.
           data-overlay={mustOverlay || undefined}
         >
-          {paletteOpen ? <Palette onNotify={onNotify} /> : null}
+          {paletteOpen ? (
+            <Palette
+              onNotify={onNotify}
+              // The same handler the arrival dialog and the start panel take.
+              // A third surface, one owner (`stable-beta-public/29`).
+              onOpenPackage={(slug) => void arrival.openWorkflow(slug)}
+            />
+          ) : null}
 
           <main
             className="app-shell__canvas"

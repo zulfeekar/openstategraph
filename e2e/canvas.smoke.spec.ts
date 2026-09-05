@@ -147,9 +147,7 @@ test('the palette adds a node from the keyboard', async ({ page }) => {
   // person who cannot drag can still put a node on the canvas.
   const before = await page.locator('[data-node-id]').count();
   await page.getByPlaceholder('Search nodes…').fill('Note');
-  const item = page
-    .locator('.palette [class*=card], .palette button', { hasText: 'Note' })
-    .first();
+  const item = page.locator('.palette [class*=card], .palette button', { hasText: 'Note' }).first();
   await item.focus();
   await item.press('Enter');
   await expect.poll(async () => page.locator('[data-node-id]').count()).toBeGreaterThan(before);
@@ -300,4 +298,56 @@ test('clicking a real link still selects it', async ({ page }) => {
 
   await expect(page.locator('.inspector')).toContainText('Link');
   await expect(page.locator('.inspector')).not.toContainText('Link removed');
+});
+
+/**
+ * `stable-beta-public/29` — a package row could be mounted and not opened.
+ *
+ * The backend is mocked rather than started, which is this file's standing
+ * arrangement (`?demo=1` exists because Playwright starts a dev server and no
+ * Python). Two endpoints are enough: the catalogue the Packages section lists,
+ * and the document the open loads. `capabilities` is deliberately left to
+ * fail — `loadWorkflowIntoEditor` treats an `Err` there as "no discovered
+ * tools", so a load with none is a real path rather than a rigged one.
+ */
+test('the Open control on a package row loads it, and the address says so', async ({ page }) => {
+  const slug = 'smoke-package';
+  await page.route('**/api/workflows?surface=editor', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        { slug, name: 'Smoke Package', hidden: false, published: true, savedAt: null },
+      ]),
+    }),
+  );
+  await page.route(`**/api/workflows/${slug}`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        document: { version: 3, name: 'Smoke Package', nodes: [], edges: [] },
+      }),
+    }),
+  );
+
+  await page.goto('/?demo=1');
+  const open = page.getByRole('button', { name: 'Open Smoke Package' });
+  await expect(open).toBeAttached();
+  // Quiet until the row is hovered — a list of your own packages reads as a
+  // list. `opacity` rather than `display`, so the control keeps its place in
+  // the tab order and a keyboard reader reveals it by focusing it.
+  await expect(open).toHaveCSS('opacity', '0');
+  await page.locator('.palette-item-shell', { hasText: 'smoke-package' }).hover();
+  await expect(open).toHaveCSS('opacity', '1');
+  await open.click();
+
+  // The assertion the ticket is actually about: opening from the palette puts
+  // the workflow in the address bar, exactly as the Workflows menu does, so
+  // the tab can be reloaded, bookmarked and shared.
+  // The parameter, not the whole query string: this fixture arrives at
+  // `?demo=1` and the open adds to that address rather than replacing it,
+  // which is correct — a `?w=` open is not a reason to forget how the tab got
+  // here.
+  await expect.poll(async () => new URL(page.url()).searchParams.get('w')).toBe(slug);
 });

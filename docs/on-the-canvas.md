@@ -328,6 +328,12 @@ becomes one node: a task goes in, an answer comes out. It is the only mount
 card in the palette — see *Workflow or Team?* below for what happened to the
 second one.
 
+Each of your own packages also has a row in the palette's **Packages** section.
+Dragging a row onto the canvas, or Tabbing to it and pressing Enter, mounts it;
+the small **Open** control that appears on the row when you hover or focus it
+opens that package as the document you are editing, and the address bar becomes
+`?w=<slug>`.
+
 **By reference, not by copy.** This is the part worth being precise about:
 
 - The mount **points at** the package. Edit that package and every mount of it

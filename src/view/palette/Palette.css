@@ -20,6 +20,46 @@
   padding: var(--space-2) var(--space-3);
 }
 
+/* The row and its Open control, side by side — `stable-beta-public/29`.
+   The row is a `<button>` and so is the control, so they cannot nest; the
+   shell is what makes them siblings while the control still sits on the row's
+   right edge. */
+.palette-item-shell {
+  position: relative;
+  display: flex;
+}
+
+.palette-item-shell .palette-item {
+  /* Room the text can never run under, whether the control is showing or
+     not — a reserved gutter rather than a reflow on hover. */
+  padding-right: calc(var(--space-2-5) + var(--control-height-sm));
+}
+
+/* Quiet by default: a list of your own packages should read as a list. The
+   control is still in the tab order at zero opacity, and focusing it is one of
+   the two things that reveals it — `:focus-within` on the shell, so a keyboard
+   reader sees what a mouse reader sees. */
+.palette-item__open {
+  position: absolute;
+  top: var(--space-1-5);
+  right: var(--space-1-5);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.palette-item-shell:hover .palette-item__open,
+.palette-item-shell:focus-within .palette-item__open {
+  opacity: 1;
+}
+
+/* Never hidden from a reader who asked for it: a forced-colours or
+   reduced-motion setting must not leave the only Open control invisible. */
+@media (prefers-reduced-motion: reduce) {
+  .palette-item__open {
+    transition: none;
+  }
+}
+
 .palette-item {
   display: flex;
   align-items: flex-start;

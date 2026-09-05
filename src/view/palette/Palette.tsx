@@ -1,6 +1,6 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import clsx from 'clsx';
-import { AlertTriangle, Package, RefreshCw, Search, X } from 'lucide-react';
+import { AlertTriangle, Package, Pencil, RefreshCw, Search, X } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -57,6 +57,18 @@ export const PALETTE_ASSEMBLY_DRAG_TYPE = 'application/x-openstategraph-assembly
 
 interface PaletteProps {
   onNotify: (message: string) => void;
+  /**
+   * Open a saved package as the current document — `stable-beta-public/29`.
+   *
+   * Handed in rather than performed here, and handed in as the *same* function
+   * the arrival dialog and the start panel already take
+   * (`useArrivalOffer.openWorkflow`). Loading a workflow is knowledge — the
+   * order of capability registration against import, the frozen slug, this
+   * browser's draft — and `loadWorkflowIntoEditor` exists so that knowledge has
+   * one home. A palette that reached for it would be the third copy of the
+   * toast, the drill-stack clear and the busy state around it.
+   */
+  onOpenPackage: (slug: string) => void;
 }
 
 /**
@@ -105,7 +117,7 @@ function onKeyboardActivate(activate: () => void) {
  * habits are common: drag onto the canvas for placement control, or click to
  * drop one into the middle of the current view.
  */
-export function Palette({ onNotify }: PaletteProps) {
+export function Palette({ onNotify, onOpenPackage }: PaletteProps) {
   const workbench = useWorkbench();
   const controller = useController();
   const paper = usePaperController();
@@ -466,6 +478,7 @@ export function Palette({ onNotify }: PaletteProps) {
                   key={row.slug}
                   row={row}
                   onActivate={() => mount(row)}
+                  onOpen={() => onOpenPackage(row.slug)}
                   onRefuse={onNotify}
                 />
               ))
@@ -565,10 +578,12 @@ export function Palette({ onNotify }: PaletteProps) {
 function PackageItem({
   row,
   onActivate,
+  onOpen,
   onRefuse,
 }: {
   row: PackageRow;
   onActivate: () => void;
+  onOpen: () => void;
   onRefuse: (message: string) => void;
 }) {
   const refused = row.refusal != null;
@@ -586,80 +601,116 @@ function PackageItem({
   // the note is what the package is. A row can be either, neither or both.
   const hint = row.refusal ?? `Mount ${row.name} — task in, answer out.`;
   return (
-    <button
-      type="button"
-      className={clsx('palette-item', refused && 'palette-item--disabled')}
-      data-accent="violet"
-      draggable={!refused}
-      aria-disabled={refused}
-      // The row's own hint only. The hidden note used to be concatenated on
-      // here with a `\n\n`, which put the answer to "what does Hidden mean"
-      // in the second paragraph of a native tooltip anchored at the pointer —
-      // so the word a reader was looking at explained nothing and the sentence
-      // arrived somewhere else, a second later, if at all
-      // (`say-it-on-the-surface` 05). It now hangs off the mark itself.
-      title={hint}
-      onDragStart={(event) => {
-        if (refused) {
-          refuse(event);
-          return;
-        }
-        event.dataTransfer.setData(PALETTE_PACKAGE_DRAG_TYPE, encodePackageDrag(row.slug));
-        event.dataTransfer.effectAllowed = 'copy';
-      }}
-      // A refused row still speaks when clicked — that is not placement, it is
-      // the compiler's own sentence, and silencing it would restore
-      // `consistency-sweep` 10's "the canvas panned and nothing happened".
-      // A row that is *not* refused does nothing on click, like every other
-      // row in this palette.
-      onClick={(event) => {
-        if (refused) refuse(event);
-      }}
-      onKeyDown={onKeyboardActivate(() => {
-        if (refused) {
-          if (row.refusal) onRefuse(row.refusal);
-          return;
-        }
-        onActivate();
-      })}
-    >
-      <IconTile glyph={resolveIcon('node-subgraph')} size="md" iconSize="sm" />
-      <span className="palette-item__text">
-        <span className="palette-item__title">
-          {row.name}
-          {/* A word, not an icon: "hidden" is a claim about who can see this
+    // A shell, because the row is itself a `<button>` and the Open control is
+    // another one: nesting them is invalid HTML and a browser recovers from it
+    // by dropping one. Siblings, with the control laid over the row's right
+    // edge, is what lets both be clicked and both be Tabbed to.
+    <div className="palette-item-shell">
+      <button
+        type="button"
+        className={clsx('palette-item', refused && 'palette-item--disabled')}
+        data-accent="violet"
+        draggable={!refused}
+        aria-disabled={refused}
+        // The row's own hint only. The hidden note used to be concatenated on
+        // here with a `\n\n`, which put the answer to "what does Hidden mean"
+        // in the second paragraph of a native tooltip anchored at the pointer —
+        // so the word a reader was looking at explained nothing and the sentence
+        // arrived somewhere else, a second later, if at all
+        // (`say-it-on-the-surface` 05). It now hangs off the mark itself.
+        title={hint}
+        onDragStart={(event) => {
+          if (refused) {
+            refuse(event);
+            return;
+          }
+          event.dataTransfer.setData(PALETTE_PACKAGE_DRAG_TYPE, encodePackageDrag(row.slug));
+          event.dataTransfer.effectAllowed = 'copy';
+        }}
+        // A refused row still speaks when clicked — that is not placement, it is
+        // the compiler's own sentence, and silencing it would restore
+        // `consistency-sweep` 10's "the canvas panned and nothing happened".
+        // A row that is *not* refused does nothing on click, like every other
+        // row in this palette.
+        onClick={(event) => {
+          if (refused) refuse(event);
+        }}
+        onKeyDown={onKeyboardActivate(() => {
+          if (refused) {
+            if (row.refusal) onRefuse(row.refusal);
+            return;
+          }
+          onActivate();
+        })}
+      >
+        <IconTile glyph={resolveIcon('node-subgraph')} size="md" iconSize="sm" />
+        <span className="palette-item__text">
+          <span className="palette-item__title">
+            {row.name}
+            {/* A word, not an icon: "hidden" is a claim about who can see this
               package, and the scoped rows next door already spend the glyph
               vocabulary on provenance. The sentence behind it hangs off the
               mark itself, keyboard-reachable, rather than off the row. */}
-          {row.hidden ? (
-            <Badge className="palette-item__mark" explanation={HIDDEN_PACKAGE_NOTE}>
-              {HIDDEN_PACKAGE_MARK}
-            </Badge>
-          ) : null}
-        </span>
-        <span className="palette-item__description">
-          {/* The slug, because it is what the document stores and what a
+            {row.hidden ? (
+              <Badge className="palette-item__mark" explanation={HIDDEN_PACKAGE_NOTE}>
+                {HIDDEN_PACKAGE_MARK}
+              </Badge>
+            ) : null}
+          </span>
+          <span className="palette-item__description">
+            {/* The slug, because it is what the document stores and what a
               developer types into the mount field — the name alone leaves a
               reader unable to connect this row to `workflows/<slug>/`.
               **Unconditional since `workflow-gallery` 74**: it used to be
               swapped out for the refusal, which took the row's identity away
               at exactly the moment a reader needs it to understand the
               chain the refusal is about. */}
-          <code className="palette-item__slug">{row.slug}</code>
-        </span>
-        {/* Beneath the slug and *outside* the two-line clamp, because the
+            <code className="palette-item__slug">{row.slug}</code>
+          </span>
+          {/* Beneath the slug and *outside* the two-line clamp, because the
             clamp is right for a description and fatal for a diagnosis: the
             reason may wrap, and the chain — the actionable half — gets its
             own line and is never cut. The hover and the toast still carry the
             whole sentence, as a supplement rather than as its only home. */}
-        {row.refusalRow ? (
-          <span className="palette-item__refusal">
-            {row.refusalRow.reason}
-            <code className="palette-item__refusal-path">{row.refusalRow.path}</code>
-          </span>
-        ) : null}
-      </span>
-    </button>
+          {row.refusalRow ? (
+            <span className="palette-item__refusal">
+              {row.refusalRow.reason}
+              <code className="palette-item__refusal-path">{row.refusalRow.path}</code>
+            </span>
+          ) : null}
+        </span>
+      </button>
+      {/* **Open, quietly** — `stable-beta-public/29`. The row could be mounted
+          and not opened: drag and Enter both mount, and the only way to edit
+          one of your own packages was the Workflows menu. Hidden until the row
+          is hovered or this control is focused, so a list of packages stays a
+          list; `Pencil` rather than an arrow because this is the same act the
+          mount card's "Open this mount" spends that glyph on, and one act
+          should not have two glyphs.
+
+          The mount refusal doubles as its disabled reason. Not `disabled` the
+          attribute, for the reason the row records above: a disabled button
+          fires no mouse events, so it would swallow the sentence that is the
+          best thing on a refused row. */}
+      <IconButton
+        className="palette-item__open"
+        size="xs"
+        label={row.openLabel}
+        title={
+          row.refusal ??
+          `${row.openLabel} — it becomes the document on the canvas, at ?w=${row.slug}.`
+        }
+        aria-disabled={refused}
+        icon={<Icon glyph={Pencil} size="xs" />}
+        onClick={() => {
+          if (refused) {
+            if (row.refusal) onRefuse(row.refusal);
+            return;
+          }
+          onOpen();
+        }}
+      />
+    </div>
   );
 }
 

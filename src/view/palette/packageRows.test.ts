@@ -301,3 +301,74 @@ describe('a freshly scaffolded package, open in the editor', () => {
     });
   }
 });
+
+/**
+ * `stable-beta-public/29`. A package row could be mounted and not opened: drag
+ * and Enter both mount, and the only way to open one as the current document
+ * was the Workflows menu. The row is where a user meets their own packages
+ * first, so it carries a quiet Open beside the mount gesture.
+ */
+describe('opening a package from its own row', () => {
+  const palette = readFileSync(fileURLToPath(new URL('./Palette.tsx', import.meta.url)), 'utf8');
+
+  it('names the package it opens, so an icon-only control means something', () => {
+    expect(packageRows(CATALOGUE, [], '').map((row) => row.openLabel)).toEqual([
+      'Open Chinook Assistant',
+      'Open Concierge (gateway)',
+      'Open Morning Brief',
+    ]);
+  });
+
+  it('offers it on every package row, refused or not', () => {
+    // The refusal is about *mounting*, and the control is greyed rather than
+    // absent — a row that loses its Open when it becomes an ancestor would
+    // take the affordance away exactly when a reader has drilled into the
+    // thing they want to go back and edit.
+    const rows = packageRows(CATALOGUE, ['concierge'], '');
+    expect(rows.every((row) => row.openLabel.startsWith('Open '))).toBe(true);
+  });
+
+  it('is offered by the package row and by no other row in this palette', () => {
+    // `PaletteItem` is a node type and `AssemblyItem` is a starting shape;
+    // neither is a document of the user's, so neither has anything to open.
+    // Cut on the two function headers rather than counting occurrences: the
+    // question is *which component renders it*, and a count answers a
+    // different one and changes every time the copy does.
+    const after = (name: string) => palette.slice(palette.indexOf(`function ${name}(`));
+    expect(after('PackageItem')).toContain('row.openLabel');
+    expect(after('AssemblyItem')).not.toContain('openLabel');
+    expect(after('PaletteItem')).not.toContain('openLabel');
+  });
+
+  it('hands the open to the surface that already owns it, rather than loading here', () => {
+    // One owner: `useArrivalOffer.openWorkflow`, which is the same handler the
+    // arrival dialog and the start panel take. The palette knows a slug and
+    // nothing about capability registration order, frozen slugs or drafts —
+    // so it does not import the module that does.
+    expect(palette).toContain('onOpenPackage');
+    expect(palette).not.toMatch(/^import .*loadWorkflowIntoEditor/m);
+  });
+
+  it('is a sibling of the row, not a control nested inside a button', () => {
+    // The row itself is a `<button>`. A button inside a button is invalid
+    // HTML, and browsers recover from it by dropping one of them — so this is
+    // the structural fact that makes the control clickable at all, and it is
+    // the one a later tidy-up would undo without noticing.
+    expect(palette).toContain('palette-item-shell');
+    // The comment between them is prose; what must hold is that no `<button`
+    // opens between the row's close tag and the control.
+    const between = palette.slice(
+      palette.indexOf('</button>', palette.indexOf('function PackageItem(')),
+      palette.indexOf('<IconButton', palette.indexOf('function PackageItem(')),
+    );
+    expect(between).not.toContain('<button');
+    expect(between.length).toBeGreaterThan(0);
+  });
+
+  it('carries the mount refusal as its own disabled reason', () => {
+    // Same sentence, not a second one: a reader who meets this rule by
+    // dragging, by Entering and by hovering the Open control meets one rule.
+    // Twice in the file now — once on the row, once on the control.
+    expect(palette.match(/aria-disabled=\{refused\}/g)?.length).toBe(2);
+  });
+});
