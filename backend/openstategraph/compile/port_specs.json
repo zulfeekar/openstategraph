@@ -2394,6 +2394,7 @@
         "httpPath",
         "maxRetries",
         "maxRows",
+        "pins",
         "serverHostname",
         "timeoutSeconds",
         "token"
@@ -2431,6 +2432,14 @@
           "required": true,
           "defaultValue": "",
           "path_root": "workflows"
+        },
+        {
+          "key": "pins",
+          "kind": "text",
+          "label": "Table scope",
+          "hint": "Resolver keys from the allowlist, comma-separated — the only ones this binding may read. Leave blank for every resolver in the file. A mounted specialist sharing one allowlist with its siblings names its own here; the refusal, and the schema the model is offered, then list only these tables.",
+          "required": false,
+          "defaultValue": ""
         },
         {
           "key": "maxRows",
@@ -2709,6 +2718,7 @@
         "connection",
         "maxRetries",
         "maxRows",
+        "pins",
         "timeoutSeconds"
       ],
       "fields": [
@@ -2728,6 +2738,14 @@
           "required": true,
           "defaultValue": "",
           "path_root": "workflows"
+        },
+        {
+          "key": "pins",
+          "kind": "text",
+          "label": "Table scope",
+          "hint": "Resolver keys from the allowlist, comma-separated — the only ones this binding may read. Leave blank for every resolver in the file. A mounted specialist sharing one allowlist with its siblings names its own here; the refusal, and the schema the model is offered, then list only these tables.",
+          "required": false,
+          "defaultValue": ""
         },
         {
           "key": "maxRows",

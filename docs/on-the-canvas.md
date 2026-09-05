@@ -144,6 +144,19 @@ the model's next attempt is written against tables that exist. Configure no
 allowlist and the tool refuses every query: the dangerous default is the one
 that reads as configured.
 
+**`Table scope` narrows one binding to part of that file.** A file is the whole
+file, and a router in front of fifteen mounted specialists behind one credential
+gave each specialist's tool every specialist's tables — with the refusal
+offering another specialist's tables by name, and the per-specialist narrowing
+living only in an agent's system prompt, which is a request rather than a gate.
+So a binding may name the resolver keys it is entitled to, comma-separated, and
+both halves narrow with it: the gate refuses everything outside that scope, and
+the tool description the model is offered names only that scope's tables. Blank
+means every resolver in the file, which is the single-package case. The
+alternative — one copy of the hand-curated file per package — was rejected,
+because copies drifting apart is what the one file exists to prevent, and a copy
+that has drifted **wide** fails open.
+
 Each driver ships as an extra — `pip install 'openstategraph[mssql]'` or
 `pip install 'openstategraph[databricks]'`. The base install carries no
 database driver, and a missing one is a refusal that names the extra rather

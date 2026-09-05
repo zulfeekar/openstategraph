@@ -122,16 +122,20 @@ class MssqlQueryTool(_WarehouseExplorerBase):
         *,
         connection: str = DEFAULT_CONNECTION_ENV,
         allowlist: str = "",
+        pins: str = "",
         row_cap: int = DEFAULT_MAX_ROWS,
     ) -> None:
-        super().__init__(allowlist=allowlist, row_cap=row_cap)
         self.connection = connection
+        super().__init__(allowlist=allowlist, pins=pins, row_cap=row_cap)
 
     def configure(self, data: dict[str, Any]) -> "MssqlQueryTool":
         connection = str(data.get("connection") or "").strip() or self.connection
         allowlist = str(data.get("allowlist") or "").strip() or self.allowlist
+        pins = str(data.get("pins") or "").strip() or self.pins
         row_cap = self._row_cap_from(data, self.row_cap)
-        return type(self)(connection=connection, allowlist=allowlist, row_cap=row_cap)
+        return type(self)(
+            connection=connection, allowlist=allowlist, pins=pins, row_cap=row_cap
+        )
 
     def _connection(self) -> tuple[tuple[Any, ...], str | None]:
         dsn, refusal = self._env_value(

@@ -129,12 +129,13 @@ class DatabricksQueryTool(_WarehouseExplorerBase):
         http_path: str = DEFAULT_HTTP_PATH_ENV,
         token: str = DEFAULT_TOKEN_ENV,
         allowlist: str = "",
+        pins: str = "",
         row_cap: int = DEFAULT_MAX_ROWS,
     ) -> None:
-        super().__init__(allowlist=allowlist, row_cap=row_cap)
         self.server_hostname = server_hostname
         self.http_path = http_path
         self.token = token
+        super().__init__(allowlist=allowlist, pins=pins, row_cap=row_cap)
 
     def configure(self, data: dict[str, Any]) -> "DatabricksQueryTool":
         def named(key: str, current: str) -> str:
@@ -145,6 +146,7 @@ class DatabricksQueryTool(_WarehouseExplorerBase):
             http_path=named("httpPath", self.http_path),
             token=named("token", self.token),
             allowlist=str(data.get("allowlist") or "").strip() or self.allowlist,
+            pins=str(data.get("pins") or "").strip() or self.pins,
             row_cap=self._row_cap_from(data, self.row_cap),
         )
 

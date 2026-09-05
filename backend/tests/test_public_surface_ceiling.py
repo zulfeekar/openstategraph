@@ -408,7 +408,11 @@ MSSQL_QUERY_TOOL = """One more than `SqlQueryTool`, and the difference is the ti
     a warehouse, which is the whole reason it is a sibling and not a copy — and
     does *not* carry `database`, which is the difference `39` made. Everything
     else on the count is inherited: `BaseTool`'s ten, the four manifest
-    constants, `configure`, and `row_cap`.
+    constants, `configure`, and `row_cap` — plus, since
+    `osg-agent-experience/61`, the rung's `pins`, which is the seventeenth.
+    The rung gained two that ticket and a leaf gains one: `description` is
+    already assigned on every leaf, because a leaf names its own dialect in
+    the sentence an agent reads before it writes SQL.
 
     **It was seventeen until 2026-09-05, and the seventeenth was a member this
     leaf could not use.** `database` came from `_SqlExplorerBase`, where it
@@ -431,18 +435,31 @@ MSSQL_QUERY_TOOL = """One more than `SqlQueryTool`, and the difference is the ti
 WAREHOUSE_FAMILY = """A recorded exception at two levels, and the second is the
     reason the first is worth having.
 
-    `_WarehouseExplorerBase` is **twelve**: `BaseTool`'s ten, plus `allowlist`
-    and `row_cap`. Neither is behaviour — they are the two values every
-    warehouse leaf configures, and both were already public on
-    `MssqlQueryTool` before this rung existed. The rung's own behaviour is
-    entirely private (`_pins`, `_env_value`, `_local_names`, `_execute`, and
-    the two seams a leaf fills in), because that is what it is: the wiring
-    between the family and its dialects, not surface a consumer reads. Nothing
-    became visible that was not visible before; two members moved up one rung
-    and the leaves lost nothing.
+    `_WarehouseExplorerBase` is **fourteen**: `BaseTool`'s ten, plus
+    `allowlist`, `pins`, `row_cap` and `description`. None is behaviour — the
+    first three are the values every warehouse leaf configures, and the first
+    and third were already public on `MssqlQueryTool` before this rung existed.
+    The rung's own behaviour is
+    entirely private (`_pins`, `_scope`, `_described`, `_env_value`,
+    `_local_names`, `_execute`, and the two seams a leaf fills in), because
+    that is what it is: the wiring between the family and its dialects, not
+    surface a consumer reads. Nothing became visible that was not visible
+    before; two members moved up one rung and the leaves lost nothing.
 
-    `DatabricksQueryTool` is **eighteen** — two more than `MssqlQueryTool`'s
-    sixteen — and the two are `http_path` and `token`. `databricks-sql-connector`
+    **Twelve until `osg-agent-experience/61`, and both of the two are that
+    ticket.** `pins` is the subset of a shared allowlist one binding may read
+    — the field that lets fifteen mounted specialists share one hand-curated
+    file without sharing its tables. `description` is the same fact on the
+    other side of the seam: `BaseTool` declares it as an *annotation* with no
+    value, so nothing assigned it and the census never saw it; this rung
+    assigns it per instance, because what a binding may read is part of what
+    the model is told before it writes SQL. That is a member with a value, not
+    a member with behaviour — `_described()` is private and runs once, at bind
+    time — but it is genuinely one more thing a consumer can reach, and the
+    honest record is the number rather than a cast that hides it.
+
+    `DatabricksQueryTool` is **nineteen** — two more than `MssqlQueryTool`'s
+    seventeen — and the two are `http_path` and `token`. `databricks-sql-connector`
     takes `server_hostname`, `http_path` and `access_token` as three separate
     arguments and publishes no connection-string form to fold them into, so
     where the T-SQL leaf names one variable this one names three. Each field
@@ -454,13 +471,13 @@ WAREHOUSE_FAMILY = """A recorded exception at two levels, and the second is the
     refuses the same trade: that is writing code for the measurement rather
     than for the design. There is no "and" here to split — the class does one
     thing, reads one warehouse, and the count is the vendor's API surfacing in
-    ours. A fourth dialect that needed a fourth variable would be nineteen and
+    ours. A fourth dialect that needed a fourth variable would be twenty and
     still one reason to change.
 
     **What would make this dishonest is a member with behaviour**, and the
     census cannot tell the difference — so the argument is: every one of the
-    eighteen is either `BaseTool`'s, a manifest constant, `configure`, or one
-    of the five configured values. If a nineteenth appears that is none of
+    nineteen is either `BaseTool`'s, a manifest constant, `configure`, or one
+    of the six configured values. If a twentieth appears that is none of
     those, it is a second reason to change and this note has stopped being
     true.
     """
@@ -883,9 +900,9 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_sql.SqlGetSchemaTool": Recorded(14, PREBUILT_TOOLS),
     "prebuilt_sql.SqlListTablesTool": Recorded(14, PREBUILT_TOOLS),
     "prebuilt_sql.SqlQueryTool": Recorded(15, PREBUILT_TOOLS),
-    "prebuilt_warehouse._WarehouseExplorerBase": Recorded(12, WAREHOUSE_FAMILY),
-    "prebuilt_mssql.MssqlQueryTool": Recorded(16, MSSQL_QUERY_TOOL),
-    "prebuilt_databricks.DatabricksQueryTool": Recorded(18, WAREHOUSE_FAMILY),
+    "prebuilt_warehouse._WarehouseExplorerBase": Recorded(14, WAREHOUSE_FAMILY),
+    "prebuilt_mssql.MssqlQueryTool": Recorded(17, MSSQL_QUERY_TOOL),
+    "prebuilt_databricks.DatabricksQueryTool": Recorded(19, WAREHOUSE_FAMILY),
     "prebuilt_youtube.YouTubeTranscriptTool": Recorded(17, PREBUILT_TOOLS),
     "prebuilt_mcp.McpTool": Recorded(15, MCP_TOOL),
     "knowledge_explorer.CodeGrepTool": Recorded(13, PREBUILT_TOOLS),

@@ -53,7 +53,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any
+from typing import Any, Iterable
 
 from pydantic import BaseModel, Field
 
@@ -158,17 +158,36 @@ def tables_named(sql: str) -> set[str]:
     return found
 
 
-def pins_from(document: dict[str, Any]) -> set[str]:
-    """Every physical table any resolver pinned — the allowlist itself.
+def resolver_names(document: dict[str, Any]) -> list[str]:
+    """Every resolver key the allowlist declares, in the order it wrote them.
+
+    The vocabulary a `pins` selector is written against, so a refusal can name
+    what a mistyped scope could have said instead of only what it was not.
+    """
+    resolvers = document.get("resolvers")
+    if not isinstance(resolvers, dict):
+        return []
+    return [str(key) for key in resolvers]
+
+
+def pins_from(document: dict[str, Any], scope: Iterable[str] = ()) -> set[str]:
+    """Every physical table the named resolvers pinned — the allowlist itself.
 
     The **values** of `resolvers.*.pin`, never its keys: a key is the logical
     name and a value is the version a human chose.
+
+    `scope` narrows to those resolver keys, matched case-insensitively; empty
+    means every resolver, which is what a single-package workflow wants and is
+    what this function did before `osg-agent-experience/61`.
     """
+    wanted = {str(name).strip().lower() for name in scope if str(name).strip()}
     pins: set[str] = set()
     resolvers = document.get("resolvers")
     if not isinstance(resolvers, dict):
         return pins
-    for resolver in resolvers.values():
+    for key, resolver in resolvers.items():
+        if wanted and str(key).strip().lower() not in wanted:
+            continue
         pin = (resolver or {}).get("pin") if isinstance(resolver, dict) else None
         if isinstance(pin, dict):
             pins.update(str(value).lower() for value in pin.values() if value)
@@ -204,9 +223,13 @@ class _WarehouseExplorerBase(_SqlExplorerBase):
     _driver_extra = ""
     _driver_label = "database"
 
-    def __init__(self, *, allowlist: str = "", row_cap: int = DEFAULT_MAX_ROWS) -> None:
+    def __init__(
+        self, *, allowlist: str = "", pins: str = "", row_cap: int = DEFAULT_MAX_ROWS
+    ) -> None:
         self.allowlist = allowlist
+        self.pins = pins
         self.row_cap = row_cap
+        self.description = self._described()
 
     # -- what a leaf supplies ------------------------------------------------
 
@@ -251,8 +274,47 @@ class _WarehouseExplorerBase(_SqlExplorerBase):
             )
         return value, None
 
+    def _scope(self) -> tuple[str, ...]:
+        """The resolver keys this binding declared, if any.
+
+        Commas or whitespace, because both are what somebody types into a
+        one-line field and neither is a legal resolver key.
+        """
+        return tuple(part for part in re.split(r"[,\s]+", self.pins or "") if part)
+
+    def _described(self) -> str:
+        """This binding's own sentence for the model, tables named.
+
+        The gate is only half of `osg-agent-experience/61`: the other half is
+        that the schema a mounted specialist's model is *offered* named every
+        table in the shared file, so the model was invited to write a query
+        the gate would then refuse. The description is therefore an instance
+        attribute, resolved once at bind time from whatever this binding can
+        actually read.
+
+        Silent when the allowlist does not resolve: an unconfigured tool in a
+        registry has nothing to name, and a broken path is the refusal's job
+        to explain, not the schema's.
+        """
+        base = type(self).description
+        if not (self.allowlist or "").strip():
+            return base
+        try:
+            pins, refusal = self._pins()
+        except Exception:  # a workflows root that will not resolve at import time
+            return base
+        if refusal or not pins:
+            return base
+        return f"{base} Readable tables for this binding: {', '.join(sorted(pins))}."
+
     def _pins(self) -> tuple[set[str], str | None]:
-        """`(pins, refusal)` — the allowlist's pinned tables, or why not."""
+        """`(pins, refusal)` — the tables *this binding* may read, or why not.
+
+        Scoped by `pins` since `osg-agent-experience/61`. One shared,
+        hand-curated allowlist and fifteen mounted specialists was the shape
+        that made this necessary, and the rejected alternative — fifteen
+        copies of the file — is the drift the file exists to prevent.
+        """
         configured = (self.allowlist or "").strip()
         if not configured:
             return set(), (
@@ -277,11 +339,24 @@ class _WarehouseExplorerBase(_SqlExplorerBase):
             document = yaml.safe_load(candidate.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as exc:
             return set(), f"The allowlist '{configured}' is not readable YAML: {exc}"
-        pins = pins_from(document if isinstance(document, dict) else {})
+        document = document if isinstance(document, dict) else {}
+        scope = self._scope()
+        names = resolver_names(document)
+        if scope:
+            known = {name.strip().lower() for name in names}
+            unknown = [part for part in scope if part.strip().lower() not in known]
+            if unknown:
+                return set(), (
+                    f"The 'pins' field names {', '.join(unknown)}, which the allowlist "
+                    f"'{configured}' has no resolver for. Its resolvers are: "
+                    f"{', '.join(names) or '(none)'}."
+                )
+        pins = pins_from(document, scope)
         if not pins:
+            where = f" under {', '.join(scope)}" if scope else ""
             return set(), (
-                f"The allowlist '{configured}' names no pinned tables. Every readable "
-                "table is a value under some resolver's 'pin:' map."
+                f"The allowlist '{configured}' names no pinned tables{where}. Every "
+                "readable table is a value under some resolver's 'pin:' map."
             )
         return pins, None
 

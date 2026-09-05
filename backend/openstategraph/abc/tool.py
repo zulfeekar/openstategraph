@@ -184,7 +184,15 @@ class BaseTool(ABC):
     """
 
     name: ClassVar[str]
-    description: ClassVar[str]
+    #: What the model is told this tool does. Declared on the class by every
+    #: tool in this repository — and **assignable per instance**, which is why
+    #: it is not a `ClassVar` (`osg-agent-experience/61`). A warehouse tool
+    #: bound to a subset of a shared allowlist must name *that binding's*
+    #: readable tables here: the gate was scoped and the sentence the model
+    #: reads before it writes SQL was not, so the model was invited to write
+    #: the query the gate would then refuse. A tool that assigns nothing per
+    #: instance behaves exactly as it did before.
+    description: str
     #: An explicit *alias* canvas node type (`tool.chinook-execute-sql`) for
     #: this tool, on top of the qualified id (`<slug>/tools.<ClassName>`)
     #: discovery always binds it to. Set this for a stable, hand-chosen id

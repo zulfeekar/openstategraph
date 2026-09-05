@@ -73,13 +73,23 @@ READS = {
     # here would produce a tool that refuses every query naming a variable
     # nobody set — the silent-configuration failure this file exists for,
     # wearing the one disguise that reads as correct behaviour.
-    "tool.mssql-query": {"connection", "allowlist", "maxRows"},
+    # `pins` joined both warehouse leaves with `osg-agent-experience/61`: the
+    # subset of the shared allowlist this binding may read, so two mounted
+    # specialists can share one hand-curated file without sharing its tables.
+    "tool.mssql-query": {"connection", "allowlist", "pins", "maxRows"},
     # And the third leaf (`osg-agent-experience/40`). Three connection keys
     # rather than one, because `databricks-sql-connector` takes three arguments
     # and has no connection-string form — which is three chances to ship a key
     # nothing reads instead of one, and the reason this file matters more here
     # than it did for either sibling.
-    "tool.databricks-query": {"serverHostname", "httpPath", "token", "allowlist", "maxRows"},
+    "tool.databricks-query": {
+        "serverHostname",
+        "httpPath",
+        "token",
+        "allowlist",
+        "pins",
+        "maxRows",
+    },
 }
 
 

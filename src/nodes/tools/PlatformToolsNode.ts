@@ -199,6 +199,22 @@ export const PLATFORM_TOOL_NODES = [
         pathRoot: 'workflows',
       },
       {
+        key: 'pins',
+        label: 'Table scope',
+        kind: 'text',
+        defaultValue: '',
+        placeholder: 'cargo, vessels',
+        mono: true,
+        // `osg-agent-experience/61`. The allowlist field names a *file*, and a
+        // file is the whole file — so a router mounting fifteen specialist
+        // packages behind one credential gave every specialist's tool every
+        // specialist's tables, and the refusal offered another lens's tables by
+        // name. Fifteen copies of one hand-curated file was the rejected
+        // repair; naming a subset of the shared one is this. Blank is the
+        // single-package case and behaves exactly as it did before.
+        hint: 'Resolver keys from the allowlist, comma-separated — the only ones this binding may read. Leave blank for every resolver in the file. A mounted specialist sharing one allowlist with its siblings names its own here; the refusal, and the schema the model is offered, then list only these tables.',
+      },
+      {
         key: 'maxRows',
         label: 'Max rows',
         kind: 'text',
@@ -268,6 +284,22 @@ export const PLATFORM_TOOL_NODES = [
         // The same fact as data (`osg-agent-experience/41`), inherited with the
         // rung: this leaf resolves the allowlist through the same `_pins()`.
         pathRoot: 'workflows',
+      },
+      {
+        key: 'pins',
+        label: 'Table scope',
+        kind: 'text',
+        defaultValue: '',
+        placeholder: 'cargo, vessels',
+        mono: true,
+        // `osg-agent-experience/61`. The allowlist field names a *file*, and a
+        // file is the whole file — so a router mounting fifteen specialist
+        // packages behind one credential gave every specialist's tool every
+        // specialist's tables, and the refusal offered another lens's tables by
+        // name. Fifteen copies of one hand-curated file was the rejected
+        // repair; naming a subset of the shared one is this. Blank is the
+        // single-package case and behaves exactly as it did before.
+        hint: 'Resolver keys from the allowlist, comma-separated — the only ones this binding may read. Leave blank for every resolver in the file. A mounted specialist sharing one allowlist with its siblings names its own here; the refusal, and the schema the model is offered, then list only these tables.',
       },
       {
         key: 'maxRows',
