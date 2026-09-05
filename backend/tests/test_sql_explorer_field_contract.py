@@ -74,6 +74,12 @@ READS = {
     # nobody set — the silent-configuration failure this file exists for,
     # wearing the one disguise that reads as correct behaviour.
     "tool.mssql-query": {"connection", "allowlist", "maxRows"},
+    # And the third leaf (`osg-agent-experience/40`). Three connection keys
+    # rather than one, because `databricks-sql-connector` takes three arguments
+    # and has no connection-string form — which is three chances to ship a key
+    # nothing reads instead of one, and the reason this file matters more here
+    # than it did for either sibling.
+    "tool.databricks-query": {"serverHostname", "httpPath", "token", "allowlist", "maxRows"},
 }
 
 

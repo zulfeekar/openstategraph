@@ -140,6 +140,16 @@ SECRET_VALUE_PREFIXES = (
     "ya29.",
     "Bearer ",
     "AKIA",
+    # A Databricks personal access token (`osg-agent-experience/40`). Added
+    # because it is the second recorded instance of this list's own reason for
+    # existing: `dapi…` is a credential **and** a legal environment-variable
+    # name, so the POSIX-name regex that guards every "holds a variable name"
+    # field admits it, and the query is then refused for naming a variable
+    # nobody set — which reads as a configuration mistake rather than as a
+    # committed secret. Four characters with no separator is the shortest
+    # prefix here; it is matched with six or more trailing characters by
+    # `executed_statements._KEY_SHAPED`, so an ordinary word is not redacted.
+    "dapi",
 )
 
 

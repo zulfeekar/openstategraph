@@ -210,6 +210,77 @@ export const PLATFORM_TOOL_NODES = [
       },
     ],
   }),
+  // And the third leaf of that family (`osg-agent-experience/40`). The ticket
+  // asked one question of the shape: does a new dialect cost a driver, a
+  // connection and a dialect name, or does it cost a base class? This card is
+  // half the answer — the difference from the T-SQL sibling above is entirely
+  // in the connection, and it is three fields rather than one because
+  // `databricks-sql-connector` takes three arguments and publishes no
+  // connection-string form to fold them into. Their defaults are the variable
+  // names Databricks' own documentation uses, so a workspace already set up for
+  // the connector needs no edits here at all.
+  backendTool({
+    id: 'tool.databricks-query',
+    label: 'Run Databricks Query',
+    description:
+      'Runs one read-only SELECT against a Databricks SQL warehouse and returns the rows as a table. Only tables the allowlist pinned may be named.',
+    keywords: ['sql', 'databricks', 'warehouse', 'unity catalog', 'lakehouse', 'select', 'query'],
+    fields: [
+      {
+        key: 'serverHostname',
+        label: 'Hostname variable',
+        kind: 'text',
+        defaultValue: 'DATABRICKS_SERVER_HOSTNAME',
+        placeholder: 'DATABRICKS_SERVER_HOSTNAME',
+        mono: true,
+        hint: 'The name of an environment variable holding the workspace hostname (dbc-1234.cloud.databricks.com) — never the hostname itself. Unset at run time, the tool refuses by name and sends nothing.',
+        required: true,
+      },
+      {
+        key: 'httpPath',
+        label: 'HTTP path variable',
+        kind: 'text',
+        defaultValue: 'DATABRICKS_HTTP_PATH',
+        placeholder: 'DATABRICKS_HTTP_PATH',
+        mono: true,
+        hint: 'The name of an environment variable holding the warehouse HTTP path (/sql/1.0/warehouses/…). A name, not the path, so all three connection fields read the same way.',
+        required: true,
+      },
+      {
+        key: 'token',
+        label: 'Token variable',
+        kind: 'text',
+        defaultValue: 'DATABRICKS_TOKEN',
+        placeholder: 'DATABRICKS_TOKEN',
+        mono: true,
+        hint: 'The name of an environment variable holding a personal access token — never the token, because a workflow document is committed. A pasted token is refused as a value and is not echoed back, even though it is also a legal variable name.',
+        required: true,
+      },
+      {
+        key: 'allowlist',
+        label: 'Allowlist YAML',
+        kind: 'text',
+        defaultValue: '',
+        placeholder: 'my-flow/lenses.yaml',
+        mono: true,
+        hint: 'A YAML file whose resolvers carry “pin:” maps, given relative to the workflows root. The pinned values are the only tables a query may name; anything else is refused with the list. The path is resolved under the workflows root and one that lands outside the workflows root is refused — this is not a convention, it is where the file has to be. Without this the tool refuses every query.',
+        required: true,
+        // The same fact as data (`osg-agent-experience/41`), inherited with the
+        // rung: this leaf resolves the allowlist through the same `_pins()`.
+        pathRoot: 'workflows',
+      },
+      {
+        key: 'maxRows',
+        label: 'Max rows',
+        kind: 'text',
+        defaultValue: '',
+        placeholder: '200',
+        // Same reasoning as `tool.sql-query`: `configure` falls back to the
+        // tool's own default, so blank is a legitimate answer.
+        hint: 'Ceiling on rows returned. Leave blank for the tool’s own default.',
+      },
+    ],
+  }),
   backendTool({
     id: 'tool.validate-workflow',
     label: 'Validate Workflow',

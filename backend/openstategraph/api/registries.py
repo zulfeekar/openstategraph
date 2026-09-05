@@ -74,6 +74,7 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
     from openstategraph.compile.node_runtime import chinook_tool_registry
     from openstategraph.extensions import entry_point_tools
     from openstategraph.prebuilt_architect import ARCHITECT_TOOLS
+    from openstategraph.prebuilt_databricks import DATABRICKS_TOOLS
     from openstategraph.prebuilt_email import EMAIL_TOOLS
     from openstategraph.prebuilt_mcp import MCP_TOOLS
     from openstategraph.prebuilt_mssql import MSSQL_TOOLS
@@ -111,6 +112,12 @@ def _process_tool_layer() -> tuple[dict[str, Any], Any]:
         # allowlist YAML pinned. It shares `_SqlExplorerBase` with the three
         # above; the dialect and the connection are the whole difference.
         MSSQL_TOOLS,
+        # And the third leaf of that family (`osg-agent-experience/40`): a
+        # Databricks SQL warehouse. It is registered here rather than folded
+        # into `MSSQL_TOOLS` for the reason the ticket set out to test — a new
+        # dialect is a driver, a connection and a dialect name, and one more
+        # line in this list.
+        DATABRICKS_TOOLS,
         # Read-only platform introspection (ticket 67, user spec: "no write,
         # everything else") — list/describe workflows, jailed ls/read/grep.
         PLATFORM_TOOLS,

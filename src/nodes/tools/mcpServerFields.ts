@@ -134,6 +134,9 @@ export const SECRET_VALUE_PREFIXES = [
   'ya29.',
   'Bearer ',
   'AKIA',
+  // A Databricks personal access token (`osg-agent-experience/40`) — the
+  // second recorded case of a credential that is also a legal variable name.
+  'dapi',
 ] as const;
 
 /**

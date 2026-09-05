@@ -87,36 +87,52 @@ and *we could not tell* (it declares none). And where several sources are
 live and nothing settles which, it chooses **nothing**: that is a question
 for the person asking, not a coin toss.
 
-### Two SQL atoms, and the difference between them is not the dialect
+### Three SQL atoms, and the difference between them is not the dialect
 
-`Tools · atoms` holds two ways to read a database, and picking the wrong one
+`Tools · atoms` holds three ways to read a database, and picking the wrong one
 is not a small mistake — the fields do not mean the same things.
 
-| | **Run Query** (`tool.sql-query`) | **Run T-SQL Query** (`tool.mssql-query`) |
-| --- | --- | --- |
-| Reads | a `.sqlite` file inside `workflows/` | an MSSQL server |
-| Points at it with | `Database file` — a path | `Connection variable` — the **name** of an environment variable |
-| Read-only comes from | the driver: SQLite opens the file `mode=ro` and refuses every write however it is spelled | a **statement gate** plus an uncommitted transaction — see below |
-| Which tables may be read | every table in the file | only those an **allowlist** pinned |
+**What all three share is one sentence:** every one of them runs a single
+read-only `SELECT`, caps the rows it returns, hands back the same markdown
+table, and answers a mistake with a refusal a model can act on rather than an
+exception — that is the family base, and a dialect adds a driver and a
+connection to it, nothing more.
 
-**Read-only is a weaker word on the second row, and it is written down here
-rather than assumed.** No MSSQL driver offers SQLite's `mode=ro`.
+| | **Run Query** (`tool.sql-query`) | **Run T-SQL Query** (`tool.mssql-query`) | **Run Databricks Query** (`tool.databricks-query`) |
+| --- | --- | --- | --- |
+| Reads | a `.sqlite` file inside `workflows/` | an MSSQL server | a Databricks SQL warehouse |
+| Points at it with | `Database file` — a path | `Connection variable` — the **name** of an environment variable | three variable **names**: hostname, HTTP path, token |
+| Read-only comes from | the driver: SQLite opens the file `mode=ro` and refuses every write however it is spelled | a **statement gate** plus an uncommitted transaction — see below | the **statement gate** alone — see below |
+| Which tables may be read | every table in the file | only those an **allowlist** pinned | only those an **allowlist** pinned |
+
+**Read-only is a weaker word on the two warehouse columns, and it is written
+down here rather than assumed.** No warehouse driver offers SQLite's `mode=ro`.
 `ApplicationIntent=ReadOnly`, which is the string most people expect to close
-this, is an availability-group *routing* hint: it chooses which replica you
-talk to, and it refuses nothing. So the T-SQL atom guards with two mechanisms
-of its own — it accepts exactly one statement and only a `SELECT` or a
-`WITH … SELECT`, and it opens its connection without autocommit and rolls it
-back unconditionally. Both are real; neither is the engine refusing a write,
-and a workflow that needs that guarantee should be given a login that cannot
-write.
+this for MSSQL, is an availability-group *routing* hint: it chooses which
+replica you talk to, and it refuses nothing. So both warehouse atoms guard with
+a **statement gate** — exactly one statement, and only a `SELECT` or a
+`WITH … SELECT` — and both restrict what it may name to the allowlist.
 
-**The `Connection variable` field holds a name, never a connection string.**
-A workflow document is committed, so a pasted DSN would be a password in a
-repository; the field is refused if you type one, and the refusal does not
-echo it back. The default is `OPENSTATEGRAPH_MSSQL_URL`. With that variable
-unset the tool answers a refusal that names it and sends nothing — which is
-what a workflow built against a warehouse that does not exist yet does on
-every run, on purpose.
+The T-SQL atom can add one thing the Databricks atom cannot: it opens its
+connection without autocommit and rolls it back unconditionally. A Databricks
+SQL warehouse has no session read-only mode, and the connector's autocommit
+handling has moved between releases, so that atom does not ask for one; a
+rollback is attempted on the way out and ignored if the warehouse declines. In
+neither case is the engine refusing a write, and a workflow that needs that
+guarantee should be given a login that cannot write.
+
+**Every connection field holds a name, never a value.** A workflow document is
+committed, so a pasted DSN or token would be a password in a repository; the
+field is refused if you type one, and the refusal does not echo it back — a
+Databricks token is caught even though `dapi…` is also a legal variable name.
+The T-SQL default is `OPENSTATEGRAPH_MSSQL_URL`, ours because ODBC has no
+conventional variable to keep a DSN in. The Databricks defaults are the
+vendor's own — `DATABRICKS_SERVER_HOSTNAME`, `DATABRICKS_HTTP_PATH`,
+`DATABRICKS_TOKEN` — so a machine already set up for the connector needs no
+edits on the card at all. With a variable unset the tool answers a refusal that
+names it and sends nothing, one variable at a time so there is one thing to go
+and do — which is what a workflow built against a warehouse that does not exist
+yet does on every run, on purpose.
 
 **The `Allowlist YAML` field is not optional and is not a convenience.** It
 names a file inside `workflows/` whose `resolvers` each carry a `pin:` map,
@@ -128,9 +144,10 @@ the model's next attempt is written against tables that exist. Configure no
 allowlist and the tool refuses every query: the dangerous default is the one
 that reads as configured.
 
-The driver ships as an extra — `pip install 'openstategraph[mssql]'`. The base
-install carries no database driver, and a missing one is a refusal that names
-the extra rather than an import error.
+Each driver ships as an extra — `pip install 'openstategraph[mssql]'` or
+`pip install 'openstategraph[databricks]'`. The base install carries no
+database driver, and a missing one is a refusal that names the extra rather
+than an import error.
 
 ---
 

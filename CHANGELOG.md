@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+### Added
+- **`tool.databricks-query` — one read-only SELECT against a Databricks SQL
+  warehouse** (`osg-agent-experience/40`). The third leaf of the SQL family,
+  built to answer the ticket's own question: does a new dialect cost a driver, a
+  connection and a dialect name, or does it cost a base class? It costs the
+  former now, and it did not before — the statement gate, the allowlist of
+  pinned tables, the "a field holds a variable **name**" refusals and the order
+  those refusals happen in have moved from `prebuilt_mssql` up to a shared
+  `_WarehouseExplorerBase`, where they were always family behaviour wearing one
+  dialect's name. Copies were not made; the family tests moved with them and are
+  parametrised by dialect, so a behaviour that needs a per-dialect test is
+  visibly a behaviour that did not belong on the rung.
+
+  The connection is **three** variables rather than one, and their defaults are
+  Databricks' own documented names — `DATABRICKS_SERVER_HOSTNAME`,
+  `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN` — because
+  `databricks-sql-connector` takes them as three separate arguments and
+  publishes no connection-string form. A workspace already set up for the
+  connector therefore needs no edits on the card. Each field holds the *name* of
+  a variable and a pasted value is refused without being echoed, including a
+  personal access token: `dapi…` is a credential **and** a legal
+  environment-variable name, so `dapi` joins the one maintained prefix list in
+  `config_file.py` and its TypeScript mirror.
+
+  Read-only is honestly weaker here than on the T-SQL sibling and the docs now
+  say so for both: a Databricks warehouse has no session read-only and the
+  connector's autocommit handling has moved between releases, so this leaf asks
+  for neither and its guarantee is the statement gate plus the allowlist. The
+  driver is a new optional extra, `openstategraph[databricks]`, imported lazily
+  at one seam; the base wheel is unchanged and a missing driver is a refusal
+  naming the extra.
+
+### Fixed
+- **A three-part table name was read as its first two parts**
+  (`osg-agent-experience/40`). The warehouse allowlist scanned identifiers with
+  a two-group regex, so `main.sales.invoice_line` was checked as the table
+  `main.sales` — a name no pin can ever carry, so a legal query was refused
+  citing a table nobody had written. Shipped in `34` and invisible until a
+  dialect whose catalogue names are three parts arrived. Both warehouse leaves
+  are fixed, since T-SQL writes multi-part names too.
+
 ### Changed
 - **A run with no model is refused at the door, not inside a node**
   (`osg-agent-experience/48`). With no provider configured, a run used to

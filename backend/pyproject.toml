@@ -78,6 +78,15 @@ deep = ["deepagents>=0.7,<1"]
 # (msodbcsql18) to reach a server; that is the vendor's floor, not ours, and
 # the tool's refusal names this extra rather than leaving an ImportError.
 mssql = ["pyodbc>=5.0,<6"]
+# Only a document containing a `tool.databricks-query` node needs this
+# (`osg-agent-experience/40`), on the same terms as `[mssql]` above:
+# `prebuilt_databricks` imports it lazily at one seam, so the unconfigured path
+# needs no driver and the base wheel's dependencies are unchanged. Unlike
+# pyodbc it needs no system driver — it speaks Thrift over HTTPS — so the extra
+# is the whole install. Verified against 4.5.0 on 2026-09-05; the floor is 3.4
+# because that is where the connector's own docs settle on the three-argument
+# `sql.connect(server_hostname=, http_path=, access_token=)` this leaf calls.
+databricks = ["databricks-sql-connector>=3.4,<5"]
 # Not an optional feature so much as an undeclared one: `memory.py` imports
 # these inside a try/except, so `settings.checkpointer: "sqlite"` and
 # OPENSTATEGRAPH_MEMORY_PATH degraded to in-memory in every install that
@@ -179,7 +188,7 @@ postgres = [
 # says so in one line rather than failing.
 bastion = ["bastion-prompt-protection>=1.3,<2"]
 all = [
-    "openstategraph[anthropic,openai,ollama,deep,sqlite,server,mcp,postgres,mssql]",
+    "openstategraph[anthropic,openai,ollama,deep,sqlite,server,mcp,postgres,mssql,databricks]",
 ]
 dev = [
     "pytest>=8",

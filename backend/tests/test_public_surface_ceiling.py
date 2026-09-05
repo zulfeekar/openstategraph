@@ -427,6 +427,45 @@ MSSQL_QUERY_TOOL = """One more than `SqlQueryTool`, and the difference is the ti
     """
 
 
+#: The warehouse rung and its third leaf (`osg-agent-experience/40`).
+WAREHOUSE_FAMILY = """A recorded exception at two levels, and the second is the
+    reason the first is worth having.
+
+    `_WarehouseExplorerBase` is **twelve**: `BaseTool`'s ten, plus `allowlist`
+    and `row_cap`. Neither is behaviour — they are the two values every
+    warehouse leaf configures, and both were already public on
+    `MssqlQueryTool` before this rung existed. The rung's own behaviour is
+    entirely private (`_pins`, `_env_value`, `_local_names`, `_execute`, and
+    the two seams a leaf fills in), because that is what it is: the wiring
+    between the family and its dialects, not surface a consumer reads. Nothing
+    became visible that was not visible before; two members moved up one rung
+    and the leaves lost nothing.
+
+    `DatabricksQueryTool` is **eighteen** — two more than `MssqlQueryTool`'s
+    sixteen — and the two are `http_path` and `token`. `databricks-sql-connector`
+    takes `server_hostname`, `http_path` and `access_token` as three separate
+    arguments and publishes no connection-string form to fold them into, so
+    where the T-SQL leaf names one variable this one names three. Each field
+    holds the *name* of an environment variable, so each is a value a document
+    carries and a person edits.
+
+    The move that would take this to sixteen is a small object holding the
+    three names, and it is refused for the reason `ENGINE_ADAPTERS` above
+    refuses the same trade: that is writing code for the measurement rather
+    than for the design. There is no "and" here to split — the class does one
+    thing, reads one warehouse, and the count is the vendor's API surfacing in
+    ours. A fourth dialect that needed a fourth variable would be nineteen and
+    still one reason to change.
+
+    **What would make this dishonest is a member with behaviour**, and the
+    census cannot tell the difference — so the argument is: every one of the
+    eighteen is either `BaseTool`'s, a manifest constant, `configure`, or one
+    of the five configured values. If a nineteenth appears that is none of
+    those, it is a second reason to change and this note has stopped being
+    true.
+    """
+
+
 PREBUILT_TOOLS = """A recorded exception, with the shape visible in the base they share:
     `BaseTool` is **eight** members, and every tool here clears the ceiling only
     by its own configuration on top of that. `SqlListTablesTool` and
@@ -844,7 +883,9 @@ RECORDED: dict[str, Recorded] = {
     "prebuilt_sql.SqlGetSchemaTool": Recorded(14, PREBUILT_TOOLS),
     "prebuilt_sql.SqlListTablesTool": Recorded(14, PREBUILT_TOOLS),
     "prebuilt_sql.SqlQueryTool": Recorded(15, PREBUILT_TOOLS),
+    "prebuilt_warehouse._WarehouseExplorerBase": Recorded(12, WAREHOUSE_FAMILY),
     "prebuilt_mssql.MssqlQueryTool": Recorded(16, MSSQL_QUERY_TOOL),
+    "prebuilt_databricks.DatabricksQueryTool": Recorded(18, WAREHOUSE_FAMILY),
     "prebuilt_youtube.YouTubeTranscriptTool": Recorded(17, PREBUILT_TOOLS),
     "prebuilt_mcp.McpTool": Recorded(15, MCP_TOOL),
     "knowledge_explorer.CodeGrepTool": Recorded(13, PREBUILT_TOOLS),
