@@ -1204,7 +1204,7 @@ it.
 """
 
 RECORDED: dict[str, Recorded] = {
-    "kanban_store.py": Recorded(676, KANBAN_STORE),
+    "kanban_store.py": Recorded(690, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
     "cli.py": Recorded(1679, CLI),
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),

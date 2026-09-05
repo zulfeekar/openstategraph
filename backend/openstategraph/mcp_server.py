@@ -1589,8 +1589,10 @@ def build_mcp_server(
         Each row is `kanban_list_cards`' own row (`card_row` plus `column`)
         with two fields added: `rank` (1-indexed, this call's order) and
         `why_here`, the one sentence naming which rule placed it — "unblocks
-        N cards", "<priority> priority, nothing waits on it", or "blocked by
-        <ids>". Nothing is stored; call again after the board changes.
+        N cards" (or "unblocks N cards directly, M in all", when the chain
+        below it runs deeper than one hop — `osg-agent-experience/66`),
+        "<priority> priority, nothing waits on it", or "blocked by <ids>".
+        Nothing is stored; call again after the board changes.
         """
         from openstategraph.kanban_store import kanban_store_path, list_cards, triage
 

@@ -1178,18 +1178,23 @@ def triage(cards: Sequence[Card]) -> tuple[TriageRow, ...]:
     1. **Unblocked cards that block others**, most dependents first — the
        card whose done-when unlocks the most other work is worth doing
        before a card nothing is waiting on, regardless of either one's
-       priority.
+       priority. **Dependents are counted to the end of the chain**
+       (`osg-agent-experience/66`): A <- B <- C ranked A first and said
+       `unblocks 1 card`, when nothing else on that board could start until A
+       landed. Both the order and the sentence use the transitive count, and
+       the sentence names the direct one too whenever they differ.
     2. **Unblocked cards that block nothing**, by priority (high, med, low).
     3. **Blocked cards, last**, in the *same* sub-order as 1+2 combined —
        dependents first, priority second — so a blocked card that itself
        unblocks a chain still sorts ahead of a blocked card nobody is
        waiting on, even though neither can be picked up yet.
 
-    `why_here` names exactly one of those three rules: "unblocks N cards",
-    "<priority> priority, nothing waits on it", or "blocked by <ids>" — and
-    the third distinguishes a blocker that is a card on this board from one no
-    card carries (`osg-agent-experience/30`), because only the first of those
-    two clears by working the board.
+    `why_here` names exactly one of those three rules: "unblocks N cards"
+    (or "unblocks N cards directly, M in all" when the chain runs deeper than
+    one hop), "<priority> priority, nothing waits on it", or "blocked by
+    <ids>" — and the third distinguishes a blocker that is a card on this
+    board from one no card carries (`osg-agent-experience/30`), because only
+    the first of those two clears by working the board.
     """
     live = [card for card in cards if card.stage is not Stage.FINISHED]
     finished_ids = {card.task_id for card in cards if card.stage is Stage.FINISHED}
@@ -1204,6 +1209,34 @@ def triage(cards: Sequence[Card]) -> tuple[TriageRow, ...]:
             if blocker in dependents:
                 dependents[blocker].append(card.task_id)
 
+    def all_dependents(task_id: str) -> set[str]:
+        """Every live card that cannot start until this one lands, at any
+        depth — `osg-agent-experience/66`.
+
+        A chain A <- B <- C ranked A first and printed `unblocks 1 card`. The
+        order was right and the only evidence offered for it understated the
+        case by two thirds, which is a reader's cue to take the `high`
+        priority card nothing waits on instead.
+
+        The walk is breadth-first with a `seen` set, and the set is a cycle
+        guard rather than an optimisation: `blocked_by` is free text resolved
+        against the board, nothing on the write path refuses A <- B <- A, and
+        a walk that trusts the graph is acyclic hangs the door. The origin is
+        excluded at the end because reachability from a card inside a cycle
+        includes the card, and "unblocks itself" is not a fact about a board.
+        """
+        seen: set[str] = {task_id}
+        frontier = list(dependents.get(task_id, ()))
+        while frontier:
+            nxt = frontier.pop()
+            if nxt in seen:
+                continue
+            seen.add(nxt)
+            frontier.extend(dependents.get(nxt, ()))
+        return seen - {task_id}
+
+    reachable = {card.task_id: all_dependents(card.task_id) for card in live}
+
     def priority_rank(card: Card) -> int:
         try:
             return BOARD_PRIORITIES.index(card.priority)
@@ -1212,8 +1245,11 @@ def triage(cards: Sequence[Card]) -> tuple[TriageRow, ...]:
 
     def sort_key(card: Card) -> tuple[int, int, str]:
         # Most dependents first (negated for ascending sort), then priority,
-        # then title for a stable, readable tie-break.
-        return (-len(dependents[card.task_id]), priority_rank(card), card.title)
+        # then title for a stable, readable tie-break. Transitive, and the
+        # same number `why_here` prints: an order computed from one count and
+        # justified by another is worse than either alone
+        # (`osg-agent-experience/66`).
+        return (-len(reachable[card.task_id]), priority_rank(card), card.title)
 
     unblocked = [c for c in live if not outstanding_blockers(c)]
     blocked = [c for c in live if outstanding_blockers(c)]
@@ -1223,6 +1259,7 @@ def triage(cards: Sequence[Card]) -> tuple[TriageRow, ...]:
     for rank, card in enumerate(ordered, start=1):
         blockers = outstanding_blockers(card)
         n_dependents = len(dependents[card.task_id])
+        n_reachable = len(reachable[card.task_id])
         if blockers:
             # `osg-agent-experience/30`: "blocked by X" read the same whether
             # X is a card somebody will finish or an id nothing carries, and
@@ -1236,9 +1273,15 @@ def triage(cards: Sequence[Card]) -> tuple[TriageRow, ...]:
                 why_here = f"blocked by {phrase}"
             else:
                 why_here = f"blocked by {', '.join(carried)}"
-        elif n_dependents:
+        elif n_reachable:
+            # One number when the two agree — a clause that always says the
+            # same thing is a clause a reader stops reading — and both when
+            # they do not, because "unblocks 4 cards" for a card one thing
+            # waits on directly is its own kind of misreport.
             plural = "card" if n_dependents == 1 else "cards"
             why_here = f"unblocks {n_dependents} {plural}"
+            if n_reachable != n_dependents:
+                why_here = f"unblocks {n_dependents} {plural} directly, {n_reachable} in all"
         else:
             why_here = f"{card.priority} priority, nothing waits on it"
         rows.append(TriageRow(card=card, rank=rank, why_here=why_here))

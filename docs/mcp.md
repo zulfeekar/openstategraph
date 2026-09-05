@@ -663,6 +663,15 @@ so an agent never has to reconstruct the order from the raw fields to trust
 it. The last two are separated because only the first of them clears by
 working the board (`osg-agent-experience/30`).
 
+**Dependents are counted to the end of the chain.** A <- B <- C ranked A
+first and said `"unblocks 1 card"`, which is a third of the truth: nothing
+else on that board could start until A landed, and a reader weighing that
+line against a `high` priority card with nothing waiting on it would
+reasonably take the other one. Both the order and the sentence now use the
+transitive count, and the sentence names the direct one beside it whenever
+the two differ — `"unblocks 1 card directly, 2 in all"`
+(`osg-agent-experience/66`).
+
 ### Which name lands on the card
 
 `actor` is a parameter a *model* fills in, and this project's standing rule
