@@ -191,16 +191,31 @@ export function createGraderNode(providers: ProviderRegistry): INodeDefinition {
           // `n` allows `n - 1` revisions, which is what the hint says rather
           // than what the label implies.
           label: 'Max attempts',
+          // The arithmetic, at the point of the gesture (`osg-agent-experience`
+          // 37). "Send it back once" reads as `1`, and `1` is a grader that
+          // never sends anything back: the compiled node judges the candidate
+          // in hand, so `judged = revisions + 1` and a cap of 1 is exhausted on
+          // the first verdict. The old hint said "3 attempts allows 2
+          // revisions" and left the developer to invert it for the case they
+          // had actually asked for. The field still counts judgements — the
+          // rename is priced in the test's docstring — so the number the
+          // developer wants is named here, and the slider reads it back.
           hint:
-            'How many candidates this grader will judge before it passes one ' +
-            'through. Its own budget — another grader in the same workflow ' +
-            'gets its own. 3 attempts allows 2 revisions.',
+            'Candidates this grader will judge — not revisions, so it is one ' +
+            'more than the number of times you want the answer sent back: ' +
+            '2 = one revision, 1 = never sends it back. Its own budget; ' +
+            'another grader in the same workflow gets its own.',
           defaultValue: 3,
           min: 1,
           max: 6,
           step: 1,
           onCard: false,
-          format: (value) => `· ${value} ${value === 1 ? 'attempt' : 'attempts'}`,
+          format: (value) => {
+            const attempts = `${value} ${value === 1 ? 'attempt' : 'attempts'}`;
+            const back = value - 1;
+            if (back === 0) return `· ${attempts} · never sends it back`;
+            return `· ${attempts} · sends it back ${back === 1 ? 'once' : `${back} times`}`;
+          },
         },
         {
           kind: 'select',

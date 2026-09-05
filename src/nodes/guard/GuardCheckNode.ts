@@ -91,15 +91,26 @@ export const guardCheckNode: INodeDefinition = defineNode(
         kind: 'slider',
         key: FIELD_MAX_ATTEMPTS,
         label: 'Max attempts',
+        // Same field, same arithmetic, same sentence — `osg-agent-experience`
+        // 37. The docstring above already says "same two ceilings as a
+        // grader"; a grader that explains its own count while its mechanical
+        // sibling does not is the same defect one node type over.
         hint:
-          'How many candidates this guard will check before it passes one through ' +
-          'regardless. Its own budget, like a grader’s.',
+          'Candidates this guard will check before it passes one through ' +
+          'regardless — checks, not send-backs, so it is one more than the ' +
+          'number of times you want the answer sent back: 2 = one revision, ' +
+          '1 = never sends it back. Its own budget, like a grader’s.',
         defaultValue: 3,
         min: 1,
         max: 6,
         step: 1,
         onCard: false,
-        format: (value) => `· ${value} ${value === 1 ? 'attempt' : 'attempts'}`,
+        format: (value) => {
+          const attempts = `${value} ${value === 1 ? 'attempt' : 'attempts'}`;
+          const back = value - 1;
+          if (back === 0) return `· ${attempts} · never sends it back`;
+          return `· ${attempts} · sends it back ${back === 1 ? 'once' : `${back} times`}`;
+        },
       },
     ],
     ports: [

@@ -148,17 +148,27 @@ describe('grader criteria — prebuilt and overridable', () => {
     expect(field?.label).toMatch(/attempt/i);
     expect(field?.label).not.toMatch(/revision/i);
     // The two claims a reader needs and could not get from the label: whose
-    // budget it is, and that `n` attempts is `n - 1` revisions.
+    // budget it is, and the arithmetic for the case they actually asked for.
+    // `osg-agent-experience/37`: the hint used to work the sum the other way
+    // ("3 attempts allows 2 revisions") and left "send it back once" — the
+    // thing a developer says out loud — as an inversion they got wrong. The
+    // number is named now; the Python side holds the hint against the compiled
+    // loop in `test_send_it_back_once_is_a_number_the_hint_names.py`.
     expect(field?.hint).toMatch(/this grader/i);
     expect(field?.hint).toMatch(/its own/i);
-    expect(field?.hint).toMatch(/3 attempts allows 2 revisions/i);
+    expect(field?.hint).toMatch(/2 = one revision/i);
+    expect(field?.hint).toMatch(/1 = never sends it back/i);
   });
 
-  it('reads out attempts on the slider, and one attempt is singular', () => {
+  it('reads the send-backs out beside the attempts, so the sum is never done twice', () => {
+    // The slider is where the number is chosen, so it is where the number is
+    // explained. A hint two panels away that the developer has to remember is
+    // the same defect with an extra step.
     const field = graderNode.fields.find((f) => f.key === 'maxAttempts');
     const format = (field as { format?: (v: number) => string }).format;
-    expect(format?.(3)).toBe('· 3 attempts');
-    expect(format?.(1)).toBe('· 1 attempt');
+    expect(format?.(3)).toBe('· 3 attempts · sends it back 2 times');
+    expect(format?.(2)).toBe('· 2 attempts · sends it back once');
+    expect(format?.(1)).toBe('· 1 attempt · never sends it back');
   });
 });
 

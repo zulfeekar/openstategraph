@@ -105,6 +105,23 @@ the CLI as `--session-id card:<task_id>` — so the project's own patrol can
 tell your work from the developer's traffic and does not later file cards
 about its own shadow.
 
+## The one number that reads backwards: a revision loop's budget
+
+A grader's `maxAttempts` counts **candidates judged**, including the one in
+hand — so it is one more than the number of times the answer gets sent back.
+`2` sends it back once. `1` never sends it back at all: the first candidate is
+also the last, and the grader force-passes it.
+
+That matters because *"send it back once"* is the sentence a developer says,
+and `1` is the number it reads like. When they say it, type `2`, and say which
+number you typed and why. `guard.check` carries the same field with the same
+arithmetic. Neither `validate` nor `graph` will object to `1` — the document is
+entirely legal, it just cannot revise — so this is one of the few numbers you
+have to get right by reading rather than by checking.
+
+The **step budget** is a different ceiling and is not this: it counts
+supersteps for the whole workflow, and one lap of a loop can cost several.
+
 ## When a card turns out to be wrong
 
 Two honest outcomes, and both are fine:

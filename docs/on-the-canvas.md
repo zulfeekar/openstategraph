@@ -139,6 +139,14 @@ The grader's `revise` output connects back to the agent's `feedback` input.
 That is the whole mechanism. There is no Loop node, and there does not need to
 be — a loop is a **cycle in the graph**, not a wrapper around one.
 
+**How many laps it gets, and the one number that reads backwards.** *Max
+attempts* on the grader counts **candidates judged**, including the one in
+hand — so it is one more than the number of times the answer is sent back.
+Set it to **2** to send it back once; **1** never sends it back at all,
+because the first candidate is also the last and the grader passes it through.
+The slider reads both numbers out so the sum is never yours to do. Nothing
+refuses a `1`: it is a legal document that simply cannot revise.
+
 **What the agent is handed on the way back round** is the grader's reason
 *and* the answer that was rejected, in full — the text the grader judged,
 arriving over the `revise` edge that caused the lap. Without the second half a

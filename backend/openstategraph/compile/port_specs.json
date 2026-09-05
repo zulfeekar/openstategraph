@@ -480,7 +480,7 @@
           "key": "maxAttempts",
           "kind": "slider",
           "label": "Max attempts",
-          "hint": "How many candidates this guard will check before it passes one through regardless. Its own budget, like a grader’s.",
+          "hint": "Candidates this guard will check before it passes one through regardless — checks, not send-backs, so it is one more than the number of times you want the answer sent back: 2 = one revision, 1 = never sends it back. Its own budget, like a grader’s.",
           "required": false,
           "defaultValue": 3
         },
@@ -1960,7 +1960,7 @@
           "key": "maxAttempts",
           "kind": "slider",
           "label": "Max attempts",
-          "hint": "How many candidates this grader will judge before it passes one through. Its own budget — another grader in the same workflow gets its own. 3 attempts allows 2 revisions.",
+          "hint": "Candidates this grader will judge — not revisions, so it is one more than the number of times you want the answer sent back: 2 = one revision, 1 = never sends it back. Its own budget; another grader in the same workflow gets its own.",
           "required": false,
           "defaultValue": 3
         },
