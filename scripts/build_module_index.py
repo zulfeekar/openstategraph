@@ -62,9 +62,15 @@ this properly"* is a judgement and no field in the data carries it. Scanning
 ``docs/`` for each type id was priced and rejected: it would make this page's
 bytes a function of every other page's prose, so an unrelated sentence added to
 ``patterns.md`` would fail the drift gate in CI with a diff about node types.
-The cost of the judgement is one assertion —
-``test_every_deeper_link_points_at_a_page_that_exists`` — so a link this table
-gets wrong is a red test rather than a 404.
+The cost of the judgement is two assertions in
+``backend/tests/test_documented_modules_match_the_vocabulary.py``: the target
+exists, **and** the target names that module by id or by label outside a fenced
+block. Existence alone was not enough, and ``docs-onramp/11`` is the bill —
+every link resolved, and 31 of the 43 landed on a page that never mentioned the
+card the reader had just clicked. Naming is judged on prose only, because the
+row that exposed this was ``tool.platform-read-file``: its id sat in a comment
+inside an example document on ``docs/mcp.md``, and nothing written *to* a reader
+on that page said what the tool read.
 
 Types with no entry fall back to ``openstategraph nodes <type>``, which prints
 the fields and ports as well as the brief, and is never stale by construction.
@@ -164,27 +170,40 @@ CATEGORIES: tuple[tuple[str, str, str], ...] = (
 #: type id, or a prefix ending in `-`/`.`, → the page that goes deeper.
 #: Hand-written on purpose; see this module's docstring, §"The one
 #: hand-written table, named".
+#:
+#: A row here is a promise that the target page tells the reader something
+#: about *that* module, and `docs-onramp/11` measured what the promise was
+#: worth: 31 of the 43 rows landed on a page that named the module in neither
+#: form outside a code block, and three of the five targets were written for a
+#: different reader — eight rows about running a query pointed at
+#: `declaring-a-table.md`, which opens *"for whoever owns a data source"*.
+#: A type with **no row here is the honest outcome**, not the leftover one:
+#: it falls back to `openstategraph nodes <type>`, which prints the fields and
+#: the ports as well as the brief and is never stale by construction. The
+#: property is pinned by
+#: `backend/tests/test_documented_modules_match_the_vocabulary.py`, which reads
+#: each target and fails naming the row and the page.
 DEEPER: tuple[tuple[str, str, str], ...] = (
     ("tool.knowledge-lookup", "second-brain.md", "the second brain"),
-    ("tool.sql-", "declaring-a-table.md", "declaring a table"),
-    ("tool.chinook-", "declaring-a-table.md", "declaring a table"),
-    ("tool.databricks-query", "declaring-a-table.md", "declaring a table"),
-    ("tool.mssql-query", "declaring-a-table.md", "declaring a table"),
+    ("tool.sql-", "on-the-canvas.md", "the SQL atoms"),
+    ("tool.databricks-query", "on-the-canvas.md", "the SQL atoms"),
+    ("tool.mssql-query", "on-the-canvas.md", "the SQL atoms"),
     ("tool.mcp", "mcp.md", "the MCP layer"),
-    ("tool.platform-", "mcp.md", "the MCP layer"),
-    ("tool.validate-workflow", "mcp.md", "the MCP layer"),
-    ("tool.", "building-an-atom.md", "building a tool"),
+    ("tool.platform-", "mcp.md", "the platform's own tools"),
+    ("tool.validate-workflow", "mcp.md", "the platform's own tools"),
     ("route.grader", "evaluation.md", "grading"),
+    ("route.check", "on-the-canvas.md", "the Check router"),
     ("route.", "patterns.md", "routing patterns"),
-    ("guard.", "patterns.md", "guard patterns"),
+    ("guard.check", "on-the-canvas.md", "the guard on a path"),
     ("orchestrate.", "patterns.md", "orchestrator/worker"),
     ("human.approval", "patterns.md", "approval in the loop"),
     ("agent.llm", "on-the-canvas.md", "on the canvas"),
     ("function.", "on-the-canvas.md", "on the canvas"),
-    ("input.skill", "the-openstategraph-skill.md", "skills"),
-    ("input.", "on-the-canvas.md", "on the canvas"),
+    ("input.skill", "ports-and-edges.md", "the skill layer"),
+    ("input.markdown", "ports-and-edges.md", "the skill layer"),
+    ("input.text", "on-the-canvas.md", "on the canvas"),
     ("memory.", "on-the-canvas.md", "on the canvas"),
-    ("resolve.", "second-brain.md", "the second brain"),
+    ("resolve.", "on-the-canvas.md", "resolving before the model"),
     ("output.", "on-the-canvas.md", "on the canvas"),
     ("workflow.subgraph", "export-and-portability.md", "mounts and portability"),
     ("annotate.", "on-the-canvas.md", "on the canvas"),

@@ -118,6 +118,34 @@ and *we could not tell* (it declares none). And where several sources are
 live and nothing settles which, it chooses **nothing**: that is a question
 for the person asking, not a coin toss.
 
+### The cards you meet first, in the order a run touches them
+
+The shortest workflow that does anything is three cards, and knowing what each
+one is *for* is most of learning the palette. A run starts at **Text Input**
+(`input.text`), which holds the flow's starting prompt, and ends at **Formatted
+Output** (`output.formatted`), which renders whatever reached it as Markdown.
+Between them sits **AI Agent** (`agent.llm`): one model, with whatever you wired
+to its `tools` bus. Everything else on this page is something you add to that.
+
+The next three are about a *shape* rather than about a model. **Memory segment**
+(`memory.segment`) is a step on the path rather than a card beside it — whatever
+crosses it is recorded, and the segment's earlier entries are handed onward,
+which is how a later step knows what an earlier one said. **Format Report**
+(`function.format_report`) joins several results into one Markdown document and
+calls no model to do it; it is the join at the end of a fan-out. **Static
+Output** (`output.static`) prints a sentence you wrote, for a branch that has to
+say something without spending a model call on it — a refusal, a *nothing to do
+here*, the quiet half of a router.
+
+Two cards compile to nothing at all. **Group** (`annotate.group`) frames related
+nodes and **Note** (`annotate.note`) is a Markdown sticky, and both exist for
+the person who opens this canvas in six months — including you.
+
+Two more you meet early are covered where the wires are, because what they
+produce is the point: **Skill** (`input.skill`) and **Markdown File**
+(`input.markdown`) both feed a `skill` port, and the difference between them is
+[in ports and edges](ports-and-edges.md).
+
 ### Three SQL atoms, and the difference between them is not the dialect
 
 `Tools · atoms` holds three ways to read a database, and picking the wrong one
@@ -187,6 +215,16 @@ means every resolver in the file, which is the single-package case. The
 alternative — one copy of the hand-curated file per package — was rejected,
 because copies drifting apart is what the one file exists to prevent, and a copy
 that has drifted **wide** fails open.
+
+**Two more atoms point at the same file, and neither of them runs a query.**
+`Tools · atoms` also holds **List Tables** (`tool.sql-list-tables`) and **Get
+Schema** (`tool.sql-get-schema`), and the order they are meant to be called in
+is the point: an agent asks List Tables what exists, asks Get Schema for one
+table's columns, types and — the part that earns the call — its foreign keys,
+which are the JOIN rules, and only then writes a `SELECT` for **Run Query**. Both
+read the same `Database file` field, and both are the file dialect only: a
+warehouse atom's list of readable tables is its allowlist, which you wrote
+yourself.
 
 Each driver ships as an extra — `pip install 'openstategraph[mssql]'` or
 `pip install 'openstategraph[databricks]'`. The base install carries no

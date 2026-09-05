@@ -897,3 +897,35 @@ already in flight — a token revoked underneath it will fail that run's calls
 with the server's own 401, which is a protocol error and is deliberately not
 retried. Rotate between runs, and restart the server only if you have also
 changed which variable a row reads from while it was running.
+
+---
+
+## 9. The platform's own tools, as cards on a canvas
+
+Everything above is a client reaching this platform from *outside*. The same
+introspection is also on the palette, under `Tools · atoms`, for an agent you
+draw here: **List Workflows** (`tool.platform-list-workflows`) and **Describe
+Workflow** (`tool.platform-describe-workflow`) answer *what is on this platform*
+and *what is inside this package* — the same reads the MCP door answers — while
+**Repo ls** (`tool.platform-ls`), **Repo Read File** (`tool.platform-read-file`)
+and **Repo Grep** (`tool.platform-grep`) read the files themselves. All of them
+are read-only, and none has a write counterpart anywhere in the palette.
+
+**What "jailed" means on those cards, since they say the word and not the
+place.** The read jail is one directory above `workflows/` — the repository in
+a checkout, the adopter's own project directory in an installed wheel, and never
+the interpreter's `lib/`, which is what a naive parent-of-the-packages would
+have resolved to and would have handed an agent a grep over `site-packages`.
+Inside that root, hidden entries are excluded — `.env` holds credentials and
+`.git` holds history, and a read-only jail that reads those is not one — and so
+are the bulk directories: `node_modules`, `.venv`, `dist`, `__pycache__` and
+their neighbours. Reads are capped: one file is truncated at 40kB, a grep stops
+at 60 matches. A path that escapes the root comes back as a refusal naming the
+path, not as a traceback.
+
+**Validate Workflow** (`tool.validate-workflow`) is the odd one out of the
+group, because it reads a document rather than a file. Hand it a workflow
+document an agent has composed and it compile-checks it — entry points, routes,
+tool bindings, warnings, and any node type it does not recognise — by planning a
+graph in memory and throwing it away. Nothing is saved and nothing runs, which
+is what makes it safe to give an agent that is still drafting.

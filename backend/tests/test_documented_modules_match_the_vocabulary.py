@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import re
 
 import pytest
 
@@ -101,3 +102,58 @@ def test_every_deeper_link_points_at_a_page_that_exists() -> None:
         if not (REPO / "docs" / target).exists()
     ]
     assert not dangling, f"docs/modules.md would link nothing: {dangling}"
+
+
+def _prose(page: pathlib.Path) -> str:
+    """The page with every fenced block removed.
+
+    `docs-onramp/11`. Grep is the wrong instrument for *"does this page tell
+    a reader anything about this module"*, and the row that proved it is
+    `tool.platform-read-file`: `docs/mcp.md` carried its type id inside a
+    comment in an example document, enumerating ids the model may use. The id
+    was on the page and nothing on the page said what the tool reads or where
+    its jail root is. A fenced block is example input and output; prose is the
+    only part written *to* the reader, so it is the only part that counts as
+    naming.
+    """
+    kept, fenced = [], False
+    for line in page.read_text(encoding="utf-8").splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if not fenced:
+            kept.append(line)
+    return "\n".join(kept)
+
+
+def test_every_deeper_link_lands_on_a_page_that_names_the_module() -> None:
+    """A "Read more" is a promise, and the second half of `docs-onramp/04`.
+
+    Measured on the second fresh-user walk (`docs-onramp/00b`): 31 of the 43
+    rows linked to a page that names the module in neither form outside a
+    code block, and three of the five targets were written for a different
+    reader entirely — `declaring-a-table.md` opens *"for whoever owns a data
+    source"* and eight rows about running a query pointed at it.
+
+    The property, not the list: a row either links to a page that names its
+    module, or it carries no link at all. `openstategraph nodes <type>` is an
+    honest cell — it prints the fields and the ports, and it is never stale.
+    A link to the wrong reader's page is not.
+    """
+    generator = _generator()
+    misrouted = []
+    for node in generator.node_types():
+        cell = generator.deeper_for(node["type"])
+        match = re.fullmatch(r"\[.+\]\((.+)\)", cell)
+        if not match:
+            continue
+        target = REPO / "docs" / match.group(1)
+        assert target.exists(), f"{node['type']} links to a missing {match.group(1)}"
+        prose = _prose(target)
+        if node["type"] not in prose and node["label"] not in prose:
+            misrouted.append(f"{node['type']} ({node['label']}) → {match.group(1)}")
+    assert not misrouted, (
+        "docs/modules.md sends a reader to a page that never names the module "
+        "they clicked — re-route the row in DEEPER, unlink it, or add the "
+        "sentence to the target page:\n  " + "\n  ".join(misrouted)
+    )
