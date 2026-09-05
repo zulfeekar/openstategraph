@@ -136,6 +136,55 @@ class TestNodeVocabulary:
         assert by_type["agent.llm"]["prompt_contract"] is not None
         assert by_type["input.text"]["prompt_contract"] is None
 
+    def test_the_document_shape_names_every_settings_key_the_runtime_reads(
+        self,
+    ) -> None:
+        """`osg-agent-experience/29`. `document_shape` is the authoritative
+        example of a document, and its `settings` carried one key. The step
+        budget — the setting that ends a revision loop — was not in it, so an
+        agent reading only what the entry sheet points it at could not learn
+        the key; and `workflow_step_budget` is tolerant, so a plausible guess
+        was silently ignored and the document inherited the default with
+        nothing reported.
+
+        Derived from `step_budget.STEP_BUDGET_KEYS`, so the published shape
+        and the reader cannot drift: a key added there without being published
+        here fails this.
+        """
+        from openstategraph.step_budget import STEP_BUDGET_KEYS
+
+        settings = NodeVocabulary().describe()["document_shape"]["settings"]
+        published = json.dumps(settings)
+        for key in STEP_BUDGET_KEYS:
+            assert key in published, f"{key} is read but never published"
+        assert STEP_BUDGET_KEYS[0] in settings, (
+            "the canonical key belongs in the shape as a key, not only in prose"
+        )
+
+    def test_the_step_budget_entry_is_derived_never_literalised(self) -> None:
+        """The default and the window are `step_budget.py`'s to state. A
+        number typed here has no way to fail — the rule
+        `test_a_library_default_is_never_literalised.py` exists for."""
+        from openstategraph.step_budget import (
+            DEFAULT_STEP_BUDGET,
+            MAX_STEP_BUDGET,
+            MIN_STEP_BUDGET,
+            STEP_BUDGET_KEYS,
+        )
+
+        entry = NodeVocabulary().describe()["document_shape"]["settings"][
+            STEP_BUDGET_KEYS[0]
+        ]
+        assert str(DEFAULT_STEP_BUDGET) in entry
+        assert str(MIN_STEP_BUDGET) in entry
+        assert str(MAX_STEP_BUDGET) in entry
+        # The user-facing word, and the unit. CLAUDE.md forbids *labelling*
+        # it "max iterations"; contradicting that label is the point, since
+        # the guess an agent arrives with is exactly the wrong one.
+        assert "step budget" in entry
+        assert "superstep" in entry
+        assert "NOT iterations" in entry
+
     def test_it_names_which_port_types_are_control_flow_and_which_are_bindings(
         self,
     ) -> None:

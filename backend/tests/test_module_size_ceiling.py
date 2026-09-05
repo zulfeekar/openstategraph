@@ -823,6 +823,13 @@ what `blocked_by` now accepts. The resolution and the refusal are the store's,
 which is the point — this door and the CLI could otherwise disagree about what
 a blocker is, and that disagreement was the defect.
 
+**986 -> 993** (`osg-agent-experience/29`). Seven lines: the step budget key in
+`document_shape.settings`, and the comment saying why it is there. The key,
+the sentence and every number in it are `step_budget.py`'s — this door calls
+`step_budget_document_hint()` and indexes `STEP_BUDGET_KEYS`, so nothing about
+the budget is decided here. A literal typed into this payload is exactly the
+defect the ticket closed, one layer along.
+
 """
 
 ROUTES_WORKFLOWS = """
@@ -1167,7 +1174,7 @@ RECORDED: dict[str, Recorded] = {
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(986, MCP_SERVER),
+    "mcp_server.py": Recorded(993, MCP_SERVER),
     "api/routes/workflows.py": Recorded(586, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(556, SCHEMAS),

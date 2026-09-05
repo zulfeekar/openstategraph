@@ -78,6 +78,37 @@ DEFAULT_STEP_BUDGET = 50
 MIN_STEP_BUDGET = 10
 MAX_STEP_BUDGET = 1000
 
+#: The `settings` keys `workflow_step_budget` below reads, canonical first.
+#: A tuple rather than two literals in the loop, because this is the one fact
+#: a *publisher* of the document shape needs (`osg-agent-experience/29`): the
+#: MCP `get_node_vocabulary` payload derives its `settings` entry from this,
+#: so a key this module learns to read cannot go unpublished, and a plausible
+#: guess cannot be silently ignored because the shape never named the real
+#: one.
+STEP_BUDGET_KEYS: tuple[str, ...] = ("recursionLimit", "recursion_limit")
+
+
+def step_budget_document_hint() -> str:
+    """One sentence for a client composing a document — what the key is, what
+    it counts, and its window, every number derived from the constants above.
+
+    `osg-agent-experience/29`. Lives here rather than at the MCP door for the
+    reason the exhaustion message does: this module owns the vocabulary, and
+    "supersteps, not iterations" is its opening line. A sentence written at
+    the door is a second place that has to be told when the window moves, and
+    a number typed into a payload has no way to fail.
+    """
+    alternates = ", ".join(repr(key) for key in STEP_BUDGET_KEYS[1:])
+    return (
+        f"optional; the step budget — how many supersteps one run may spend "
+        f"before it stops. Supersteps, NOT iterations or laps round a loop: "
+        f"one lap that fans out costs one superstep per branch. This is what "
+        f"ends a revision loop that never settles. Omit to inherit "
+        f"{DEFAULT_STEP_BUDGET}; a saved number outside "
+        f"{MIN_STEP_BUDGET}..{MAX_STEP_BUDGET} is clamped into it. "
+        f"{alternates} is read too and means the same thing."
+    )
+
 
 def workflow_step_budget(document: Any) -> int | None:
     """The budget this document saved, or `None` if it saved none.
@@ -98,7 +129,7 @@ def workflow_step_budget(document: Any) -> int | None:
     settings = document.get("settings") if isinstance(document, dict) else None
     if not isinstance(settings, dict):
         return None
-    for key in ("recursionLimit", "recursion_limit"):
+    for key in STEP_BUDGET_KEYS:
         value = settings.get(key)
         if isinstance(value, int) and not isinstance(value, bool):
             return max(MIN_STEP_BUDGET, min(MAX_STEP_BUDGET, value))

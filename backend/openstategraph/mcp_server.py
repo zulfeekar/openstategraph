@@ -68,7 +68,11 @@ from openstategraph.kanban_store import STALE_THRESHOLD_SECONDS as _STALE_THRESH
 from openstategraph.principal import IPrincipals
 from openstategraph.run_doors import invoke_run
 from openstategraph.schema import normalize_document as _normalize_document
-from openstategraph.step_budget import resolve_step_budget
+from openstategraph.step_budget import (
+    STEP_BUDGET_KEYS,
+    resolve_step_budget,
+    step_budget_document_hint,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -361,7 +365,18 @@ class NodeVocabulary:
             "document_shape": {
                 "version": 2,
                 "name": "Human readable name",
-                "settings": {"model": "optional; omit to use the server default"},
+                # `osg-agent-experience/29`: the step budget is the setting
+                # that ends a revision loop, and this shape — the
+                # authoritative example a composing client reads — did not
+                # name it. `workflow_step_budget` is tolerant, so a guess was
+                # silently ignored and the document inherited the default with
+                # nothing reported. Derived from `step_budget.py`, key and
+                # sentence both, so the published shape and the reader cannot
+                # drift.
+                "settings": {
+                    "model": "optional; omit to use the server default",
+                    STEP_BUDGET_KEYS[0]: step_budget_document_hint(),
+                },
                 "nodes": [
                     {
                         "id": "in1",

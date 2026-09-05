@@ -215,7 +215,11 @@ The gist of what comes back:
     "feedback": "feedback",
     "explanation": "NOT every edge is a graph edge. An edge landing on a `tool` or `skill` port is a BINDING …"
   },
-  "document_shape": { "version": 2, "name": "…", "nodes": [], "edges": [] },
+  "document_shape": {
+    "version": 2, "name": "…",
+    "settings": { "model": "optional; …", "recursionLimit": "optional; the step budget — how many supersteps one run may spend … Omit to inherit 50 …" },
+    "nodes": [], "edges": []
+  },
   "rules": [
     "Exactly one node should have no incoming control edge — that is the entry point.",
     "Some node must flow toward the end, or the graph has no exit.",
@@ -225,6 +229,15 @@ The gist of what comes back:
   ]
 }
 ```
+
+`settings.recursionLimit` is the **step budget** — the setting that ends a
+revision loop that never settles. It counts supersteps, not laps: one lap that
+fans out costs one superstep per branch. The key, the default and the window
+are all `step_budget.py`'s, so this payload cannot drift from what the runtime
+reads (`osg-agent-experience/29`); `recursion_limit` is read too and means the
+same thing. Reading is tolerant, which is exactly why the key had to be
+published: a plausible guess is silently ignored and the document inherits the
+default with nothing reported.
 
 The single most valuable line in that payload is the one about bindings.
 **Not every edge is a graph edge.** A tool wired into `tools` is a capability
