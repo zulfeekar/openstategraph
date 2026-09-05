@@ -1,10 +1,17 @@
 """`tool.mssql-query` — one read-only T-SQL statement against a warehouse.
 
-The sibling of `prebuilt_sql`'s SQLite family, on the same base, and the two
-places it differs are the two places it must: **the dialect and the
-connection**. Everything the base already owns — the `configure` shape, the
-markdown table, the row cap, `side_effecting = False`, the structured refusal
-— is inherited rather than repeated (`osg-agent-experience/34`).
+The sibling of `prebuilt_sql`'s SQLite family, on the same family base, and the
+two places it differs are the two places it must: **the dialect and the
+connection**. What the base owns — `side_effecting = False`, the `maxRows`
+parse, the truncation-aware markdown table — is inherited rather than repeated
+(`osg-agent-experience/34`).
+
+It sits *beside* `_SqliteExplorerBase` rather than under it
+(`osg-agent-experience/39`). That rung holds `database`, `_db()` and
+`_refusal()`, and a warehouse read over ODBC has no file for any of them to
+name; while this class inherited them, a refusal reachable from an MSSQL node
+could have told its reader to set a `.sqlite` path. The refusals here are
+`_dsn()` and `_pins()`, and they are the only ones.
 
 **Read-only here is not what read-only is over there, and saying so is the
 point.** `prebuilt_sql`'s docstring is proud that safety is the driver's,
@@ -56,7 +63,7 @@ from typing import Any, Iterator
 from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import ToolResult
-from openstategraph.prebuilt_sql import DEFAULT_MAX_ROWS, _SqlExplorerBase, _markdown
+from openstategraph.prebuilt_sql import DEFAULT_MAX_ROWS, _SqlExplorerBase
 from openstategraph.workflows_root import workflows_root
 
 #: The variable a document names when its author names nothing else. A default
@@ -205,7 +212,6 @@ class MssqlQueryTool(_SqlExplorerBase):
         allowlist: str = "",
         row_cap: int = DEFAULT_MAX_ROWS,
     ) -> None:
-        super().__init__(database="")
         self.connection = connection
         self.allowlist = allowlist
         self.row_cap = row_cap
@@ -213,11 +219,7 @@ class MssqlQueryTool(_SqlExplorerBase):
     def configure(self, data: dict[str, Any]) -> "MssqlQueryTool":
         connection = str(data.get("connection") or "").strip() or self.connection
         allowlist = str(data.get("allowlist") or "").strip() or self.allowlist
-        cap = data.get("maxRows")
-        try:
-            row_cap = int(str(cap).strip()) if cap else self.row_cap
-        except ValueError:
-            row_cap = self.row_cap
+        row_cap = self._row_cap_from(data, self.row_cap)
         return type(self)(connection=connection, allowlist=allowlist, row_cap=row_cap)
 
     # -- the three refusals that happen before a socket is opened ------------
@@ -320,15 +322,7 @@ class MssqlQueryTool(_SqlExplorerBase):
                 f"the allowed tables: {', '.join(sorted(pins))}."
             )
 
-        truncated = len(rows) > cap
-        content = (
-            _markdown(headers, [tuple(r) for r in rows[:cap]])
-            if headers
-            else "(no result set)"
-        )
-        if truncated:
-            content += f"\n\n_(truncated at {cap} rows)_"
-        return ToolResult(content=content)
+        return ToolResult(content=self._capped_table(headers, rows, cap))
 
     @staticmethod
     def _local_names(sql: str) -> set[str]:

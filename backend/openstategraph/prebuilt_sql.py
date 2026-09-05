@@ -67,11 +67,61 @@ def _markdown(headers: list[str], rows: list[tuple[Any, ...]]) -> str:
 
 
 class _SqlExplorerBase(BaseTool):
-    """Shared per-node configuration: which database file, declared once."""
+    """What every SQL dialect shares, and nothing a single dialect owns.
+
+    The rung `osg-agent-experience/39` split out. Until then this class also
+    held `database`, `_db()` and `_refusal()` — three members shaped for a
+    file, inherited by `MssqlQueryTool`, which reads a warehouse over ODBC and
+    has no file at all; `_refusal()`'s sentence told its reader to set a
+    `.sqlite` path. Nothing called it there, which is the reason it survived a
+    ticket: a latent wrong message waits for the fifth member of the family to
+    reach for it because it is there.
+
+    What is left is what a dialect cannot change: reading is not a side
+    effect, the row cap is parsed from the same card field, and rows come back
+    as the same truncation-aware markdown table. File-shaped configuration is
+    :class:`_SqliteExplorerBase`, one rung down; a warehouse leaf sits beside
+    that rung rather than under it, and a third dialect adds a driver and a
+    dialect rather than a base.
+    """
 
     #: The whole family reads — `launch-readiness` 121. `SqlQueryTool` too:
     #: the driver enforces read-only, so a repeat is a repeat of a SELECT.
     side_effecting = False
+
+    @staticmethod
+    def _row_cap_from(data: dict[str, Any], current: int) -> int:
+        """The card's `maxRows`, or the cap already in force.
+
+        Blank and unparseable are the same answer — the field is optional and
+        a node that mistypes it gets the default rather than a refusal.
+        """
+        raw = data.get("maxRows")
+        try:
+            return int(str(raw).strip()) if raw else current
+        except ValueError:
+            return current
+
+    @staticmethod
+    def _capped_table(headers: list[str], rows: list[tuple[Any, ...]], cap: int) -> str:
+        """`cap` rows as markdown, saying so when there were more.
+
+        `rows` carries `cap + 1` when the query overran, because that is how
+        every leaf asks the driver whether it did.
+        """
+        content = _markdown(headers, [tuple(r) for r in rows[:cap]]) if headers else "(no result set)"
+        if len(rows) > cap:
+            content += f"\n\n_(truncated at {cap} rows)_"
+        return content
+
+
+class _SqliteExplorerBase(_SqlExplorerBase):
+    """Shared per-node configuration for the file dialect: which database file.
+
+    Everything here reads a `.sqlite` path jailed to the workflows root, so
+    everything here is wrong on a node that has no file — which is why it is
+    a rung and not the family base (`osg-agent-experience/39`).
+    """
 
     def __init__(self, *, database: str = "") -> None:
         self.database = database
@@ -91,7 +141,7 @@ class _SqlExplorerBase(BaseTool):
         )
 
 
-class SqlListTablesTool(_SqlExplorerBase):
+class SqlListTablesTool(_SqliteExplorerBase):
     """Orientation first: every table with its row count."""
 
     name = "sql_list_tables"
@@ -119,7 +169,7 @@ class SqlSchemaArgs(BaseModel):
     table: str = Field(description="Exact table name.")
 
 
-class SqlGetSchemaTool(_SqlExplorerBase):
+class SqlGetSchemaTool(_SqliteExplorerBase):
     """Columns, types, PK and — critically — foreign keys, the JOIN rules."""
 
     name = "sql_get_table_schema"
@@ -156,7 +206,7 @@ class SqlQueryArgs(BaseModel):
     max_rows: int | None = Field(default=None, ge=1, le=1000)
 
 
-class SqlQueryTool(_SqlExplorerBase):
+class SqlQueryTool(_SqliteExplorerBase):
     """Read-only execution; the driver enforces read-only, not a regex."""
 
     name = "sql_query"
@@ -170,12 +220,7 @@ class SqlQueryTool(_SqlExplorerBase):
 
     def configure(self, data: dict[str, Any]) -> "BaseTool":
         database = str(data.get("database") or "").strip() or self.database
-        cap = data.get("maxRows")
-        try:
-            row_cap = int(str(cap).strip()) if cap else self.row_cap
-        except ValueError:
-            row_cap = self.row_cap
-        return type(self)(database=database, row_cap=row_cap)
+        return type(self)(database=database, row_cap=self._row_cap_from(data, self.row_cap))
 
     def _execute(self, args: BaseModel) -> ToolResult:
         assert isinstance(args, SqlQueryArgs)
@@ -195,11 +240,7 @@ class SqlQueryTool(_SqlExplorerBase):
                     conn, exc,
                     instead="write a single SELECT against the tables "
                             "sql_list_tables reports."))
-        truncated = len(rows) > cap
-        content = _markdown(headers, [tuple(r) for r in rows[:cap]]) if headers else "(no result set)"
-        if truncated:
-            content += f"\n\n_(truncated at {cap} rows)_"
-        return ToolResult(content=content)
+        return ToolResult(content=self._capped_table(headers, list(rows), cap))
 
 
 SQL_EXPLORER_TOOLS = [SqlListTablesTool(), SqlGetSchemaTool(), SqlQueryTool()]

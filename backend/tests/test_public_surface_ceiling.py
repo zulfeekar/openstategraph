@@ -402,30 +402,28 @@ ENGINE_ADAPTERS = """A recorded exception: this is a data class the counting rul
     design."""
 
 #: `BaseTool` is eight; the leaves carry their own manifest.
-MSSQL_QUERY_TOOL = """Two more than `SqlQueryTool`, and the two are the ticket
-    (`osg-agent-experience/34`). `MssqlQueryTool` is that class's fifteen plus
-    `connection` and `allowlist` — the two things that differ between reading a
-    file and reading a warehouse, which is the whole reason it is a sibling and
-    not a copy. Everything else on the count is inherited: `BaseTool`'s eight,
-    the four manifest constants, `configure`, and the family's `database`.
+MSSQL_QUERY_TOOL = """One more than `SqlQueryTool`, and the difference is the ticket
+    (`osg-agent-experience/34`). `MssqlQueryTool` carries `connection` and
+    `allowlist` — the two things that differ between reading a file and reading
+    a warehouse, which is the whole reason it is a sibling and not a copy — and
+    does *not* carry `database`, which is the difference `39` made. Everything
+    else on the count is inherited: `BaseTool`'s ten, the four manifest
+    constants, `configure`, and `row_cap`.
 
-    **`database` is the member worth arguing about, because this leaf does not
-    use it.** It comes from `_SqlExplorerBase`, where it means "a .sqlite path
-    inside workflows/", and an MSSQL connection has no such thing. The base was
-    kept anyway: what the family genuinely shares — the `configure` shape, the
-    row cap, `side_effecting = False`, and the refusal-rather-than-raise habit
-    — is more than the two fields CLAUDE.md's "inheritance must earn itself"
-    line warns about, and the alternative on offer today is a second base class
-    with one member on it.
+    **It was seventeen until 2026-09-05, and the seventeenth was a member this
+    leaf could not use.** `database` came from `_SqlExplorerBase`, where it
+    meant "a .sqlite path inside workflows/", and an ODBC connection has no
+    such thing; `_refusal()` came with it and named that path. The count is now
+    sixteen because the base was split along the line its own members already
+    drew: `_SqlExplorerBase` keeps what no dialect can change — reading is not
+    a side effect, the `maxRows` parse, the truncation-aware markdown table —
+    and `_SqliteExplorerBase` keeps the file (`database`, the workflows-root
+    jail, `_db`, `_refusal`). This leaf sits beside that rung, not under it.
 
-    That is a decision with a cost, and the cost is written down rather than
-    hidden: `_SqlExplorerBase` now holds one SQLite-shaped field that a quarter
-    of its members ignore, and its `_refusal()` names a `.sqlite` path that
-    could in principle reach an MSSQL node. Nothing calls it there today —
-    `MssqlQueryTool` refuses through its own `_dsn()` and `_pins()` — and the
-    split of the base into "what the family shares" and "what SQLite owns" is
-    filed as `osg-agent-experience/35` rather than done here, because it moves
-    three shipped tools to fix a defect none of them has yet.
+    The family base itself is now **under** the ceiling and has left this
+    record, which is the honest reading of the split rather than a member
+    hidden behind a collaborator: three of its five members moved down to the
+    three tools that use them, and none moved out of sight.
     """
 
 
@@ -483,6 +481,9 @@ PREBUILT_TOOLS = """A recorded exception, with the shape visible in the base the
     default-on-the-base shape, same reason it is charged to every tool — and
     the count of tools moved from sixteen to twenty-one at the same time
     because `_SqlExplorerBase` crossed on this commit and joins the record.
+    (That entry is `_SqliteExplorerBase` since `osg-agent-experience/39` split
+    the family base in two; the rung the three file tools share is the one
+    carrying `database`, and it is the one over the ceiling.)
     Its default is the *quiet* side rather than the safe one, which is the one
     thing that differs from `side_effecting`, and the argument is on the
     attribute itself.
@@ -839,11 +840,11 @@ RECORDED: dict[str, Recorded] = {
     "knowledge_explorer.CodebaseKnowledgeBuilder": Recorded(15, KNOWLEDGE_BUILDERS),
     "knowledge_engines.PostgresEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
     "knowledge_engines.MssqlEngineAdapter": Recorded(11, ENGINE_ADAPTERS),
-    "prebuilt_sql._SqlExplorerBase": Recorded(11, PREBUILT_TOOLS),
+    "prebuilt_sql._SqliteExplorerBase": Recorded(11, PREBUILT_TOOLS),
     "prebuilt_sql.SqlGetSchemaTool": Recorded(14, PREBUILT_TOOLS),
     "prebuilt_sql.SqlListTablesTool": Recorded(14, PREBUILT_TOOLS),
     "prebuilt_sql.SqlQueryTool": Recorded(15, PREBUILT_TOOLS),
-    "prebuilt_mssql.MssqlQueryTool": Recorded(17, MSSQL_QUERY_TOOL),
+    "prebuilt_mssql.MssqlQueryTool": Recorded(16, MSSQL_QUERY_TOOL),
     "prebuilt_youtube.YouTubeTranscriptTool": Recorded(17, PREBUILT_TOOLS),
     "prebuilt_mcp.McpTool": Recorded(15, MCP_TOOL),
     "knowledge_explorer.CodeGrepTool": Recorded(13, PREBUILT_TOOLS),

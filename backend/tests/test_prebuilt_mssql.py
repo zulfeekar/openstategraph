@@ -393,3 +393,54 @@ class TestTheDriverIsOptional:
         )
         assert result.error is not None
         assert "openstategraph[mssql]" in result.error
+
+
+class TestTheLeafCarriesNothingShapedForAFile:
+    """`osg-agent-experience/39` — a warehouse has no `.sqlite` path.
+
+    `34` put `MssqlQueryTool` on `_SqlExplorerBase` and inherited three
+    members shaped for a file: `database`, `_db()` and `_refusal()`, the last
+    of which tells the reader to *"set the node's 'database' field to a
+    .sqlite path inside workflows/"*. Nothing called it there — the leaf
+    refuses through `_dsn()` and `_pins()` first — so this was a latent wrong
+    message, and the fifth member of the family would have reached for it
+    because it was there.
+
+    The family base now holds only what every dialect shares; the file-shaped
+    rung sits below it and this leaf is not on it.
+    """
+
+    def test_the_leaf_declares_no_database_field(self) -> None:
+        assert not hasattr(MssqlQueryTool(), "database")
+
+    def test_the_file_shaped_rung_is_not_an_ancestor(self) -> None:
+        from openstategraph.prebuilt_sql import _SqliteExplorerBase
+
+        assert not issubclass(MssqlQueryTool, _SqliteExplorerBase)
+
+    def test_no_refusal_this_node_can_produce_names_sqlite(self, tmp_path: Path) -> None:
+        """Every refusal reachable from an unconfigured MSSQL node.
+
+        Asked of the tool rather than of the source, so a member inherited
+        from anywhere is included: whatever a reader standing at this node can
+        be told, none of it names a file format this node cannot read.
+        """
+        outside = tmp_path / "lenses.yaml"
+        outside.write_text(LENSES, encoding="utf-8")
+        refusals = [
+            MssqlQueryTool().run(query="SELECT 1"),
+            MssqlQueryTool(allowlist="nowhere/lenses.yaml").run(query="SELECT 1"),
+            MssqlQueryTool(allowlist="../../etc/passwd").run(query="SELECT 1"),
+            MssqlQueryTool(connection="").run(query="SELECT 1"),
+            MssqlQueryTool(connection="Server=tcp:x;Uid=y").run(query="SELECT 1"),
+        ]
+        texts = [str(result.error or "") for result in refusals]
+        assert all(texts), texts
+        assert not any("sqlite" in text.lower() for text in texts), texts
+
+    def test_the_family_base_holds_no_dialect_shaped_member(self) -> None:
+        from openstategraph.prebuilt_sql import _SqlExplorerBase
+
+        assert not hasattr(_SqlExplorerBase, "database")
+        assert not hasattr(_SqlExplorerBase, "_db")
+        assert not hasattr(_SqlExplorerBase, "_refusal")
