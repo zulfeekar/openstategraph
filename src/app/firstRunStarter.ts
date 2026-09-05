@@ -429,6 +429,16 @@ export function afterRunNote(outcome: StarterRunOutcome): string {
     '',
     'Change the question in the **Input** and press Run again.',
     '',
+    // The step the note used to stop short of (`stable-beta-public/31`). Both
+    // halves are things nothing else on the canvas can say: a saved workflow
+    // becomes a **package**, which is both mountable and reopenable; and the
+    // name the first save asks for is not a label but a directory, minted into
+    // a slug and then frozen. **Package**, never *template* — the second is a
+    // scaffold that copies and stops existing, and teaching the wrong one on
+    // the first screen a stranger reads teaches it first.
+    'Save it and it appears under **Packages** — drag it into another workflow as one step, ' +
+      'or press Open to edit it. The first save asks for a name; that name becomes its folder.',
+    '',
     'This note is yours to delete.',
   ].join('\n');
 }

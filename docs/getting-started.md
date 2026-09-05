@@ -113,7 +113,10 @@ already typed into the **Input**. A note above the three nodes says press
 **Run**; press it and the **Agent** answers, the answer lands in the
 **Output**, and the note rewrites itself once to say who answered and what it
 cost, and that the question or the agent's instructions are the next thing to
-change. If no model is configured, the note never says *press Run* — it names
+change. It also says what a saved workflow *becomes*: it appears under
+**Packages** in the palette, where you drag it into another workflow as one
+step or press **Open** to edit it, and the name the first save asks for is not
+a label — it becomes the package's folder. If no model is configured, the note never says *press Run* — it names
 the environment variable to set, quoted from the server's own account of why
 nothing can answer yet, and a run that fails anyway explains itself the same
 way. It is nobody else's document; it is composed from the palette's own

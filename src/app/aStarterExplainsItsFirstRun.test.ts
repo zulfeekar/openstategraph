@@ -215,12 +215,59 @@ describe('the rewrite is one undoable step', () => {
   });
 });
 
+/**
+ * `stable-beta-public/31`. The note said what had just happened and stopped
+ * one step short of the two things a stranger does next — and those two are
+ * the ones nothing else on the canvas can tell them: that a saved workflow
+ * becomes a **package** they can mount or reopen, and that the name the first
+ * save asks for is not a label but a directory.
+ */
+describe('the note says what to do with the workflow, not only with the run', () => {
+  const ran = afterRunNote({ ok: true, models: ['gpt-oss:120b-cloud'], totalTokens: 1522 });
+
+  it('says where a saved workflow turns up, and both things it is then for', () => {
+    expect(ran).toContain('**Packages**');
+    expect(ran).toContain('drag it into another workflow as one step');
+    expect(ran).toContain('press Open to edit it');
+  });
+
+  it('says the first save’s name is a folder, which is the part nobody guesses', () => {
+    // A slug is minted from it and frozen — a name a user never chose in the
+    // sense that matters, so the one moment they *are* choosing it has to say
+    // what it decides.
+    expect(ran).toContain('The first save asks for a name; that name becomes its folder');
+  });
+
+  it('calls it a package, and never a template', () => {
+    // The two are different things here: a package is the reusable definition
+    // a mount points at, a template is a scaffold that copies and stops
+    // existing. Saying the wrong one on the first screen a stranger reads
+    // teaches the wrong one first.
+    expect(ran.toLowerCase()).not.toContain('template');
+  });
+
+  it('leaves the failure wording alone — there is nothing saved to talk about', () => {
+    const failed = afterRunNote({ ok: false, reason: 'The provider refused the request.' });
+    expect(failed).not.toContain('Packages');
+  });
+});
+
 describe('the after-run wordings are as short as the before-run one', () => {
   const wordings = [
     afterRunNote({ ok: true, models: ['gpt-oss:120b-cloud'], totalTokens: 1522 }),
     afterRunNote({ ok: true, models: ['a', 'b', 'c'], totalTokens: 999999 }),
     afterRunNote({ ok: true, models: [], totalTokens: 0 }),
     afterRunNote({ ok: false, reason: 'The provider refused the request.' }),
+    // The longest thing that can be interpolated is a model id, and nothing
+    // clamps one. Every fixture above happens to be short, so the ceiling was
+    // being measured against the wordings rather than against the note — and
+    // `31` spent most of its headroom. This is a real Bedrock id; with it the
+    // success note runs to 380 of the 400. Trim the wording, never the ceiling.
+    afterRunNote({
+      ok: true,
+      models: ['us.anthropic.claude-3-5-sonnet-20241022-v2:0'],
+      totalTokens: 999999,
+    }),
   ];
 
   it('every one of them is under 400 characters', () => {
