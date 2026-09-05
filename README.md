@@ -19,7 +19,9 @@ workflow.graph          # a langgraph CompiledStateGraph. Yours now.
 ```
 
 **Start here and read straight down.** Install → First run → Where to read
-next. Everything after that section is reference you can come back for.
+next. Everything after that section is reference you can come back for, and the
+whole documentation set is indexed by intent at
+[`docs/README.md`](docs/README.md).
 
 ---
 
