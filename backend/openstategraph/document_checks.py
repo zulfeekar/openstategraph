@@ -49,6 +49,11 @@ from pathlib import Path
 from typing import Any
 
 from openstategraph.compile.node_catalogue import CATALOGUE, FieldSpec
+from openstategraph.concurrent_producers import (
+    ControlFlow,
+    build_control_flow,
+    concurrent_producer_count,
+)
 
 
 class FindingClass(str, Enum):
@@ -76,6 +81,8 @@ class FindingClass(str, Enum):
     #: More than one edge leaving a conditional branch, of which the compiled
     #: plan keeps exactly one.
     BRANCH_FAN_OUT = "branch-fan-out"
+    #: More producers arriving at one input than that port declares it takes.
+    PORT_OVERFULL = "port-overfull"
 
 
 @dataclass(frozen=True)
@@ -588,6 +595,136 @@ def branch_fan_out(context: CheckContext) -> Iterable[DocumentFinding]:
             f"{len(destinations)} edges leave it, to {listed}. The compiled graph keeps "
             "one destination per branch, so all but one of these are dropped without "
             "being run. Wire one, or send the work to a node that fans out.",
+        )
+
+
+def _port_index(context: CheckContext) -> tuple[
+    Callable[[str, str], Mapping[str, Any] | None],
+    Callable[[str], list[str]],
+]:
+    """`(port record for an endpoint, branch out-port ids of a node)`.
+
+    Both answers need the same two lookups — the node's type, then its record —
+    and both have to resolve a *configured* port id (`branch:<row id>`) through
+    the catalogue's dynamic groups, which publish only the prefix. Resolved once
+    here so the two checks below cannot drift into two spellings of it.
+    """
+
+    def record_and_type(node_id: str) -> tuple[Mapping[str, Any] | None, str]:
+        node = context.nodes.get(node_id)
+        if node is None:
+            return None, ""
+        node_type = str(node.get("type") or "")
+        return _record_for(node_type), node_type
+
+    def port_of(node_id: str, port_id: str) -> Mapping[str, Any] | None:
+        record, node_type = record_and_type(node_id)
+        if record is None or not port_id:
+            return None
+        for port in record.get("ports") or ():
+            if isinstance(port, Mapping) and str(port.get("id")) == port_id:
+                return port
+        for direction in ("in", "out"):
+            for group in _dynamic_groups(record, direction):
+                prefix = str(group.get("prefix") or "")
+                if not port_id.startswith(prefix):
+                    continue
+                rows = _configured_row_ids(context, node_id, node_type)
+                if rows and port_id.removeprefix(prefix) not in rows:
+                    # A port the node does not have. `unknown-port` says so;
+                    # answering here would invent one for it.
+                    return None
+                return {**group, "id": port_id}
+        return None
+
+    def branch_ports_of(node_id: str) -> list[str]:
+        record, node_type = record_and_type(node_id)
+        if record is None:
+            return []
+        found = [
+            str(port["id"])
+            for port in record.get("ports") or ()
+            if port.get("direction") == "out" and port.get("branch")
+        ]
+        for group in _dynamic_groups(record, "out"):
+            if not group.get("branch"):
+                continue
+            prefix = str(group.get("prefix") or "")
+            found.extend(
+                f"{prefix}{row}"
+                for row in sorted(_configured_row_ids(context, node_id, node_type))
+            )
+        return found
+
+    return port_of, branch_ports_of
+
+
+@register_document_check
+def port_overfull(context: CheckContext) -> Iterable[DocumentFinding]:
+    """More producers arriving at one input than that port declares it takes.
+
+    `osg-agent-experience/43`. Fifteen edges converged on a one-slot input, and
+    every checker between the document and the run was green; the run answered
+    with the node's own "nothing arrived here" text. `capacityRule` has guarded
+    this on the canvas since `workflow-gallery/64` — but a document written
+    through the MCP door never passes a canvas, which is how the try project
+    was built.
+
+    **Producers, not links.** A router takes one of its branches, so three of
+    them converging on one `prompt` are three links and one value, and three of
+    this repository's shipped documents do exactly that. The count comes from
+    `concurrent_producers`, which also records the one place it deliberately
+    answers smaller than the canvas does.
+
+    An out-port is not asked here: `branch-fan-out` already asks it, and about
+    a different failure — an output cap is not an ambiguity about which value
+    arrives, it is the plan dropping an edge it cannot store.
+    """
+    edges = [edge for edge in context.document.get("edges") or () if isinstance(edge, dict)]
+    if not edges:
+        return
+    port_of, branch_ports_of = _port_index(context)
+
+    incoming: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    for edge in edges:
+        target = edge.get("target")
+        if not isinstance(target, dict):
+            continue
+        node_id = str(target.get("nodeId") or "")
+        port_id = str(target.get("portId") or "")
+        if node_id and port_id:
+            incoming.setdefault((node_id, port_id), []).append(edge)
+
+    def type_of(node_id: str, port_id: str) -> str | None:
+        port = port_of(node_id, port_id)
+        return str(port.get("type")) if port is not None and port.get("type") else None
+
+    flow: ControlFlow | None = None
+    for (node_id, port_id), arriving in incoming.items():
+        if len(arriving) < 2:
+            continue
+        port = port_of(node_id, port_id)
+        if port is None:
+            continue
+        cap = port.get("max_connections")
+        # `None` is a bus, declared: an agent's tool palette, a `skill` input.
+        if not isinstance(cap, int) or len(arriving) <= cap:
+            continue
+        if flow is None:
+            flow = build_control_flow(list(context.nodes), edges, type_of, branch_ports_of)
+        if concurrent_producer_count(flow, arriving) <= cap:
+            continue
+        sources = ", ".join(
+            f'"{(edge.get("source") or {}).get("nodeId") or "?"}"' for edge in arriving
+        )
+        node_type = str((context.nodes.get(node_id) or {}).get("type") or "")
+        yield DocumentFinding(
+            FindingClass.PORT_OVERFULL,
+            f"{node_id}.{port_id}",
+            f'Port "{port_id}" on node "{node_id}" ({node_type}) takes {cap} '
+            f"connection{'' if cap == 1 else 's'} and {len(arriving)} edges arrive at it, "
+            f"from {sources}. Nothing decides between them, so they can produce in the "
+            "same step and the port holds one value — all but one of them is discarded.",
         )
 
 

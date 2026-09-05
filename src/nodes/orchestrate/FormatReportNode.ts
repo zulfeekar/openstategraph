@@ -83,6 +83,16 @@ export function createFormatReportNode(_providers: ProviderRegistry): INodeDefin
           required: true,
           // A bus since ticket 37: every worker archetype's `result` wires in,
           // and the join runs once after the fan-out's superstep completes.
+          //
+          // **`null` was measured against the runtime and kept**
+          // (`osg-agent-experience/43`, which asked whether it should say 1).
+          // These edges *sequence* the join; the value comes from
+          // `worker_results` in graph state, so the number of them is the
+          // number of workers and capping it at one would refuse the fan-out
+          // this node exists for. `maxConnections` was never what could have
+          // refused the fifteen guards that ticket found wired in here —
+          // `sourceMustDeclare` below is, and it is asked by the canvas and
+          // not yet by `validate`.
           maxConnections: null,
           // …and a bus for workers ONLY (production-ready ticket 31). These
           // edges sequence the join; they do not carry it. The compiled step
@@ -95,7 +105,17 @@ export function createFormatReportNode(_providers: ProviderRegistry): INodeDefin
           // worker's `result` and an agent's `result` are one type), so the
           // port states the requirement the runtime actually has.
           //
-          // This is a refusal, not a fan-in: static fan-in is still unbuilt.
+          // This is a refusal, not a fan-in: static fan-in is still unbuilt
+          // (`production-ready/31`, open). Narrowed since, and the narrowing
+          // is the part a reader needs: `_format_report_function` falls back
+          // to the upstream `outputs` of every **static** `plan.edges` edge
+          // into this node (`every-workflow-green/27`), so a plain fan-in is
+          // partly served. A source whose edge compiles to a *conditional*
+          // one — a guard's `pass`, a grader's `pass`, an approval's
+          // `approved` — is not in `plan.edges` at all, so it arrives as
+          // nothing and the join reports "No results". `_discovered_function`
+          // reads `plan.conditional` for exactly that reason
+          // (`launch-readiness/66`); this builder was left out of it.
           sourceMustDeclare: {
             portType: PORT.worker,
             refusal:

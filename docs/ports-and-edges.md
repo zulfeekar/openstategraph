@@ -145,6 +145,18 @@ different agents behind one router converge on one grader's `candidate`. Two
 producers count as one only when some node's branches decide between them, and
 only when that node genuinely decides whether each of them runs at all.
 
+**The document door asks the same question, and answers smaller.**
+`openstategraph validate` runs `port-overfull` (`osg-agent-experience/43`),
+which counts producers the same way — a document written through the MCP door
+never passes a canvas, and the try project drew fifteen producers into a
+one-slot input with every checker green. Where the two differ is the direction
+they guess in: the canvas over-counts, because refusing a drawable link is
+cheaper than letting two values race; the checker under-counts, because
+accusing a valid document is the one thing it may never do. So a Router in *run
+every match, in parallel* is treated as exclusive there and its branches
+converging on one slot go unreported — `backend/openstategraph/concurrent_producers.py`
+names that gap at the top.
+
 **A node whose branches are not exclusive says so.** A Router set to *run every
 match, in parallel* dispatches to every branch that matched, in one superstep —
 so its branches really can race, and `INodeModel.branchesAreExclusive` is how
