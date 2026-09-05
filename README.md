@@ -84,6 +84,22 @@ waiting to happen. An existing directory is merged into, never overwritten, and
 a conflicting entry is reported as kept. Full flags:
 [`init`](docs/cli.md#init).
 
+**Now give it one credential.** `init` never writes a `.env` for you, and
+without one the very next step refuses: a run prints *"the only provider
+integration installed; set `OLLAMA_API_KEY` or `OLLAMA_HOST` to use it"* and
+stops. One line fixes it:
+
+```bash
+echo 'OLLAMA_API_KEY=your-key-here' > .env
+```
+
+Any one of the providers in [Environment variables](#environment-variables)
+will do — `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or the Azure set instead, if
+that is the vendor you already pay. `openstategraph env-example` prints the
+whole block with the names and no values; `openstategraph providers` then says
+which of them this install can actually see. (A workflow with no model-calling
+node needs none of this.)
+
 Then open it:
 
 ```bash

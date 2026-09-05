@@ -61,7 +61,13 @@ STRANGER_PATH_ENDS_AT = "## The CLI at a glance"
 #: rather than a coincidence: the path was never the long part. What changed is
 #: that it is now the *whole* first half instead of the first fifth, so a reader
 #: who stops at the end of it has stopped at a deliberate place.
-STRANGER_PATH_CEILING = 190
+#:
+#: Raised from 190 to 200 the same day, by `docs-onramp/02`: the ratchet fired
+#: on the sixteen lines that add the credential step between `init` and Run.
+#: That is the one addition this budget exists to admit rather than refuse — a
+#: path measured at 180 lines that ends in a 503 is shorter and worse. The next
+#: edit that wants ten more lines does not get them for free.
+STRANGER_PATH_CEILING = 200
 
 #: The whole page. 829 lines on 2026-09-05 before `docs-onramp/01`, 305 after.
 #: The budget above the recorded figure is small on purpose — the failure this
