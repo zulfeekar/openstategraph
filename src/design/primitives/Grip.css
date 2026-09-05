@@ -10,8 +10,13 @@
  *
  * Two states, both drawn, neither pickable by a surface — `stable-beta-public/23`
  * corrected the resting one, which shipped invisible: `21` drew it at
- * `--color-border`, a 60%-mix hairline that measures under 2:1 against a
- * near-white surface and reads as absent. The owner's own rule (`21`'s
+ * `--color-border`, the hairline every non-draggable edge uses, and it read
+ * as absent. (The number this sentence used to give for that — "under 2:1
+ * against a near-white surface" — was wrong when it was written: the token
+ * measured 4.41:1 there at the time. What made the bar disappear was 1px of
+ * it against 2px of full ink, which is `23`'s actual finding. It happens to
+ * be under 2:1 today, since `stable-beta-public/26` halved the token's ink,
+ * and that is a coincidence rather than a vindication.) The owner's own rule (`21`'s
  * story, restated in `23`) was full ink at rest, quiet only in *width*:
  *
  *   at rest   a `--grip-length` bar, centred on the edge, `--color-rule`

@@ -29,8 +29,18 @@ import { describe, expect, it } from 'vitest';
  * There is a floor as well as a ceiling. `15`'s first attempt failed the
  * other way — `--color-border-default` sat at 1.25:1 and read as absent —
  * so the job is the band between "competes with the draggable weight" and
- * "is not there". 60% of the ink over white is `#797877` at 4.41:1: a grey
+ * "is not there". 60% of the ink over white was `#797877` at 4.41:1: a grey
  * line anybody can see, and nobody would call dark.
+ *
+ * **A fourth instruction, 2026-09-04, took it to 30%** —
+ * `stable-beta-public/26`. Not a correction of the reading above: the
+ * ground moved under it. `02` retired every shadow in the product between
+ * `17` and now, so this hairline stopped being one cue among several and
+ * became the only thing separating most surfaces, and the owner looked at
+ * the result and asked for half the ink. 30% over white is `#bcbcbb` at
+ * 1.90:1 — still above the 1.5:1 floor `noShadowButTheGrip.test.ts`
+ * argues, by 27% rather than by a factor of three, and that narrowing is
+ * recorded there rather than here.
  *
  * **What `16` could not fix by moving alpha, and `17` fixes by moving
  * width.** Measured on the running app at `5f0b895`, the palette's right
@@ -43,12 +53,16 @@ import { describe, expect, it } from 'vitest';
  * - `--color-rule` at `--border-width-rule` — 2px, full ink, and **only a
  *   border a pointer can drag**. One pair, spent at three declarations
  *   across two files, asserted by site below.
- * - `--color-border` at `--border-width-hairline` — 1px, 60%. Every other
+ * - `--color-border` at `--border-width-hairline` — 1px, 30%. Every other
  *   structural line: a panel edge, a card outline, a divider, an input, a
  *   table rule, a chart hairline.
  * - `--color-border-emphasis` — 80%, interaction *state* only, never a
- *   resting border. Equal 20-point steps put it between the two, which is
- *   a rule a reader can check rather than three hand-picked numbers.
+ *   resting border. It sits between the two, and since `26` it no longer
+ *   sits at an equal step from either — 30 / 80 / 100 is not a ladder. The
+ *   argument that shape was carrying is now carried by the measurement in
+ *   `noShadowButTheGrip.test.ts` instead, which is the stronger place for
+ *   it: arithmetic a reader can check said nothing about whether any of
+ *   the three is *visible*.
  *
  * **What this file does not try to settle.** A colour used to signal
  * something other than structural weight — danger, warning, focus, an
@@ -243,26 +257,33 @@ describe('a border is drawn by what it means, and there are two weights', () => 
    *
    * | | light surface | light canvas | dark surface | dark canvas |
    * | --- | --- | --- | --- | --- |
-   * | `--color-border` 60% | 4.41:1 | 4.32:1 | 6.33:1 | 6.62:1 |
+   * | `--color-border` 30% | 1.90:1 | 1.89:1 | 2.55:1 | 2.48:1 |
    * | `--color-border-emphasis` 80% | 8.67:1 | 8.34:1 | 10.40:1 | 11.08:1 |
    * | `--color-rule` 100% | 16.60:1 | 15.66:1 | 15.71:1 | 17.25:1 |
    *
+   * Re-measured 2026-09-05 for `stable-beta-public/26`; only the first row
+   * moved. It read 4.41:1 / 4.32:1 / 6.33:1 / 6.62:1 at 60%.
+   *
    * And the number the owner's rule is actually about — the step **between
-   * the weights**, normal against draggable side by side: **3.77:1 light,
-   * 2.48:1 dark**. Under `16`'s 70% it was 2.73:1 / 1.91:1, and the third
-   * complaint arrived anyway, because that step was being asked to carry
-   * the whole distinction on its own. It is not any more: the draggable
-   * weight is also twice as wide.
+   * the weights**, normal against draggable side by side: **8.74:1 light,
+   * 6.16:1 dark**, up from 3.77:1 / 2.48:1 at 60% and 2.73:1 / 1.91:1 under
+   * `16`. The third complaint arrived under `16` anyway, because that step
+   * was being asked to carry the whole distinction on its own; it is not,
+   * since `17` made the draggable weight twice as wide as well. `26`'s
+   * lighter hairline widens the ink half of that gap by more than double,
+   * which is a side effect of the owner's instruction rather than its
+   * purpose, and it moves in the direction the owner's rule of thumb
+   * points.
    *
    * The floor is real and it is `15`'s own failure — a weight at 1.25:1
-   * reads as absent. 4.41:1 is not near it. Nor is the low end of the
-   * band: 50% would put the normal weight at 3.26:1 on white, and the
-   * arithmetic ladder would stop being one.
+   * reads as absent. 1.90:1 is above it but no longer far above it, which
+   * is why the eight-ground table in `noShadowButTheGrip.test.ts` is the
+   * live instrument and this row is the ladder.
    *
-   * The hover step comes back with the value: 60% → 80% is 1.97:1 light /
-   * 1.64:1 dark, against the 1.70:1 / 1.40:1 that `16`'s narrower range
-   * cost. That was recorded as `16`'s price, and it is refunded here
-   * rather than quietly forgotten.
+   * The hover step widens with the resting weight: 30% → 80% is 4.56:1
+   * light / 4.08:1 dark, against 1.97:1 / 1.64:1 at 60% and the 1.70:1 /
+   * 1.40:1 that `16`'s narrower range cost. A hover is the one state this
+   * system says with ink alone, and it has never said it more clearly.
    */
   it('declares the three weights as one ink at three strengths', () => {
     const theme = read(join(SRC, 'design/styles/theme.css'));
@@ -270,7 +291,7 @@ describe('a border is drawn by what it means, and there are two weights', () => 
       (new RegExp(`${token}\\s*:\\s*([^;]+);`).exec(theme)?.[1] ?? '').replace(/\s+/g, ' ').trim();
 
     expect(declared('--color-border')).toBe(
-      'color-mix(in srgb, var(--osg-divider) 60%, transparent)',
+      'color-mix(in srgb, var(--osg-divider) 30%, transparent)',
     );
     expect(declared('--color-border-emphasis')).toBe(
       'color-mix(in srgb, var(--osg-divider) 80%, transparent)',
@@ -369,8 +390,8 @@ describe('a border is drawn by what it means, and there are two weights', () => 
    * declaration anywhere else spends rule width.
    *
    * That is the whole two-weight system stated as one sentence a reader
-   * can check — **2px full ink is draggable, 1px at 60% is everything
-   * else** — and it is why `NodeCard.css`'s grip stopped writing `2px` as
+   * can check — **2px full ink is draggable, 1px of the light mix is
+   * everything else** — and it is why `NodeCard.css`'s grip stopped writing `2px` as
    * a literal: a literal cannot be counted by the half of this pin that
    * counts the token.
    */

@@ -306,7 +306,7 @@ function toRgb(value: string): [number, number, number] {
 }
 
 /**
- * `--color-border` is `color-mix(in srgb, var(--osg-divider) 60%, transparent)`
+ * `--color-border` is `color-mix(in srgb, var(--osg-divider) 30%, transparent)`
  * — a translucent line, so what a person sees is the ink composited over
  * whichever ground it is drawn on. Flattened here per channel, exactly as
  * `kanbanColumnContrastIsMeasured.test.ts` flattens its own rgba badges;
@@ -339,10 +339,23 @@ function borderOverGround(theme: 'light' | 'dark', groundToken: string): number 
  * shipped a border at **1.25:1** and the owner reported it as *absent*, which
  * is the only direct evidence this product has about where the floor is.
  *
- * Every measurement below clears it by more than a factor of two, in both
- * themes, which is the answer to the question the shadows used to beg: a
- * hairline alone is enough to hold an edge, so nothing has to be lifted off
- * the page to be seen.
+ * **Re-measured 2026-09-05 for `stable-beta-public/26`**, which halved the
+ * token's ink from 60% to 30% on the owner's instruction. Every one of the
+ * eight readings still clears the floor and none was lowered — the worst,
+ * the light canvas, went 4.32:1 → 1.89:1, which is 26% of headroom where
+ * there used to be 188%. That is a real narrowing and it is written down
+ * rather than smoothed over: at 60% this file could say the hairline
+ * cleared the floor "by more than a factor of two" and no plausible future
+ * ground would change that; at 30% a ground even slightly lighter than
+ * `--color-bg-canvas` would fail, so the eight-row table below is now the
+ * *reason* the floor holds rather than a record of a margin nobody had to
+ * think about.
+ *
+ * The floor itself was not touched, and that is the ticket's own
+ * instruction: the owner chose the ink, so the ink is the input and the
+ * floor is the test. Had a reading gone under 1.5:1 the answer would have
+ * been a per-surface exception argued here, never a smaller number in this
+ * constant.
  */
 describe('the hairline that replaced the shadows is legible on every ground', () => {
   const FLOOR = 1.5;
@@ -364,15 +377,40 @@ describe('the hairline that replaced the shadows is legible on every ground', ()
 
   /**
    * The measured table, asserted to one decimal so it is a record rather
-   * than a range. The worst case is the light canvas at 4.32:1 — the ground
+   * than a range. The worst case is the light canvas at 1.89:1 — the ground
    * a node card sits on, and the thinnest line in the product.
+   *
+   * | ground | 2026-08 at 60% | 2026-09-05 at 30% |
+   * | --- | --- | --- |
+   * | light canvas | 4.32:1 | **1.89:1** |
+   * | light surface | 4.41:1 | 1.90:1 |
+   * | light raised | 4.41:1 | 1.90:1 |
+   * | light sunken | 4.31:1 | 1.90:1 |
+   * | dark canvas | 6.62:1 | 2.48:1 |
+   * | dark surface | 6.33:1 | 2.55:1 |
+   * | dark raised | 6.15:1 | 2.57:1 |
+   * | dark sunken | 6.48:1 | 2.55:1 |
+   *
+   * **All eight are asserted now, where four were** — and the four the
+   * `it.each` above already walked for the floor were the four this record
+   * did not carry, which is how the dark raised ground could sit 0.47
+   * below the figure the neighbouring prose quoted for it without anything
+   * going red. No reason for the omission was ever recorded; at 30% the
+   * margin above the floor is small enough that a ground moving by a few
+   * points is a thing this file should notice rather than one it happens
+   * to cover, so the record now walks the same eight grounds the floor
+   * does.
    */
   it('measures the same numbers this file reports', () => {
     const at = (theme: 'light' | 'dark', ground: string): number =>
       Math.round(borderOverGround(theme, ground) * 100) / 100;
-    expect(at('light', '--color-bg-canvas')).toBeCloseTo(4.32, 1);
-    expect(at('light', '--color-bg-surface')).toBeCloseTo(4.41, 1);
-    expect(at('dark', '--color-bg-canvas')).toBeCloseTo(6.62, 1);
-    expect(at('dark', '--color-bg-surface')).toBeCloseTo(6.33, 1);
+    expect(at('light', '--color-bg-canvas')).toBeCloseTo(1.89, 1);
+    expect(at('light', '--color-bg-surface')).toBeCloseTo(1.9, 1);
+    expect(at('light', '--color-bg-surface-raised')).toBeCloseTo(1.9, 1);
+    expect(at('light', '--color-bg-surface-sunken')).toBeCloseTo(1.9, 1);
+    expect(at('dark', '--color-bg-canvas')).toBeCloseTo(2.48, 1);
+    expect(at('dark', '--color-bg-surface')).toBeCloseTo(2.55, 1);
+    expect(at('dark', '--color-bg-surface-raised')).toBeCloseTo(2.57, 1);
+    expect(at('dark', '--color-bg-surface-sunken')).toBeCloseTo(2.55, 1);
   });
 });

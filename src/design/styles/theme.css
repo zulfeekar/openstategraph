@@ -80,13 +80,22 @@
      the dark colour — 60%, a greyish"*). `16` read their middle sentence
      — *"normal borders are dark grey so that the draggable borders stand
      out"* — as a specification and raised this 60% → 70%; it was a report
-     of what they were looking at. Two of the three agree, so the value is
-     the owner's own number and this is the third pass to write it.
+     of what they were looking at. Two of the three agree, so 60% was the
+     owner's own number and `17` was the third pass to write it.
+
+     **`stable-beta-public/26` halves it again, to 30%, on the owner's
+     direct instruction of 2026-09-04.** `02` had since retired every
+     shadow, so this hairline became the only thing separating most
+     surfaces — a change `17` could not have priced, and one that makes the
+     line's ink the whole feel of the editor rather than one cue among
+     several.
 
      There is a floor as well as a ceiling: `15`'s first attempt put a
-     weight at 1.25:1 and it read as absent. 60% of the ink is `#797877` on
-     white at 4.41:1 — a grey line anybody can see, and nobody would call
-     dark.
+     weight at 1.25:1 and it read as absent. 30% of the ink is `#bcbcbb` on
+     white at 1.90:1 — still a line anybody can see, and 27% above the
+     floor `noShadowButTheGrip.test.ts` argues at 1.5:1. It is close to the
+     lightest this can go and stay a line: 20% measures 1.51:1 on the light
+     canvas, which is the floor itself rather than a margin above it.
 
      Three strengths of one ink, at equal 20-point steps, so the ladder is
      arithmetic a reader can check rather than three picked swatches. It
@@ -96,12 +105,22 @@
      Composited over the two grounds these actually sit on:
 
        weight               light surface / canvas   dark surface / canvas
-       --color-border  60%   4.41:1 / 4.32:1          6.33:1 / 6.62:1
+       --color-border  30%   1.90:1 / 1.89:1          2.55:1 / 2.48:1
        ...-emphasis    80%   8.67:1 / 8.34:1         10.40:1 / 11.08:1
        --color-rule   100%  16.60:1 / 15.66:1        15.71:1 / 17.25:1
 
+     (Re-measured 2026-09-05 at 30%. Only the first row moved; it read
+     4.41:1 / 4.32:1 and 6.33:1 / 6.62:1 at 60%. The full eight-ground
+     table is asserted in `noShadowButTheGrip.test.ts`, which is where to
+     read it — these three rows are the ladder, not the record.)
+
      And the number the rule is about — normal against draggable, side by
-     side: 3.77:1 light, 2.48:1 dark, against 2.73:1 / 1.91:1 under `16`.
+     side: 8.74:1 light, 6.16:1 dark, against 3.77:1 / 2.48:1 at 60% and
+     2.73:1 / 1.91:1 under `16`. The three strengths are no longer equal
+     20-point steps, and that is the deliberate cost: the ladder stopped
+     being arithmetic when the owner chose the ink, and what it buys is
+     that the weight a pointer can drag is now impossible to mistake for
+     the weight it cannot.
 
      **Alpha is no longer carrying this alone, and that is `17`'s real
      change.** A width goes with each weight: this one is always
@@ -111,7 +130,7 @@
      same width — which is a difference you measure rather than see, and is
      why a third complaint arrived about a token that was already the
      right one. */
-  --color-border: color-mix(in srgb, var(--osg-divider) 60%, transparent);
+  --color-border: color-mix(in srgb, var(--osg-divider) 30%, transparent);
   /* Interaction *state*, not a third structural weight — the one thing a
      flat two-weight system cannot say on its own. A `:hover` on an input,
      a button, a palette row steps up one rung with no other cue; collapsing
@@ -120,10 +139,12 @@
      border — and held to an exact site list by the pin.
 
      `16` raised the resting weight to 70% and recorded the cost to this
-     step: 1.97:1 light / 1.64:1 dark became 1.70:1 / 1.40:1. `17` returns
-     the resting weight to 60%, so the step comes back with it. A cost that
-     was recorded rather than hidden is a cost that can be refunded in the
-     open. */
+     step: 1.97:1 light / 1.64:1 dark became 1.70:1 / 1.40:1. `17` returned
+     the resting weight to 60%, so the step came back with it, and `26`'s
+     30% widens it again to 4.56:1 light / 4.08:1 dark. A hover is the one
+     state this system says with ink alone, and it has never said it more
+     clearly. A cost that was recorded rather than hidden is a cost that
+     can be refunded in the open. */
   --color-border-emphasis: color-mix(in srgb, var(--osg-divider) 80%, transparent);
   /* Full ink, and **only a border a pointer can drag** — `16`, completed by
      `17`. Two of them in the product: the node card's resize grip and the
@@ -259,10 +280,13 @@
    * interaction *state* and never a resting border, asserted there as an
    * exact site list. A third resting weight would have contradicted both,
    * so the hairline carries every layer and the ground carries the
-   * difference between them. `--color-border` measures 4.32:1 against the
-   * canvas at its worst — the thinnest case — which is well clear of the
-   * ~1.5:1 a hairline needs to read at all; the whole table is in
-   * `noShadowButTheGrip.test.ts`, measured rather than stated.
+   * difference between them. `--color-border` measures 1.89:1 against the
+   * canvas at its worst — the thinnest case — which still clears the
+   * ~1.5:1 a hairline needs to read at all, by 27% rather than by the
+   * factor of three it had before `stable-beta-public/26` halved the ink;
+   * the whole table is in `noShadowButTheGrip.test.ts`, measured rather
+   * than stated, which is why halving the token moved a number here
+   * instead of quietly moving the product.
    *
    * The one thing kept is the one the owner named: the **draggable grip**,
    * which stands out on purpose and never used a shadow to do it — it is
@@ -383,9 +407,12 @@
   /* The dark block's own elevation scale is retired with the light one —
    * see the light block above. Its argument was already that "a light
    * hairline, not a shadow" gives a dark surface its definition, and the
-   * hairline is now the whole of it: `--color-border` reads at 6.33:1 on
-   * the dark surface and 6.62:1 on the dark canvas, better than either
-   * light figure. */
+   * hairline is now the whole of it: `--color-border` reads at 2.55:1 on
+   * the dark surface and 2.48:1 on the dark canvas — a third of what it was
+   * before `stable-beta-public/26`, and still better than either light
+   * figure, which is the one thing about this ladder that has not changed:
+   * a light line on a dark ground carries further than a dark one on a
+   * light ground at the same alpha. */
 }
 
 /* ------------------------------------------------------------------ *

@@ -22,9 +22,14 @@ import { describe, expect, it } from 'vitest';
  * other, and they had come apart by 2px on screen.
  *
  * `21`'s "quiet" turned out to mean invisible: it moved the resting bar's
- * *ink* down to `--color-border`, a 60%-mix hairline that composites under
- * 2:1 against the panel ground, and the owner reported twice in one day
- * that they could not find the control (`stable-beta-public/23`). `23`
+ * *ink* down to `--color-border`, the hairline every non-draggable edge
+ * uses, and the owner reported twice in one day that they could not find
+ * the control (`stable-beta-public/23`). What made it vanish was width, not
+ * ink: 1px of the hairline against the 2px of full ink `23` restored. This
+ * sentence used to say the hairline "composites under 2:1 against the panel
+ * ground", which was not true of the 60% mix it was written about (4.41:1),
+ * and is true of the 30% mix `stable-beta-public/26` shipped — by accident,
+ * so the argument is stated as width instead. `23`
  * gave the two states back one ink — `--color-rule`, full strength, at
  * both rest and hover — and let *width* alone carry the difference:
  * `--border-width-rule` (2px) at rest, `--grip-weight` (4px) under a
@@ -74,8 +79,8 @@ describe('a grip has a resting mark, not just a hover mark', () => {
 
   /**
    * `21` made the resting bar quieter by moving its *ink* down a weight —
-   * `--color-border`, the same 60%-mix hairline every non-draggable edge
-   * uses. Composited over the panel ground that reads under 2:1, which is
+   * `--color-border`, the same hairline every non-draggable edge uses, at
+   * 1px against the 2px of full ink the hover state brought — which is
    * indistinguishable from "not drawn" (`stable-beta-public/23`). So the
    * bar is quieter at rest by *width* only now, never by ink: both states
    * share `--color-rule`, and only `--grip-weight` — the hover/focus
