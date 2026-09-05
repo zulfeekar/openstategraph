@@ -1472,7 +1472,7 @@ client that loads a document, edits it and saves quotes that digest back; if
 the file changed in between, nothing is written and the response is
 
 ```json
-{"detail": {"reason": "'cpl-analyst' changed on disk since it was loaded here — reload it to take the file's version, or save again to overwrite it", "digest": "<what the file holds now>"}}
+{"detail": {"reason": "'fleet-analyst' changed on disk since it was loaded here — reload it to take the file's version, or save again to overwrite it", "digest": "<what the file holds now>"}}
 ```
 
 The `digest` in that body is the way forward, not decoration: a client that

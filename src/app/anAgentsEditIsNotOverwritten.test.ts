@@ -24,7 +24,7 @@ import {
  * `osg-agent-experience/45`.
  *
  * Reproduced in a try-folder session on 2026-09-05: a generator rewrote
- * fifteen tails in `workflows/cpl-analyst/workflow.json` while the developer
+ * fifteen tails in `workflows/fleet-analyst/workflow.json` while the developer
  * had that workflow open to watch the board, and four of the edges it wrote
  * were gone by the time anybody re-read the file. Nothing failed. The editor
  * posted the document it had held since the load and the backend wrote it.
@@ -50,7 +50,7 @@ import {
  * uses for the same reason.
  */
 
-const SLUG = 'cpl-analyst';
+const SLUG = 'fleet-analyst';
 
 /** The one call `writeOpenWorkflowToDisk` makes, recorded and answered. */
 class StubClient {
@@ -75,10 +75,10 @@ const storage = (slug: string | null): Pick<Storage, 'getItem'> => ({
 /** An editor holding the file's document, with a version quoted for it. */
 function openWorkflow(digest: string): Workbench {
   const workbench = new Workbench();
-  workbench.model.setName('CPL Analyst');
+  workbench.model.setName('Fleet Analyst');
   rememberDiskDocument(
     SLUG,
-    'CPL Analyst',
+    'Fleet Analyst',
     workbench.serializer.serialize(workbench.model),
     workbench.serializer,
   );
@@ -92,7 +92,7 @@ const edit = (workbench: Workbench): void => {
 
 const CONFLICT: SaveFailure = {
   kind: 'conflict',
-  reason: "'cpl-analyst' changed on disk since it was loaded here",
+  reason: "'fleet-analyst' changed on disk since it was loaded here",
   digest: 'sha-from-the-agent',
 };
 

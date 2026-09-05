@@ -7,7 +7,7 @@ uncovered without calling anybody. Nothing could turn that fact into a route to
 an output. `guard.check` routes `pass`/`revise`, but `revise` is a `feedback`
 port and an `output.formatted` takes `result`; `route.classifier` can name an
 `ask_back` branch, but a **model** picks it, and on the first live run
-(2026-09-05, *"How much crude did Norway export?"*) it picked `sm_cargoflow`
+(2026-09-05, *"How much crude did Norway export?"*) it picked `sm_shipments`
 and never asked. A deterministic fact was demoted to a model's judgement
 because no node carried it.
 

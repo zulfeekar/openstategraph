@@ -7,7 +7,7 @@ calling anybody. There was no node that could turn that fact into a route to an
 output. `guard.check` routes `pass`/`revise`, but `revise` is a `feedback` port
 and an `output.formatted` takes `result`; `route.classifier` can name an
 `ask_back` branch, but a **model** picks it, and on the first live run
-(2026-09-05, *"How much crude did Norway export?"*) it picked `sm_cargoflow` and
+(2026-09-05, *"How much crude did Norway export?"*) it picked `sm_shipments` and
 never asked.
 
 So this node is `guard.check`'s sibling on the other axis: the same package
@@ -145,12 +145,12 @@ class TestADeterministicFork:
 class TestTheReturnIsResolvedStrictly:
     def test_a_name_no_branch_declares_lands_on_fallback(self) -> None:
         """Tolerant in reading, strict in trusting (`CLAUDE.md`)."""
-        runtime = NodeRuntime(functions={"function.needs_a_date_range": lambda text: "sm_cargoflow"})
+        runtime = NodeRuntime(functions={"function.needs_a_date_range": lambda text: "sm_shipments"})
         final = _run(runtime, _document(), "anything")
 
         assert final["decisions"]["r1"] == "fallback"
         assert "fell" in final["outputs"]
-        assert "sm_cargoflow" in final["verdicts"]["r1"]["reason"]
+        assert "sm_shipments" in final["verdicts"]["r1"]["reason"]
 
     def test_a_branch_id_is_accepted_as_well_as_its_name(self) -> None:
         """The document's `{id, name}` pair means both spellings are real."""
