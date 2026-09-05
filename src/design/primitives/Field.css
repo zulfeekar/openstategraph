@@ -104,6 +104,17 @@ label.field > .field__label {
   box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring-soft);
 }
 
+/* One ring per focus, and this wrapper owns it (`stable-beta-public/30`).
+   `reset.css` outlines anything `:focus-visible`, which is the only focus a
+   bare control gets and must stay; inside a painted box it is the *second*
+   ring, drawn a hairline inside the halo above. The wrapper is the box a
+   reader sees, so the control's own outline is cleared here — in the
+   stylesheet that replaces it, never in the reset, which knows about no
+   class. */
+.input .input__control:focus-visible {
+  outline: none;
+}
+
 .input[data-invalid='true'] {
   border-color: var(--color-danger);
 }

@@ -867,8 +867,10 @@ describe('a fallback behind a name that always resolves is dead code', () => {
     // literal fallback is the value every unmeasured element renders.
     // The line moved 147 → 146 when `stable-beta-public/02` turned the input's
     // inset ring into a `border` — one declaration shorter after comments are
-    // stripped, which is what this site is counted against.
-    expect(live).toContain('design/primitives/Field.css:146 --textarea-max-rows');
+    // stripped, which is what this site is counted against — and 146 → 151
+    // when `stable-beta-public/30` added the rule that gives a wrapped control
+    // one focus ring instead of two.
+    expect(live).toContain('design/primitives/Field.css:151 --textarea-max-rows');
   });
 
   it('leaves no fallback behind a name that is always in scope', () => {

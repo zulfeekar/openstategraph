@@ -91,3 +91,25 @@ Three edits touch something a reader might call colour:
 
 All three are state geometry expressed through existing tokens. No ramp,
 semantic colour, or theme value was edited, and `theme.css` was not touched.
+
+## Correction: "one ring" meant one *token*, and shipped as two rings
+
+Row 3 above says *"Adopt — one ring"*, and what was adopted was the shared
+`--focus-ring-*` tokens: the same width, offset and tint reached the global
+`:focus-visible` outline **and** the input/select `:focus-within` box-shadow.
+Both of those are drawn, and a wrapped control composes both — so from this
+decision until `stable-beta-public/30` every text field and every select in
+the product wore two concentric rings for one focus, in the identical colour
+that made them read as one thicker, doubled halo rather than as a mistake.
+
+The half of the shadcn recipe row 3 quotes but did not adopt is the one that
+would have prevented it: `outline-none` **on the base**. It is adopted now, and
+narrowed to where it is safe — `.input .input__control:focus-visible` and
+`.select .select__control:focus-visible` clear the control's outline *inside*
+the wrapper that replaces it, so the global rule keeps serving every control
+that has no wrapper. A bare button's ring is unchanged.
+
+Pinned by `src/design/primitives/oneRingPerFocus.test.ts`, as a derived census
+rather than as this sentence: it finds every primitive that paints a wrapper
+ring and requires each to clear its control's outline, so the next composed
+control that forgets fails by name.

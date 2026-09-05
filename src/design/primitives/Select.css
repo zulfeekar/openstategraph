@@ -46,6 +46,14 @@
   box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring-soft);
 }
 
+/* The wrapper owns the ring here too — see `Field.css` for the argument.
+   A native <select> is the interactive element, so the reset reaches it
+   exactly as it reaches a bare button; the skin around it is what a reader
+   sees light up. */
+.select .select__control:focus-visible {
+  outline: none;
+}
+
 .select[data-invalid='true'] {
   border-color: var(--color-danger);
 }
