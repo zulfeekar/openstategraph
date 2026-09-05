@@ -341,6 +341,12 @@ class WorkflowServices:
         tools = self.capabilities.tools(
             slug, knowledge_dir=knowledge_dir, warnings=capability_warnings
         )
+        # Beside the tools rather than at the use site below, so that a
+        # `functions/` file contributing nothing lands in `capability_warnings`
+        # *before* a caller's own list is filled from it
+        # (`osg-agent-experience/58`). Built once for the same reason the tools
+        # are: discovery `exec_module`s every file in the folder.
+        functions = self.capabilities.functions(slug, warnings=capability_warnings)
         # The document's memory declaration, and everything it could not
         # honour. Both findings go on the same channel every other unresolved
         # capability uses, so a typo'd scope and a missing tool are reported
@@ -362,7 +368,7 @@ class WorkflowServices:
             services=RuntimeServices(
                 model=model,
                 tools=tools,
-                functions=self.capabilities.functions(slug),
+                functions=functions,
                 document_loader=lambda child_slug: normalize_document(packages.load(child_slug)),
                 package_loader=lambda child_slug: PackageAssets(
                     tools=self.capabilities.tools(child_slug),

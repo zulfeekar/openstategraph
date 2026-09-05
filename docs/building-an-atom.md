@@ -1243,6 +1243,21 @@ Two things about it that are not guesses:
   whether the inheritance should exist at all is a separate decision — skills
   and knowledge are explicitly isolated to the child a few lines below the
   merge, and functions and tools are the exception (`export-and-eject/14`).
+- **One implementation can serve several packages.** Discovery counts a
+  top-level `def` in the scanned file — and, since `osg-agent-experience/58`,
+  a function **re-exported** from a module written anywhere under the
+  workflows root. So sixteen packages that must all run the same guard bind
+  one implementation rather than sixteen copies of it, which is the point: a
+  copy that drifts *wide* fails open. Write the implementation in one
+  package's `functions/`, load it by path (a slug may hold a hyphen and a
+  hyphen is never a legal module name) and bind the name:
+  `honest_findings = _module.honest_findings`. The `__module__` guard that
+  used to drop that is still there for everything else, so
+  `from textwrap import dedent` beside your own functions still registers
+  nothing. A file that defines *no* function of its own and binds only names
+  from outside the workflows root contributes nothing at all, and now says so
+  by name — at `validate`, on the same channel every other lost capability
+  travels.
 - **The card has no fields.** The compiled step reads nothing from `data`, so a
   control here would be one the compiler ignores. The signature and the first
   line of the docstring become the card's subtitle instead, where they cannot

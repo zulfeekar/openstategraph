@@ -595,7 +595,7 @@ def get_capabilities(services: Services, slug: str) -> CapabilitiesResponse:
 
     warnings: list[str] = []
     tools = discover_tools(workflow_dir, slug=slug, warnings=warnings)
-    functions = discover_functions(workflow_dir, slug=slug)
+    functions = discover_functions(workflow_dir, slug=slug, warnings=warnings)
     plugin_tools, plugin_warnings = plugin_tool_capabilities()
     warnings.extend(plugin_warnings)
     # The third claimant pair, on the surface a user reads

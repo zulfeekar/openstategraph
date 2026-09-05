@@ -480,7 +480,71 @@ def discover_tools(
     return described
 
 
-def discover_functions(workflow_dir: Path, slug: str) -> list[FunctionCapability]:
+def _written_inside(fn: Any, root: Path) -> bool:
+    """Was this function written in a file under `root`?
+
+    The `__module__` guard's question, asked the way `osg-agent-experience/58`
+    showed it should have been asked all along: *whose tree*, not *which
+    module*. A function's own bytecode names the file it was written in, which
+    is the reliable signal here — discovery loads modules without registering
+    them in `sys.modules` (that is how two packages' identically named files
+    stay apart), so `inspect.getfile` cannot be trusted.
+    """
+    origin = getattr(getattr(fn, "__code__", None), "co_filename", "")
+    if not origin:
+        return False
+    try:
+        Path(origin).resolve().relative_to(root)
+    except (ValueError, OSError):
+        return False
+    return True
+
+
+def _shared_root(workflow_dir: Path) -> Path:
+    """Where this package's siblings live — the tree a shared function may
+    come from.
+
+    The package's own parent rather than `workflows_root()`, for the reason
+    `unresolved_mounts` takes the same one: validating or running a package by
+    path must answer about *that* path, and a mount resolves its siblings the
+    same way.
+    """
+    return workflow_dir.resolve().parent
+
+
+def _note_a_shim_that_binds_nothing(
+    path: Path,
+    skipped: list[str],
+    own: int,
+    warnings: list[str] | None,
+) -> None:
+    """A file that defines no function of its own and binds imported ones.
+
+    Narrow on purpose (`osg-agent-experience/58`). Reporting every re-exported
+    name would fire on `from textwrap import dedent` in every helper file that
+    also defines real functions, and a finding that fires on ordinary code is
+    one nobody reads. A module that defines *nothing* is different: whoever
+    wrote it meant its whole content to be a package function, and it
+    contributes none.
+    """
+    if own or not skipped:
+        return
+    _note(
+        warnings,
+        f"functions/{path.name} defines no function of its own and binds "
+        f"{', '.join(sorted(skipped))} from outside the workflows root, so this "
+        "package contributes no function from that file. Move the implementation "
+        "into a package under the workflows root and re-export it from there, or "
+        "write a `def` that calls it.",
+    )
+
+
+def discover_functions(
+    workflow_dir: Path,
+    slug: str,
+    *,
+    warnings: list[str] | None = None,
+) -> list[FunctionCapability]:
     """Every top-level, non-underscore function in `<workflow_dir>/functions/*.py`.
 
     Convention-based, deliberately looser than `tools/`'s subclass predicate —
@@ -490,11 +554,17 @@ def discover_functions(workflow_dir: Path, slug: str) -> list[FunctionCapability
     workflow's `functions/` folder is already a stated-scope boundary, so an
     extra per-function marker would be a second signal saying the same thing
     the folder already says.
+
+    **A function written in another package is admitted**
+    (`osg-agent-experience/58`) — see `_written_inside`. This lists exactly
+    what `discover_function_callables` binds, so the two answer the same
+    question or a capability is listed and unbindable.
     """
     functions_dir = workflow_dir / "functions"
     if not functions_dir.is_dir():
         return []
 
+    root = _shared_root(workflow_dir)
     found: list[FunctionCapability] = []
 
     for path in sorted(functions_dir.glob("*.py")):
@@ -513,9 +583,17 @@ def discover_functions(workflow_dir: Path, slug: str) -> list[FunctionCapability
             )
             continue
 
+        own = 0
+        skipped: list[str] = []
         for name, obj in inspect.getmembers(module, inspect.isfunction):
-            if name.startswith("_") or obj.__module__ != qualified_module:
+            if name.startswith("_"):
                 continue
+            if obj.__module__ != qualified_module:
+                if not _written_inside(obj, root):
+                    skipped.append(name)
+                    continue
+            else:
+                own += 1
             found.append(
                 FunctionCapability(
                     id=f"{slug}/functions.{name}",
@@ -524,11 +602,17 @@ def discover_functions(workflow_dir: Path, slug: str) -> list[FunctionCapability
                     signature=str(inspect.signature(obj)),
                 )
             )
+        _note_a_shim_that_binds_nothing(path, skipped, own, warnings)
 
     return found
 
 
-def discover_function_callables(workflow_dir: Path, slug: str) -> dict[str, Any]:
+def discover_function_callables(
+    workflow_dir: Path,
+    slug: str,
+    *,
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
     """The runtime's function registry: `function.<name>` → the callable.
 
     The node-type convention mirrors tools' `node_type` declaration without
@@ -545,6 +629,7 @@ def discover_function_callables(workflow_dir: Path, slug: str) -> dict[str, Any]
     if not functions_dir.is_dir():
         return {}
 
+    root = _shared_root(workflow_dir)
     registry: dict[str, Any] = {}
     for path in sorted(functions_dir.glob("*.py")):
         if path.stem.startswith("_"):
@@ -561,10 +646,19 @@ def discover_function_callables(workflow_dir: Path, slug: str) -> dict[str, Any]
                 exc_info=True,
             )
             continue
+        own = 0
+        skipped: list[str] = []
         for name, obj in inspect.getmembers(module, inspect.isfunction):
-            if name.startswith("_") or obj.__module__ != qualified_module:
+            if name.startswith("_"):
                 continue
+            if obj.__module__ != qualified_module:
+                if not _written_inside(obj, root):
+                    skipped.append(name)
+                    continue
+            else:
+                own += 1
             registry[f"function.{name}"] = obj
+        _note_a_shim_that_binds_nothing(path, skipped, own, warnings)
     return registry
 
 

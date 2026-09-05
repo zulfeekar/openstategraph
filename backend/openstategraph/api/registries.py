@@ -309,20 +309,36 @@ def suggestible_tool_catalog(registry: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def build_function_registry(workflow_store: Any, slug: str | None) -> dict[str, Any]:
+def build_function_registry(
+    workflow_store: Any,
+    slug: str | None,
+    *,
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
     """`function.<name>` -> callable, from the workflow's own `functions/`.
 
     Mirrors `build_tool_registry`: slug-scoped, degrade-loud (the runtime
-    records an unresolved function; discovery failures log and return {}).
+    records an unresolved function; discovery failures log and return {}) —
+    including its `warnings` sink, which is how a `functions/` file that
+    contributes nothing reaches `validate` and the run instead of being a log
+    line nobody reads (`osg-agent-experience/58`).
     """
     from openstategraph.api.capability_discovery import discover_function_callables
 
     if not slug:
         return {}
     try:
-        return discover_function_callables(workflow_store.directory_for(slug), slug)
-    except Exception:
-        logger.warning("Function discovery failed for %r", slug, exc_info=True)
+        return discover_function_callables(
+            workflow_store.directory_for(slug), slug, warnings=warnings
+        )
+    except Exception as exc:
+        message = (
+            f"Function discovery failed for workflow {slug!r} "
+            f"({type(exc).__name__}: {exc}) — none of its own functions are available."
+        )
+        logger.warning(message, exc_info=True)
+        if warnings is not None:
+            warnings.append(message)
         return {}
 
 
@@ -378,14 +394,20 @@ class CapabilityRegistries:
         registry.update(self._tools)
         return registry
 
-    def functions(self, slug: str | None) -> dict[str, Any]:
+    def functions(
+        self,
+        slug: str | None,
+        *,
+        warnings: list[str] | None = None,
+    ) -> dict[str, Any]:
         """`function.<name>` -> callable, discovery then the caller's over it.
 
         A method rather than a bare `build_function_registry` call at each use
         site, mirroring `tools`, so the override is applied in one place and
-        the parent runtime and a routed child cannot disagree.
+        the parent runtime and a routed child cannot disagree — `warnings`
+        included, for the same reason it is on `tools`.
         """
-        registry = build_function_registry(self._store, slug)
+        registry = build_function_registry(self._store, slug, warnings=warnings)
         registry.update(self._functions)
         return registry
 
