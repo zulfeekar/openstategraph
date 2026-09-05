@@ -1,6 +1,6 @@
 # Helpers — long form
 
-Read this when step 9 of `SKILL.md` is the step you are on.
+Read this when step 11 of `SKILL.md` is the step you are on.
 
 This sheet tells you when to hand a card to a helper. It cannot spawn one: if
 your platform has no subagent facility, run the same loop inline and say so to

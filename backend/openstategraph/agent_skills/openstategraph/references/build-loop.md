@@ -1,6 +1,6 @@
 # The build loop — long form
 
-Read this when step 8 of `SKILL.md` is the step you are on. One card at a
+Read this when step 9 of `SKILL.md` is the step you are on. One card at a
 time, start to finish, before the next card is attended. A **tweak** (step 3)
 runs a short form of this page: the failing test, the fix, the commit, and
 `finished` — no attend, no `red`/`green`, no deliberate break.

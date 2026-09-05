@@ -739,3 +739,188 @@ class TestTheProposedName:
             "the step suggests a name and does not say the developer gets to refuse it"
         )
         assert "propos" in lowered, lowered
+
+
+#: English number words the sheet actually uses to count its own parts. Small
+#: and closed on purpose: a general word-to-integer parser would invite the
+#: gate to be pointed at prose it was never meant to measure.
+NUMBER_WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+}
+
+
+class TestEveryCountedClaimIsMeasured:
+    """`osg-agent-experience/22`. The sheet counts itself in prose, and until
+    this class nothing counted back.
+
+    `CLAUDE.md` says it twice — *a ceiling nobody measures is a preference*,
+    *a number in prose has no way to fail* — and the repository already
+    practises it on its own authored documents. The entry sheet was the
+    exception: it opened with a number of steps, sent a reader to a reference
+    page by that page's step number, and told a helper it had a fixed number
+    of gates, with nothing holding any of it. The tests above pin the sheet's
+    *tools*, *verbs* and *structure*; none of them counts.
+
+    It found three live defects on the first run — three reference pages whose
+    opening line named the wrong step of a sheet that had grown two steps
+    since they were written, which is the exact shape the gate was written
+    for: an agent told to *"read this when step 8 is the step you are on"*
+    reads it at triage and never at the build loop.
+
+    **Rejected, with its argument**, in the shape
+    `test_a_dispatch_table_does_not_hold_its_targets.py` uses:
+
+    - *The helper gates equal the unattended gates this repository uses for
+      its own tickets.* Two objections, either sufficient. The gate would have
+      to name a document that ships with nobody, which is the lexicon rule
+      pinned by `test_no_page_names_a_skill_from_somebody_elses_machine`
+      above — a shipped page and a test that enforces its wording are the same
+      dependency. And the property is not one of the software: those gates
+      govern tickets in this checkout, the sheet's govern a stranger's cards,
+      and agreement between the two is a coincidence worth nothing when it
+      holds and a false failure when it breaks. What is pinned instead is that
+      the sheet's claimed number of gates is the number the long form names.
+    - *Every count in every sentence.* "two or three questions", "two to four
+      words", "at most twenty lines" — those are advice to a reader with no
+      countable referent in the tree, so a gate over them would measure an
+      author's wording. Counted here: only a number whose subject is a thing
+      this repository can count.
+    """
+
+    NUMBERED_HEADING = re.compile(r"^##\s+(\d+)\.\s+(.*)$", re.MULTILINE)
+    CITED_PAGE = re.compile(r"`?references/([a-z-]+\.md)`?")
+    OPENING_STEP = re.compile(r"step (\d+) of `SKILL\.md`")
+
+    def _sheet(self) -> str:
+        return SHEET.read_text(encoding="utf-8")
+
+    def _steps(self) -> list[tuple[int, str, str]]:
+        """`(number, heading, body)` for every numbered step of the sheet."""
+        text = self._sheet()
+        found = list(self.NUMBERED_HEADING.finditer(text))
+        out = []
+        for position, match in enumerate(found):
+            end = found[position + 1].start() if position + 1 < len(found) else len(text)
+            out.append((int(match.group(1)), match.group(2).strip(), text[match.start() : end]))
+        return out
+
+    def test_the_sheet_states_the_number_of_steps_it_has(self) -> None:
+        """The first sentence an agent reads, and the one that decides whether
+        it thinks it has finished."""
+        steps = self._steps()
+        claimed = re.search(r"^([A-Za-z]+) steps, in order", self._sheet(), re.MULTILINE)
+        assert claimed, "the sheet no longer opens by saying how many steps it has"
+
+        word = claimed.group(1).lower()
+        assert word in NUMBER_WORDS, f"unreadable step count {claimed.group(1)!r}"
+        assert NUMBER_WORDS[word] == len(steps), (
+            f"the sheet says {word} steps and carries {len(steps)}"
+        )
+        assert [number for number, _, _ in steps] == list(range(1, len(steps) + 1)), (
+            f"the steps are not numbered 1..{len(steps)}: {[n for n, _, _ in steps]}"
+        )
+
+    @pytest.mark.parametrize("page", sorted(_pages()), ids=lambda p: p.name)
+    def test_every_reference_page_a_page_cites_exists(self, page: Path) -> None:
+        """The check that catches a pointer going stale. `engineering-rules.md`
+        is the one exemption and it is a real file too — the installer writes
+        it from the package's own rules, so it is absent from the source tree
+        by design (`test_the_sheet_and_its_references_were_found`)."""
+        cited = {match.group(1) for match in self.CITED_PAGE.finditer(page.read_text(encoding="utf-8"))}
+        generated = {Path(RULES_REFERENCE).name}
+
+        missing = sorted(name for name in cited - generated if not (REFERENCES / name).is_file())
+        assert not missing, f"{page.name} sends an agent to reference pages that do not exist: {missing}"
+
+    @pytest.mark.parametrize(
+        "page", sorted(p for p in _pages() if p != SHEET), ids=lambda p: p.name
+    )
+    def test_a_reference_page_names_the_step_that_sends_a_reader_to_it(self, page: Path) -> None:
+        """Each long-form page opens *"read this when step N of `SKILL.md` is
+        the step you are on"*. `N` is derived here rather than transcribed: the
+        step that cites the page is the step that sends the reader, and a page
+        that names a different one is read at the wrong moment or not at all."""
+        text = page.read_text(encoding="utf-8")
+        claimed = self.OPENING_STEP.search(text)
+        if claimed is None:
+            pytest.skip(f"{page.name} does not open by naming its step")
+
+        citing = [
+            number
+            for number, _, body in self._steps()
+            if f"references/{page.name}" in body
+        ]
+        assert citing, f"no step of the sheet sends a reader to {page.name}"
+        assert int(claimed.group(1)) in citing, (
+            f"{page.name} says it belongs to step {claimed.group(1)} and the sheet cites it "
+            f"from step(s) {citing}: an agent reads it at the wrong step, or never"
+        )
+
+    def test_the_helper_gates_are_the_number_the_long_form_names(self) -> None:
+        """The sheet says a helper passes *all four*; the long form is where
+        the four are written. A fifth gate added to one and not the other is a
+        gate nobody runs."""
+        step = next(body for _, heading, body in self._steps() if "helper" in heading.lower())
+        long_form = (REFERENCES / "subagents.md").read_text(encoding="utf-8")
+
+        claimed = re.search(r"\*\*all ([a-z]+)\*\*", step)
+        assert claimed, "the helper step no longer says how many gates a card must pass"
+        written = len(re.findall(r"^### \d+\. ", long_form, re.MULTILINE))
+
+        assert NUMBER_WORDS[claimed.group(1)] == written, (
+            f"the sheet demands all {claimed.group(1)} gates and the long form writes {written}"
+        )
+
+    def test_the_environments_are_the_number_the_sheet_names(self) -> None:
+        """`osg-agent-experience/26`. The sheet promises a reader that their
+        situation is one of a fixed set; a fourth case added to the long form
+        is a case the sheet's reader is never told exists."""
+        step = next(body for _, heading, body in self._steps() if "environment" in heading.lower())
+        long_form = (REFERENCES / "environments.md").read_text(encoding="utf-8")
+
+        claimed = re.search(r"^([A-Za-z]+) starting points", step, re.MULTILINE)
+        assert claimed, "the environments step no longer says how many starting points there are"
+        written = len(re.findall(r"^## Case \d+", long_form, re.MULTILINE))
+
+        assert NUMBER_WORDS[claimed.group(1).lower()] == written, (
+            f"the sheet names {claimed.group(1)} starting points and the long form writes {written}"
+        )
+
+    def test_the_short_loop_and_its_long_form_have_the_same_steps(self) -> None:
+        """The sheet's step 9 is an eight-item list and `build-loop.md` is the
+        same eight, expanded. The sheet then tells a tweak to run four of them
+        *by number*, so the two lists agreeing is not a tidiness point: a
+        renumbering makes the tweak run the wrong steps in silence."""
+        step = next(body for _, heading, body in self._steps() if "build loop" in heading.lower())
+        long_form = (REFERENCES / "build-loop.md").read_text(encoding="utf-8")
+
+        expanded = [int(n) for n in re.findall(r"^## (\d+)\. ", long_form, re.MULTILINE)]
+        assert expanded == list(range(1, len(expanded) + 1)), expanded
+
+        # Past its own heading, whose number is the step, not a loop item.
+        listed = step.split("\n", 1)[1]
+        numbered = {int(n) for n in re.findall(r"(?:^|\*\*|\s)(\d+)\.\s", listed, re.MULTILINE)}
+        spelled = re.search(r"runs ([\d,\sand]+?) of it", step)
+        assert spelled, "the loop no longer says which of its steps a tweak runs"
+        cited = {int(n) for n in re.findall(r"\d+", spelled.group(1))}
+
+        assert numbered == set(expanded), (
+            f"the sheet's loop is {sorted(numbered)} and the long form's is {expanded}"
+        )
+        assert cited <= set(expanded), (
+            f"a tweak is told to run steps {sorted(cited)} of a loop that has {expanded}"
+        )
