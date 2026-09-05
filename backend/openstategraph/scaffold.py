@@ -80,6 +80,32 @@ def _envelope(name: str, document: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def package_test_basename(slug: str) -> str:
+    """The file name a package's scaffolded shape test is written under —
+    `osg-agent-experience/63`.
+
+    Every package used to get `tests/test_shape.py`. pytest's default import
+    mode names a test module by its **basename**, so the second package in a
+    project stopped a whole-project run before it ran anything: *import file
+    mismatch … use a unique basename for your test file modules*. A project
+    that generated fifteen packages met fourteen of those at once, and none of
+    them says the word *duplicate*.
+
+    The slug goes in the name because the two other remedies pytest documents
+    do not travel with the package. `tests/__init__.py` lifts the module name
+    to `tests.test_shape`, which is still one name for two packages; the step
+    that would qualify it further needs `<slug>/__init__.py`, and a slug is
+    required to carry hyphens, which no identifier may. `importmode=importlib`
+    works and is a line in a configuration file this scaffold does not own —
+    a package whose suite collects only under somebody else's setting is a
+    package that does not carry its own tests.
+
+    Hyphens become underscores because the result is a module name, not a
+    path.
+    """
+    return f"test_{slug.replace('-', '_')}_shape.py"
+
+
 def new_package(
     root: Path | str,
     slug: str,
@@ -107,7 +133,7 @@ def new_package(
         (target / "AGENTS.md").write_text(chosen.agents_md(display, slug, outcome=outcome))
         test_shape = chosen.test_shape_py(display, slug, outcome=outcome)
         if test_shape is not None:
-            (target / "tests" / "test_shape.py").write_text(test_shape)
+            (target / "tests" / package_test_basename(slug)).write_text(test_shape)
     except Exception:
         # A package with directories and no document is not a package; it is
         # debris the next `new` run would then refuse to overwrite.

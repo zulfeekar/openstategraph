@@ -32,7 +32,7 @@ import pytest
 
 from openstategraph import templates
 from openstategraph.prebuilt_architect import ValidateWorkflowTool
-from openstategraph.scaffold import ScaffoldError, new_package
+from openstategraph.scaffold import ScaffoldError, new_package, package_test_basename
 from openstategraph.schema import normalize_document
 
 NAMES = list(templates.names())
@@ -111,7 +111,7 @@ class TestEveryTemplateCompiles:
     def test_nothing_is_left_unsubstituted(self, name: str, tmp_path: Path) -> None:
         package = scaffolded(tmp_path, name)
 
-        for file in ("workflow.json", "AGENTS.md", "tests/test_shape.py"):
+        for file in ("workflow.json", "AGENTS.md", f"tests/{package_test_basename('my-flow')}"):
             assert "{{" not in (package / file).read_text(), file
 
     def test_it_ships_a_shape_test(self, name: str, tmp_path: Path) -> None:
@@ -119,7 +119,9 @@ class TestEveryTemplateCompiles:
         same kind of test the whole gallery was migrated onto in ticket 19 —
         `assert_document_shape` over the document, not the template that
         produced it, which is why it names no template at all."""
-        text = (scaffolded(tmp_path, name) / "tests" / "test_shape.py").read_text()
+        text = (
+            scaffolded(tmp_path, name) / "tests" / package_test_basename("my-flow")
+        ).read_text()
 
         assert "assert_document_shape" in text
         assert "load_document" in text
@@ -365,7 +367,7 @@ class TestTheScaffoldedShapeTestRunsForReal:
         # unattended session and `main` (`workflow-gallery` 60).
         try:
             return subprocess.run(
-                [sys.executable, "-m", "pytest", "-q", "tests/test_shape.py"],
+                [sys.executable, "-m", "pytest", "-q", f"tests/{package_test_basename('my-flow')}"],
                 cwd=package,
                 env=env,
                 capture_output=True,

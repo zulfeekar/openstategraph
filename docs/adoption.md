@@ -211,12 +211,26 @@ is the authoritative list; this table is the reading order.
 | `team` | the work splits into parallel subtasks with a supervisor over them, and you intend to **mount** it inside another workflow. The `Workflow` card runs it — "team" names a package *shape*, not a node type | several — a fan-out per subtask |
 
 Every scaffolded package carries an `AGENTS.md` that names what was created and
-the next step for that particular shape, plus a `tests/test_shape.py` — the
-document loads, its node types are what got scaffolded, and it compiles clean
-under the strict default. It asserts the document, not the template, so it
-keeps working after you have edited the workflow past recognition; run it with
-plain `pytest` from inside the package. `--team` still works as a deprecated
-alias for `--template team`.
+the next step for that particular shape, plus a shape test at
+`tests/test_<slug>_shape.py` — the document loads, its node types are what got
+scaffolded, and it compiles clean under the strict default. It asserts the
+document, not the template, so it keeps working after you have edited the
+workflow past recognition; run it with plain `pytest` from inside the package,
+or over the whole `workflows/` directory at once. `--team` still works as a
+deprecated alias for `--template team`.
+
+**The slug is in that file name deliberately.** pytest names a test module by
+its *basename*, so two packages sharing one would stop a whole-project run
+before it ran anything — `import file mismatch … use a unique basename for
+your test file modules`, once per package, and a project generating fifteen
+of them meets fourteen at once (`osg-agent-experience/63`). The two other
+remedies pytest documents do not travel with the package: `tests/__init__.py`
+only lifts the shared name to `tests.test_shape`, and qualifying it further
+would need a `<slug>/__init__.py`, which a slug — hyphens and all — cannot
+be; `importmode=importlib` works but is a line in *your* pytest
+configuration, and a package whose suite collects only under a setting
+somebody else has to know about is a package that does not carry its own
+tests. Rename the file freely, as long as no two packages agree.
 
 ### Or start from a worked example
 
