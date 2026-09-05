@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from openstategraph._extras import document_extras, install_hint
+from openstategraph.agent_config import ServerDescriptor
 from openstategraph.skills import SkillDocument, has_frontmatter
 
 #: Canonical schema identifiers (spec §5.2, §7.2.1). They MUST be exact — a
@@ -373,6 +374,89 @@ def _document_of(workflow_dir: Path) -> dict[str, Any]:
         return {}
     document = envelope.get("document")
     return document if isinstance(document, dict) else envelope
+
+
+# ------------------------------------------------- export: the toolkit
+
+
+#: The bundle's own name — a directory somebody installs, not the key an
+#: `mcpServers` object is indexed by. The two read the same today and are
+#: deliberately separate values: `ServerDescriptor.name` is what an agent
+#: config calls our server, and renaming one has no business renaming the
+#: other.
+TOOLKIT_PLUGIN_NAME = "openstategraph"
+
+
+def export_toolkit(
+    *, server: ServerDescriptor | None = None, name: str = TOOLKIT_PLUGIN_NAME
+) -> PluginExport:
+    """This installation's skills and its MCP server, as one plugin directory.
+
+    `osg-agent-experience/28`. The other export function above renders a
+    *workflow package*, which has no server, so it emits no `mcp.json` and
+    says so in a note. This one is the opposite shape: no graph, no tools, no
+    knowledge — the wheel's three skills and the one stdio server `init`
+    already configures four agents to launch.
+
+    **The command line is not written here.** `agent_config.ServerDescriptor`
+    is the single fact the four `init` renderers read, and it is the single
+    fact this one reads too; a literal `"openstategraph"` and `["mcp"]` in
+    this module would be the fifth hand-maintained copy of exactly the block
+    `agent_config` was written to stop copying — and the line a copy drops is
+    always `OPENSTATEGRAPH_MCP_ALLOW_RUNS=0`.
+
+    The seam rule holds in the direction it was written: this module reads the
+    descriptor, `agent_config` never reads a plugin directory.
+    """
+    from openstategraph.bundled_skills import bundled_skill_files
+
+    if not _PLUGIN_NAME_RE.match(name):
+        raise InvalidPluginError(f"{name!r} cannot be an Agent Plugins name")
+    descriptor = server if server is not None else ServerDescriptor()
+
+    notes: list[str] = []
+    files: dict[str, str] = {}
+    for (_skill, relative), source in bundled_skill_files().items():
+        text = _read_text(source)
+        if text is None:
+            notes.append(f"{relative} skipped: not readable as UTF-8 text")
+            continue
+        files[f"skills/{relative}"] = text
+
+    files["mcp.json"] = (
+        json.dumps(
+            {
+                "$schema": MCP_SCHEMA_ID,
+                # `type` is stated rather than inferred: §7.2.2's entry is a
+                # closed union on it, and the one agent config that also names
+                # a transport (VS Code) proves nothing else about the other
+                # three — they infer stdio from `command`, a plugin client
+                # selects its rules from the literal.
+                "mcpServers": {descriptor.name: {"type": "stdio", **descriptor.entry()}},
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
+
+    notes.append(
+        "No workflow travels in this bundle: it is the toolkit, not a package. "
+        "`openstategraph export plugin <package>` is the other direction."
+    )
+    notes.append(
+        "The server entry launches the console script this wheel installs. A machine "
+        "that installs the plugin and not the wheel has a bundle that cannot start."
+    )
+    return PluginExport(
+        manifest={
+            "$schema": PLUGIN_SCHEMA_ID,
+            "name": name,
+            "description": descriptor.description[:_DESCRIPTION_MAX],
+        },
+        files=files,
+        notes=notes,
+    )
 
 
 def write_export(export: PluginExport, destination: Path) -> Path:

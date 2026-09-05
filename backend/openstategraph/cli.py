@@ -803,6 +803,35 @@ def cmd_export_plugin(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_export_toolkit(args: argparse.Namespace) -> int:
+    """`export_toolkit` + `write_export` — the same pair, about this install.
+
+    `osg-agent-experience/28`. The leaf beside it exports a *package*; this one
+    exports the toolkit — the wheel's skills and the MCP server `init` writes
+    into four agent config files — for a developer whose agent installs Agent
+    Plugins and reads none of those four.
+
+    No positional: there is nothing to name. The bundle's content is decided by
+    which version of this wheel is running, which is the point of it.
+    """
+    from openstategraph.plugin_interop import TOOLKIT_PLUGIN_NAME, export_toolkit, write_export
+
+    destination = (
+        Path(args.out).expanduser().resolve()
+        if args.out
+        else Path.cwd().resolve() / TOOLKIT_PLUGIN_NAME
+    )
+    if destination.exists() and any(destination.iterdir()):
+        return _error(f"{destination} already has files in it — name an empty --out")
+
+    export = export_toolkit()
+    written = write_export(export, destination)
+    for note in export.notes:
+        print(f"note: {note}", file=sys.stderr)
+    print(f"plugin exported: {written}")
+    return EXIT_OK
+
+
 def _write_root(args: argparse.Namespace) -> Path:
     """Where a command that *creates* a package puts it (install-experience T5).
 
@@ -2424,6 +2453,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--out", help="where to write the bundle (default: ./<the package's folder name>)"
     )
     export_plugin_cmd.set_defaults(handler=cmd_export_plugin)
+
+    export_toolkit_cmd = export_commands.add_parser(
+        "toolkit",
+        help="write this installation's skills and MCP server as one Agent Plugins v1 bundle",
+    )
+    export_toolkit_cmd.add_argument(
+        "--out", help="where to write the bundle (default: ./openstategraph)"
+    )
+    export_toolkit_cmd.set_defaults(handler=cmd_export_toolkit)
 
     kanban = subparsers.add_parser(
         "kanban",

@@ -482,6 +482,12 @@ resolves, what is refused, what is only reported — is `kanban_store
 .resolve_blocked_by` and `unresolved_blockers`, so this is the command saying
 what it did, again the only thing this module does.
 
+**1612 -> 1635** (`osg-agent-experience/28`). Twenty-three lines: `export
+toolkit`, the leaf beside `export plugin`, and its four `add_argument`/help
+lines. No new logic — it is `plugin_interop.export_toolkit` plus the same two
+argument refusals `cmd_export_plugin` already makes, and the bundle's server
+entry is rendered from `agent_config.ServerDescriptor` in that seam, not here.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -1170,7 +1176,7 @@ it.
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(660, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(581, NODE_RUNTIME),
-    "cli.py": Recorded(1612, CLI),
+    "cli.py": Recorded(1635, CLI),
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

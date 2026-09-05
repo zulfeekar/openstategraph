@@ -131,21 +131,31 @@ def sections(page: str) -> dict[str, str]:
 
     Keyed by the **first word** of the backticked heading, so `### `export
     plugin`` files under `export`, which is what argparse calls it.
+
+    A group with two leaves has two headings, and they **accumulate** rather
+    than overwrite (`osg-agent-experience/28`). Assigning made the last heading
+    the whole of the group's documentation, so adding `### `export toolkit``
+    failed the *`export plugin`* case — a page that had grown a section was
+    reported as a page that had lost one, which is the least useful direction
+    for a docs gate to be wrong in.
     """
     found: dict[str, str] = {}
     current: str | None = None
     body: list[str] = []
+
+    def flush() -> None:
+        if current is not None:
+            found[current] = "\n".join([found[current], *body] if current in found else body)
+
     for line in page.splitlines():
         heading = re.match(r"^#{2,3} `([a-z][a-z-]*)", line)
         if line.startswith("## ") or line.startswith("### "):
-            if current is not None:
-                found[current] = "\n".join(body)
+            flush()
             current, body = (heading.group(1) if heading else None), []
             continue
         if current is not None:
             body.append(line)
-    if current is not None:
-        found[current] = "\n".join(body)
+    flush()
     return found
 
 

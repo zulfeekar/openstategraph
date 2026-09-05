@@ -182,6 +182,20 @@ explicit destination. Nothing writes into `workflows/` implicitly.
   `write_export`, `import_plugin`, `write_import`, plus `PluginExport` /
   `ImportPlan` carrying `notes` (the lossy edges, surfaced at runtime rather
   than only in this document).
+- `export_toolkit` (2026-09-05, `osg-agent-experience/28`) — the *other*
+  subject. §5's table maps a **workflow package**, which has no server; this
+  one maps **the installation**: the wheel's bundled skills, and one `mcp.json`
+  entry for the stdio server `init` already configures four agents to launch.
+  Its `mcp.json` is rendered from `agent_config.ServerDescriptor`, the single
+  fact those four renderers read, so the bundle cannot become a fifth
+  hand-maintained copy of one command line — which is the whole risk of a
+  second road to the same place, and is asserted byte-for-byte in
+  `backend/tests/test_the_skills_and_the_server_ship_as_one_bundle.py`. The
+  seam rule holds in its stated direction: this module reads the descriptor,
+  and `agent_config` still never reads a plugin directory.
+  `openstategraph export toolkit` is the door; there is no hosted one, and
+  that is deliberate — a bundle describes the machine the wheel is installed
+  on, and an HTTP door hands it to a machine that is not that one.
 - `GET /api/workflows/{slug}/plugin-export` — returns manifest + layout +
   notes as JSON (a preview/report, no bytes written to disk by a GET).
 - `backend/tests/test_plugin_interop.py` — spec-conformance, containment,
@@ -198,8 +212,14 @@ against the endpoint and expensive to design now.
   list. Agents standardizing would be the first time their box could hold
   something shaped like a workflow node.
 - ~~We gain an MCP client.~~ **We have one** (`tool.mcp`, `prebuilt_mcp.py`).
-  The re-open trigger is therefore already pulled: what remains is mapping an
-  `mcp.json` entry onto a `tool.mcp` node so it becomes a real import target
-  instead of a reported gap, and export could publish our tools as MCP servers.
+  The re-open trigger is therefore already pulled, and **half of what it left
+  open is now built** (2026-09-05, `osg-agent-experience/28`): `export_toolkit`
+  emits a real `mcp.json`. Read the halves precisely, because they are
+  different claims — what ships is *this runtime's own server*, published from
+  `agent_config.ServerDescriptor`; what does **not** ship, and is still the
+  honest gap, is publishing a package's `tools/*.py` as MCP servers (they are
+  in-process Python callables, not servers, and §5's "never emitted" row still
+  governs a *package* export), and mapping an incoming `mcp.json` entry onto a
+  `tool.mcp` node so an import stops being a reported gap.
 - We publish plugins publicly — at which point `org.openstategraph` must be
   replaced by a namespace on a domain we actually control.

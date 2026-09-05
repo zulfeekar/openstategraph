@@ -740,6 +740,25 @@ directory, and **every lossy edge is printed as a `note:` on stderr** — what
 was carried non-portably, what was excluded, and what was deliberately not
 emitted rather than fabricated. Needs no extra and calls no model.
 
+### `export toolkit`
+
+```
+openstategraph export toolkit [--out DIR]
+```
+
+Writes **this installation** out as an [Agent Plugins](decisions/agent-plugins.md)
+v1 bundle: the three skills `init` installs, and an `mcp.json` naming the same
+stdio server `init` writes into the four agent config files. For a developer
+whose agent installs plugins and reads none of those four. Defaults to
+`./openstategraph`; a destination that already holds files exits **1**.
+
+There is no positional, because there is nothing to name — the bundle's content
+is whichever version of the wheel is running. The server entry is rendered from
+the one descriptor the four `init` files are rendered from, so it cannot drift
+from them; it launches the console script this wheel installs, which is the one
+`note:` worth reading before handing the directory to a machine that has not
+installed it.
+
 ## Knowledge
 
 ### `knowledge`
