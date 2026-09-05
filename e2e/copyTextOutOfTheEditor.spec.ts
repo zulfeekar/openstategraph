@@ -15,6 +15,17 @@ import { expect, test } from '@playwright/test';
  * shortcut — and because that is the defect exactly. The canvas claiming a key
  * the browser was about to handle is the whole bug; what the pasteboard then
  * holds is the operating system's business.
+ *
+ * `stable-beta-public` 28 — the shortcut here is `ControlOrMeta+c`, not
+ * `Meta+c`. `KeyboardFeature`'s binding table resolves `Mod` by platform
+ * (`IS_APPLE ? event.metaKey : event.ctrlKey`), so the app binds ⌘ on macOS
+ * and Ctrl everywhere else — that is correct, and matches the browser's own
+ * native copy shortcut per platform. A test that presses the literal `Meta+c`
+ * key exercises a binding the app never makes on Linux, where CI runs, so the
+ * "nothing selected" assertion failed there for pressing a key nobody bound
+ * rather than for a real regression. Playwright 1.42+ (this repo: 1.62.1)
+ * exposes `ControlOrMeta` precisely so a test can press "the platform's
+ * modifier" without hand-branching on `process.platform`.
  */
 test('a selection over prose keeps ⌘C, and the canvas keeps it back when nothing is selected', async ({
   page,
@@ -62,7 +73,7 @@ test('a selection over prose keeps ⌘C, and the canvas keeps it back when nothi
   });
   expect(selected?.length ?? 0).toBeGreaterThan(30);
 
-  for (const key of ['Meta+c', 'Meta+x', 'Meta+a']) {
+  for (const key of ['ControlOrMeta+c', 'ControlOrMeta+x', 'ControlOrMeta+a']) {
     expect(await press(key), `${key} while text is selected`).toBe(false);
   }
 
@@ -70,5 +81,5 @@ test('a selection over prose keeps ⌘C, and the canvas keeps it back when nothi
   // which is what clicking a node does, so this is the order a real user
   // reaches a node copy in.
   await page.evaluate(() => getSelection()?.removeAllRanges());
-  expect(await press('Meta+c'), 'Meta+c with nothing selected').toBe(true);
+  expect(await press('ControlOrMeta+c'), 'ControlOrMeta+c with nothing selected').toBe(true);
 });
