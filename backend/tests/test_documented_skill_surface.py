@@ -550,3 +550,91 @@ class TestTheRecommendedShapeStep:
 
         assert "facet" in additions, additions
         assert "guard" in additions or "gate" in additions, additions
+
+
+class TestTheClosingBrief:
+    """`osg-agent-experience/52`. The agent files the cards, builds them, moves
+    them to `finished` — and stops. The developer opens the board, the folder
+    and the transcript and pieces the session together themselves. The owner,
+    2026-09-05: *"once the coding agent completes, give a brief back to the
+    developer: what has been done and what the next steps are."*
+
+    Three claims are pinned, and the third is the one that keeps the brief
+    honest rather than merely present:
+
+    - the step exists, and it comes **after** the cards are filed and after
+      the build loop — a brief written before the work is a plan;
+    - it names the `graph` verb, so the picture the developer reads is the one
+      the compiler drew from the document that actually compiled;
+    - it says in so many words that a diagram of what **exists** is never
+      hand-drawn. Owner's decision 17, and this is the step where breaking it
+      is most tempting: the agent has just built the thing and knows the shape
+      by heart, so drawing it from memory costs nothing and gives the reader
+      two pictures with no way to tell which one lied.
+
+    Not pinned: the wording of the brief's own bullets, or its length in
+    lines. The sheet states twenty; a test counting the lines of a document
+    that does not exist yet would be measuring the sentence rather than the
+    behaviour.
+    """
+
+    HEADING = re.compile(r"^##\s+\d+\.\s+(.*)$", re.MULTILINE)
+
+    def _text(self) -> str:
+        return SHEET.read_text(encoding="utf-8")
+
+    def _headings(self) -> list[str]:
+        return [m.group(1).strip() for m in self.HEADING.finditer(self._text())]
+
+    def _index_of(self, needle: str) -> int:
+        for position, heading in enumerate(self._headings()):
+            if needle in heading.lower():
+                return position
+        raise AssertionError(f"no numbered section of the sheet mentions {needle!r}: {self._headings()}")
+
+    def _section(self) -> str:
+        """The brief's own step, from its heading to the next one."""
+        text = self._text()
+        headings = list(self.HEADING.finditer(text))
+        for position, match in enumerate(headings):
+            if "brief" in match.group(1).lower():
+                end = headings[position + 1].start() if position + 1 < len(headings) else len(text)
+                return text[match.start() : end]
+        raise AssertionError(f"the sheet has no closing-brief step: {self._headings()}")
+
+    def test_the_step_is_a_numbered_step_of_its_own(self) -> None:
+        assert self._index_of("brief") >= 0
+
+    def test_it_comes_after_the_cards_are_filed_and_after_the_build_loop(self) -> None:
+        """The whole defect, as one assertion: the session ended with a stage
+        change and nothing addressed to a person."""
+        assert self._index_of("filing") < self._index_of("brief"), (
+            "the brief is written before the cards exist, which makes it a plan"
+        )
+        assert self._index_of("build loop") < self._index_of("brief"), (
+            "the brief is written before anything was built, so it reports intentions"
+        )
+
+    def test_the_brief_names_the_graph_verb(self) -> None:
+        section = self._section()
+        assert "openstategraph graph" in section, (
+            "the closing step never names the verb that draws the compiled graph, so "
+            f"the agent has to invent a picture: {section}"
+        )
+
+    def test_a_diagram_of_what_exists_is_never_hand_drawn(self) -> None:
+        section = self._section().lower()
+        assert "hand-draw" in section or "hand draw" in section or "hand-drawn" in section, (
+            "the closing step never forbids hand-drawing the diagram, which is the "
+            "one instruction the agent is most likely to skip here"
+        )
+        assert "never" in section, (
+            "the closing step mentions hand-drawing without forbidding it"
+        )
+
+    def test_the_brief_is_left_behind_for_the_next_agent(self) -> None:
+        """A brief that lives only in a transcript is a brief the next session
+        cannot read — which is the same defect one turn later."""
+        assert "AGENTS.md" in self._section(), (
+            "the brief is spoken and never written down beside the workflow it describes"
+        )

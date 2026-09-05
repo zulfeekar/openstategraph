@@ -5,7 +5,7 @@ description: Build a workflow with OpenStateGraph — interview the developer, f
 
 # OpenStateGraph
 
-Thirteen steps, in order. Every later step assumes an earlier one's answer.
+Fourteen steps, in order. Every later step assumes an earlier one's answer.
 
 ## 1. Whose project is this?
 
@@ -14,8 +14,7 @@ Answer this from the ask itself. Two asks, two directories.
 - **A workflow in the developer's project** — the normal case. Work here, in
   the current directory, against the *installed* package.
 - **A change to OpenStateGraph itself** — a node family, the compiler, the
-  editor — belongs in an OpenStateGraph checkout. If the ask is that and this
-  directory is not such a checkout, say exactly that and stop.
+  editor — belongs in an OpenStateGraph checkout. If this is not one, say so and stop.
 
 Never edit files inside an installed package: the next upgrade deletes them
 and nothing warns anybody.
@@ -26,9 +25,8 @@ Both doors do the same things in the same order; check yours first.
 
 - **MCP.** If the `openstategraph` server is selected in your client, use its
   tools — `openstategraph init` wrote the config your client reads.
-- **The command line.** Otherwise every step has a verb: run
-  `openstategraph --help` once, and command not found means the tool is not
-  installed, which is the first thing to say.
+- **The command line.** Otherwise every step has a verb: run `openstategraph
+  --help` once; command not found means it is not installed — say that first.
 
 | Step | MCP tool | Command |
 | --- | --- | --- |
@@ -49,15 +47,14 @@ stale one, running a workflow — is in `references/build-loop.md`.
 
 Classify the ask from the words the developer already used, then say the size
 back in one line they can disagree with — *"This is a tweak: I will add
-`maxRetries` to that node, with a test that pins the value."* Follow that row
-and no other. **Size decides the ritual, never the rules.**
+`maxRetries` to that node, with a test that pins the value."* Follow that row and
+no other. **Size decides the ritual, never the rules.**
 
 Non-negotiable at every size, and this paragraph is the whole of it: read the
 ground rules once per session (step 4); never a node type the registry does not
-know, and when nothing registered fits, extend through the family's base,
-register it, and only then use it; the failing test is written before the code
-that passes it; the card is the one record, because a decision left in the
-conversation is lost at the end of it.
+know, and when nothing registered fits, extend through the family's base, register
+it, and only then use it; the failing test is written before the code that passes
+it; the card is the one record, because a decision left in the conversation is lost at the end of it.
 
 | Size | The ask | The ritual, whole |
 | --- | --- | --- |
@@ -66,48 +63,43 @@ conversation is lost at the end of it.
 | **feature or slice** | a workflow, several nodes, anything you cannot finish in one sitting | the whole path — the interview, a decision map, a card per decision, triage, then step 9 for each |
 
 A tweak's card is filed and finished in one sitting. A **decision map** — an
-index of the decisions a concept still owes, each in exactly one place —
-belongs to a feature or a slice only. Unsure between two rows? Take the smaller
-one and say so.
+index of the decisions a concept still owes, each in exactly one place — belongs
+to a feature or a slice only. Unsure between two rows? Take the smaller one.
 
 ## 4. Before anything: read the ground rules
 
 Two reads, every time, before the first node exists.
 
-- **The vocabulary** — every node type, every port id and type, what may
-  legally connect to what, and the prompt sections that are locked. **Then
-  quote the field list for every type you are about to write, in your reply,
-  before you write a line of `data`** — the keys and their kinds, copied from
-  `openstategraph nodes <type>` (or from `get_node_vocabulary`). A field
-  invented is a field the reader can see you did not quote.
+- **The vocabulary** — every node type, every port id and type, what may legally
+  connect to what, and the prompt sections that are locked. **Then quote the field
+  list for every type you are about to write, in your reply, before you write a
+  line of `data`** — the keys and their kinds, copied from `openstategraph nodes
+  <type>` (or `get_node_vocabulary`). A field invented is one you did not quote.
 - **The rules** — what may be *built* out of them: the interface → abstract →
-  base → concrete ladder, extension by registration, cardinality on the port,
-  one field schema, tests first, and the rule that settles most arguments:
-  **never invent a node type** — never a type the registry does not know. Not
-  a rule against new types, a rule about order: when nothing registered fits,
-  extend through the family's base, register it, and only then use it.
+  base → concrete ladder, extension by registration, cardinality on the port, one
+  field schema, tests first, and the rule that settles most arguments: **never
+  invent a node type** — never one the registry does not know. Not a rule against
+  new types, a rule about order: when nothing fits, extend the family's base,
+  register it, and only then use it.
 
 `references/engineering-rules.md` is that text, installed beside this sheet as
 a copy of the file the package ships, so the two doors cannot disagree.
 
 ## 5. The interview
 
-**How much of this you run was decided in step 3.** A tweak asks one
-confirming question and goes to step 9; a change asks two or three — which
-node or tool, what check settles it, and the one thing the ask left open; only
-a feature or a slice runs every dimension below.
+**How much of this you run was decided in step 3.** A tweak asks one confirming
+question and goes to step 9; a change asks two or three — which node or tool, what
+check settles it, and the one thing the ask left open. Only a feature runs it all.
 
-Open with *"tell me what the workflow should do, and I will ask you the
-questions a senior engineer would ask before building it"*. Then **one question
-per turn**, generated from *this* concept's mechanics — never a fixed list read
-at the developer; their last answer decides your next question. Recommend an
-answer each time so they can agree in one word; the decision is theirs and the
-facts are yours, so go and look before asking something the installation can
-answer.
+Open with *"tell me what the workflow should do, and I will ask you the questions
+a senior engineer would ask before building it"*. Then **one question per turn**,
+generated from *this* concept's mechanics — never a fixed list read at the
+developer; their last answer decides your next. Recommend an answer each time so
+they can agree in one word; the decision is theirs and the facts are yours, so go
+and look before asking what the installation can answer.
 
-Keep going until every dimension below has a concrete answer **or an
-explicitly accepted gap** — an accepted gap is a correct outcome, a silent one
-is not.
+Keep going until every dimension below has a concrete answer **or an explicitly
+accepted gap** — an accepted gap is a correct outcome, a silent one is not.
 
 | Dimension | The question it answers |
 | --- | --- |
@@ -120,15 +112,15 @@ is not.
 | Budget | the step budget, and the token budget for the whole build |
 | Done | what "done" looks like, as something you can check |
 
-If a dimension's honest answer is *this platform cannot do that yet*, say so
-and file a card for it. That is a correct outcome, not a failed interview.
-Long form: `references/interview.md`.
+If a dimension's honest answer is *this platform cannot do that yet*, say so and
+file a card for it. That is a correct outcome, not a failed interview. Long form:
+`references/interview.md`.
 
 ## 6. Recommend a shape — and ask what will multiply
 
-The interview says what this workflow *does*, not what shape it should *be* —
-and the shape decides whether the fifteenth of anything is a new folder or an
-edit to the other fourteen. So ask one more question before any card exists:
+The interview says what this workflow *does*, not what shape it should *be* — and
+the shape decides whether the fifteenth of anything is a new folder or an edit to
+the other fourteen. So ask one more question before any card exists:
 
 > **What in this concept is going to multiply?** Specialists, sources,
 > tenants, teams, checks, decisions — and how many of each, today.
@@ -145,16 +137,15 @@ table picks the spine, its second names the additions — then say, in one turn:
 Then ask them to confirm: one question, one turn. Only when they have answered
 do you size the cards and file them.
 
-A concept with one of everything is one agent, and recommending that is a
-correct outcome. The failure this step prevents is the other one: fifteen
-specialists built as fifteen of everything on one canvas — every node correct,
-the shape wrong, and nobody able to say so until it ran.
+A concept with one of everything is one agent, and recommending that is a correct
+outcome. The failure this step prevents is the other one: fifteen specialists
+built as fifteen of everything on one canvas — every node correct, the shape
+wrong, and nobody able to say so until it ran.
 
 ## 7. Filing — every decision and every task becomes a card
 
-The board is the memory: a decision recorded only in the conversation is lost
-at the end of it. File each with `kanban_file_card` / `openstategraph kanban
-file`, carrying:
+The board is the memory: a decision recorded only in the conversation is lost at
+the end of it. File each with `kanban_file_card` / `openstategraph kanban file`:
 
 - **kind** — `task` or `bug` for work an agent may take; the judgement kind for
   anything a human must weigh, which lands in Needs You.
@@ -172,17 +163,15 @@ file`, carrying:
 | mechanical — a rename, a field, a fixture, a doc row | a small model | low |
 | judgement — a design, a prompt, an ambiguous defect | a large model | high |
 
-These two are advice, not a contract; a platform that cannot choose its own
-model says so. Long form of the card text: the ticket sheet installed beside
-this one.
+These two are advice, not a contract; a platform that cannot choose its own model
+says so. Long form of the card text: the ticket sheet installed beside this one.
 
 ## 8. Triage — take the top card
 
 Call `kanban_triage` (or `openstategraph kanban triage`). It answers with the
-cards in order and, for each, `why_here` — the rule that put it there.
-Unblocked cards that block others come first, by how many they block; then
-unblocked by priority; blocked last. Take the top one, or name the rule you are
-overriding.
+cards in order and, for each, `why_here` — the rule that put it there. Unblocked
+cards that block others come first, by how many they block; then unblocked by
+priority; blocked last. Take the top one, or name the rule you are overriding.
 
 ## 9. The build loop, once per card
 
@@ -197,10 +186,10 @@ and 8 of it and files its card at 1's place (step 3).
 3. **`set_stage red`** with the test id and the reason it failed.
 4. **Make it pass.** The smallest change that does it.
 5. **Break the fix on purpose** and watch the test go red again: that is what
-   tells you the test holds the behaviour rather than merely passing beside
-   it. Restore. **Skip it only when the test already discriminates the value**
-   rather than its presence — `maxRetries == 2` is already red on a wrong
-   value, `"maxRetries" in data` is not — and say which of the two you did.
+   tells you the test holds the behaviour rather than merely passing beside it.
+   Restore. **Skip it only when the test already discriminates the value** rather
+   than its presence — `maxRetries == 2` is already red on a wrong value,
+   `"maxRetries" in data` is not — and say which of the two you did.
 6. **`set_stage green`.** 7. **Commit.** 8. **`set_stage finished`** with the
    commit.
 
@@ -208,43 +197,54 @@ Two standing rules inside the loop:
 - **`compile_workflow` or `validate_workflow` before any
   `save_workflow_draft`.** They answer deterministically, no model, no cost;
   never validate a document by running it.
-- **Never `run_workflow` unless runs are enabled and the developer has said
-  so.** Runs are off by default (`OPENSTATEGRAPH_MCP_ALLOW_RUNS=0`) because a
-  run costs money. If you do run one while working a card, tag it with the
-  session marker `card:<task_id>`, so the patrol can tell your work from the
-  developer's. Long form: `references/build-loop.md`.
+- **Never `run_workflow` unless runs are enabled and the developer has said so.**
+  Runs are off by default (`OPENSTATEGRAPH_MCP_ALLOW_RUNS=0`) because a run costs
+  money. If you do run one while working a card, tag it with the session marker
+  `card:<task_id>`, so the patrol can tell your work from the developer's. Long
+  form: `references/build-loop.md`.
 
-## 10. Helpers
+## 10. Hand the developer a brief
 
-Spawn a subagent for a card only when it passes **all four** gates:
-**reproducible without a person**; **the decision is already made** (the card
-carries it); **blast radius contained** (you can name the files it may touch);
-**cost** (no calls beyond the card's stated budget). Use the card's
-`agent_model` and `agent_effort`, and when it returns **verify its report
-against the tree** — a report is testimony, the filesystem is evidence. A
-platform with no subagents runs the loop inline and says so. Long form:
-`references/subagents.md`.
+When the last card reaches `finished`, write **at most twenty lines** — in your
+reply, and again to `workflows/<slug>/AGENTS.md` under a dated heading, so the
+next agent reads what the developer read: the **shape** you recommended in step 6
+and they confirmed; the **cards finished**, each with its commit; **what
+validates and what runs**, naming the verb and its answer; the **next two or
+three steps**, in the order `kanban triage` gave them; and **what only the
+developer can supply** — a key, a connection, a decision.
 
-## 11. Explaining
+Then the picture, and it is the compiler's: paste the output of
+`openstategraph graph workflows/<slug>` (or `compile_workflow`'s diagram).
+**Never hand-draw a diagram of a workflow that exists** — you have just built it
+and know the shape by heart, which is precisely why the drawing would come from
+memory, and two pictures leave the reader no way to tell which one lied.
+
+## 11. Helpers
+
+Spawn a subagent for a card only when it passes **all four** gates: **reproducible
+without a person**; **the decision is already made** (the card carries it);
+**blast radius contained** (you can name the files it may touch); **cost** (no
+calls beyond the card's stated budget). Use the card's `agent_model` and
+`agent_effort`, and when it returns **verify its report against the tree** — a
+report is testimony, the filesystem is evidence. A platform with no subagents runs
+the loop inline and says so. Long form: `references/subagents.md`.
+
+## 12. Explaining
 
 Explain in text by default, and pick the smallest view that makes the point. A
 Mermaid sketch is allowed for one thing only: a **proposed** flow that does not
-exist yet. What exists is drawn by the compiler (`compile_workflow`'s diagram,
-`openstategraph graph`); hand-drawing a workflow that compiles gives the reader
-two pictures and no way to tell which one lied.
+exist yet. What exists is drawn by the compiler — step 10.
 
-## 12. Environments
+## 13. Environments
 
-Three starting points — a fresh folder, an existing project, an existing
-LangGraph codebase — settled by one fact: the tool installs into its own
-environment and shares nothing with the project's pins, while the *library*
-shares them and requires `langgraph>=1.0,<2`. Read `references/environments.md`
-before promising anything about an install.
+Three starting points — a fresh folder, an existing project, an existing LangGraph
+codebase — settled by one fact: the tool installs into its own environment and
+shares nothing with the project's pins, while the *library* shares them and
+requires `langgraph>=1.0,<2`. Read `references/environments.md` first.
 
-## 13. Where this came from
+## 14. Where this came from
 
-Nothing here is copied and no name is given — a name is a file on somebody
-else's machine, and a stranger's agent sent looking for one finds nothing. The
-practices are credited instead: a one-question-per-turn interview, planning as
-an index of decisions, TDD, and *a report is testimony, the filesystem is
-evidence*.
+Nothing here is copied and no name is given — a name is a file on somebody else's
+machine, and a stranger's agent sent looking for one finds nothing. The practices
+are credited instead: a one-question-per-turn interview, planning as an index of
+decisions, TDD, and *a report is testimony, the filesystem is evidence*.
