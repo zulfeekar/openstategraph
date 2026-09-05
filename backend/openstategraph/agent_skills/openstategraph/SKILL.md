@@ -132,8 +132,8 @@ table picks the spine, its second names the additions — then say, in one turn:
 - **the two you rejected**, one reason each — a recommendation with no rejected
   alternatives is an assertion; the developer cannot weigh what they never saw.
 
-**Name it in the same turn.** Two to four words from the concept's own nouns (*CPL
-Analyst*, *Support Triage*), stated with the slug it would mint — `workflows/<slug>/`.
+**Name it in the same turn.** Two to four words from the concept's own nouns
+(*Support Triage*, *Release Notes*), with the slug it would mint — `workflows/<slug>/`.
 A slug is a directory, minted at the first save and frozen there, so this is the only
 moment it is free. Proposed, **never silently chosen**: one word from the developer
 changes it, and it is the document's `name` when you first save.
