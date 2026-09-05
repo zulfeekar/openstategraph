@@ -848,20 +848,39 @@ assert status == 422, f"a client naming the person got {status}, not 422: {body[
 assert "user_email" in body, body[:300]
 print("    /api/runs        422 — a client may not say who a run is for")
 
-# 2. A missing provider key is a diagnosis, not a 500 and not a silence. The
-#    customer surface gets a sentence it can act on; the developer audience
-#    gets the variable to set. Both halves, because a 200 whose developer
-#    channel is empty is the shape ticket 04 already had to fix once.
+# 2. A missing provider key is a diagnosis, not a 500 and not a silence — and
+#    since `osg-agent-experience/48` it is a diagnosis delivered *before* the
+#    first superstep. This assertion used to expect 200 with the variable named
+#    in the developer channel; that was the pre-48 contract, and the proof went
+#    red on `b6592f3` still holding it (`osg-agent-experience/57`).
+#
+#    48 is the one that is right, and the reason is worth keeping here because
+#    the proof is where an outsider reads it: a document that certainly reaches
+#    a model, on a deployment that certainly cannot serve one, has a knowable
+#    answer up front. Running half the graph first turns that into a node
+#    failure, and a reader who sees a node fail suspects the node.
+#
+#    503, not 422 and not 500: the request is well-formed and the *document* is
+#    fine — the identical document runs the moment a credential exists — so
+#    this is a fact about the deployment, the same class `/api/health` reports
+#    with 503 for a missing editor build.
 status, body = call("POST", "/api/runs", {
     "workflow": document, "question": "hi", "audience": "developer",
 })
-assert status == 200, f"a credential-less run returned {status}: {body[:300]}"
-answer = json.loads(body)
-warnings = " ".join((answer.get("developer") or {}).get("warnings") or [])
-assert "no credential" in warnings, f"no credential diagnosis: {warnings!r}"
-assert "OLLAMA_API_KEY" in warnings, f"the diagnosis names no variable: {warnings!r}"
-assert answer.get("answer"), "a failed run answered with nothing at all"
-print("    /api/runs        200 + the variable to set, not a 500 and not a blank")
+assert status == 503, f"a credential-less run returned {status}, not 503: {body[:300]}"
+detail = json.loads(body).get("detail") or ""
+assert "OLLAMA_API_KEY" in detail, f"the refusal names no variable: {detail!r}"
+print("    /api/runs        503 + the variable to set, before any node runs")
+
+# 2a. And the customer never gets a bare 500 for the same cause. A stack trace
+#     with no body is what this looked like before it was a refusal, and the
+#     audience must not change the class of the answer — only its wording.
+status, body = call("POST", "/api/runs", {
+    "workflow": document, "question": "hi", "audience": "customer",
+})
+assert status == 503, f"the customer surface returned {status}, not 503: {body[:300]}"
+assert (json.loads(body).get("detail") or "").strip(), "the customer got an empty body"
+print("    /api/runs        503 on the customer surface too, never a bare 500")
 
 # 2b. `ThreadSummary.failed` on the wire (`f46935e`, ticket 07). The run just
 #     above failed a node for want of a credential, and the checkpointer wrote
@@ -875,7 +894,34 @@ print("    /api/runs        200 + the variable to set, not a 500 and not a blank
 #     saver is in-memory and this is the same process that ran the run, which
 #     is exactly the reader a history list is. Durability across a restart is a
 #     different claim and not this one.
-thread_id = json.loads(body)["thread_id"]
+#
+#     The failure it reads back is no longer the credential one — after 48 that
+#     run is refused and leaves no thread at all, so there is nothing to read
+#     (`osg-agent-experience/57`). An unimplemented node type fails the same
+#     way and is strictly better here: it needs no credential *by
+#     construction*, which is this section's own rule, rather than by the
+#     accident of an unconfigured machine. The document is otherwise the
+#     minimal one and holds no model node, so 48's door lets it through.
+failing = {
+    "version": 3, "name": "Proof Failed", "settings": {},
+    "nodes": [
+        {"id": "in1", "type": "input.text", "data": {}, "position": {"x": 40, "y": 200}},
+        {"id": "x1", "type": "proof.no-such-node", "data": {}, "position": {"x": 200, "y": 200}},
+        {"id": "out1", "type": "output.formatted", "data": {}, "position": {"x": 380, "y": 200}},
+    ],
+    "edges": [
+        {"source": {"nodeId": "in1", "portId": "text"}, "target": {"nodeId": "x1", "portId": "input"}},
+        {"source": {"nodeId": "x1", "portId": "output"}, "target": {"nodeId": "out1", "portId": "result"}},
+    ],
+}
+status, body = call("POST", "/api/runs", {
+    "workflow": failing, "question": "hi", "audience": "developer",
+})
+assert status == 200, f"a model-free run was refused: {status} {body[:300]}"
+answer = json.loads(body)
+warnings = " ".join((answer.get("developer") or {}).get("warnings") or [])
+assert "proof.no-such-node" in warnings, f"the failure names no node type: {warnings!r}"
+thread_id = answer["thread_id"]
 status, body = call("GET", "/api/threads")
 assert status == 200, f"/api/threads returned {status}: {body[:300]}"
 threads = {row["thread_id"]: row for row in json.loads(body)["threads"]}
