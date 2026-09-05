@@ -351,3 +351,30 @@ strict_equality = true
 # environment and fail in the other. A gate that depends on an optional
 # dependency is worse than the ignore it polices.
 warn_unused_ignores = false
+
+# numpy is not ours, is never imported by our code, and is only here at all
+# because `[all]` includes `[databricks]`, whose connector depends on pandas
+# (`osg-agent-experience/56`). It still reaches mypy's graph, because a *hard*
+# dependency imports it: `mcp_server` -> `langchain_core.messages.utils` ->
+# `langchain_text_splitters.base` -> `tiktoken.core` -> `numpy.typing`. And
+# mypy parses every file in its graph under `python_version` above, so
+# numpy 2.4's PEP 695 `type` statements are a syntax error on 3.11 grammar —
+# one that failed the whole backend job on 3.13 (CI 33973261110) for a file
+# nothing here reads.
+#
+# Priced and rejected: raising `python_version` (it must stay at
+# `requires-python`, or the gate stops seeing what a 3.11 adopter sees), and
+# dropping `[databricks]` from `[all]` (that removes the extra from the
+# clean-install proof's coverage and changes the wheel footprint to hide a
+# type-checker problem). Skipping a package we do not import costs nothing
+# real: no annotation in `openstategraph/` mentions numpy, and
+# `tests/test_the_type_gate_survives_a_newer_stub.py` fails the day one does.
+#
+# `follow_imports_for_stubs` is not decoration. `follow_imports = "skip"` on
+# its own does NOT stop mypy parsing a `.pyi`, so without the second line this
+# whole section is a no-op that looks like a fix — measured against a
+# synthesised stub, and pinned next door.
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
