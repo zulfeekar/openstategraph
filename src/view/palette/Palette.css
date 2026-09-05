@@ -2,6 +2,24 @@
   flex: none;
 }
 
+/* ---------- Search ---------- *
+ * The panel's top strip, not a box inside one (`stable-beta-public/25`).
+ * The four-sided border is reduced to the bottom hairline — the panel's own
+ * top edge is the boundary above, and the left and right edges are the
+ * panel's — and the inset moves inside the box, where it pads text rather
+ * than floating the control. `flex: 1 1 auto` is the half that makes it
+ * edge to edge: `.input` is a flex *container*, and as a flex *item* in the
+ * header it shrank to its content and left 39px of surface on the right.
+ * `:focus-within` in `Field.css` sets `border-color`, which with no other
+ * side declared paints exactly this hairline. */
+.palette__search {
+  flex: 1 1 auto;
+  border: 0;
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
+  border-radius: 0;
+  padding: var(--space-2) var(--space-3);
+}
+
 .palette-item {
   display: flex;
   align-items: flex-start;

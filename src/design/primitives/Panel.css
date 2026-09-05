@@ -39,6 +39,20 @@
   padding: var(--space-2) var(--space-3);
 }
 
+/* A header that IS its control (`stable-beta-public/25`).
+   The palette's header holds one search field and nothing else, so the
+   inset above put a box inside a strip: 8px of surface above the input and
+   12px to its left, and two horizontal lines forty-five pixels apart —
+   the input's own top edge and the panel's — saying the same thing. The
+   flush modifier drops the inset and the 40px minimum, and the control
+   takes the header's own size; the field moves the inset inside its box,
+   where it pads text. Opt in per header, never per panel: the inspector's
+   headers carry a title and actions and still want the strip. */
+.panel__header--flush {
+  padding: 0;
+  min-height: 0;
+}
+
 .panel__header--bordered {
   border-bottom: var(--border-width-hairline) solid var(--color-border);
 }

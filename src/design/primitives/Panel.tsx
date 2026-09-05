@@ -23,15 +23,24 @@ export function PanelHeader({
   title,
   actions,
   bordered,
+  flush,
   children,
 }: {
   title?: ReactNode;
   actions?: ReactNode;
   bordered?: boolean;
+  /** Drop the header's inset so a single control can be the header itself. */
+  flush?: boolean;
   children?: ReactNode;
 }) {
   return (
-    <header className={clsx('panel__header', bordered && 'panel__header--bordered')}>
+    <header
+      className={clsx(
+        'panel__header',
+        bordered && 'panel__header--bordered',
+        flush && 'panel__header--flush',
+      )}
+    >
       {title ? <h2 className="panel__title">{title}</h2> : null}
       {children}
       {actions}

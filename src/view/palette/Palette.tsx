@@ -297,8 +297,9 @@ export function Palette({ onNotify }: PaletteProps) {
 
   return (
     <Panel side="left" className="palette" style={{ width: 'var(--layout-palette-width)' }}>
-      <PanelHeader>
+      <PanelHeader flush>
         <TextInput
+          className="palette__search"
           value={query}
           placeholder="Search nodes…"
           aria-label="Search nodes"
