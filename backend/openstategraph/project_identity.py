@@ -34,10 +34,8 @@ and the caller has to be able to print the right one.
 
 from __future__ import annotations
 
-import re
 import uuid
 from dataclasses import dataclass
-from datetime import date
 from enum import Enum
 from pathlib import Path
 
@@ -94,67 +92,43 @@ class ProjectIdentityError(Exception):
     """A carrier this module will not append to. Named, never guessed at."""
 
 
-#: The two suffixes where a column-0 key at end of file is a valid document
-#: key. A `pyproject.toml`'s `[tool.openstategraph]` table and a `.json`
-#: config are both files where appending a YAML line is corruption, not a
-#: field — so they are refused by name (kanban-patrol/23).
-_APPENDABLE_SUFFIXES = (".yaml", ".yml")
-
-_PROJECT_ID_KEY = re.compile(r"^project_id\s*:", re.MULTILINE)
-
-
 def adopt_project_id(*, config_path: Path, state_dir: Path) -> ProjectIdentityResult:
-    """Give an **existing** config an identity, by appending one line.
+    """Give an **existing** config an identity, by adding one key to it.
 
-    kanban-patrol/23. `ensure_project_identity` mints for a config being
-    created; `init_project` is its one call site, and it only ever writes a
-    file it is authoring. A project made before this field existed has a real
-    `openstategraph.yaml` — comments, an order somebody chose, possibly
-    hand-edited — and until this function nothing could add the field to it,
-    so the kanban board was permanently unusable there.
+    kanban-patrol/23, extended to every carrier by
+    `team-board-and-gap-reports/01`. `ensure_project_identity` mints for a
+    config being created; `init_project` is its one call site, and it only ever
+    writes a file it is authoring. A project made before this field existed has
+    a real config — comments, an order somebody chose, possibly hand-edited —
+    and until this function nothing could add the field to it, so the kanban
+    board was permanently unusable there.
 
-    The owner's decision, dated 2026-09-04 in that ticket: **append and
-    print**, rather than print-and-refuse. Refusing leaves the board dead
-    until a hand edit, and the hand edit is exactly what this writes.
+    The owner's decision, dated 2026-09-04 in that ticket: **write and print**,
+    rather than print-and-refuse. Refusing leaves the board dead until a hand
+    edit, and the hand edit is exactly what this writes.
 
-    Why appending is the safe edit and a rewrite is not: a column-0 key at
-    the end of the file is a valid top-level mapping key **whatever precedes
-    it**, so nothing above is parsed, re-serialised, re-ordered or
-    de-commented. A round-trip through a YAML loader would have to rewrite
-    the whole document to add one key, and would silently discard every
-    comment in a file this code does not own.
+    *Which* edit is safe depends on the format, so the edit itself belongs to
+    the carrier — `project_id_carriers` holds one reader and one writer per
+    carrier, and a carrier whose own shape makes an exact insertion impossible
+    refuses by name there rather than rewriting a file it cannot preserve.
+    Until 01 this function knew only the YAML append and refused the other two
+    of the four carriers `config_file` documents, which left
+    `project_id_for_board()` raising forever on a `pyproject.toml` project.
 
     Never touches a file that already carries the key — the same only-add,
-    never-replace rule `ensure_project_identity` states — and returns that
-    file's own verdict instead, so a caller sees `VERIFIED`/`UNVERIFIED`
-    exactly as it would from a read.
+    never-replace rule `ensure_project_identity` states, checked here so every
+    carrier inherits it — and returns that file's own verdict instead, so a
+    caller sees `VERIFIED`/`UNVERIFIED` exactly as it would from a read.
     """
-    if config_path.suffix.lower() not in _APPENDABLE_SUFFIXES:
-        raise ProjectIdentityError(
-            f"cannot add project_id to {config_path.name} — only "
-            f"{' or '.join(_APPENDABLE_SUFFIXES)} takes an appended key. "
-            "Add `project_id: <uuid>` to it by hand."
-        )
+    from openstategraph.project_id_carriers import read_project_id, write_project_id
 
-    text = config_path.read_text()
-    existing = _PROJECT_ID_KEY.search(text)
+    existing = read_project_id(config_path)
     if existing is not None:
-        value = text[existing.end() :].splitlines()[0].strip().strip("\"'")
-        return ensure_project_identity(project_id=value or None, state_dir=state_dir)
+        return ensure_project_identity(project_id=existing, state_dir=state_dir)
 
     minted = ensure_project_identity(project_id=None, state_dir=state_dir)
-    # Exactly one newline between the last line somebody wrote and ours,
-    # whether or not their file ended with one: a config that already ends in
-    # a newline must not grow a blank line every time this runs.
-    if text and not text.endswith("\n"):
-        text += "\n"
-    today = date.today().isoformat()
-    text += (
-        f"# project_id — added by openstategraph on {today} for the patrol board "
-        "(kanban-patrol/03); a copy of this file into another project must not keep it\n"
-        f"project_id: {minted.project_id}\n"
-    )
-    config_path.write_text(text)
+    assert minted.project_id is not None
+    write_project_id(config_path, minted.project_id)
     return minted
 
 

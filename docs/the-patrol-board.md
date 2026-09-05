@@ -236,8 +236,11 @@ rather than left to whoever reads the card.
 ## 8. One board per project, and the project has an identity
 
 Cards live in a SQLite file called `kanban.sqlite`, keyed by
-`project_id + thread_id`. `project_id` is a line in your committed
-`openstategraph.yaml`, minted the first time the project is initialised.
+`project_id + thread_id`. `project_id` is a key in your committed config —
+`openstategraph.yaml`, `.yml`, `.json` or the `[tool.openstategraph]` table of
+your `pyproject.toml`, all four of which can hold it
+(`team-board-and-gap-reports/01`) — minted the first time the project is
+initialised, or written into an older config the first time a board needs it.
 
 **Where that file is depends on how OpenStateGraph is installed, so ask
 rather than assume:**

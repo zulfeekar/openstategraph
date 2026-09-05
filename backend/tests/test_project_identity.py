@@ -172,21 +172,210 @@ class TestAdoptingAConfigThatPredatesTheField:
         assert result.state is not ProjectIdentityState.MINTED
         assert result.project_id == "already-there"
 
-    def test_a_carrier_this_cannot_safely_append_to_is_refused_not_guessed(self, tmp_path: Path) -> None:
-        """A `pyproject.toml [tool.openstategraph]` or a JSON config is not a
-        file where a column-0 YAML key at EOF means anything. Refused by name
-        rather than corrupted."""
+    def test_a_carrier_with_no_writer_at_all_is_refused_by_name(self, tmp_path: Path) -> None:
+        """The refusal survives `team-board-and-gap-reports/01`; what changed
+        is which files reach it. A `.ini` is not a carrier this project reads
+        or writes, so it is named rather than guessed at."""
+        import pytest
+
+        from openstategraph.project_identity import ProjectIdentityError, adopt_project_id
+
+        config = tmp_path / "openstategraph.ini"
+        config.write_text("[openstategraph]\nversion = 1\n")
+
+        with pytest.raises(ProjectIdentityError) as exc:
+            adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
+
+        assert "openstategraph.ini" in str(exc.value)
+
+
+class TestEveryCarrierCanBeGivenAnId:
+    """team-board-and-gap-reports/01. `project_id` is committed in
+    `openstategraph.yaml`, and until this ticket the only writer was a YAML
+    append — so a project whose carrier is `openstategraph.json` or
+    `pyproject.toml [tool.openstategraph]` could never be given an id at all
+    and `project_id_for_board()` raised on it, permanently.
+
+    One writer per carrier, each of which knows how to add the key without
+    destroying the rest of the file: append for YAML, an exact insertion for
+    JSON and for the `[tool.openstategraph]` table. Where a file's own shape
+    makes that impossible the writer refuses **by name** — it never rewrites a
+    file it cannot preserve.
+    """
+
+    JSON_CONFIG = (
+        "{\n"
+        '  "version": 1,\n'
+        '  "workflows_dir": "workflows",\n'
+        '  "providers": [\n'
+        '    {"id": "ollama", "enabled": true}\n'
+        "  ]\n"
+        "}\n"
+    )
+
+    PYPROJECT = (
+        "[project]\n"
+        'name = "their-project"\n'
+        'version = "0.1.0"\n'
+        "\n"
+        "# our openstategraph settings, hand ordered\n"
+        "[tool.openstategraph]\n"
+        "version = 1\n"
+        'workflows_dir = "workflows"\n'
+        "\n"
+        "[tool.ruff]\n"
+        "line-length = 100\n"
+    )
+
+    def test_a_yml_config_is_appended_to_like_its_yaml_sibling(self, tmp_path: Path) -> None:
+        from openstategraph.project_identity import adopt_project_id
+
+        config = tmp_path / "openstategraph.yml"
+        config.write_text("version: 1\n")
+
+        result = adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
+
+        assert result.state is ProjectIdentityState.MINTED
+        assert config.read_text().endswith(f"project_id: {result.project_id}\n")
+
+    def test_a_json_config_keeps_every_other_key_and_its_own_layout(self, tmp_path: Path) -> None:
+        import json
+
+        from openstategraph.project_identity import adopt_project_id
+
+        config = tmp_path / "openstategraph.json"
+        config.write_text(self.JSON_CONFIG)
+        before = json.loads(self.JSON_CONFIG)
+
+        result = adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
+
+        text = config.read_text()
+        assert result.state is ProjectIdentityState.MINTED
+        after = json.loads(text)
+        assert after.pop("project_id") == result.project_id
+        assert after == before
+        # An exact insertion, not a re-serialisation: every line somebody else
+        # wrote is still in the file, byte for byte.
+        for line in self.JSON_CONFIG.splitlines()[1:]:
+            assert line in text.splitlines()
+        assert (tmp_path / ".openstategraph" / "project_identity").read_text().strip() == result.project_id
+
+    def test_a_pyproject_table_gains_one_key_and_nothing_else_moves(self, tmp_path: Path) -> None:
+        import tomllib
+
+        from openstategraph.project_identity import adopt_project_id
+
+        config = tmp_path / "pyproject.toml"
+        config.write_text(self.PYPROJECT)
+        before = tomllib.loads(self.PYPROJECT)
+
+        result = adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
+
+        text = config.read_text()
+        assert result.state is ProjectIdentityState.MINTED
+        after = tomllib.loads(text)
+        assert after["tool"]["openstategraph"].pop("project_id") == result.project_id
+        assert after == before
+        for line in self.PYPROJECT.splitlines():
+            assert line in text.splitlines()
+        # The key lands inside the table it belongs to, never in a later one.
+        lines = text.splitlines()
+        assert lines.index(f'project_id = "{result.project_id}"') < lines.index("[tool.ruff]")
+        assert "# project_id — added by openstategraph on " in text
+
+    def test_an_id_already_in_a_json_config_survives_untouched(self, tmp_path: Path) -> None:
+        from openstategraph.project_identity import adopt_project_id
+
+        config = tmp_path / "openstategraph.json"
+        original = '{"version": 1, "project_id": "already-there"}\n'
+        config.write_text(original)
+
+        result = adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
+
+        assert config.read_text() == original
+        assert result.project_id == "already-there"
+        assert result.state is not ProjectIdentityState.MINTED
+
+    def test_an_id_already_in_a_pyproject_table_survives_untouched(self, tmp_path: Path) -> None:
+        from openstategraph.project_identity import adopt_project_id
+
+        config = tmp_path / "pyproject.toml"
+        original = '[tool.openstategraph]\nversion = 1\nproject_id = "already-there"\n'
+        config.write_text(original)
+
+        result = adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
+
+        assert config.read_text() == original
+        assert result.project_id == "already-there"
+        assert result.state is not ProjectIdentityState.MINTED
+
+    def test_a_pyproject_whose_table_is_an_inline_value_is_refused_by_name(
+        self, tmp_path: Path
+    ) -> None:
+        """`openstategraph = {version = 1}` under `[tool]` is the same table
+        to a reader and a different file to a writer: there is no header line
+        to insert under, and an inserted line would land in `[tool]` itself.
+        Refused, with the file named and the edit spelled out."""
         import pytest
 
         from openstategraph.project_identity import ProjectIdentityError, adopt_project_id
 
         config = tmp_path / "pyproject.toml"
-        config.write_text("[tool.openstategraph]\nversion = 1\n")
+        original = "[tool]\nopenstategraph = {version = 1}\n"
+        config.write_text(original)
 
         with pytest.raises(ProjectIdentityError) as exc:
             adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
 
         assert "pyproject.toml" in str(exc.value)
+        assert "project_id" in str(exc.value)
+        assert config.read_text() == original
+
+    def test_a_json_config_that_is_not_an_object_is_refused_by_name(self, tmp_path: Path) -> None:
+        import pytest
+
+        from openstategraph.project_identity import ProjectIdentityError, adopt_project_id
+
+        config = tmp_path / "openstategraph.json"
+        original = "[1, 2, 3]\n"
+        config.write_text(original)
+
+        with pytest.raises(ProjectIdentityError) as exc:
+            adopt_project_id(config_path=config, state_dir=tmp_path / ".openstategraph")
+
+        assert "openstategraph.json" in str(exc.value)
+        assert config.read_text() == original
+
+    def test_the_board_resolves_an_id_on_all_four_carriers(self, tmp_path: Path, monkeypatch) -> None:
+        """The symptom this ticket was filed for: `project_id_for_board()`
+        raised `ProjectIdentityError` on two of the four carriers, so the
+        board could not file a card there at all."""
+        from openstategraph.config_file import reset_active_config
+        from openstategraph.project_identity import project_id_for_board
+
+        carriers = {
+            "openstategraph.yaml": "version: 1\n",
+            "openstategraph.yml": "version: 1\n",
+            "openstategraph.json": '{"version": 1}\n',
+            "pyproject.toml": "[tool.openstategraph]\nversion = 1\n",
+        }
+        seen = set()
+        for name, body in carriers.items():
+            home = tmp_path / name.replace(".", "-")
+            home.mkdir()
+            config = home / name
+            config.write_text(body)
+            monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(config))
+            reset_active_config()
+
+            project_id = project_id_for_board()
+
+            assert project_id
+            seen.add(project_id)
+            # Read back through the config loader, not just the writer.
+            reset_active_config()
+            assert project_id_for_board() == project_id
+        assert len(seen) == 4
 
 
 class TestTheDoorsThatAdopt:
@@ -215,9 +404,12 @@ class TestTheDoorsThatAdopt:
         assert adopted_project_id_note() is None
         assert config.read_text() == written
 
-    def test_a_carrier_it_cannot_append_to_never_stops_the_server(
+    def test_a_pyproject_project_is_adopted_now_rather_than_skipped(
         self, tmp_path: Path, monkeypatch
     ) -> None:
+        """Until `team-board-and-gap-reports/01` this door asserted the
+        opposite — a `pyproject.toml` project got no note, because it could get
+        no id. It gets both now, through the same one function."""
         from openstategraph.cli import adopted_project_id_note
         from openstategraph.config_file import reset_active_config
 
@@ -226,4 +418,25 @@ class TestTheDoorsThatAdopt:
         monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(config))
         reset_active_config()
 
+        note = adopted_project_id_note()
+
+        assert note is not None
+        assert note.split()[1] in config.read_text()
+
+    def test_a_carrier_it_cannot_write_to_never_stops_the_server(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A refusal is still a refusal — it is just rarer. An inline
+        `[tool]` table has no header to insert under, and the door swallows
+        that rather than refusing to start."""
+        from openstategraph.cli import adopted_project_id_note
+        from openstategraph.config_file import reset_active_config
+
+        config = tmp_path / "pyproject.toml"
+        original = "[tool]\nopenstategraph = {version = 1}\n"
+        config.write_text(original)
+        monkeypatch.setenv("OPENSTATEGRAPH_CONFIG", str(config))
+        reset_active_config()
+
         assert adopted_project_id_note() is None
+        assert config.read_text() == original
