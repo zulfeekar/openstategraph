@@ -352,9 +352,13 @@ have to write a Python file to find out whether a package works.
 | `--json` | the whole `RunResult` rather than the answer text |
 
 **A run that needs a model and has none exits 1 before anything executes**, with
-the same sentence `openstategraph providers` prints as its header. A package
-whose graph reaches no model — functions, tools, outputs — is not refused and
-runs with no provider configured at all.
+the same sentence `openstategraph providers` prints as its header, followed by
+the next step: run [`providers`](#providers) to see which variable each
+integration reads and whether this machine has it, then
+[`env-example`](#env-example) to print the block to paste into `.env`. The exit
+code is unchanged by that — a next step is a destination, not a status. A
+package whose graph reaches no model — functions, tools, outputs — is not
+refused and runs with no provider configured at all.
 
 **A paused run exits 1.** A run stopped at a `human.approval` gate has not
 failed and has not answered — it is waiting — so it prints the pause, the

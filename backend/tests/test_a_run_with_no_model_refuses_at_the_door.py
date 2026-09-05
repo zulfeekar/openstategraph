@@ -83,7 +83,20 @@ def no_credential(monkeypatch: pytest.MonkeyPatch):
 
 
 def _sentence() -> str:
-    return provider_catalogue().elected_default().reason
+    """The refusal, composed where the doors compose it.
+
+    Derived rather than restated. `docs-onramp/09` appended a next step —
+    `openstategraph providers`, then `env-example` into `.env` — to this
+    refusal, and a literal here would have made this file the fourth wording
+    the module above exists to prevent. What these tests assert is unchanged:
+    all three doors say the *same* thing, whatever it currently is.
+    """
+    from openstategraph.model_readiness import unmet_model_requirement
+
+    composed = unmet_model_requirement(no_model=True)
+    assert composed is not None
+    assert provider_catalogue().elected_default().reason in composed
+    return composed
 
 
 class TestTheHttpDoor:

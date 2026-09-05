@@ -47,7 +47,27 @@ not restated here.
 
 from __future__ import annotations
 
-__all__ = ["unmet_model_requirement", "would_reach_no_model"]
+__all__ = ["NEXT_STEP", "unmet_model_requirement", "would_reach_no_model"]
+
+#: What to do about it — appended to the readiness sentence, never folded into
+#: it. `docs-onramp/09`: the refusal was true, short, and the point at which
+#: install-to-first-answer stopped, because the two commands that finish the job
+#: were not named at the moment of failure. `docs/declaring-a-next-step.md` is
+#: this repository's own rule for the shape, written for somebody else's MCP
+#: server: *a destination, not an apology*, naming the command and the argument.
+#:
+#: Appended **here** rather than in `elected_default().reason`, which is what
+#: `openstategraph providers` prints as its header and what `GET /api/providers`
+#: publishes as `run_readiness`. A next step in the reason itself would tell a
+#: reader of the providers table to run the providers table, and the editor's
+#: banner already has a *Show me where* button instead of a sentence. So the
+#: reason stays a reason and the *refusal* carries the step — one composition,
+#: three doors.
+NEXT_STEP = (
+    "Next step: run `openstategraph providers` to see which variable each "
+    "provider reads and whether this machine has it, then "
+    "`openstategraph env-example` to print the block to paste into `.env`."
+)
 
 
 def would_reach_no_model(*, drives_model: bool, model: object) -> bool:
@@ -97,4 +117,4 @@ def unmet_model_requirement(*, no_model: bool) -> str | None:
         return None
     from openstategraph.providers import provider_catalogue
 
-    return provider_catalogue().elected_default().reason
+    return f"{provider_catalogue().elected_default().reason}. {NEXT_STEP}"
