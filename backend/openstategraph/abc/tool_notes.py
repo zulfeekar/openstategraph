@@ -96,6 +96,7 @@ the rendered sentence rather than merely stored.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from typing import Literal, Union
 
@@ -568,6 +569,33 @@ def _unverified_answer_for_reader(note: UnverifiedAnswer) -> str:
     )
 
 
+_QUANTITY_ALREADY_SAYS_FIGURES = re.compile(r"\bfigures?\b", re.I)
+
+
+def _quantity_subject(quantity: str) -> str:
+    """*What comes before "come from …"* — the half `osg-agent-experience/67`
+    is about.
+
+    The node's own field help asks the developer for the quantity "in your
+    words", offering a bare noun (*"supply"*, *"outages"*) as the example but
+    never requiring one. A developer who instead writes a noun phrase that
+    already says "the figures" — or writes exactly that phrase — feeds the
+    fixed template `The figures for {quantity}` a second copy of the word it
+    already supplies, and the result stutters in front of a customer.
+
+    Read tolerantly rather than taught a stricter field: any quantity that
+    already talks about "figure(s)" is a subject on its own, so the sentence
+    falls back to the fixed subject instead of nesting one figures-phrase
+    inside another. A quantity that says nothing about figures — the
+    documented common case — is still woven into the template exactly as
+    before.
+    """
+    text = quantity.strip()
+    if not text or _QUANTITY_ALREADY_SAYS_FIGURES.search(text):
+        return "These figures"
+    return f"The figures for {text}"
+
+
 def _source_choice_for_reader(note: SourceChoice) -> str:
     """The sentence `launch-readiness/150` was filed to make unforgettable.
 
@@ -576,25 +604,33 @@ def _source_choice_for_reader(note: SourceChoice) -> str:
     and tells the reader that asking for another is a thing they may do. The
     last clause is not decoration: without it a reader learns there was a
     choice and not that it is theirs.
+
+    Neither branch says "this data" where a source name belongs
+    (`osg-agent-experience/67`): the source that answered is already named a
+    few words earlier, so the clause that explains *how* it was settled
+    names the mechanism ("declared here as the default") rather than
+    gesturing at an unnamed "this data", and the alternatives are introduced
+    as belonging to the same catalogue rather than to a vague "this data".
     """
-    quantity = note.quantity.strip()
-    subject = f"The figures for {quantity}" if quantity else "These figures"
+    subject = _quantity_subject(note.quantity)
     head = f"{subject} come from {note.chosen} — {_HOW_CHOSEN_FOR_READER[note.how_chosen]}."
     if not note.alternatives:
         return head + (
-            " It is the only system of record this data declares for them, so there was "
-            "nothing to choose between."
+            " It is the only system of record declared for them, so there was nothing to "
+            "choose between."
         )
     return head + (
-        " This data also holds " + _english_list(note.alternatives) + " for the same figures, "
-        "and they can disagree. Ask for one by name and it will be re-run against that source."
+        " The same catalogue also holds "
+        + _english_list(note.alternatives)
+        + " for the same figures, and they can disagree. Ask for one by name and it will be "
+        "re-run against that source."
     )
 
 
 _HOW_CHOSEN_FOR_READER: dict[str, str] = {
     "named_in_question": "the source you named",
-    "declared_default": "the source this data declares as its default",
-    "only_source": "the only source this data declares",
+    "declared_default": "declared here as the default",
+    "only_source": "the only source declared here",
 }
 
 

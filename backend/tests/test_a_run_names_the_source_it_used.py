@@ -145,6 +145,75 @@ class TestTheAlternativesAreThePayload:
         assert notes_for_reader([substitution]) != notes_for_reader([choice])
 
 
+class TestTheDisclosureReadsAsOneSentence:
+    """`osg-agent-experience/67`: a live run printed a stutter and a
+    placeholder-shaped clause in front of a customer. Three subject shapes a
+    developer's free-text `quantity` field can actually take, and the
+    template must read as one plain sentence for every one of them.
+    """
+
+    def test_a_bare_noun_quantity_reads_plainly(self) -> None:
+        note = SourceChoice(
+            quantity="Russian gasoline supply",
+            chosen="BAV",
+            alternatives=("JODI",),
+            how_chosen="declared_default",
+        )
+        rendered = notes_for_reader([note])
+        assert rendered.startswith("The figures for Russian gasoline supply come from BAV")
+        assert "figures for the figures" not in rendered.lower()
+
+    def test_a_quantity_that_already_says_the_figures_does_not_stutter(self) -> None:
+        """The field help offers 'supply' and 'outages' as examples but asks
+        for the quantity 'in your words' — a developer may reasonably answer
+        with a full noun phrase like this one."""
+        note = SourceChoice(
+            quantity="the figures this question asks for",
+            chosen="BAV",
+            alternatives=("JODI", "Plant tracker"),
+            how_chosen="declared_default",
+        )
+        rendered = notes_for_reader([note])
+        assert "figures for the figures" not in rendered.lower()
+        assert rendered.startswith("These figures come from BAV")
+
+    def test_a_bare_figures_quantity_does_not_stutter(self) -> None:
+        note = SourceChoice(
+            quantity="the figures",
+            chosen="BAV",
+            alternatives=(),
+            how_chosen="only_source",
+        )
+        rendered = notes_for_reader([note])
+        assert "figures for the figures" not in rendered.lower()
+        assert rendered.startswith("These figures come from BAV")
+
+    def test_an_empty_quantity_still_reads_plainly(self) -> None:
+        note = SourceChoice(
+            quantity="",
+            chosen="BAV",
+            alternatives=(),
+            how_chosen="only_source",
+        )
+        rendered = notes_for_reader([note])
+        assert rendered.startswith("These figures come from BAV")
+
+    def test_no_sentence_says_this_data_where_a_source_name_belongs(self) -> None:
+        """`this data` reads like an unfilled placeholder in a node whose one
+        job is naming where a figure came from. Neither branch may say it."""
+        with_alternatives = SourceChoice(
+            quantity="supply",
+            chosen="BAV",
+            alternatives=("JODI",),
+            how_chosen="declared_default",
+        )
+        only_source = SourceChoice(
+            quantity="supply", chosen="BAV", alternatives=(), how_chosen="only_source"
+        )
+        assert "this data" not in notes_for_reader([with_alternatives]).lower()
+        assert "this data" not in notes_for_reader([only_source]).lower()
+
+
 class TestTheUserMayNameTheSource:
     """*"Ask for another and I will re-run."* — deterministically, before the model."""
 
