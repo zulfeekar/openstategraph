@@ -448,6 +448,92 @@ def idea_task_id(project_id: str, title: str) -> str:
     return f"{project_id}:{IDEA_PREFIX}{slug}"
 
 
+def _known_card_ids(conn: sqlite3.Connection) -> frozenset[str]:
+    return frozenset(row[0] for row in conn.execute("SELECT task_id FROM cards"))
+
+
+def resolve_blocked_by(
+    project_id: str, blocked_by: Sequence[str], known_ids: frozenset[str]
+) -> tuple[str, ...]:
+    """The ids a `blocked_by` actually names — `osg-agent-experience/30`.
+
+    A card id is `<project_id>:<name>`, and until this function existed the
+    field took whatever string it was handed. The bare slug — the readable
+    half of an id the CLI had just printed, and the obvious guess — was
+    accepted and produced a blocker no card would ever carry: the blocked card
+    stayed blocked after every real card on the board had finished, and the
+    blocker lost the `unblocks N` credit that lifts it to the top.
+
+    `CLAUDE.md`'s own rule, both halves. **Tolerant in reading**: a bare name
+    is resolved against the board, as itself first (a patrol card's id is
+    `<project>:<thread_id>` with no `idea-` in it) and then as an idea slug.
+    **Strict in trusting**: a name that resolves to nothing is still
+    normalised to the id that card *will* be given, never left as the half-id
+    that can never match.
+
+    Two shapes are refused outright, because no working of this board can ever
+    clear them: a blank entry, and an id belonging to another project.
+
+    An id this board does not carry *yet* is **not** refused. Filing a card
+    that blocks on one not yet filed is a real ordering, and a board that
+    cannot be filed into is worse than one that explains itself — so it is
+    reported instead, by `unresolved_blockers` at both doors and by `triage`'s
+    `why_here` on the board.
+    """
+    resolved: list[str] = []
+    for raw in blocked_by:
+        name = str(raw).strip()
+        if not name:
+            raise ValueError(
+                "a blocked-by entry is blank — name the card it waits on, or "
+                "pass no blocked-by at all"
+            )
+        if ":" in name:
+            owner = name.split(":", 1)[0]
+            if owner != project_id:
+                raise ValueError(
+                    f"blocked-by {name!r} names project {owner!r}; this board "
+                    f"is project {project_id!r}, and a card in another project "
+                    "is one this board can never see finish"
+                )
+            candidate = name
+        else:
+            qualified = f"{project_id}:{name}"
+            as_idea = f"{project_id}:{IDEA_PREFIX}{name}"
+            if qualified in known_ids:
+                candidate = qualified
+            elif as_idea in known_ids:
+                candidate = as_idea
+            elif name.startswith(IDEA_PREFIX):
+                candidate = qualified
+            else:
+                candidate = as_idea
+        if candidate not in resolved:
+            resolved.append(candidate)
+    return tuple(resolved)
+
+
+def unresolved_blockers(db_path: Path, card: Card) -> tuple[str, ...]:
+    """The ids on `card.blocked_by` that no card on the store carries —
+    `osg-agent-experience/30`'s "reported at filing time, naming it".
+
+    Read-only, and computed here rather than at either door so the CLI and the
+    MCP tool report the same thing. A missing store is an empty board, so
+    every blocker on the card is unresolved.
+    """
+    if not card.blocked_by:
+        return ()
+    if not db_path.is_file():
+        return tuple(card.blocked_by)
+    ensure_schema(db_path)
+    conn = sqlite3.connect(db_path)
+    try:
+        known = _known_card_ids(conn)
+    finally:
+        conn.close()
+    return tuple(b for b in card.blocked_by if b not in known)
+
+
 def file_idea_card(
     db_path: Path,
     *,
@@ -513,6 +599,9 @@ def file_idea_card(
     ensure_schema(db_path)
     conn = sqlite3.connect(db_path)
     try:
+        resolved_blockers = resolve_blocked_by(
+            project_id, blocked_by, _known_card_ids(conn)
+        )
         existing = conn.execute(
             "SELECT title FROM cards WHERE task_id = ?", (task_id,)
         ).fetchone()
@@ -534,7 +623,7 @@ def file_idea_card(
                 Stage.UNATTENDED.value, actor.strip() or None,
                 priority, area, priority_reason.strip(),
                 _now(), story.strip(), done_when.strip(),
-                json.dumps([str(item) for item in blocked_by]),
+                json.dumps(list(resolved_blockers)),
                 agent_model.strip(), agent_effort.strip(),
             ),
         )
@@ -1060,10 +1149,14 @@ def triage(cards: Sequence[Card]) -> tuple[TriageRow, ...]:
        waiting on, even though neither can be picked up yet.
 
     `why_here` names exactly one of those three rules: "unblocks N cards",
-    "<priority> priority, nothing waits on it", or "blocked by <ids>".
+    "<priority> priority, nothing waits on it", or "blocked by <ids>" — and
+    the third distinguishes a blocker that is a card on this board from one no
+    card carries (`osg-agent-experience/30`), because only the first of those
+    two clears by working the board.
     """
     live = [card for card in cards if card.stage is not Stage.FINISHED]
     finished_ids = {card.task_id for card in cards if card.stage is Stage.FINISHED}
+    known_ids = {card.task_id for card in cards}
 
     def outstanding_blockers(card: Card) -> tuple[str, ...]:
         return tuple(b for b in card.blocked_by if b not in finished_ids)
@@ -1094,7 +1187,18 @@ def triage(cards: Sequence[Card]) -> tuple[TriageRow, ...]:
         blockers = outstanding_blockers(card)
         n_dependents = len(dependents[card.task_id])
         if blockers:
-            why_here = f"blocked by {', '.join(blockers)}"
+            # `osg-agent-experience/30`: "blocked by X" read the same whether
+            # X is a card somebody will finish or an id nothing carries, and
+            # only one of those two clears by working the board.
+            carried = tuple(b for b in blockers if b in known_ids)
+            phantom = tuple(b for b in blockers if b not in known_ids)
+            phrase = f"an id no card carries: {', '.join(phantom)}"
+            if carried and phantom:
+                why_here = f"blocked by {', '.join(carried)}, and by {phrase}"
+            elif phantom:
+                why_here = f"blocked by {phrase}"
+            else:
+                why_here = f"blocked by {', '.join(carried)}"
         elif n_dependents:
             plural = "card" if n_dependents == 1 else "cards"
             why_here = f"unblocks {n_dependents} {plural}"

@@ -156,3 +156,38 @@ class TestEveryRowHasARank:
 
     def test_empty_board_is_empty_output(self) -> None:
         assert triage([]) == ()
+
+
+class TestABlockerNoCardCarriesIsSaidDifferently:
+    """`osg-agent-experience/30`'s second done-when. "blocked by <id>" reads
+    the same whether the blocker is a card somebody will finish or an id that
+    will never exist, and only one of those two clears by working the board."""
+
+    def test_a_blocker_that_is_a_card_reads_as_before(self) -> None:
+        rows = triage([_card("blocker"), _card("blocked", blocked_by=("blocker",))])
+        blocked = next(r for r in rows if r.card.task_id == "blocked")
+        assert blocked.why_here == "blocked by blocker"
+
+    def test_a_blocker_no_card_carries_says_so(self) -> None:
+        rows = triage([_card("blocked", blocked_by=("ghost",))])
+        assert rows[0].why_here == "blocked by an id no card carries: ghost"
+
+    def test_a_mix_names_both_halves(self) -> None:
+        rows = triage(
+            [_card("blocker"), _card("blocked", blocked_by=("blocker", "ghost"))]
+        )
+        blocked = next(r for r in rows if r.card.task_id == "blocked")
+        assert blocked.why_here == (
+            "blocked by blocker, and by an id no card carries: ghost"
+        )
+
+    def test_a_finished_card_still_counts_as_a_card_that_carries_the_id(self) -> None:
+        """A finished blocker is spent, so it does not block at all — it must
+        never be reported as an id nothing carries."""
+        rows = triage(
+            [
+                _card("done", stage=Stage.FINISHED),
+                _card("blocked", blocked_by=("done",)),
+            ]
+        )
+        assert "no card carries" not in rows[0].why_here

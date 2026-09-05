@@ -1562,6 +1562,7 @@ def cmd_kanban_file(args: argparse.Namespace) -> int:
         file_idea_card,
         kanban_store_path,
         read_card,
+        unresolved_blockers,
     )
     from openstategraph.project_identity import ProjectIdentityError, project_id_for_board
 
@@ -1589,7 +1590,13 @@ def cmd_kanban_file(args: argparse.Namespace) -> int:
         )
     except ValueError as exc:
         return _error(str(exc))
-    print(f"filed {task_id} in {column_for(read_card(db, task_id))}")
+    card = read_card(db, task_id)
+    print(f"filed {task_id} in {column_for(card)}")
+    # `osg-agent-experience/30`: a blocker nothing carries is a real ordering
+    # (the card it waits on may not be filed yet) and also the exact shape of
+    # a typo, so it is said out loud rather than refused or swallowed.
+    for blocker in unresolved_blockers(db, card):
+        print(f"  waiting on {blocker} — no card carries that id yet")
     return EXIT_OK
 
 

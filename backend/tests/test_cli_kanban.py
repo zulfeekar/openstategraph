@@ -485,6 +485,26 @@ class TestFile:
         assert card.blocked_by == ("proj-a:idea-other", "proj-a:idea-second")
         assert (card.agent_model, card.agent_effort) == ("opus", "high")
 
+    def test_a_blocker_no_card_carries_is_named_on_stdout(
+        self, _identified: Path, capsys
+    ) -> None:
+        """`osg-agent-experience/30`. The refusal and the report are the
+        store's, so this door and the MCP one cannot disagree; what is tested
+        here is that the door does not swallow either."""
+        cli.main(self._argv(_identified, "--blocked-by", "not-filed-yet"))
+
+        out = capsys.readouterr().out
+        assert "proj-a:idea-not-filed-yet" in out
+        assert "no card carries" in out
+
+    def test_a_blocker_naming_another_project_exits_nonzero(
+        self, _identified: Path, capsys
+    ) -> None:
+        code = cli.main(self._argv(_identified, "--blocked-by", "proj-b:idea-elsewhere"))
+
+        assert code != 0
+        assert "proj-b:idea-elsewhere" in capsys.readouterr().err
+
     def test_a_grilling_lands_in_needs_you(self, _identified: Path, capsys) -> None:
         cli.main(self._argv(_identified, "--kind", "grilling"))
 

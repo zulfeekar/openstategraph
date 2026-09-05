@@ -169,7 +169,8 @@ The gist of what comes back:
     //
     //  Then every bindable tool, which is the half that matters when you are
     //  composing a document an agent can actually run: tool.chinook-execute-sql,
-    //  tool.chinook-get-all-tables, tool.chinook-get-schema, tool.email-send,
+    //  tool.chinook-get-all-tables, tool.chinook-get-schema,
+    //  tool.databricks-query, tool.email-send,
     //  tool.knowledge-lookup, tool.mcp, tool.mssql-query,
     //  tool.platform-describe-workflow,
     //  tool.platform-grep, tool.platform-list-workflows, tool.platform-ls,
@@ -611,8 +612,12 @@ conversation would take on the card.
 derived way everything else here does: a `grilling` ends in a judgement and
 lands in `needsYou`, the other two land in `detected`. The id is derived from
 the title — `<project_id>:idea-<slug>` — so two ideas given one title are a
-refusal rather than a silent merge, and `blocked_by` can name a card by an id
-its filer can predict. `agent_model` and `agent_effort` are advisory: what to
+refusal rather than a silent merge. `blocked_by` names a card by an id its
+filer can predict: a bare name is resolved against the board and normalised to
+the full `<project_id>:<name>` id, one naming another project is refused, and
+one no card carries yet comes back in `unresolved_blockers` on the success
+payload rather than being refused, because blocking on a card not yet filed is
+a real ordering (`osg-agent-experience/30`). `agent_model` and `agent_effort` are advisory: what to
 give a subagent that takes the card, left empty when nobody had an opinion
 rather than filled with a default that would read as somebody's decision.
 Every refusal is the same `{"ok": false, "reason": "..."}` shape, including a
@@ -639,8 +644,10 @@ dependents first; then an unblocked card nobody is waiting on, by priority
 dependents-then-priority sub-order. Each row is `kanban_list_cards`' own row
 plus `rank` (1-indexed) and `why_here`, the one sentence naming which rule
 placed it there — `"unblocks 2 cards"`, `"high priority, nothing waits on
-it"`, or `"blocked by <ids>"` — so an agent never has to reconstruct the
-order from the raw fields to trust it.
+it"`, `"blocked by <ids>"`, or `"blocked by an id no card carries: <ids>"` —
+so an agent never has to reconstruct the order from the raw fields to trust
+it. The last two are separated because only the first of them clears by
+working the board (`osg-agent-experience/30`).
 
 ### Which name lands on the card
 

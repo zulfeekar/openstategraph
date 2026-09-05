@@ -29,6 +29,7 @@ from openstategraph.kanban_store import (
     file_idea_card,
     idea_task_id,
     read_card,
+    unresolved_blockers,
 )
 
 
@@ -184,3 +185,104 @@ class TestTheWire:
         assert row["blocked_by"] == ["proj-a:idea-other"]
         assert row["agent_model"] == "sonnet"
         assert row["agent_effort"] == "medium"
+
+
+class TestABlockedByIsResolvedAgainstTheBoard:
+    """`osg-agent-experience/30`. `blocked_by` took any string verbatim, so
+    the obvious guess — the bare slug, the readable half of an id the CLI had
+    just printed — produced a blocker that no card would ever carry. The card
+    was blocked forever and the real blocker lost its `unblocks N` credit.
+
+    The seam is here rather than at either door, so the CLI and the MCP tool
+    cannot disagree about what a blocker is.
+    """
+
+    def test_a_bare_slug_resolves_to_the_card_that_carries_it(self, db: Path) -> None:
+        blocker = _file(db)  # proj-a:idea-draft-the-agenda
+
+        task_id = _file(db, title="Grade it", blocked_by=["draft-the-agenda"])
+
+        assert read_card(db, task_id).blocked_by == (blocker,)
+
+    def test_a_bare_idea_prefixed_name_resolves_too(self, db: Path) -> None:
+        blocker = _file(db)
+
+        task_id = _file(db, title="Grade it", blocked_by=[f"{IDEA_PREFIX}draft-the-agenda"])
+
+        assert read_card(db, task_id).blocked_by == (blocker,)
+
+    def test_a_bare_name_of_a_patrol_card_resolves_without_the_idea_prefix(
+        self, db: Path
+    ) -> None:
+        """A patrol card's id is `<project>:<thread_id>` with no `idea-` in
+        it, so the bare form cannot simply have `idea-` glued on."""
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "INSERT INTO cards (task_id, board, kind, category, title, stage, "
+            "filed_at) VALUES (?, 'workflows', 'bug', 'finding', "
+            "'A patrol finding', 'unattended', '2026-09-05T00:00:00+00:00')",
+            ("proj-a:thread-77",),
+        )
+        conn.commit()
+        conn.close()
+
+        task_id = _file(db, title="Grade it", blocked_by=["thread-77"])
+
+        assert read_card(db, task_id).blocked_by == ("proj-a:thread-77",)
+
+    def test_a_full_id_no_card_carries_is_kept_so_ordering_still_works(
+        self, db: Path
+    ) -> None:
+        """Filing a card that blocks on one not yet filed is a real ordering,
+        so this is reported rather than refused."""
+        task_id = _file(db, title="Grade it", blocked_by=["proj-a:idea-not-yet-filed"])
+
+        assert read_card(db, task_id).blocked_by == ("proj-a:idea-not-yet-filed",)
+
+    def test_an_unresolved_bare_slug_is_normalised_so_the_later_card_matches(
+        self, db: Path
+    ) -> None:
+        """The forward reference has to become the id the blocker *will* be
+        given, or it strands the card exactly as before."""
+        task_id = _file(db, title="Grade it", blocked_by=["write-the-rubric"])
+
+        assert read_card(db, task_id).blocked_by == (f"proj-a:{IDEA_PREFIX}write-the-rubric",)
+
+    def test_a_blocker_naming_another_project_is_refused_with_both_names(
+        self, db: Path
+    ) -> None:
+        with pytest.raises(ValueError) as exc:
+            _file(db, title="Grade it", blocked_by=["proj-b:idea-elsewhere"])
+
+        assert "proj-b:idea-elsewhere" in str(exc.value)
+        assert "proj-a" in str(exc.value)
+
+    def test_a_blank_blocker_is_refused_rather_than_stored(self, db: Path) -> None:
+        with pytest.raises(ValueError, match="blank"):
+            _file(db, title="Grade it", blocked_by=["   "])
+
+    def test_the_same_blocker_twice_is_one_blocker(self, db: Path) -> None:
+        blocker = _file(db)
+
+        task_id = _file(
+            db, title="Grade it", blocked_by=["draft-the-agenda", blocker]
+        )
+
+        assert read_card(db, task_id).blocked_by == (blocker,)
+
+
+class TestFilingReportsABlockerNoCardCarries:
+    """The ticket's first done-when: reported at filing time, naming it."""
+
+    def test_an_unresolved_blocker_is_named(self, db: Path) -> None:
+        _file(db, title="Grade it", blocked_by=["write-the-rubric"])
+
+        assert unresolved_blockers(db, read_card(db, "proj-a:idea-grade-it")) == (
+            f"proj-a:{IDEA_PREFIX}write-the-rubric",
+        )
+
+    def test_a_blocker_a_card_carries_is_not_reported(self, db: Path) -> None:
+        _file(db)
+        _file(db, title="Grade it", blocked_by=["draft-the-agenda"])
+
+        assert unresolved_blockers(db, read_card(db, "proj-a:idea-grade-it")) == ()

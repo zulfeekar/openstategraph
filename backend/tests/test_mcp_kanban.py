@@ -863,6 +863,28 @@ class TestFileCard:
         assert card.blocked_by == ("proj-a:idea-other",)
         assert (card.agent_model, card.agent_effort) == ("opus", "high")
 
+    def test_a_blocker_no_card_carries_comes_back_named(
+        self, services: WorkflowServices, _identified: Path
+    ) -> None:
+        """`osg-agent-experience/30`. The same report the CLI prints, in the
+        structured shape this door answers in."""
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_file_card", _brief(blocked_by=["not-filed-yet"]))
+
+        assert result["ok"] is True
+        assert result["unresolved_blockers"] == ["proj-a:idea-not-filed-yet"]
+
+    def test_a_blocker_naming_another_project_is_refused(
+        self, services: WorkflowServices, _identified: Path
+    ) -> None:
+        server = build_mcp_server(services)
+
+        result = _call(server, "kanban_file_card", _brief(blocked_by=["proj-b:idea-elsewhere"]))
+
+        assert result["ok"] is False
+        assert "proj-b:idea-elsewhere" in result["reason"]
+
     def test_a_judgement_is_filed_into_needs_you(
         self, services: WorkflowServices, _identified: Path
     ) -> None:

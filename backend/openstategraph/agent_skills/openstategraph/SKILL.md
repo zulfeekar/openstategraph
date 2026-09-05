@@ -157,8 +157,8 @@ the end of it. File each with `kanban_file_card` / `openstategraph kanban file`:
   want, in the developer's own words; **done-when** — a check you can run.
 - **priority and its reason** — one sentence citing this interview's own
   evidence. A priority with no reason is a guess with a label.
-- **blocked-by** — the cards this one waits on, by the **full id** filing
-  printed; a bare slug strands the card forever.
+- **blocked-by** — the cards this one waits on. A bare name resolves against
+  the board; an id no card carries is named back at you, and triage says so.
 - **agent_model / agent_effort** — defaults by shape:
 
 | Shape of the work | model | effort |

@@ -465,8 +465,13 @@ urgent) are refused blank, because an empty string is exactly the shape the
 lost conversation would take on the card.
 
 The id is a slug of the title — `<project_id>:idea-<slug>` — so two ideas
-given one title are a refusal rather than a silent merge, and `--blocked-by`
-(repeatable) can name a card by an id its filer can predict. `--agent-model`
+given one title are a refusal rather than a silent merge. `--blocked-by`
+(repeatable) names a card by an id its filer can predict: a bare name is
+resolved against the board and normalised to the full `<project_id>:<name>`
+id, one naming another project is refused, and one no card carries yet is
+printed back — `waiting on <id> — no card carries that id yet` — rather than
+refused, because blocking on a card not yet filed is a real ordering
+(`osg-agent-experience/30`). `--agent-model`
 and `--agent-effort` are advisory: what to give a subagent that takes the
 card, left empty when nobody had an opinion rather than filled with a default
 that would read as somebody's decision. A `grilling` lands in Needs You, a
@@ -545,7 +550,10 @@ waiting on, by priority (`high`, `med`, `low`); then every still-blocked
 card, last, in that same sub-order. Each line is `rank`, `task_id` and
 title, followed by `why_here` — the one sentence naming which rule placed it
 there, the same function (`kanban_store.triage`) the MCP `kanban_triage` tool
-answers from, so the two doors can never argue about the order. A board with
+answers from, so the two doors can never argue about the order. A blocked card
+says which kind of blocker holds it — `blocked by <ids>` for cards on this
+board, `blocked by an id no card carries: <ids>` for one nothing carries,
+because only the first clears by working the board (`osg-agent-experience/30`). A board with
 nothing to triage prints `nothing to triage` rather than silence.
 
 ### `patrol`

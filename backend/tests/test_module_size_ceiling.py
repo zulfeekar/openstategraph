@@ -476,6 +476,12 @@ is (`load_workflow`) and recorded on the workflow, so what is here is the
 command saying what it did — which is the only thing this module is allowed
 to do.
 
+**1608 -> 1612** (`osg-agent-experience/30`). Four lines: `kanban file` now
+prints the blockers no card carries, one line each. The judgement — what
+resolves, what is refused, what is only reported — is `kanban_store
+.resolve_blocked_by` and `unresolved_blockers`, so this is the command saying
+what it did, again the only thing this module does.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -811,6 +817,12 @@ fallback, which accepts any in-port id and draws none of them. The ports are
 generated (probed from the factory that mints these nodes) and this door only
 reshapes them; no new reader, nothing decided here.
 
+**979 -> 986** (`osg-agent-experience/30`). Seven lines: `kanban_file_card`
+returns `unresolved_blockers` beside the id and column, and its docstring says
+what `blocked_by` now accepts. The resolution and the refusal are the store's,
+which is the point — this door and the CLI could otherwise disagree about what
+a blocker is, and that disagreement was the defect.
+
 """
 
 ROUTES_WORKFLOWS = """
@@ -1135,16 +1147,27 @@ process (a CLI, an MCP tool) and the server that serves the board is one more
 reader of this file. It belongs here rather than beside the stream for the
 reason `column_for` does: it knows this schema's columns, and a digest built
 in `api/` would be a second place that has to be told when one is added.
+
+**2026-09-05, `osg-agent-experience/30`.** `resolve_blocked_by`,
+`unresolved_blockers` and `_known_card_ids` added, plus the branch in
+`triage`'s `why_here`: 600 -> 660. Sixty lines, and about forty of them are
+the docstring on `resolve_blocked_by` — the argument for why a blocker naming
+another project is refused while one no card carries *yet* is only reported,
+which is a judgement two doors and a board all have to make the same way.
+That is the same reason every other refusal's argument lives here: writing it
+at the CLI would leave the MCP tool free to disagree, and the defect this
+closed was exactly a field that meant different things depending on who typed
+it.
 """
 
 RECORDED: dict[str, Recorded] = {
-    "kanban_store.py": Recorded(600, KANBAN_STORE),
+    "kanban_store.py": Recorded(660, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(581, NODE_RUNTIME),
-    "cli.py": Recorded(1608, CLI),
+    "cli.py": Recorded(1612, CLI),
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(979, MCP_SERVER),
+    "mcp_server.py": Recorded(986, MCP_SERVER),
     "api/routes/workflows.py": Recorded(586, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(556, SCHEMAS),

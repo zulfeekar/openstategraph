@@ -1659,7 +1659,12 @@ def build_mcp_server(
         `kind` is `task`, `bug` or `grilling`. A `grilling` ends in a
         judgement, so it lands in **Needs You** and no agent may settle it;
         the other two land in **Detected**, which is where an agent pulls
-        work from. `blocked_by` names other cards' ids. `agent_model` /
+        work from. `blocked_by` names other cards' ids: a bare name is
+        resolved against the board and normalised to the full
+        `<project_id>:<name>` id, one naming another project is refused, and
+        one no card carries yet comes back in `unresolved_blockers` rather
+        than being refused, because blocking on a card not yet filed is a real
+        ordering (`osg-agent-experience/30`). `agent_model` /
         `agent_effort` are advisory — what to give a subagent that takes this
         card — and are left empty when nobody had an opinion, never filled
         with a default that would read as somebody's decision.
@@ -1674,6 +1679,7 @@ def build_mcp_server(
             file_idea_card,
             kanban_store_path,
             read_card,
+            unresolved_blockers,
         )
         from openstategraph.project_identity import (
             ProjectIdentityError,
@@ -1704,7 +1710,17 @@ def build_mcp_server(
             )
         except ValueError as exc:
             return {"ok": False, "reason": str(exc)}
-        return {"ok": True, "task_id": task_id, "column": column_for(read_card(db, task_id))}
+        card = read_card(db, task_id)
+        return {
+            "ok": True,
+            "task_id": task_id,
+            "column": column_for(card),
+            # `osg-agent-experience/30`: the ids this card waits on that no
+            # card carries. Not a refusal — blocking on a card not yet filed
+            # is a real ordering — but never silent either, because that is
+            # also the shape of a typo, and a stranded card never clears.
+            "unresolved_blockers": list(unresolved_blockers(db, card)),
+        }
 
     @server.tool(name="kanban_release_card")
     def kanban_release_card(
