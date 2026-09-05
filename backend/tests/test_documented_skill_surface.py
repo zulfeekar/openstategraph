@@ -75,6 +75,20 @@ TOOL_IN_PROSE = re.compile(r"`(kanban_\w+|get_node_vocabulary|get_engineering_ru
 #: (`openstategraph validate workflows/x`) is resolved by longest match below.
 INVOCATION = re.compile(r"openstategraph ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?")
 
+#: `agent.llm`, `route.check`, `output.static`. The prefix must be a category
+#: the registry itself declares, derived rather than listed, so an ordinary
+#: dotted filename in prose is not mistaken for a promise about a type.
+NODE_TYPE_IN_PROSE = re.compile(r"`([a-z][a-z0-9]*\.[a-z][a-z0-9_-]*)`")
+
+#: Documents that are not node types and share a category's spelling.
+NOT_A_NODE_TYPE = {"workflow.json"}
+
+
+def _registered_node_types() -> set[str]:
+    specs = json.loads((ROOT / "backend" / "openstategraph" / "compile" / "port_specs.json").read_text())
+    return {node["type"] for node in specs["node_types"]}
+
+
 #: Skills installed on the owner's machine. Credit the shape, never the name.
 FORBIDDEN_NAMES = (
     "ticket-loop-orchestrator",
@@ -178,6 +192,29 @@ def test_every_command_the_pages_name_is_real(page: Path) -> None:
         elif first not in verbs:
             bad.append(pair)
     assert not bad, f"{page.name} tells an agent to type commands argparse rejects: {bad}"
+
+
+@pytest.mark.parametrize("page", sorted(_pages()), ids=lambda p: p.name)
+def test_every_node_type_the_pages_name_is_one_the_registry_knows(page: Path) -> None:
+    """The third door, beside the CLI verb and the MCP tool. `shapes.md` is
+    pinned in its own class below because the catalogue is where a shape is
+    recommended; but `build-loop.md` names types too, and a type named on any
+    page is a type the agent will write into `workflow.json` — where an
+    invented one arrives a level above every validator that could catch it
+    (`osg-agent-experience/62`)."""
+    known = _registered_node_types()
+    categories = {name.split(".", 1)[0] for name in known}
+
+    claimed = {
+        name
+        for name in NODE_TYPE_IN_PROSE.findall(page.read_text(encoding="utf-8"))
+        if name.split(".", 1)[0] in categories and name not in NOT_A_NODE_TYPE
+    }
+    unknown = sorted(name for name in claimed if name not in known)
+    assert not unknown, (
+        f"{page.name} tells an agent to place these and the registry knows no such "
+        f"node type: {unknown}"
+    )
 
 
 def test_every_board_tool_and_verb_the_loop_needs_is_named() -> None:

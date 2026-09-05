@@ -3,6 +3,56 @@
 ## Unreleased
 
 ### Added
+- **A *Recommend a shape* step in the bundled skill, and `references/shapes.md`
+  behind it** (`osg-agent-experience/49`). The interview asked eight questions,
+  filed the cards and never said *what shape this concept should be* — so one
+  concept arrived as sixty-six nodes on a single canvas when its own answers
+  read as fifteen packages behind one router. The step asks what multiplies,
+  reads the answer against a catalogue whose rules a test can run, and names
+  what it rejected.
+- **`openstategraph nodes`** (`osg-agent-experience/33`) — the node vocabulary
+  through the terminal, not only over MCP, so an agent composing a document can
+  quote a type's fields instead of guessing them.
+- **`openstategraph kanban where`** (`osg-agent-experience/23`) — the board says
+  which store it is reading, so the shortest documented ritual no longer ends in
+  a refusal a reader cannot place.
+- **`openstategraph export toolkit`** (`osg-agent-experience/24`) — the skills
+  and the server were four doors with no bundle; `init` now says which seven
+  start-up files it wrote, rather than writing them silently.
+- **`output.static`** — an exit that prints a sentence the run never produced is
+  a node of its own rather than a field smuggled onto another one.
+
+### Changed
+- **A workflow's name is proposed, never silently chosen** — a saved concept
+  used to reach the editor as *Untitled*, and the slug the name would mint is
+  stated before the save.
+- **The arrival offer names every route onto the canvas** — there were five and
+  it listed four (`stable-beta-public/27`) — with the palette's search box as
+  the strip rather than floating in one (`25`), one focus ring instead of two
+  (`26`), and side panels whose grips are the dock and the panel.
+
+### Fixed
+- **`validate` planned the graph and never read the document that made it**
+  (`osg-agent-experience/32`), so a defect in the saved file survived a green
+  check.
+- **A branch is one way out, and fourteen of fifteen edges were dropped in
+  silence** (`38`); fifteen producers on a one-slot input were refused only by
+  the canvas (`43`); a guard's `pass` reached the report join as nothing (`51`);
+  a `route.check` documented a fallback field it does not have and hid an
+  unwired port (`60`); a function node's port ids existed only in a fallback
+  nobody publishes.
+- **One allowlist file gave fifteen specialists each other's tables, by name**
+  (`61`), and three warehouse calls timed out with both judges reading only the
+  prose (`50`).
+- **An open editor overwrote the file a coding agent was editing, with a 200.**
+- **`resolve.source`'s disclosure said "this data" where it meant a name** (`67`);
+  the board reported vanished was two files and one silence (`65`); a
+  `blocked-by` naming nothing was accepted and its card waited forever; a chain
+  three deep was credited with unblocking one card (`66`); every scaffolded
+  package's test had the same file name (`63`); one slug rule raised two
+  refusals and only one named the fix (`64`).
+
+### Added
 - **`tool.databricks-query` — one read-only SELECT against a Databricks SQL
   warehouse** (`osg-agent-experience/40`). The third leaf of the SQL family,
   built to answer the ticket's own question: does a new dialect cost a driver, a
@@ -245,6 +295,15 @@
 - **Docs**: `docs/the-patrol-board.md` is the board's own page — the columns,
   the evidence gate, the copy-instruction flow — with `docs/cli.md` and
   `docs/mcp.md` carrying the two doors, and `docs/openapi.json` regenerated.
+
+## 0.3.0rc14 — 2026-09-05
+Everything under *Unreleased* above this line at the time of the cut. The
+pre-release that catches the shipped skill sheet up with the software it
+describes: the *Recommend a shape* step and `references/shapes.md`, the
+`nodes` and `kanban where` verbs an agent is told to type, `export toolkit`,
+`route.check` and `output.static` as node types, and the read-only Databricks
+warehouse tool. Until this cut the installed sheet named doors the installed
+CLI did not answer (`osg-agent-experience/62`).
 
 ## 0.3.0rc13 — 2026-09-05
 
