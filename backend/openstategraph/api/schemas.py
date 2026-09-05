@@ -832,6 +832,21 @@ class SaveWorkflowAtSlugRequest(SaveWorkflowRequest):
     """
 
     slug: str | None = None
+    base_digest: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("base_digest", "baseDigest", "digest"),
+        description=(
+            "The digest this client was handed when it loaded the document. "
+            "A save whose base does not match the file's current digest is "
+            "refused with 409 rather than overwriting somebody else's edit. "
+            "Omit it to write unguarded — for a caller that owns the package "
+            "outright, such as the CLI. `digest` is accepted as a spelling "
+            "because that is the key `GET /api/workflows/{slug}` hands back, "
+            "and *fetch, edit, put it back* must stay writable with no "
+            "reshaping (ticket 42) — the version a fetched body carries is "
+            "exactly the version that body is an edit of."
+        ),
+    )
     must_exist: bool = Field(
         default=False,
         validation_alias=AliasChoices("must_exist", "mustExist"),
@@ -908,6 +923,11 @@ class WorkflowSummaryResponse(BaseModel):
     #: Draft→publish lifecycle (launch-readiness ticket 04). Drafts stay off
     #: the customer /chat surface until published.
     published: bool = True
+    #: The digest of the bytes this row was read from
+    #: (`osg-agent-experience/45`). Quote it back as `base_digest` on a save
+    #: to be refused rather than overwrite an edit made since. Empty means the
+    #: package could not be read, which is not the same as unchanged.
+    digest: str = ""
     #: Whether this package is advertised on any surface (ticket 21).
     #: `GET /api/workflows?surface=editor` (the default) returns hidden
     #: packages too, so this flag carries real information there — the editor
@@ -984,6 +1004,37 @@ class WorkflowDocumentResponse(BaseModel):
     #: check for.
     name: str
     document: dict[str, Any]
+    #: What the file held at the moment this answer was produced
+    #: (`osg-agent-experience/45`). A client that will edit and save keeps it
+    #: and sends it back as `base_digest`; on a successful save the response
+    #: carries the **new** digest, which is what makes consecutive saves work
+    #: without a re-read. Empty on a response describing a document that is
+    #: not (yet) a file.
+    digest: str = ""
+
+
+class SaveConflictDetail(BaseModel):
+    """Why a save was refused, and what the file actually holds now."""
+
+    #: One line, addressed to a person: what changed and what the two ways out
+    #: are. Named `reason` rather than `message` to match the refusal
+    #: vocabulary the editor already carries for a host-package write.
+    reason: str
+    #: The file's current digest. A client that means to keep its own version
+    #: saves again quoting this; without it there is no way to say "yes,
+    #: overwrite" other than turning the guard off.
+    digest: str
+
+
+class SaveConflictResponse(BaseModel):
+    """The body of a 409 from `PUT /api/workflows/{slug}`.
+
+    Shaped as `{"detail": {...}}` because that is what FastAPI's own error
+    channel produces, and a second shape for one status code is a client
+    branch nobody remembers to write.
+    """
+
+    detail: SaveConflictDetail
 
 
 class MountDocumentResponse(BaseModel):

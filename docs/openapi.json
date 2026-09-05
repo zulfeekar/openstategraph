@@ -1866,10 +1866,54 @@
         "title": "RunResponse",
         "type": "object"
       },
+      "SaveConflictDetail": {
+        "description": "Why a save was refused, and what the file actually holds now.",
+        "properties": {
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "digest"
+        ],
+        "title": "SaveConflictDetail",
+        "type": "object"
+      },
+      "SaveConflictResponse": {
+        "description": "The body of a 409 from `PUT /api/workflows/{slug}`.\n\nShaped as `{\"detail\": {...}}` because that is what FastAPI's own error\nchannel produces, and a second shape for one status code is a client\nbranch nobody remembers to write.",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/SaveConflictDetail"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "SaveConflictResponse",
+        "type": "object"
+      },
       "SaveWorkflowAtSlugRequest": {
         "additionalProperties": false,
         "description": "What `PUT /api/workflows/{slug}` accepts \u2014 workflow-gallery ticket 42.\n\nIdentical to :class:`SaveWorkflowRequest` but for tolerating the `slug`\nthat `WorkflowDocumentResponse` hands back, so *fetch, edit, put it\nback* is writable without reshaping the payload. The field is\n**echo-only**: the path is the identity, and a `slug` disagreeing with\nit is refused by the route rather than honoured (a body carrying another\nworkflow's slug is a confused client, not an instruction to cross-write).\n\n`extra=\"forbid\"` is inherited and deliberately not relaxed further \u2014\nit is what makes a typo an error instead of a silent no-op. One field\nwas admitted, not the door.\n\n`must_exist` is the second, and it is a data-loss guard rather than a\nconvenience (launch-readiness 147). This endpoint creates a package when\nthe slug is free \u2014 right for the CLI, a script or a test, and catastrophic\nfor an editor tab whose package another tab deleted a moment ago: one\nkeystroke re-made the directory with `workflow.json` alone, and the\n`tools/`, `functions/` and `tests/` that made the workflow work were gone\nfor good. A client that believes it is *editing* an existing package says\nso, and gets a 404 instead of a resurrection. Default `False`, because the\ncreate is not the defect \u2014 writing to a slug you were told is gone is.",
         "properties": {
+          "base_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The digest this client was handed when it loaded the document. A save whose base does not match the file's current digest is refused with 409 rather than overwriting somebody else's edit. Omit it to write unguarded \u2014 for a caller that owns the package outright, such as the CLI. `digest` is accepted as a spelling because that is the key `GET /api/workflows/{slug}` hands back, and *fetch, edit, put it back* must stay writable with no reshaping (ticket 42) \u2014 the version a fetched body carries is exactly the version that body is an edit of.",
+            "title": "Base Digest"
+          },
           "document": {
             "additionalProperties": true,
             "title": "Document",
@@ -2560,6 +2604,11 @@
       "WorkflowDocumentResponse": {
         "description": "What the catalogue hands back for one package \u2014 and what\n`PUT /api/workflows/{slug}` takes back unchanged (ticket 42).\n\n`name` is here because the save shape requires it. It used to live only\ninside `document[\"name\"]`, so a scripted edit had to know to lift it out;\nthat asymmetry made a published contract whose read and write shapes\ncould not be composed.",
         "properties": {
+          "digest": {
+            "default": "",
+            "title": "Digest",
+            "type": "string"
+          },
           "document": {
             "additionalProperties": true,
             "title": "Document",
@@ -2584,6 +2633,11 @@
       },
       "WorkflowSummaryResponse": {
         "properties": {
+          "digest": {
+            "default": "",
+            "title": "Digest",
+            "type": "string"
+          },
           "edge_count": {
             "title": "Edge Count",
             "type": "integer"
@@ -4197,6 +4251,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveConflictResponse"
+                }
+              }
+            },
+            "description": "The file changed on disk since the digest this save quoted. Nothing was written; the body carries the current digest."
           },
           "422": {
             "content": {

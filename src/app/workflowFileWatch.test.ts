@@ -16,6 +16,7 @@ const summary = (slug: string, savedAt: string, hidden = false): WorkflowSummary
   edgeCount: 0,
   hidden,
   findings: [],
+  digest: '',
 });
 
 /**

@@ -40,6 +40,7 @@ from openstategraph.api.schemas import (
     PluginToolCapabilityResponse,
     PublishWorkflowRequest,
     PublishWorkflowResponse,
+    SaveConflictResponse,
     SaveWorkflowAtSlugRequest,
     SaveWorkflowRequest,
     SqlSchemaResponse,
@@ -126,12 +127,24 @@ def list_workflows(
         )
     ]
 
+def _digest_now(services: WorkflowServices, slug: str) -> str:
+    """The version the file holds after a write — `osg-agent-experience/45`.
+
+    Through `describe`, which is the store's one answer to "what is in this
+    package", rather than through a second reader: a client adopts this as the
+    base for its next save, so a digest computed any other way would be a
+    version stamp nothing else agrees with.
+    """
+    row = services.store.describe(slug)
+    return row.digest if row is not None else ""
+
+
 def _summary_response(services: WorkflowServices, s: WorkflowSummary) -> WorkflowSummaryResponse:
     return WorkflowSummaryResponse(
         slug=s.slug, name=s.name, saved_at=s.saved_at,
         node_count=s.node_count, edge_count=s.edge_count,
         findings=validate_package(services.store.directory_for(s.slug)),
-        published=s.published, hidden=s.hidden,
+        published=s.published, hidden=s.hidden, digest=s.digest,
     )
 
 @router.get(
@@ -281,7 +294,11 @@ def get_workflow(services: Services, slug: str) -> WorkflowDocumentResponse:
     # written twice.
     summary = services.store.describe(slug)
     name = summary.name if summary is not None else str(document.get("name") or slug)
-    return WorkflowDocumentResponse(slug=slug, name=name, document=document)
+    # From the same `describe` that already read the file, never a second read:
+    # a digest computed from bytes other than the ones this document came from
+    # would be a version stamp for a version nobody was handed.
+    digest = summary.digest if summary is not None else ""
+    return WorkflowDocumentResponse(slug=slug, name=name, document=document, digest=digest)
 
 @router.get(
     "/api/workflows/{root}/mounts/{path:path}",
@@ -419,13 +436,24 @@ def create_workflow(services: Services, request: SaveWorkflowRequest) -> Workflo
     except SlugMintingError as exc:
         raise HTTPException(status_code=507, detail=str(exc)) from exc
     announce(services, "saved", slug)
-    return WorkflowDocumentResponse(slug=slug, name=request.name, document=request.document)
+    return WorkflowDocumentResponse(
+        slug=slug, name=request.name, document=request.document, digest=_digest_now(services, slug)
+    )
 
 @router.put(
     "/api/workflows/{slug}",
     response_model=WorkflowDocumentResponse,
     summary="Overwrite the workflow document at a slug you already hold",
     tags=["Catalogue"],
+    responses={
+        409: {
+            "model": SaveConflictResponse,
+            "description": (
+                "The file changed on disk since the digest this save quoted. "
+                "Nothing was written; the body carries the current digest."
+            ),
+        }
+    },
 )
 def save_workflow(
     services: Services, slug: str, request: SaveWorkflowAtSlugRequest
@@ -453,7 +481,11 @@ def save_workflow(
     """
     from datetime import datetime, timezone
 
-    from openstategraph.api.workflow_store import InvalidSlugError, WorkflowNotFoundError
+    from openstategraph.api.workflow_store import (
+        InvalidSlugError,
+        WorkflowChangedOnDiskError,
+        WorkflowNotFoundError,
+    )
 
     if request.slug is not None and request.slug != slug:
         # Tolerant in reading, strict in trusting: the echoed slug is
@@ -475,7 +507,15 @@ def save_workflow(
             document=request.document,
             saved_at=datetime.now(timezone.utc).isoformat(),
             must_exist=request.must_exist,
+            expected_digest=request.base_digest,
         )
+    except WorkflowChangedOnDiskError as exc:
+        # A dict detail rather than a sentence: the digest is the half a
+        # client needs to act, and parsing it back out of prose is how a
+        # contract stops being one.
+        raise HTTPException(
+            status_code=409, detail={"reason": str(exc), "digest": exc.current}
+        ) from exc
     except WorkflowNotFoundError as exc:
         # The same sentence `GET /api/workflows/{slug}/summary` answers with,
         # because it is the same fact and a client comparing the two must not
@@ -484,7 +524,9 @@ def save_workflow(
     except InvalidSlugError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     announce(services, "saved", slug)
-    return WorkflowDocumentResponse(slug=slug, name=request.name, document=request.document)
+    return WorkflowDocumentResponse(
+        slug=slug, name=request.name, document=request.document, digest=_digest_now(services, slug)
+    )
 
 @router.delete(
     "/api/workflows/{slug}",

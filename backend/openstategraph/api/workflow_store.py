@@ -30,6 +30,7 @@ now only ever addresses a slug the caller already holds.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -160,6 +161,45 @@ def _candidate_slugs(name: str) -> Iterator[str]:
         yield f"{base[:room].strip('-')}-{ordinal}"
 
 
+def digest_of(raw: bytes) -> str:
+    """The identity of one `workflow.json`'s **bytes** — `osg-agent-experience/45`.
+
+    Content, not `mtime` and size (which is what `kanban_store.store_digest`
+    uses for a change *hint*, where a false positive costs one extra read).
+    This one decides whether a write is refused, so a false positive is a
+    developer told their edit was lost when it was not, and a false negative
+    is the data loss this exists to stop. A checkout, a `git stash pop` and a
+    generator that rewrites a file to the same bytes all move `mtime` without
+    changing anything anybody would call a version.
+
+    Opaque to every caller. Nothing outside this module may reconstruct it,
+    and no client is asked to compute one — a client quotes back the digest it
+    was handed, which is what makes the comparison a statement about the
+    server's own file rather than about two ideas of the content.
+    """
+    return hashlib.sha256(raw).hexdigest()
+
+
+def package_digest(path: Path) -> str:
+    """What that `workflow.json` holds right now, as one opaque string.
+
+    A module function and **not** a `WorkflowStore` method, deliberately. The
+    store already answers this question — every `WorkflowSummary` carries a
+    `digest`, because :func:`_summarize` reads the file anyway — and a second
+    public way to ask it would be two answers that can drift, on the one
+    question whose whole value is that it is the same answer everywhere. The
+    store uses this internally, where it must digest bytes without parsing
+    them; every caller outside reads `describe(slug).digest`.
+
+    ``""`` when there is no such file, and that is an answer rather than a
+    failure: a caller comparing against it learns "there is nothing here to
+    conflict with", which is exactly right for a slug about to be created.
+    """
+    if not path.is_file():
+        return ""
+    return digest_of(path.read_bytes())
+
+
 def _broken(slug: str, reason: str) -> WorkflowSummary:
     """A row for a package that could not be read. Never published, by
     construction: rubble must not reach the customer surface even if the
@@ -191,7 +231,8 @@ def _summarize(slug: str, path: Path) -> WorkflowSummary | None:
     if not path.is_file():
         return None
     try:
-        payload = json.loads(path.read_text())
+        raw = path.read_bytes()
+        payload = json.loads(raw)
         if not isinstance(payload, dict):
             raise ValueError(f"top level is a {type(payload).__name__}, not an object")
     except (json.JSONDecodeError, OSError, ValueError) as exc:
@@ -207,11 +248,30 @@ def _summarize(slug: str, path: Path) -> WorkflowSummary | None:
         edge_count=len(document.get("edges") or []),
         published=payload.get("published") is not False,
         hidden=payload.get("hidden") is True,
+        digest=digest_of(raw),
     )
 
 
 class WorkflowNotFoundError(Exception):
     pass
+
+
+class WorkflowChangedOnDiskError(Exception):
+    """A save was refused because the file moved under the caller.
+
+    Carries `current` — the digest the file actually has now — because the
+    only useful next move needs it: a client that means to overwrite anyway
+    re-saves against this, and one that does not reloads. A bare "conflict"
+    would leave both doors shut.
+    """
+
+    def __init__(self, slug: str, current: str) -> None:
+        super().__init__(
+            f"{slug!r} changed on disk since it was loaded here — "
+            "reload it to take the file's version, or save again to overwrite it"
+        )
+        self.slug = slug
+        self.current = current
 
 
 class SlugMintingError(Exception):
@@ -248,6 +308,10 @@ class WorkflowSummary:
     #: (`list(include_broken=True)`). Empty on every healthy row, which is what
     #: lets `if summary.error:` be the whole check.
     error: str = ""
+    #: The digest of the bytes this row was read from (`osg-agent-experience/45`).
+    #: Empty on a row that could not be read, exactly as `saved_at` is — the
+    #: same "I cannot tell you" a caller must not read as "unchanged".
+    digest: str = ""
     #: The concierge-gateway flag (ticket 67): loadable by slug, never
     #: advertised. Always ``False`` on a row that came out of :meth:`list`,
     #: because that method filters hidden packages out — it is meaningful only
@@ -432,6 +496,7 @@ class WorkflowStore:
         document: dict[str, Any],
         saved_at: str,
         must_exist: bool = False,
+        expected_digest: str | None = None,
     ) -> None:
         """Overwrite the package at `slug` — a slug the caller already holds.
 
@@ -470,6 +535,10 @@ class WorkflowStore:
         # client is two round trips with a delete-shaped gap between them.
         if must_exist and is_new:
             raise WorkflowNotFoundError(slug)
+        if expected_digest is not None:
+            current = package_digest(directory / "workflow.json")
+            if current != expected_digest:
+                raise WorkflowChangedOnDiskError(slug, current)
         directory.mkdir(parents=True, exist_ok=True)
         self._write(directory, name=name, document=document, saved_at=saved_at, is_new=is_new)
 

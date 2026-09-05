@@ -28,6 +28,42 @@ import { describeRuntimeBase, runtimeBaseUrl } from './runtimeBaseUrl';
  * which slug it got. Nothing in the editor derives a slug from a name.
  */
 
+/**
+ * What a save that landed hands back — `osg-agent-experience/45`.
+ *
+ * `digest` is the file's version **after** this write, so a client saving
+ * repeatedly quotes the answer to its previous save instead of re-reading the
+ * file between keystrokes. Without it the second consecutive autosave would
+ * conflict with the first one's own work.
+ */
+export interface SaveReceipt {
+  readonly digest: string;
+}
+
+/**
+ * Why a save did not happen, and the two cases are not the same event.
+ *
+ * A union rather than a string because the difference has a consequence a
+ * caller must act on: an `error` is something that went wrong, and a
+ * `conflict` is somebody else's work sitting in the file. Making it a type
+ * means a surface cannot print a conflict as "could not save" by accident —
+ * it has to look at `kind` to get the message out.
+ */
+export type SaveFailure =
+  | { readonly kind: 'error'; readonly message: string }
+  | {
+      readonly kind: 'conflict';
+      /** The backend's sentence — one copy owner, on the side that knows. */
+      readonly reason: string;
+      /** What the file holds now. Saving again quoting this is "keep mine". */
+      readonly digest: string;
+    };
+
+/** The sentence a surface says. Both shapes carry prose; only the key moves. */
+export function saveFailureMessage(failure: SaveFailure): string {
+  return failure.kind === 'conflict' ? failure.reason : failure.message;
+}
+
 export interface WorkflowSummary {
   readonly slug: string;
   readonly name: string;
@@ -81,6 +117,18 @@ export interface WorkflowSummary {
    * nothing to report rather than a row that was not checked.
    */
   readonly findings: readonly string[];
+  /**
+   * The digest of the bytes this row was read from (`osg-agent-experience/45`).
+   *
+   * Opaque — nothing here computes or compares it against a document; it is
+   * quoted back to the backend on a save so a file that moved in between is
+   * refused rather than overwritten. Empty means the backend could not say,
+   * which a caller must read as *unknown*, never as *unchanged*: a row from a
+   * backend that predates the field, or a package caught mid-write, both
+   * arrive that way, and treating either as a match would turn the guard off
+   * exactly when it matters.
+   */
+  readonly digest: string;
 }
 
 /** Ticket 18: one `BaseTool` subclass discovered in a workflow's `tools/` folder. */
@@ -331,7 +379,12 @@ export interface IWorkflowFileClient {
   loadIfPresent(slug: string): Promise<Result<unknown | null, string>>;
   /** Create a workflow and receive the slug the backend minted for it. */
   create(name: string, document: unknown): Promise<Result<string, string>>;
-  save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
+  save(
+    slug: string,
+    name: string,
+    document: unknown,
+    baseDigest?: string,
+  ): Promise<Result<SaveReceipt, SaveFailure>>;
   remove(slug: string): Promise<Result<void, string>>;
   setPublished(slug: string, published: boolean): Promise<Result<PublishOutcome, string>>;
   /** Copy a whole package to a new slug — see `DuplicatedWorkflow`. */
@@ -802,19 +855,52 @@ export class WorkflowFileClient
    * gap between them — the store answers the existence question in the same
    * call that does the write.
    */
-  async save(slug: string, name: string, document: unknown): Promise<Result<void, string>> {
+  async save(
+    slug: string,
+    name: string,
+    document: unknown,
+    baseDigest?: string,
+  ): Promise<Result<SaveReceipt, SaveFailure>> {
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}/api/workflows/${encodeURIComponent(slug)}`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name, document, must_exist: true }),
+        // The field is **absent**, not `null`, when there is nothing to
+        // quote: the backend reads `None` as "unguarded, this caller owns the
+        // package", and sending an empty string instead would claim to be
+        // editing a version that never existed and conflict with every file.
+        body: JSON.stringify(
+          baseDigest
+            ? { name, document, must_exist: true, base_digest: baseDigest }
+            : { name, document, must_exist: true },
+        ),
       });
     } catch {
-      return Err(this.unreachable());
+      return Err({ kind: 'error', message: this.unreachable() });
     }
-    if (!response.ok) return Err(await describeFailure(response));
-    return Ok(undefined);
+    if (response.status === 409) {
+      const conflict = await describeConflict(response);
+      if (conflict) return Err(conflict);
+      // A 409 with no digest offers no way to keep your own version, so it is
+      // reported as the failure it is rather than as a choice the editor
+      // cannot honour. Tolerant in reading, strict in trusting.
+      return Err({
+        kind: 'error',
+        message: 'The workflow folder changed and the save was refused.',
+      });
+    }
+    if (!response.ok) return Err({ kind: 'error', message: await describeFailure(response) });
+
+    try {
+      const payload = (await response.json()) as { digest?: unknown };
+      return Ok({ digest: asString(payload.digest) });
+    } catch {
+      // The write landed; only the receipt was unreadable. An empty digest is
+      // "I cannot tell you", which the caller must treat as no longer knowing
+      // the file's version rather than as a version.
+      return Ok({ digest: '' });
+    }
   }
 
   async remove(slug: string): Promise<Result<void, string>> {
@@ -1050,6 +1136,28 @@ function asSqlSource(record: Record<string, unknown>): SqlSource {
   };
 }
 
+/**
+ * A 409 from `PUT /api/workflows/{slug}`, read back into the two facts it
+ * carries: the sentence and the digest the file actually has now.
+ *
+ * `null` for anything that does not carry both — including a 409 whose detail
+ * is a plain string, which is what an older backend or a proxy produces.
+ */
+async function describeConflict(
+  response: Response,
+): Promise<{ kind: 'conflict'; reason: string; digest: string } | null> {
+  try {
+    const payload = (await response.json()) as { detail?: unknown };
+    const detail = payload.detail;
+    if (typeof detail !== 'object' || detail === null) return null;
+    const reason = asString((detail as Record<string, unknown>)['reason']);
+    const digest = asString((detail as Record<string, unknown>)['digest']);
+    return reason && digest ? { kind: 'conflict', reason, digest } : null;
+  } catch {
+    return null;
+  }
+}
+
 async function describeFailure(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as { detail?: unknown };
@@ -1078,6 +1186,7 @@ function asSummary(record: Record<string, unknown>): WorkflowSummary {
     // reaches a surface that prints it, and `String(undefined)` on a row is a
     // worse answer than an empty one.
     findings: Array.isArray(record['findings']) ? record['findings'].map(asString) : [],
+    digest: asString(record['digest']),
   };
 }
 

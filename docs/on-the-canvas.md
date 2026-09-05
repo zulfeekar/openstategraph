@@ -20,6 +20,18 @@ someone else, and it compiles to a plain LangGraph `StateGraph` — an ordinary
 Python object that runs anywhere Python runs. The editor authors it; nothing
 you draw depends on the editor to run.
 
+**And you are not the only writer of that file.** A coding agent editing
+`workflow.json` while you watch the board is the normal way of working on a
+real project, so the editor no longer assumes the document it loaded is still
+what is on disk. Every save says which version it is editing, and one that
+would overwrite somebody else's change is refused: the file is left alone, this
+workflow stops saving automatically, and you are told, with the two choices
+spelled out. **Open it again from Workflows** to take the version on disk,
+discarding what is on screen — after a refusal that open does not put your
+unsaved edits back, because they are the thing you just chose against. Or
+**press Save** to overwrite the file with what is on screen. Nothing is decided
+for you, and neither version is thrown away until you say which one you want.
+
 ---
 
 ## 2. Atoms, molecules, organisms — and only one tier you can get two ways

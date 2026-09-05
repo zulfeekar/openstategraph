@@ -2,7 +2,7 @@ import { Err, Ok, type Result } from '@core/kernel/Result';
 import { loadWasFaithful } from '@app/lossyLoad';
 import type { Workbench } from '@app/Workbench';
 import type { IWorkflowFileClient } from '@core/runtime/WorkflowFileClient';
-import { recordKnownSavedAt } from '@app/workflowFileWatch';
+import { recordKnownVersion } from '@app/workflowFileWatch';
 import { getOpenSlug, setOpenSlug } from '@app/openWorkflow';
 import { clearOpenAddress, getOpenAddress, setOpenAddress } from '@app/openAddress';
 import type { MountAddress } from '@core/model/MountAddress';
@@ -17,6 +17,8 @@ import { registerPluginCapabilities, setCapabilityWarnings } from '@app/pluginNo
 import { pushDrillFrame } from '@app/drillStack';
 import { restoreDraftFor } from '@app/workflowDrafts';
 import {
+  clearConflictStandDown,
+  conflictWantsTheFile,
   forgetMountHostDocument,
   rememberDiskDocument,
   rememberMountHostDocument,
@@ -197,7 +199,7 @@ export async function loadMountIntoEditor(
       if (baselined.has(target)) continue;
       baselined.add(target);
       const row = await client.summary(target);
-      recordKnownSavedAt(target, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
+      recordKnownVersion(target, row.ok ? row.value : null);
     }
     return Ok({ name: workbench.model.name, restoredDraft: false });
   } catch (error) {
@@ -316,7 +318,14 @@ export async function loadWorkflowIntoEditor(
     // any that differ (ticket 23). Opening a second workflow used to discard
     // them with no prompt and no way back, because the draft was keyed on the
     // tab rather than on the document.
-    const draft = restoreDraftFor(slug, workbench);
+    // **Except after a conflict** (`osg-agent-experience/45`). Autosave was
+    // refused because the file moved, the user was told so and told what the
+    // two ways out are, and this open is them choosing the file. Restoring the
+    // draft here would put back precisely the document they chose against, and
+    // the next keystroke would offer to write it over the file again.
+    const wantsTheFile = conflictWantsTheFile(slug);
+    clearConflictStandDown(slug);
+    const draft = wantsTheFile ? { restored: false as const } : restoreDraftFor(slug, workbench);
     // Establishes the file watch's baseline for this slug — otherwise its
     // first poll after a load would have nothing to compare against and could
     // mistake the file as already-changed. Asked about *this slug*, not found
@@ -327,7 +336,7 @@ export async function loadWorkflowIntoEditor(
     // `surface=editor` has carried them since launch-readiness ticket 04. It
     // still omits unreadable ones, so asking by slug is still the right call.)
     const row = await client.summary(slug);
-    recordKnownSavedAt(slug, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
+    recordKnownVersion(slug, row.ok ? row.value : null);
     // After the import, never before: a trail entry for a load that failed
     // would offer a way back from somewhere the user never arrived.
     if (provenance && provenance.fromSlug && provenance.fromSlug !== slug) {

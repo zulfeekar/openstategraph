@@ -844,6 +844,12 @@ the knowledge. What was rejected here was moving the whole `warnings` assembly
 into `plugin_capabilities`: two of its four sources are workflow-local
 discovery, which that module deliberately knows nothing about, and pulling
 them across would have cost the module its one-sentence description.
+
+`559 -> 586`, 2026-09-05 (`osg-agent-experience/45`). Twenty-seven lines: the
+409 branch on the save route, its `responses=` declaration, `_digest_now`, and
+the paragraphs that say why a save may be refused. All of it is the wire — a
+status code this endpoint can now answer with, and the sentence that goes with
+it — rather than a second reason for this module to change.
 """
 
 RUN_SINKS = """
@@ -1063,6 +1069,14 @@ subagent that takes it. Declarations and their documentation once more, and
 the documentation earns the lines the same way: `blocked_by` is a `list[str]`
 here and JSON text in the column, and the comment is where a reader of the
 wire is told the encoding is the store's business and not theirs.
+
+`534 -> 556`, 2026-09-05 (`osg-agent-experience/45`). Twenty-two lines: the
+`digest` field on the two shapes a client reads a package through, the
+`base_digest` a save quotes back, and `SaveConflictDetail`/`SaveConflictResponse`
+— the body of the 409 that refuses a save whose file moved on disk. The comments
+are again the load-bearing half: an empty digest means *I cannot tell you which
+version*, and a reader who takes it for *unchanged* turns the guard off exactly
+where it is needed.
 """
 
 KANBAN_STORE = """
@@ -1118,9 +1132,9 @@ RECORDED: dict[str, Recorded] = {
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(970, MCP_SERVER),
-    "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
+    "api/routes/workflows.py": Recorded(586, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
-    "api/schemas.py": Recorded(534, SCHEMAS),
+    "api/schemas.py": Recorded(556, SCHEMAS),
 }
 
 

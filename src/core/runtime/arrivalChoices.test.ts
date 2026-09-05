@@ -22,6 +22,7 @@ const row = (over: Partial<WorkflowSummary> & { slug: string }): WorkflowSummary
   published: true,
   hidden: false,
   findings: [],
+  digest: '',
   ...over,
 });
 

@@ -102,7 +102,7 @@ describe('opening a shipped package writes nothing to its file', () => {
   });
 
   it.each(fixtures.map((f) => [f.label, f] as const))('%s', async (_label, fixture) => {
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const workbench = new Workbench();
     // The same pre-registration the load path performs, so a package whose own
     // hand-authored family exists is measured against its real cards rather

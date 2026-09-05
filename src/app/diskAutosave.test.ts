@@ -82,7 +82,9 @@ describe('writing the open workflow to its package', () => {
   const workbench = () => new Workbench();
 
   it('sends the slug, the name and the document', async () => {
-    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) => Ok(undefined));
+    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) =>
+      Ok({ digest: 'sha-written' }),
+    );
     const bench = workbench();
     // A baseline means "this page opened this package"; without one nothing is
     // written at all. An empty document stands in for whatever was on disk.
@@ -104,7 +106,7 @@ describe('writing the open workflow to its package', () => {
   });
 
   it('does not call the backend when there is nowhere to write', async () => {
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const bench = workbench();
 
     const outcome = await writeOpenWorkflowToDisk(
@@ -127,7 +129,7 @@ describe('writing the open workflow to its package', () => {
     rememberDiskDocument('demo', 'whatever was on disk', {}, bench.serializer);
 
     await writeOpenWorkflowToDisk(
-      { save: async () => Ok(undefined) },
+      { save: async () => Ok({ digest: 'sha-written' }) },
       bench.model,
       bench.serializer,
       storageWith('demo'),
@@ -145,7 +147,7 @@ describe('writing the open workflow to its package', () => {
     rememberDiskDocument('demo', 'whatever was on disk', {}, bench.serializer);
 
     const outcome = await writeOpenWorkflowToDisk(
-      { save: async () => Err('the disk is full') },
+      { save: async () => Err({ kind: 'error' as const, message: 'the disk is full' }) },
       bench.model,
       bench.serializer,
       storageWith('demo'),
@@ -164,7 +166,7 @@ describe('never write a package this page has not opened', () => {
     // itself arrives over the network some time later. In between, the model
     // holds the seeded demo. A load slower than the autosave debounce would
     // have written that demo straight into somebody's workflow.
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const bench = new Workbench();
 
     const outcome = await writeOpenWorkflowToDisk(
@@ -179,7 +181,7 @@ describe('never write a package this page has not opened', () => {
   });
 
   it('writes once the load has said what is on disk', async () => {
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
     const bench = new Workbench();
     const storage = storageWith('demo');
@@ -202,7 +204,7 @@ describe('opening a workflow is not an edit', () => {
   // `savedAt`. Browsing three workflows left three modified files in
   // `git status`, and a diff that is pure noise stops being read.
   it('does not write a document identical to the one just loaded', async () => {
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const bench = new Workbench();
     rememberDiskDocument(
       'demo',
@@ -223,7 +225,7 @@ describe('opening a workflow is not an edit', () => {
   });
 
   it('writes once a real edit lands, and not again until the next one', async () => {
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
     const bench = new Workbench();
     rememberDiskDocument(
@@ -249,7 +251,9 @@ describe('opening a workflow is not an edit', () => {
   it('counts a rename as a change, though no node moved', async () => {
     // The name is stored beside the document, not inside it, so comparing
     // documents alone would have missed this entirely.
-    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) => Ok(undefined));
+    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) =>
+      Ok({ digest: 'sha-written' }),
+    );
     const bench = new Workbench();
     rememberDiskDocument(
       'demo',
@@ -284,7 +288,7 @@ describe('the write loop', () => {
     // alternated between 118 and 200 as its schema list settled. Height is
     // written back by a ResizeObserver — nobody authored it — so it must not
     // be able to dirty a package file.
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
     const bench = new Workbench();
     // A node, because the injection below rewrites `doc.nodes` — and on an
@@ -339,7 +343,7 @@ describe('the write loop', () => {
     // gestures somebody made, and stripping `size` for every node made a
     // size-only change the one edit no autosave was worth. Reproduced in the
     // browser first: the frame resized on screen and `mtime` never moved.
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
     const bench = new Workbench();
     const frame = addNode(bench as unknown as Parameters<typeof addNode>[0], TYPE.group, {
@@ -372,7 +376,7 @@ describe('the write loop', () => {
     // The other half of 70, and the reason the strip was not simply deleted: a
     // frame is measured too, and a measurement must stay unable to dirty a
     // file whichever kind of card produced it.
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
     const bench = new Workbench();
     const frame = addNode(bench as unknown as Parameters<typeof addNode>[0], TYPE.group, {
@@ -396,7 +400,7 @@ describe('the write loop', () => {
   });
 
   it('treats two equal documents with different key order as unchanged', async () => {
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const client = { save } as unknown as Pick<IWorkflowFileClient, 'save'>;
     const bench = new Workbench();
 
@@ -460,7 +464,9 @@ describe('writing an open mount’s host package', () => {
   afterEach(() => forgetMountHostDocument('host'));
 
   it('writes the host, under the host’s slug, when an override lands on it', async () => {
-    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) => Ok(undefined));
+    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) =>
+      Ok({ digest: 'sha-written' }),
+    );
     const summary = vi.fn(async () => Ok(null));
     const document = hostDocument();
     const mounts = context(document);
@@ -482,7 +488,9 @@ describe('writing an open mount’s host package', () => {
   });
 
   it('never writes the package the mount points at', async () => {
-    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) => Ok(undefined));
+    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) =>
+      Ok({ digest: 'sha-written' }),
+    );
     const document = hostDocument();
     const mounts = context(document);
     rememberMountHostDocument('host', document);
@@ -500,7 +508,7 @@ describe('writing an open mount’s host package', () => {
     // none of which touch the host. Without this the editor would rewrite an
     // unchanged host file every second for as long as the drill-in stayed
     // open, which is the write loop `comparable` exists to prevent.
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const document = hostDocument();
     const mounts = context(document);
     rememberMountHostDocument('host', document);
@@ -518,7 +526,9 @@ describe('writing an open mount’s host package', () => {
     // both rows point at `child` by reference, and what differs is stored per
     // mount on the host. One write carries both, because both live in the one
     // document this function writes.
-    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) => Ok(undefined));
+    const save = vi.fn(async (_slug: string, _name: string, _document: unknown) =>
+      Ok({ digest: 'sha-written' }),
+    );
     const document = {
       name: 'Host',
       nodes: [
@@ -544,7 +554,7 @@ describe('writing an open mount’s host package', () => {
   });
 
   it('writes nothing when no mount is open', async () => {
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     expect(await writeOpenMountHostToDisk({ save, summary: async () => Ok(null) }, null)).toEqual({
       kind: 'skipped',
     });
@@ -555,7 +565,7 @@ describe('writing an open mount’s host package', () => {
     // Same rule as the class path: without a baseline the document in memory
     // is not known to have come from this slug, and a blind write of a whole
     // retained document is how somebody else's package gets reverted.
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const mounts = context(hostDocument());
     mounts.writeOverride('question', 'prompt', 'x');
 
@@ -571,7 +581,7 @@ describe('writing an open mount’s host package', () => {
     // The explicit Save has compare-and-set for this; autosave writes the same
     // whole retained document far more often, and silently, so it needs it
     // more rather than less.
-    const save = vi.fn(async () => Ok(undefined));
+    const save = vi.fn(async () => Ok({ digest: 'sha-written' }));
     const summary = vi.fn(async () => Ok({ slug: 'host', name: 'Host', savedAt: 'later' }));
     const document = hostDocument();
     const mounts = context(document);
@@ -594,7 +604,7 @@ describe('writing an open mount’s host package', () => {
     // adoption below stops the *next* one reading that as a stranger's edit.
     const save = vi.fn(async () => {
       writes += 1;
-      return Ok(undefined);
+      return Ok({ digest: 'sha-written' });
     });
     const summary = vi.fn(async () =>
       Ok({ slug: 'host', name: 'Host', savedAt: `stamp-${writes}` }),

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { SaveFailure, SaveReceipt } from '@core/runtime/WorkflowFileClient';
 import { Ok, Err, type Result } from '@core/kernel/Result';
 import type { MountUsage } from '@core/runtime/WorkflowFileClient';
 import {
@@ -35,9 +36,13 @@ function recordingClient(overrides: Partial<IPushToPackageClient> = {}) {
         name: 'Child',
         nodes: [{ id: 'agent-sql', type: 'agent.llm', data: { rules: 'old package rules' } }],
       }),
-    save: async (slug: string, name: string, document: unknown): Promise<Result<void, string>> => {
+    save: async (
+      slug: string,
+      name: string,
+      document: unknown,
+    ): Promise<Result<SaveReceipt, SaveFailure>> => {
       calls.save = { slug, name, document };
-      return Ok(undefined);
+      return Ok({ digest: 'sha-written' });
     },
     ...overrides,
   };

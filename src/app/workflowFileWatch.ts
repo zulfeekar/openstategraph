@@ -40,6 +40,62 @@ export function getKnownSavedAt(slug: string): string | undefined {
   return knownSavedAt.get(slug);
 }
 
+/**
+ * The **version** of a package this tab is editing — `osg-agent-experience/45`.
+ *
+ * Beside `knownSavedAt` and deliberately not merged into it, because the two
+ * are read by different questions. `savedAt` answers *did the file move*, and
+ * the watch's own poll is allowed to adopt a new value: noticing a change is
+ * its entire job. This answers *which bytes is this tab's document derived
+ * from*, and a poll must **never** adopt it — if it did, an agent's write
+ * would become this tab's base within seconds and the very next autosave
+ * would quote the agent's version back at the backend and overwrite it. The
+ * guard would then be at its quietest exactly when it was needed.
+ *
+ * So this map is written by three events and no others: a load, a save that
+ * landed (which answers with the file's new digest), and a refused save
+ * (which answers with the digest the file actually has, so *keep mine* is a
+ * save the user can make rather than a switch they have to find).
+ */
+const knownDigest = new Map<string, string>();
+
+/**
+ * Adopt the version a *row the backend just handed us* describes.
+ *
+ * Takes the row rather than two strings so the one moment a client learns
+ * both facts about a file writes both of them. Four call sites recorded
+ * `savedAt` and would each have had to remember the digest separately, which
+ * is the same knowledge in four places — and the one that forgot would
+ * silently be the one that saves unguarded.
+ *
+ * A `null` row (a 404, or a summary call that did not answer) records
+ * **nothing**: "I cannot tell you" is not a version, and writing an empty
+ * digest would make the next save claim to be editing a file that never
+ * existed.
+ */
+export function recordKnownVersion(
+  slug: string,
+  row: Pick<WorkflowSummary, 'savedAt' | 'digest'> | null | undefined,
+): void {
+  recordKnownSavedAt(slug, row?.savedAt);
+  if (row?.digest) knownDigest.set(slug, row.digest);
+}
+
+/** Adopt a digest handed back by a save — the one this tab just caused. */
+export function recordKnownDigest(slug: string, digest: string | undefined): void {
+  if (digest) knownDigest.set(slug, digest);
+}
+
+/** What this tab believes it is editing, or `undefined` when it has no idea. */
+export function getKnownDigest(slug: string): string | undefined {
+  return knownDigest.get(slug);
+}
+
+/** Drop a slug's version — for tests, and for a package that was deleted. */
+export function forgetKnownDigest(slug: string): void {
+  knownDigest.delete(slug);
+}
+
 export type FileWatchAction =
   | { readonly kind: 'none' }
   | { readonly kind: 'baseline'; readonly savedAt: string }

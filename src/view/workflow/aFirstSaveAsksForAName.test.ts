@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SaveFailure, SaveReceipt } from '@core/runtime/WorkflowFileClient';
 import { Ok, type Result } from '@core/kernel/Result';
 import type { WorkflowSummary } from '@core/runtime/WorkflowFileClient';
 import { clearOpenSlug, setOpenSlug } from '@app/openWorkflow';
@@ -68,9 +69,9 @@ function recordingClient() {
   const client: IWorkflowSaving = {
     list: (): Promise<Result<readonly WorkflowSummary[], string>> => Promise.resolve(Ok([])),
     summary: (): Promise<Result<WorkflowSummary | null, string>> => Promise.resolve(Ok(null)),
-    save: (slug: string): Promise<Result<void, string>> => {
+    save: (slug: string): Promise<Result<SaveReceipt, SaveFailure>> => {
       calls.push(`save:${slug}`);
-      return Promise.resolve(Ok(undefined));
+      return Promise.resolve(Ok({ digest: 'sha-written' }));
     },
     create: (name: string): Promise<Result<string, string>> => {
       calls.push(`create:${name}`);
@@ -199,7 +200,7 @@ describe('the first save', () => {
         return Promise.resolve(Ok([]));
       },
       summary: () => Promise.resolve(Ok(null)),
-      save: () => Promise.resolve(Ok(undefined)),
+      save: () => Promise.resolve(Ok({ digest: 'sha-written' })),
       create: () => Promise.resolve(Ok('customer-triage')),
     };
 

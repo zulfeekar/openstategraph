@@ -11,7 +11,14 @@ import {
   discardDraftAfterDelete,
   type DraftRestoreReport,
 } from './workflowDrafts';
-import { CURRENT_SLUG_KEY, forgetKnownSavedAt } from './workflowFileWatch';
+import {
+  CURRENT_SLUG_KEY,
+  forgetKnownDigest,
+  forgetKnownSavedAt,
+  getKnownDigest,
+  recordKnownDigest,
+} from './workflowFileWatch';
+import { saveFailureMessage } from '@core/runtime/WorkflowFileClient';
 import { writeHostPackage } from './hostPackageWrite';
 
 /**
@@ -57,6 +64,16 @@ export type DiskAutosaveOutcome =
   | { readonly kind: 'saved' }
   | { readonly kind: 'skipped' }
   | { readonly kind: 'unchanged' }
+  /**
+   * The file moved under us and nothing was written — `osg-agent-experience/45`.
+   *
+   * Its own kind rather than a `failed` with a good sentence, because the two
+   * mean opposite things to the writer: a failure is a reason to try again on
+   * the next edit, and this is a reason to **stop**. A surface that folded
+   * them together would either give up on a backend blip or keep re-posting a
+   * document the file has already refused.
+   */
+  | { readonly kind: 'conflict'; readonly slug: string; readonly reason: string }
   | { readonly kind: 'failed'; readonly reason: string };
 
 /**
@@ -261,6 +278,87 @@ export function forgetDiskDocument(slug: string): void {
 }
 
 /**
+ * What the editor says when a save was refused because the file moved.
+ *
+ * Its own function, and it deliberately does **not** print the backend's
+ * sentence. The backend states the fact — *this file changed since you loaded
+ * it* — in the vocabulary of a file; a person sitting in front of the editor
+ * needs the two gestures that exist on this screen, by the names written on
+ * them. One copy owner, the same reason `saveMessage` is one.
+ *
+ * Both choices are named and neither is taken automatically. Reloading would
+ * throw away the edits on screen; keeping mine would throw away the ones on
+ * disk. This editor is not the one who knows which is wanted, and guessing is
+ * how the ticket that produced this function happened in the first place.
+ */
+export function diskConflictNotice(slug: string): string {
+  return (
+    `"${slug}" changed on disk, so this change was not written and ` +
+    'automatic saving has stopped for it. Open it again from Workflows to take the ' +
+    'version on disk and discard what is on screen, or press Save to overwrite the ' +
+    'file with what is on screen.'
+  );
+}
+
+/**
+ * Slugs whose autosave has stood down over a conflict, and why that has to be
+ * a fact this module holds rather than a sentence in a toast.
+ *
+ * The notice above names two doors. *Keep mine* is Save, which already
+ * overwrites deliberately. *Take the version on disk* is Open — and Open does
+ * not by itself do that: it loads the file and then restores this browser's
+ * draft over it (ticket 23), which is right in every ordinary case and is
+ * exactly the wrong answer here, because the draft **is** the version the
+ * user just chose against. Without this the notice would name a door that
+ * quietly does the opposite of what it says.
+ *
+ * Cleared by that open, and by an explicit save: both are the user answering.
+ */
+const standingDown = new Set<string>();
+
+/**
+ * Whether opening this slug means *take the file*, discarding the draft.
+ *
+ * Read by the load path. `false` for every slug that has not been refused,
+ * which is every slug on an ordinary day.
+ */
+export function conflictWantsTheFile(slug: string): boolean {
+  return standingDown.has(slug);
+}
+
+/** The user answered — by opening it, or by saving over it. */
+export function clearConflictStandDown(slug: string): void {
+  standingDown.delete(slug);
+}
+
+/**
+ * Stop autosaving a package whose file somebody else has changed —
+ * `osg-agent-experience/45`.
+ *
+ * The disarm is `forgetDiskDocument`, exactly as it is for a package that was
+ * deleted: a missing baseline is already this module's way of saying *never
+ * write this package*, and a document built from bytes that are no longer on
+ * disk is as much "not from this slug" as one whose slug is gone.
+ *
+ * The second half is what makes the refusal survivable. The conflict carried
+ * the digest the file **actually** holds, and adopting it is what lets the
+ * user say *keep mine*: an explicit Save now writes deliberately, against the
+ * version that is really there, instead of being refused forever or needing a
+ * guard to be switched off. The other door — *reload from disk* — goes
+ * through the ordinary load path, which re-baselines both the document and
+ * the version on its way in.
+ *
+ * The document on screen is untouched. It is the one copy of those edits that
+ * still exists, and dropping it would be this ticket's data loss wearing the
+ * other face.
+ */
+function standDownAfterConflict(slug: string, current: string): void {
+  forgetDiskDocument(slug);
+  recordKnownDigest(slug, current);
+  standingDown.add(slug);
+}
+
+/**
  * Stop writing to a package that no longer exists, and let the document go on.
  *
  * **launch-readiness 147, a data-loss blocker.** The file watch already told
@@ -347,6 +445,10 @@ export interface AbandonOutcome {
 export function abandonDeletedWorkflow(slug: string, cause: DeleteCause): AbandonOutcome {
   forgetDiskDocument(slug);
   forgetKnownSavedAt(slug);
+  // Nothing may be left claiming to know which bytes a file that no longer
+  // exists holds — a package later created at this slug is baselined afresh
+  // rather than compared against a corpse's version.
+  forgetKnownDigest(slug);
 
   // Read **before** the release, because releasing the slug re-keys this tab
   // and afterwards the question "was this tab writing that draft" can no longer
@@ -407,10 +509,27 @@ export async function writeOpenWorkflowToDisk(
   const payload = comparable(model.name, document, serializer);
   if (prev === payload) return { kind: 'unchanged' };
 
-  const result = await client.save(slug, model.name, document);
-  if (!result.ok) return { kind: 'failed', reason: result.error };
+  // **Quoting the version this document came from** (`osg-agent-experience/45`).
+  // A coding agent editing `workflow.json` while the same package is open is
+  // the normal way of working on somebody else's project, not a session
+  // accident, and until this argument existed the next autosave posted a
+  // document built before those edits and the backend wrote it with a 200.
+  // `undefined` when this tab was never handed a version — the same "no
+  // baseline, no write" honesty as the check above, except that here the
+  // backend is the one who decides.
+  const result = await client.save(slug, model.name, document, getKnownDigest(slug));
+  if (!result.ok) {
+    if (result.error.kind === 'conflict') {
+      standDownAfterConflict(slug, result.error.digest);
+      return { kind: 'conflict', slug, reason: result.error.reason };
+    }
+    return { kind: 'failed', reason: saveFailureMessage(result.error) };
+  }
 
   lastWritten.set(slug, payload);
+  // The file's version *after* this write, so the next keystroke's save
+  // quotes our own work rather than conflicting with it.
+  recordKnownDigest(slug, result.value.digest);
   forgetKnownSavedAt(slug);
   return { kind: 'saved' };
 }

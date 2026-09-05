@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
+import type { SaveFailure, SaveReceipt } from '@core/runtime/WorkflowFileClient';
 
 import { Ok, type Result } from '@core/kernel/Result';
 import type { WorkflowSummary } from '@core/runtime/WorkflowFileClient';
@@ -57,9 +58,13 @@ function recordingClient(): { client: IWorkflowSaving; saved: () => unknown } {
   const client: IWorkflowSaving = {
     list: (): Promise<Result<readonly WorkflowSummary[], string>> => Promise.resolve(Ok([])),
     summary: (): Promise<Result<WorkflowSummary | null, string>> => Promise.resolve(Ok(null)),
-    save: (_slug: string, _name: string, sent: unknown): Promise<Result<void, string>> => {
+    save: (
+      _slug: string,
+      _name: string,
+      sent: unknown,
+    ): Promise<Result<SaveReceipt, SaveFailure>> => {
       document = sent;
-      return Promise.resolve(Ok(undefined));
+      return Promise.resolve(Ok({ digest: 'sha-written' }));
     },
     create: (): Promise<Result<string, string>> => Promise.resolve(Ok('unused')),
   };

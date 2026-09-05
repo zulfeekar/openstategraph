@@ -147,7 +147,7 @@ describe('what the seam does with a draft', () => {
   it('supersedes it when the write lands', async () => {
     aDraftOfTheParent();
     const outcome = await writeHostPackage(
-      { summary: async () => Ok(null), save: async () => Ok(undefined) },
+      { summary: async () => Ok(null), save: async () => Ok({ digest: 'sha-written' }) },
       subject,
     );
     expect(outcome).toEqual({ kind: 'written', root: 'front-desk' });
@@ -175,6 +175,7 @@ describe('what the seam does with a draft', () => {
             published: true,
             hidden: false,
             findings: [],
+            digest: '',
           }),
         save: async () => {
           throw new Error('a refused host write must not reach the backend at all');
@@ -189,7 +190,10 @@ describe('what the seam does with a draft', () => {
   it('keeps it when the backend refuses the write', async () => {
     aDraftOfTheParent();
     const outcome = await writeHostPackage(
-      { summary: async () => Ok(null), save: async () => Err('disk is full') },
+      {
+        summary: async () => Ok(null),
+        save: async () => Err({ kind: 'error' as const, message: 'disk is full' }),
+      },
       subject,
     );
     expect(outcome).toEqual({ kind: 'failed', error: 'disk is full' });

@@ -2,6 +2,7 @@ import {
   baselineSlugAfterRestore,
   ensureDiskBaseline,
   writeOpenMountHostToDisk,
+  diskConflictNotice,
   writeOpenWorkflowToDisk,
   type DiskAutosaveOutcome,
 } from '@app/diskAutosave';
@@ -581,6 +582,17 @@ export function useWorkflowSession(report: (message: string) => void = () => {})
         // the storage ones are — this fires on every edit, and a backend that
         // is down would otherwise raise a toast per second.
         const reportDisk = (disk: DiskAutosaveOutcome) => {
+          // **Said every time, and not deduplicated with the failures**
+          // (`osg-agent-experience/45`). A conflict happens once per document
+          // — the writer stands down immediately afterwards, so there is no
+          // stream of them to suppress — and it is the one outcome here that
+          // asks the user to do something. Folding it into `lastDiskReported`
+          // would let a preceding failure with the same text swallow it.
+          if (disk.kind === 'conflict') {
+            lastDiskReported = null;
+            reportRef.current(diskConflictNotice(disk.slug));
+            return;
+          }
           if (disk.kind !== 'failed') {
             lastDiskReported = null;
             return;

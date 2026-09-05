@@ -90,6 +90,10 @@ describe('WorkflowFileClient.list', () => {
         published: false,
         hidden: false,
         findings: [],
+        // Absent from this row's JSON, and empty rather than `undefined`:
+        // "I cannot tell you which version" is what a caller must read it as
+        // (`osg-agent-experience/45`), never as "unchanged".
+        digest: '',
       },
     ]);
     // The editor sees everything, drafts included — its surface is explicit.

@@ -1,4 +1,9 @@
 import type { Result } from '@core/kernel/Result';
+import {
+  saveFailureMessage,
+  type SaveFailure,
+  type SaveReceipt,
+} from '@core/runtime/WorkflowFileClient';
 import type { MountUsage } from '@core/runtime/WorkflowFileClient';
 
 /**
@@ -48,7 +53,13 @@ import type { MountUsage } from '@core/runtime/WorkflowFileClient';
 /** Everything a push needs from the runtime, and nothing else. */
 export interface IPushToPackageClient {
   load(slug: string): Promise<Result<unknown, string>>;
-  save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
+  /**
+   * Unguarded on purpose (`osg-agent-experience/45`): this writer *loads the
+   * package immediately above*, edits that document and writes it straight
+   * back, so the version it holds is the one it just read. There is no stale
+   * in-memory copy here for a file to have moved out from under.
+   */
+  save(slug: string, name: string, document: unknown): Promise<Result<SaveReceipt, SaveFailure>>;
   mountUsage(slug: string, childNodeId: string, key: string): Promise<Result<MountUsage, string>>;
 }
 
@@ -165,7 +176,10 @@ export async function pushFieldToPackage(
   const name = typeof document.name === 'string' && document.name ? document.name : slug;
   const written = await client.save(slug, name, document);
   if (!written.ok) {
-    return { kind: 'refused', message: `Could not save "${slug}": ${written.error}` };
+    return {
+      kind: 'refused',
+      message: `Could not save "${slug}": ${saveFailureMessage(written.error)}`,
+    };
   }
 
   return { kind: 'pushed', slug, count: usage.count, shadowedHosts: usage.shadowedHosts };

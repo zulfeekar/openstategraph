@@ -12,7 +12,7 @@ import { formatMountAddress, isInstance, parseMountAddress } from '@core/model/M
 import { MountContext } from '@core/model/MountContext';
 import { forgetMountHostDocument, rememberMountHostDocument } from '@app/diskAutosave';
 import { restoredDraftNotice } from './restoredDraftNotice';
-import { recordKnownSavedAt } from '@app/workflowFileWatch';
+import { recordKnownVersion } from '@app/workflowFileWatch';
 import { clearDrillStack } from '@app/drillStack';
 import { hasDraftFor } from '@app/workflowDrafts';
 import { refreshWorkflowCapabilities } from '@app/capabilityRefresh';
@@ -174,10 +174,7 @@ export function useDeepLinkedWorkflow(notify: (message: string) => void): void {
             }
             rememberMountHostDocument(openAddress.root, root.value);
             const row = await client.summary(openAddress.root);
-            recordKnownSavedAt(
-              openAddress.root,
-              row.ok ? (row.value?.savedAt ?? undefined) : undefined,
-            );
+            recordKnownVersion(openAddress.root, row.ok ? row.value : null);
           });
         }
         return;

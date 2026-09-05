@@ -152,7 +152,7 @@ describe('back from a mount keeps the override it just saved', () => {
       {
         save: async (_slug: string, _name: string, document: unknown) => {
           onDisk = document;
-          return Ok(undefined);
+          return Ok({ digest: 'sha-written' });
         },
         summary: async () => Ok(null),
       },
@@ -210,7 +210,7 @@ describe('back from a mount keeps the override it just saved', () => {
         summary: async () => Ok(null),
         save: async (_slug: string, _name: string, document: unknown) => {
           onDisk = document;
-          return Ok(undefined);
+          return Ok({ digest: 'sha-written' });
         },
         create: async () => Ok('unused'),
       },

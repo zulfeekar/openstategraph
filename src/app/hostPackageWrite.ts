@@ -1,7 +1,17 @@
 import type { Result } from '@core/kernel/Result';
 import type { MountAddress } from '@core/model/MountAddress';
-import type { WorkflowSummary } from '@core/runtime/WorkflowFileClient';
-import { getKnownSavedAt, recordKnownSavedAt } from '@app/workflowFileWatch';
+import {
+  saveFailureMessage,
+  type SaveFailure,
+  type SaveReceipt,
+  type WorkflowSummary,
+} from '@core/runtime/WorkflowFileClient';
+import {
+  getKnownDigest,
+  getKnownSavedAt,
+  recordKnownDigest,
+  recordKnownVersion,
+} from '@app/workflowFileWatch';
 import { supersedeDraftAfterHostWrite } from '@app/workflowDrafts';
 
 /**
@@ -53,7 +63,12 @@ import { supersedeDraftAfterHostWrite } from '@app/workflowDrafts';
 /** Everything a host write needs from the runtime, and nothing else. */
 export interface IHostPackageClient {
   summary(slug: string): Promise<Result<WorkflowSummary | null, string>>;
-  save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
+  save(
+    slug: string,
+    name: string,
+    document: unknown,
+    baseDigest?: string,
+  ): Promise<Result<SaveReceipt, SaveFailure>>;
 }
 
 /**
@@ -97,8 +112,20 @@ export async function writeHostPackage(
   }
 
   const name = (subject.rootDocument['name'] as string) || root;
-  const written = await client.save(root, name, subject.rootDocument);
-  if (!written.ok) return { kind: 'failed', error: written.error };
+  // The `savedAt` check above is this module's own; the digest is the
+  // backend's, and both are sent (`osg-agent-experience/45`). They fail on
+  // different things and neither subsumes the other: `savedAt` moves only when
+  // this editor's own store writes the envelope, so a coding agent editing the
+  // parent's `workflow.json` by hand passes it untouched — and that is exactly
+  // the writer this ticket exists for. A refusal from either is the same
+  // `refused`, in one sentence, because a surface has one thing to say.
+  const written = await client.save(root, name, subject.rootDocument, getKnownDigest(root));
+  if (!written.ok) {
+    if (written.error.kind === 'conflict') {
+      return { kind: 'refused', reason: written.error.reason };
+    }
+    return { kind: 'failed', error: saveFailureMessage(written.error) };
+  }
 
   // Only after a write that actually landed. A refused or failed write leaves
   // the file where it was, so the draft is still this browser's unsaved work
@@ -106,6 +133,9 @@ export async function writeHostPackage(
   supersedeDraftAfterHostWrite(root);
 
   const row = await client.summary(root);
-  recordKnownSavedAt(root, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
+  recordKnownVersion(root, row.ok ? row.value : null);
+  // After the row, because the receipt describes the bytes this call wrote
+  // while the row is a second read anybody could have overtaken.
+  recordKnownDigest(root, written.value.digest);
   return { kind: 'written', root };
 }

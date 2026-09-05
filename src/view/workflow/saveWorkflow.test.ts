@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SaveFailure, SaveReceipt } from '@core/runtime/WorkflowFileClient';
 import { Ok, Err, type Result } from '@core/kernel/Result';
 import type { WorkflowSummary } from '@core/runtime/WorkflowFileClient';
 import { clearOpenSlug, getOpenSlug, setOpenSlug } from '@app/openWorkflow';
@@ -71,9 +72,9 @@ function recordingClient(overrides: Partial<IWorkflowSaving> = {}) {
       return Promise.resolve(Ok([]));
     },
     summary: (): Promise<Result<WorkflowSummary | null, string>> => Promise.resolve(Ok(null)),
-    save: (slug: string): Promise<Result<void, string>> => {
+    save: (slug: string): Promise<Result<SaveReceipt, SaveFailure>> => {
       calls.push(`save:${slug}`);
-      return Promise.resolve(Ok(undefined));
+      return Promise.resolve(Ok({ digest: 'sha-written' }));
     },
     create: (name: string): Promise<Result<string, string>> => {
       calls.push(`create:${name}`);

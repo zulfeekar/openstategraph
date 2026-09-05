@@ -1,11 +1,16 @@
 import type { Result } from '@core/kernel/Result';
-import { recordKnownSavedAt } from '@app/workflowFileWatch';
+import { recordKnownDigest, recordKnownVersion } from '@app/workflowFileWatch';
 import { writeHostPackage } from '@app/hostPackageWrite';
 import { getOpenSlug, setOpenSlug } from '@app/openWorkflow';
 import { getOpenAddress } from '@app/openAddress';
 import { isInstance } from '@core/model/MountAddress';
-import type { WorkflowSummary } from '@core/runtime/WorkflowFileClient';
-import { rememberDiskDocument } from '@app/diskAutosave';
+import {
+  saveFailureMessage,
+  type SaveFailure,
+  type SaveReceipt,
+  type WorkflowSummary,
+} from '@core/runtime/WorkflowFileClient';
+import { clearConflictStandDown, rememberDiskDocument } from '@app/diskAutosave';
 import { adoptSlugForDraft, currentDraftId } from '@app/workflowDrafts';
 import { duplicateNameConfirmation } from './consequences';
 
@@ -47,7 +52,15 @@ import { duplicateNameConfirmation } from './consequences';
 export interface IWorkflowSaving {
   list(): Promise<Result<readonly WorkflowSummary[], string>>;
   summary(slug: string): Promise<Result<WorkflowSummary | null, string>>;
-  save(slug: string, name: string, document: unknown): Promise<Result<void, string>>;
+  /**
+   * `baseDigest` is deliberately **not** in this signature
+   * (`osg-agent-experience/45`). Pressing Save is the user saying *keep
+   * mine*: an explicit, deliberate overwrite of whatever is on disk, which is
+   * exactly the door a conflict leaves open. The version check exists for the
+   * writer nobody asked for — autosave — and a Save button that could be
+   * refused would leave a developer holding edits with nowhere to put them.
+   */
+  save(slug: string, name: string, document: unknown): Promise<Result<SaveReceipt, SaveFailure>>;
   create(name: string, document: unknown): Promise<Result<string, string>>;
 }
 
@@ -218,9 +231,14 @@ export async function saveWorkflow({
   const document = JSON.parse(workbench.serializer.toJSONString(workbench.model)) as unknown;
   let slug = open;
   let failure: string | null = null;
+  // The version this Save produced, adopted below so autosave — which may have
+  // stood down over a conflict this Save has just settled — quotes the file's
+  // real digest on the next edit rather than the one it loaded with.
+  let adopted: string | undefined;
   if (open) {
     const outcome = await client.save(open, name, document);
-    if (!outcome.ok) failure = outcome.error;
+    if (!outcome.ok) failure = saveFailureMessage(outcome.error);
+    else adopted = outcome.value.digest;
   } else {
     const outcome = await client.create(name, document);
     if (outcome.ok) slug = outcome.value;
@@ -250,12 +268,20 @@ export async function saveWorkflow({
   // time here would never autosave again, which is precisely the moment a
   // developer starts expecting it to.
   rememberDiskDocument(slug, name, document, workbench.serializer);
+  // *Keep mine*, answered (`osg-agent-experience/45`): this Save has just
+  // overwritten the file deliberately, so opening the workflow again is an
+  // ordinary open and must restore this browser's draft as it always does.
+  clearConflictStandDown(slug);
   // This tab's own write — recorded as known-good so the file watch never
   // mistakes this save for an external change. Read back by slug, not looked up
   // in a refreshed listing: a hidden package is not in that listing, so saving
   // one used to record no baseline at all (ticket 21).
   const row = await client.summary(slug);
-  recordKnownSavedAt(slug, row.ok ? (row.value?.savedAt ?? undefined) : undefined);
+  recordKnownVersion(slug, row.ok ? row.value : null);
+  // The receipt wins over the row when there is one: it is the digest of the
+  // bytes this save wrote, while the row is a second read that another writer
+  // could already have overtaken (`osg-agent-experience/45`).
+  recordKnownDigest(slug, adopted);
 
   return open ? { kind: 'saved', slug, name } : { kind: 'created', slug, name };
 }

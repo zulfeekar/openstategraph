@@ -1464,6 +1464,32 @@ The slug is **frozen at creation**. Renaming a workflow changes the display
 name inside `workflow.json` and never the directory, so every link, mount and
 line of git history keeps resolving.
 
+**And unless you send `base_digest`, in which case a file that moved is a
+`409`** (`osg-agent-experience/45`). Every read of a package —
+`GET /api/workflows/{slug}`, its `/summary`, and each row of the listing —
+carries a `digest`, an opaque string naming the bytes that answer came from. A
+client that loads a document, edits it and saves quotes that digest back; if
+the file changed in between, nothing is written and the response is
+
+```json
+{"detail": {"reason": "'cpl-analyst' changed on disk since it was loaded here — reload it to take the file's version, or save again to overwrite it", "digest": "<what the file holds now>"}}
+```
+
+The `digest` in that body is the way forward, not decoration: a client that
+means to keep its own version saves again quoting it, and one that does not
+reloads. A successful save answers with the **new** digest, which is what lets
+consecutive saves work without re-reading the file between them. `digest` is
+accepted as a spelling of `base_digest` so a body fetched from
+`GET /api/workflows/{slug}` can be edited and put straight back, as ticket 42
+promises.
+
+Omit the field to write unguarded — the CLI, a script and a test own the
+package they are writing. The editor always sends it, because the case this
+exists for is not rare: a coding agent rewriting `workflows/<slug>/workflow.json`
+while the same package sits open in a browser tab is the normal way of working
+on a real project, and the tab's autosave used to post a document built before
+those edits and write them away with a `200`.
+
 **A save that changed nothing writes nothing** (`production-ready` 67). If the
 stored envelope already matches what you sent — same document, same name, same
 lifecycle flags — the file is left untouched, `mtime` included, and the
