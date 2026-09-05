@@ -245,6 +245,13 @@ are — something only the build knows, asked for one level up — and it stays
 private for the reason `_holds_a_gate` records: a tenth public member on this
 class is a class that has to argue for itself.
 
+**578 -> 581** (`osg-agent-experience/42`). Three lines and they are the shape
+this file wants: `route_check` joins the family import, one binding in the
+class body, one `registry.register` call. The whole implementation of the new
+node type is 69 code lines in `compile/nodes/route_check.py`, none of it
+here — which is what `docs-and-gaps/03`'s split was for, and the measurable
+difference from the twenty families this module used to hold inline.
+
 """
 
 CLI = """
@@ -521,6 +528,14 @@ this key" advisory: `document_checks.unknown_fields` says it on the verdict's
 own list, and printing both put "so the document stays valid" directly above
 `valid: false` on the editor's validate door. The required-key half is
 unchanged and stays here, where the plan is.
+
+**957 -> 958** (`osg-agent-experience/42`). One line: `ROUTE_CHECK_TYPE` joins
+the type constants and the router's own edge clause takes it as a second
+member of a tuple, because a fork decided by a package function is the same
+edge as a fork decided by a model — the same one destination per branch. The
+node's behaviour is 69 code lines away in `compile/nodes/route_check.py`, and
+that this file grew by exactly one line for a whole new node type is the split
+between topology and behaviour doing its job rather than a coincidence.
 """
 
 STREAMING = """
@@ -1097,9 +1112,9 @@ in `api/` would be a second place that has to be told when one is added.
 
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(600, KANBAN_STORE),
-    "compile/node_runtime.py": Recorded(578, NODE_RUNTIME),
+    "compile/node_runtime.py": Recorded(581, NODE_RUNTIME),
     "cli.py": Recorded(1608, CLI),
-    "compile/workflow_compiler.py": Recorded(957, WORKFLOW_COMPILER),
+    "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(970, MCP_SERVER),

@@ -232,6 +232,12 @@ export const CENSUS_TERMS: readonly ICompositionTerm[] = [
     many: 'graders',
     revisePort: 'revise',
   },
+  // A fork a package function decides (`osg-agent-experience` 42). Control
+  // for the same reason `guard.policy` below is: it *decides*, which is what
+  // this group counts, and it calls no model while doing it. Named rather
+  // than left to the family fallback, which would have counted it as "1
+  // route" beside "1 router" and made a reader wonder which was which.
+  { id: 'route.check', group: 'control', one: 'check router', many: 'check routers' },
   { id: 'human.approval', group: 'control', one: 'approval', many: 'approvals' },
   // Control, not reasoning: a guardrail calls no model. It is here because
   // it *decides* — `allowed` or `blocked` — which is what this group counts,

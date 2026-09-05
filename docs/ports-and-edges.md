@@ -27,7 +27,7 @@ can register more without touching the editor.
 | `text` | amber | a prompt or question | `input.text`, each `route.classifier` branch | `agent.llm.prompt`, `orchestrate.supervisor.instruction`, `route.classifier.question` |
 | `skill` | orange | a system instruction that shapes behaviour | `input.skill`, `input.markdown` | the `skill` port of all five model-driven types: `agent.llm`, `route.classifier`, `route.grader`, `orchestrate.supervisor`, `orchestrate.worker` |
 | `tool` | violet | a callable handle | every tool node's `tool` port | `agent.llm.tools`, `orchestrate.worker.tools` |
-| `result` | green | a finished answer | `agent.llm.result`, `orchestrate.worker.result`, `route.grader.pass`, `guard.check.pass`, `function.format_report.report`, `human.approval.approved`, `guard.policy.allowed`, `guard.policy.blocked`, `memory.segment.onward`, `resolve.source.result`, `resolve.vocabulary.result`, `workflow.subgraph.result` | `route.grader.candidate`, `guard.check.candidate`, `function.format_report.candidate`, `human.approval.candidate`, `guard.policy.content`, `memory.segment.crossing`, `output.formatted.result`, `resolve.source.question`, `resolve.vocabulary.question`, `workflow.subgraph.input` |
+| `result` | green | a finished answer | `agent.llm.result`, `orchestrate.worker.result`, `route.grader.pass`, `guard.check.pass`, `route.check.fallback` (and its `branch:<id>` outputs), `function.format_report.report`, `human.approval.approved`, `guard.policy.allowed`, `guard.policy.blocked`, `memory.segment.onward`, `resolve.source.result`, `resolve.vocabulary.result`, `workflow.subgraph.result` | `route.grader.candidate`, `guard.check.candidate`, `route.check.candidate`, `function.format_report.candidate`, `human.approval.candidate`, `guard.policy.content`, `memory.segment.crossing`, `output.formatted.result`, `resolve.source.question`, `resolve.vocabulary.question`, `workflow.subgraph.input` |
 | `feedback` | red | a rejection, travelling **upstream** | `route.grader.revise`, `guard.check.revise`, `human.approval.rejected` | `agent.llm.feedback`, `orchestrate.supervisor.feedback`, `route.classifier.feedback` |
 | `worker` | blue | a fan-out *declaration* | `orchestrate.supervisor.workers` | `orchestrate.worker.dispatch` |
 
@@ -92,7 +92,7 @@ maxConnections: 3       →  three
 ```
 
 **A conditional branch output takes one edge**, and it is derived from
-`branch` rather than written out beside each of the nine that declare it
+`branch` rather than written out beside each descriptor that declares it
 (`osg-agent-experience/38`). A grader's `revise` drawn to fifteen agents.
 `feedback` saved, validated, compiled and ran — with fourteen of the fifteen
 gone, because `plan.conditional[node][branch]` is a dict and the last edge

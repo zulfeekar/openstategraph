@@ -106,6 +106,13 @@ GUARDRAIL_TYPE = "guard.policy"
 #: loops back upstream the way a grader's does, it does not take a forward
 #: wire the way a blocked guardrail does.
 GUARD_CHECK_TYPE = "guard.check"
+#: `osg-agent-experience` 42: a classifier's mechanical sibling — the same
+#: one-conditional-edge-per-branch shape, decided by a package function instead
+#: of by a model, with every way out typed `result` so an output may take one.
+#: Routed exactly like `ROUTER_TYPE` below and deliberately not like
+#: `GUARD_CHECK_TYPE`: this is a fork whose branches go forward, not a loop
+#: whose `revise` returns upstream.
+ROUTE_CHECK_TYPE = "route.check"
 
 #: The port type that marks a fan-out declaration rather than control flow or a
 #: capability binding. An edge landing on a `worker`-typed port means "this is
@@ -2116,8 +2123,13 @@ class WorkflowCompiler:
                 bound_only.add(src_id)
                 continue
 
-            # --- the router: one conditional edge per branch ---
-            if src_type == ROUTER_TYPE:
+            # --- the router, and its mechanical sibling: one conditional edge
+            # per branch. `route.check` decides by calling a package function
+            # rather than a model, which changes who chooses and nothing about
+            # the edge (`osg-agent-experience` 42). Its `fallback` is a static
+            # port carrying no prefix, so `removeprefix` leaves it as its own
+            # label — the same string `_route_check` writes.
+            if src_type in (ROUTER_TYPE, ROUTE_CHECK_TYPE):
                 branch = src.get("portId", "").removeprefix("branch:")
                 plan.conditional.setdefault(src_id, {})[branch] = dst_id
                 has_outgoing.add(src_id)

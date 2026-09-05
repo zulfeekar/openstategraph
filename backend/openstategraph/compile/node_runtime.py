@@ -176,6 +176,7 @@ from openstategraph.compile.nodes import (
     mount,
     orchestration,
     resolvers,
+    route_check,
     router,
 )
 from openstategraph.compile.static_source import (
@@ -575,6 +576,7 @@ class NodeRuntime:
     # which is the whole reason it is a binding and not a delegating wrapper.
     # `compile/nodes/__init__.py` carries the argument in full.
     _router = router._router
+    _route_check = route_check._route_check
     _grader = grader._grader
     _guardrail = guard._guardrail
     _guard_check = guard._guard_check
@@ -629,6 +631,11 @@ class NodeRuntime:
             registry.register(static_type, self._static_text)
         registry.register("agent.llm", self._agent)
         registry.register("route.classifier", self._router)
+        # The same fork, decided by a package function rather than a model
+        # (`osg-agent-experience` 42). Registered beside the classifier
+        # because that is what it is a sibling of, not beside `guard.check`,
+        # whose `revise` closes a loop.
+        registry.register("route.check", self._route_check)
         registry.register("route.grader", self._grader)
         registry.register("human.approval", self._human_approval)
         registry.register("guard.policy", self._guardrail)

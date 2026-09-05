@@ -214,6 +214,43 @@ finding — the finding reports the **absence** of a gate, never the adequacy of
 one, because judging a check's contents from the compiler is how a checker
 starts reporting success on a wrong answer.
 
+### A Check router — the same function, deciding where rather than whether
+
+A Guard's `revise` is a `feedback` port, so it can only go back to something
+that takes feedback: an agent, a router. That is exactly right for a loop and
+it is the wrong shape for the other question a package function can answer —
+*which way does this go*. An Output takes `result`, and no deterministic node
+could hand it one.
+
+**Check router** (`route.check`) is the Guard's sibling on that axis. It runs
+one of your package's `functions/` against the candidate exactly as a Guard
+does, and reads the return as the **name of a branch** instead of as a
+complaint. You list the branches on the card, one out-port each, and every one
+of them carries `result` — so an Output, an agent or another fork may hang off
+any of them.
+
+| | Decides | Answers with | Its outputs are |
+| --- | --- | --- | --- |
+| **Router** (`route.classifier`) | a model | one of your branch names | `text`, one per branch |
+| **Check router** (`route.check`) | **code** — a package function, no model | one of your branch names | `result`, one per branch, plus `fallback` |
+| **Guard** (`guard.check`) | **code** — a package function, no model | `""` to pass, else the sentence to send back | `pass` (`result`) and `revise` (`feedback`) |
+
+The **fallback** port is always there and is not one of your rows. It is taken
+when the function returns a name no branch declares, returns nothing, or
+raises — and the reason is recorded either way. A name is matched
+case-insensitively and a branch's own id works as well as its name, but nothing
+outside your own list is ever taken as a branch: an unrecognised answer goes to
+`fallback`, never to a guess.
+
+Reach for it when the decision is a **fact the run already has**. The case it
+was built for: a question that names no date range must be asked back rather
+than answered on an assumed window. A `resolve.vocabulary` already reports the
+range as uncovered, for free and without a model — a `route.check` turns that
+into the edge that reaches an Output. Sent through a Router instead, the same
+question was classified onto a data branch and never asked.
+
+Each branch takes **one** edge, like every other conditional way out.
+
 The safety net underneath is the **step budget**. It is counted in
 *supersteps*, not laps: with a fan-out, one lap can cost several. Do not read
 it as "maximum retries" — the grader's own attempt limit is that.
@@ -734,6 +771,7 @@ The words this product uses, and what each one must not be mistaken for.
 | **override** | a per-instance setting, stored on the **parent** | an edit to the package |
 | **revision loop** | grader `revise` → agent `feedback`; ends when the grader passes or the budget runs out | an agent's internal tool-calling |
 | **guard** | `guard.check` — the same pass-or-revise verdict a grader reaches, decided by one of your package's functions instead of a model | a permission check; something that only blocks |
+| **check router** | `route.check` — the same package function, read as the **name of a branch** rather than as a complaint; every way out carries `result`, so an Output may take one | a Router (a model picks that one); a Guard (that one decides *whether*, not *where*) |
 | **step budget** | supersteps a run may take | "max retries" or "iterations" |
 | **cache result for** | seconds a node's answer is reused when its input repeats | a speed setting; a memory |
 | **template** | a starting document; produces a workflow and stops existing | a node type; a live link |

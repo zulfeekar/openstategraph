@@ -28,6 +28,25 @@
   skipped with a warning naming the line number alone.
 
 ### Added
+- **`route.check` — a fork a package function decides, with no model**
+  (`osg-agent-experience/42`). A question naming no date range must be asked
+  back rather than answered on an assumed window, and a workflow already had
+  the fact for free: a `resolve.vocabulary` reports the range as uncovered
+  without calling anybody. Nothing could turn that fact into a route to an
+  output. `guard.check` routes pass/revise, but `revise` is a `feedback` port
+  and an Output takes `result`; `route.classifier` can name an `ask_back`
+  branch, but a **model** picks it, and on the first live run it picked a data
+  branch and never asked. The new node runs one of the package's `functions/`
+  against the candidate — the same `fn(text) -> str` contract every
+  `function.*` node uses — and reads the return as the **name of a branch**.
+  Branches are declared as rows, one `branch:<id>` out-port each, every one
+  typed `result` and carrying one edge, so an Output, an agent or another fork
+  may hang off any of them. A static `fallback` port takes a name no branch
+  declares, nothing at all, or a raised exception, and the reason is recorded
+  on `verdicts` either way; a branch's id is accepted as well as its name and
+  case is forgiven, but nothing outside the declared list is ever taken as a
+  branch. It compiles to `add_conditional_edges`, exactly as the classifier
+  does, and reaches no model on any path.
 - **`tool.mssql-query` — one read-only T-SQL SELECT, against tables somebody
   pinned** (`osg-agent-experience/34`). The SQL Explorer family had three
   atoms and all three were SQLite, so a workflow whose data lives in a

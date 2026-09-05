@@ -16,6 +16,7 @@ import { ROUTER_TYPE, createRouterNode, routerExecutor } from './routing/RouterN
 import { humanApprovalExecutor, humanApprovalNode } from './routing/HumanApprovalNode';
 import { GUARDRAIL_TYPE, guardrailExecutor, guardrailNode } from './guard/GuardrailNode';
 import { GUARD_CHECK_TYPE, guardCheckExecutor, guardCheckNode } from './guard/GuardCheckNode';
+import { ROUTE_CHECK_TYPE, routeCheckExecutor, routeCheckNode } from './routing/RouteCheckNode';
 import {
   MEMORY_SEGMENT_TYPE,
   memorySegmentExecutor,
@@ -100,6 +101,11 @@ export function registerNodeCatalogue(
       // are registered only while a document using them is open — see
       // `syncWorkflowScopedNodes`, called from `Workbench`.
       routerNode,
+      // The same fork, decided by a package function rather than a model
+      // (`osg-agent-experience` 42). Grammar like the rest of routing: any
+      // document may need a deterministic branch, and which function decides
+      // it is the node's own configuration.
+      routeCheckNode,
       graderNode,
       humanApprovalNode,
       // Policy, as a step you can see. Ships globally for the same reason
@@ -145,6 +151,7 @@ export function registerNodeCatalogue(
     agentExecutor,
     redditSearchExecutor,
     routerExecutor,
+    routeCheckExecutor,
     graderExecutor,
     humanApprovalExecutor,
     guardrailExecutor,
@@ -178,6 +185,7 @@ export const NODE_TYPE = {
   agent: 'agent.llm',
   redditSearch: redditSearchNode.id,
   router: ROUTER_TYPE,
+  routeCheck: ROUTE_CHECK_TYPE,
   grader: GRADER_TYPE,
   humanApproval: humanApprovalNode.id,
   guardrail: GUARDRAIL_TYPE,

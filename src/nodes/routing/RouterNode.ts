@@ -77,7 +77,19 @@ const slug = (name: string): string =>
  * Backward compatible: if `branches` is a newline-separated string (v1 format),
  * it is migrated to the array format with generated stable ids.
  */
-export function branchesOf(data: Readonly<NodeData>): BranchEntry[] {
+export function branchesOf(
+  data: Readonly<NodeData>,
+  /**
+   * What an unreadable `branches` value falls back to.
+   *
+   * A parameter since `osg-agent-experience/42`, when `route.check` began
+   * reusing this reader: a second family sharing the migration and the
+   * dedupe should not also inherit *this* family's five default desks, which
+   * is what a module-scope constant would have handed it. The default keeps
+   * every existing caller reading exactly as it did.
+   */
+  fallback: BranchEntry[] = DEFAULT_BRANCHES,
+): BranchEntry[] {
   const raw = data[FIELD_BRANCHES];
 
   // Migration: old format was newline-separated text
@@ -96,7 +108,7 @@ export function branchesOf(data: Readonly<NodeData>): BranchEntry[] {
     return result.length > 0 ? result : [{ id: 'default', name: 'default' }];
   }
 
-  if (!Array.isArray(raw)) return DEFAULT_BRANCHES;
+  if (!Array.isArray(raw)) return fallback;
 
   const entries = raw as Array<Record<string, unknown>>;
   const seen = new Set<string>();

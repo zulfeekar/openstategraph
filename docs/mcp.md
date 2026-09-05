@@ -162,7 +162,7 @@ The gist of what comes back:
     //  function.format_report, guard.check, guard.policy, human.approval, input.markdown,
     //  input.skill, input.text, memory.segment, orchestrate.supervisor,
     //  orchestrate.worker, output.formatted, resolve.source, resolve.vocabulary,
-    //  route.classifier, route.grader, workflow.subgraph.
+    //  route.check, route.classifier, route.grader, workflow.subgraph.
     //
     //  Then every bindable tool, which is the half that matters when you are
     //  composing a document an agent can actually run: tool.chinook-execute-sql,

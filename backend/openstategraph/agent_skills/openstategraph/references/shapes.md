@@ -151,14 +151,19 @@ tiers whose rules differ).
   before any expensive work: a period, a unit, a tenant.
 - **Does not fit when** the workflow could sensibly default. An ask-back the
   user could have skipped is a workflow that argues.
-- **Costs:** one classification call, and a branch to an output of its own.
-  Today the decision is carried in the classifier's rules — a resolver can
-  *say* an axis is uncovered and cannot yet *make* the graph route on it, so
-  the sentence is prompt text, and it is pinned by a test rather than
-  trusted.
-- **Node types:** `resolve.vocabulary` to name the axis, `route.classifier`
-  with the missing-axis rule **first**, and a branch reaching its own
-  `output.formatted` through a node that produces text.
+- **Costs:** nothing but the function call — no model, no tokens, no lap.
+  Until `osg-agent-experience/42` the decision was carried in the classifier's
+  rules: a resolver could *say* an axis was uncovered and could not *make* the
+  graph route on it, so the sentence was prompt text, and a live run
+  (2026-09-05, *"How much crude did Norway export?"*) classified onto a data
+  branch and never asked. `route.check` closes that: a package function
+  returns the branch name, every out-port carries `result`, and the ask-back
+  branch reaches an output directly.
+- **Node types:** `resolve.vocabulary` to name the axis, `route.check` naming
+  the function that reads its verdict, and its `ask_back` branch wired
+  straight to an `output.formatted`. `route.classifier` still fits when the
+  gap genuinely needs judgement to spot; a decidable one should not pay a
+  model to be decided.
 
 ## Primary + facet
 

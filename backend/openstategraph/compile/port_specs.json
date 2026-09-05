@@ -1613,6 +1613,115 @@
       ]
     },
     {
+      "type": "route.check",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Check router",
+      "description": "Runs a package function against the candidate and takes the branch it names. No model.",
+      "ports": [
+        {
+          "id": "candidate",
+          "direction": "in",
+          "type": "result",
+          "label": "candidate",
+          "required": false,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "fallback",
+          "direction": "out",
+          "type": "result",
+          "label": "fallback",
+          "required": false,
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [
+        {
+          "prefix": "branch:",
+          "direction": "out",
+          "type": "result",
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "branches",
+        "cacheTtlSeconds",
+        "check",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "check",
+          "kind": "text",
+          "label": "Check",
+          "hint": "The package function to run, named the way `function.<name>` names it — this node calls that same function, not a model. It returns the name of one of the branches below; anything else, including nothing at all, takes the fallback. A branch’s own id is accepted as well as its name, and case and surrounding space are forgiven.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "branches",
+          "kind": "repeatable-group",
+          "label": "Branches",
+          "hint": "",
+          "required": false,
+          "defaultValue": [
+            {
+              "id": "b1",
+              "name": "ask_back"
+            },
+            {
+              "id": "b2",
+              "name": "answer"
+            }
+          ]
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
       "type": "route.classifier",
       "kind": "standard",
       "category": "agent",
