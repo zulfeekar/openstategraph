@@ -836,8 +836,9 @@ class WorkflowRuns:
         )
         from openstategraph.api.model_resolution import resolve_model, workflow_default_model
         from openstategraph.chat_model import build_chat_model
-        from openstategraph.compile.node_runtime import RunState
+        from openstategraph.compile.node_runtime import RunState, drives_a_model
         from openstategraph.compile.workflow_compiler import WorkflowCompiler
+        from openstategraph.model_readiness import unmet_model_requirement, would_reach_no_model
 
         if slug is None and document is None:
             return {"error": "Pass either a saved `slug` or an inline `document`."}
@@ -965,6 +966,19 @@ class WorkflowRuns:
                     ),
                     store=self._services.memory_store,
                 )
+                # Built, therefore knowable (`osg-agent-experience/48`). This
+                # door had the same defect as the other two: half a graph would
+                # run and a worker would die naming a credential. Returned
+                # rather than raised — errors are data to this client — and in
+                # the same `error`/`findings` shape an uncompilable document
+                # already gets, with the readiness sentence every other surface
+                # prints. See `model_readiness`.
+                no_model = would_reach_no_model(
+                    drives_model=drives_a_model(runtime), model=chat_model
+                )
+                unmet = unmet_model_requirement(no_model=no_model)
+                if unmet is not None:
+                    return {"error": unmet, "findings": [unmet]}
                 final = invoke_run(
                     graph,
                     {"question": question, "attempts": 0, "decisions": {}, "outputs": {}},

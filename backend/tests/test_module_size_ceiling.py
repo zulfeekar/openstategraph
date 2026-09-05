@@ -238,6 +238,13 @@ number driven below the shared part by pushing that resolution down into the
 families would buy this table a better figure and cost the codebase the
 anti-duplication rule, so the honest floor is well above the 500 ceiling and
 this entry is expected to keep its argument after the last family leaves.
+**574 -> 578** (`osg-agent-experience/48`). Four lines: one attribute beside
+`_holds_a_gate`, its assignment in `_resolve_model`, and a two-line module
+function to read it. It is the same *kind* of fact the two beside it already
+are — something only the build knows, asked for one level up — and it stays
+private for the reason `_holds_a_gate` records: a tenth public member on this
+class is a class that has to argue for itself.
+
 """
 
 CLI = """
@@ -456,6 +463,12 @@ The rule holds and was the reason for the size: the payload is
 so what is here is an argparse declaration, two calls and the one decision
 that is genuinely the command's — that an id nothing resolves is a *usage*
 error rather than a failure, because nothing ran.
+**1604 -> 1608** (`osg-agent-experience/48`). Four lines: an import and a
+three-line refusal before the run. The predicate was answered where the model
+is (`load_workflow`) and recorded on the workflow, so what is here is the
+command saying what it did — which is the only thing this module is allowed
+to do.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -765,6 +778,11 @@ goes here and not *which* strings, so `matchMode` was still a guess — and a
 guessed picker value is `validate`'s *not an option* finding rather than a
 run. Read off the same catalogue record as every other key beside it; no new
 reader, and nothing here decides anything.
+**963 -> 970** (`osg-agent-experience/48`). Seven lines: an import and the
+readiness refusal, returned in the `error`/`findings` shape an uncompilable
+document already gets. No new decision here — `model_readiness` holds the
+predicate and the sentence; this door only says it in its own shape.
+
 """
 
 ROUTES_WORKFLOWS = """
@@ -1079,12 +1097,12 @@ in `api/` would be a second place that has to be told when one is added.
 
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(600, KANBAN_STORE),
-    "compile/node_runtime.py": Recorded(574, NODE_RUNTIME),
-    "cli.py": Recorded(1604, CLI),
+    "compile/node_runtime.py": Recorded(578, NODE_RUNTIME),
+    "cli.py": Recorded(1608, CLI),
     "compile/workflow_compiler.py": Recorded(957, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(963, MCP_SERVER),
+    "mcp_server.py": Recorded(970, MCP_SERVER),
     "api/routes/workflows.py": Recorded(559, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(534, SCHEMAS),

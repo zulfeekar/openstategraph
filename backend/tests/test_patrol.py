@@ -484,6 +484,12 @@ class TestEveryDoorCanSetTheMarker:
         seen: dict[str, Any] = {}
 
         class _Workflow:
+            # `osg-agent-experience/48`: the CLI door asks the loaded workflow
+            # whether this machine can serve the model it will reach. A stand-in
+            # for `CompiledWorkflow` has to answer it, and the honest answer for
+            # a fake that never calls a model is False.
+            needs_a_provider = False
+
             slug = "demo"
             document: dict[str, Any] = {}
 

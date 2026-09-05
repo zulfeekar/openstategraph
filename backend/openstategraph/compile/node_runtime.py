@@ -498,6 +498,21 @@ class NodeRuntime:
         #: answering a gate anywhere below it re-runs the child from its first
         #: step, and the mount is the only place that knows both halves.
         self._holds_a_gate: bool = False
+        #: Whether this document — or anything it mounts, at any depth — will
+        #: reach a model (`osg-agent-experience/48`).
+        #:
+        #: Private for exactly the reason `_holds_a_gate` above it is: a public
+        #: boolean would be a tenth member on a surface `CLAUDE.md` says to
+        #: extend by collaborator. `drives_a_model(runtime)` below is the
+        #: reader, and it is a module function rather than a property for that
+        #: same census.
+        #:
+        #: Set by `_resolve_model` — the one place a node asks this runtime for
+        #: a model — and unioned upward across a mount beside `_holds_a_gate`.
+        #: **Not a list of node type names**: a family contributed by a plugin
+        #: is handed `resolve_model` and declares itself by calling it, which
+        #: no name list here could have known about.
+        self._drives_a_model: bool = False
 
         #: The node types **this build implements itself**, as a registry
         #: rather than a dict literal (`export-and-eject/03`).
@@ -837,6 +852,11 @@ class NodeRuntime:
         bare `data` dict with no node in scope, and a blank or `mock`
         selection is not a failure at all, so those callers never need it.
         """
+        # The record `osg-agent-experience/48`'s door reads. Set here rather
+        # than at each caller because this is the one place a node asks for a
+        # model at all, and a caller that could forget is the defect that
+        # ticket is, one layer up.
+        self._drives_a_model = True
         return self._apply_effort(
             self._base_model(data, node_id), _text(data, REASONING_EFFORT_KEY)
         )
@@ -1460,4 +1480,23 @@ class NodeRuntime:
 
 
 
-__all__ = ["NodeRuntime", "PackageAssets", "RunState", "RuntimeServices", "ToolRegistry", "chinook_tool_registry", "merge_decisions"]
+def drives_a_model(runtime: "NodeRuntime") -> bool:
+    """Whether this build will reach a model — the compiler's own account.
+
+    A function rather than a property, for the census `NodeRuntime`'s ninth
+    member sits under: a tenth public member is a class that has to argue for
+    itself, and this answer is about the build rather than part of what the
+    runtime *is*. The same shape `api/registries.runtime_warnings` already has.
+
+    `True` means at least one node asked this runtime for a model while it was
+    built, or a mount below it did. `False` means a graph of functions, tools,
+    routers-by-rule and outputs, which is entitled to run on an installation
+    with no provider at all — and does.
+
+    Read by `model_readiness.unmet_model_requirement`, which is what the three
+    run doors call.
+    """
+    return bool(getattr(runtime, "_drives_a_model", False))
+
+
+__all__ = ["NodeRuntime", "PackageAssets", "RunState", "RuntimeServices", "ToolRegistry", "chinook_tool_registry", "drives_a_model", "merge_decisions"]

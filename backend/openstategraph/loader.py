@@ -142,6 +142,24 @@ class CompiledWorkflow:
     _mounts: Mapping[str, Any] = field(
         default_factory=dict, repr=False, compare=False
     )
+    #: Whether this graph — or anything it mounts, at any depth — will reach a
+    #: model. The compiler's own account, recorded while it built
+    #: (`compile.node_runtime.drives_a_model`), because after the build there is
+    #: nothing left to ask: a closure is opaque, exactly as it is for a mount.
+    #:
+    #: Read by `openstategraph run`, which refuses a run this installation has
+    #: nothing to serve rather than letting it die inside a node
+    #: (`osg-agent-experience/48`). Public and named, unlike `_owned` and
+    #: `_mounts`, because it is a fact *about the workflow* a caller may
+    #: reasonably ask — a script that loads a package can decide whether it
+    #: needs a credential before it asks anything.
+    #:
+    #: **The model is half the answer**, so this is not `drives_model`: a build
+    #: that reaches for a model and was handed a working one needs nothing.
+    #: `model_readiness.would_reach_no_model` holds the predicate; it is
+    #: answered here because this is where the model is, and recorded because
+    #: `openstategraph run` has the workflow and not the model.
+    needs_a_provider: bool = False
     #: The loop every run through this object is driven on, and the fix for
     #: `launch-readiness/171`. **It is here because the model is here**: the
     #: provider client is built once by `load_workflow` and held for this
@@ -909,7 +927,8 @@ def load_workflow(
     from openstategraph.api.registries import runtime_failure_warnings, runtime_warnings
     from openstategraph.api.services import WorkflowServices
     from openstategraph.api.workflow_store import slugify
-    from openstategraph.compile.node_runtime import RunState
+    from openstategraph.compile.node_runtime import RunState, drives_a_model
+    from openstategraph.model_readiness import would_reach_no_model
     from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
     slug = directory.name
@@ -1013,6 +1032,9 @@ def load_workflow(
         trace_file=Path(trace_file).expanduser() if trace_file else None,
         _owned=tuple(owned),
         _mounts=dict(runtime.mounted_graphs),
+        needs_a_provider=would_reach_no_model(
+            drives_model=drives_a_model(runtime), model=resolved_model
+        ),
     )
 
 

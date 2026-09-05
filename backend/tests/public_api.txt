@@ -1,4 +1,4 @@
-openstategraph.CompiledWorkflow = dataclass(object) fields(graph,warnings,slug,package_dir,document,trace_file,failure_warnings,_owned,_mounts,_loop)
+openstategraph.CompiledWorkflow = dataclass(object) fields(graph,warnings,slug,package_dir,document,trace_file,failure_warnings,_owned,_mounts,needs_a_provider,_loop)
 openstategraph.DEFAULT_RECURSION_LIMIT = int
 openstategraph.DocumentError = class(OpenStateGraphError,ValueError)(...)
 openstategraph.InvalidPackageName = class(WorkflowPackageError,ValueError)(...)

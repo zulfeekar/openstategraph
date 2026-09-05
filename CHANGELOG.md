@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Changed
+- **A run with no model is refused at the door, not inside a node**
+  (`osg-agent-experience/48`). With no provider configured, a run used to
+  resolve its axis, score fifteen lenses, route, and only then die inside a
+  worker — honest and late, and a reader who sees a node failure suspects the
+  node. `POST /api/runs`, `POST /api/runs/stream`, `openstategraph run` and
+  MCP `run_workflow` now answer before the first superstep with the readiness
+  sentence `openstategraph providers` prints as its header and
+  `GET /api/providers` publishes as `run_readiness` — 503 on HTTP,
+  `error`/`findings` over MCP, exit 1 in the terminal. It takes **both** facts:
+  the compiler's own record that this graph (or a mount below it) will reach a
+  model, and a model that is the stand-in for an unconfigured installation, so
+  a graph of functions and tools still runs with no provider at all and a
+  caller who supplies their own model is never refused. `CompiledWorkflow`
+  gains `needs_a_provider`, which is the same answer for a script.
+- **`.env` is found beside `openstategraph.yaml`, however deep you stand**
+  (`osg-agent-experience/47`). The config walk stops at the git root; the
+  `.env` walk stopped four parents above the working directory, so a project
+  deeper than that had its config found and the credentials beside it not —
+  every provider reading "needs a key" while the key sat in the file the error
+  named. One walk now (`config_file.project_search_path`).
+  `openstategraph serve` prints whether one was read and how many variables it
+  held — the count, never the names — and a line that is not `KEY=value` is
+  skipped with a warning naming the line number alone.
+
 ### Added
 - **`tool.mssql-query` — one read-only T-SQL SELECT, against tables somebody
   pinned** (`osg-agent-experience/34`). The SQL Explorer family had three

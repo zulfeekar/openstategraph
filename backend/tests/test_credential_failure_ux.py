@@ -48,10 +48,53 @@ DOCUMENT = {
 }
 
 
+class _RejectedKey:
+    """A model that raises `MissingProviderKey` on first use — and is **not**
+    `chat_model.UnconfiguredProvider`.
+
+    The distinction was free until `osg-agent-experience/48` and is now the
+    whole reason this class exists. That ticket taught the four run doors to
+    refuse *before* the graph runs when a model-driven graph meets an
+    installation with **no provider configured at all**, because a user who
+    reads a node failure suspects the node. The state these tests used to be
+    written against — every credential unset — is exactly that state, so the
+    run they need can no longer reach a node through those doors.
+
+    The credential failure itself has not gone anywhere: a key that is present
+    and rejected, a provider that stops answering mid-deployment, a client a
+    host application built and handed us. Those still fail at the node, still
+    carry `MissingProviderKey`'s copy, and are what these tests are about. This
+    stand-in is that shape — the same deferred raise, the same diagnosis text
+    read from the real catalogue, and no claim that the installation is
+    unconfigured.
+    """
+
+    def __init__(self, diagnosis: str) -> None:
+        self._diagnosis = diagnosis
+
+    def __getattr__(self, name: str):
+        from openstategraph.errors import MissingProviderKey
+
+        raise MissingProviderKey(self._diagnosis)
+
+    def __call__(self, *args, **kwargs):
+        from openstategraph.errors import MissingProviderKey
+
+        raise MissingProviderKey(self._diagnosis)
+
+
 @pytest.fixture(autouse=True)
 def _no_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in CREDENTIALS:
         monkeypatch.delenv(name, raising=False)
+
+    from openstategraph import chat_model as chat_model_module
+
+    def rejected(model_name: str):
+        gap = chat_model_module.provider_readiness(model_name)
+        return _RejectedKey(gap.message if gap is not None else model_name)
+
+    monkeypatch.setattr(chat_model_module, "build_chat_model", rejected)
 
 
 def _elected_variable() -> str:

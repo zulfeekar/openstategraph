@@ -67,6 +67,10 @@ class TestThePrefixMatchesTheExitCode:
             #: asks anything (`organisms-first-class` 70), so a stand-in for
             #: `CompiledWorkflow` has to carry the field one really has.
             document: dict = {}
+            #: And the run door asks it whether this machine can serve the
+            #: model this graph will reach (`osg-agent-experience/48`). A
+            #: stand-in that never calls a model answers False.
+            needs_a_provider = False
 
             def ask(self, *_args, **_kwargs) -> RunResult:
                 return result

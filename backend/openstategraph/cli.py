@@ -221,6 +221,17 @@ def cmd_run(args: argparse.Namespace) -> int:
     # cannot start (1). Both before the graph is invoked and before a single
     # token is spent.
     from openstategraph.compile.run_context import coerce_context_flags
+    from openstategraph.model_readiness import unmet_model_requirement
+
+    # Before the grammar and before the document, because it is cheaper than
+    # both and answers a different question: not *is this run well formed* but
+    # *has this machine anything to run it with* (`osg-agent-experience/48`).
+    # An `error:` line and exit 1, in the terminal's own shape, carrying the
+    # sentence `openstategraph providers` prints as its header — never a
+    # second wording of it.
+    unmet = unmet_model_requirement(no_model=workflow.needs_a_provider)
+    if unmet is not None:
+        return _error(unmet)
 
     supplied, usage = split_context_flags(args.context or [])
     if usage:

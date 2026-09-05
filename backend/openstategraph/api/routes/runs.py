@@ -53,6 +53,7 @@ from openstategraph.compile.run_context import validate_run_context
 from openstategraph.compile.state import published_routes
 from openstategraph.errors import RunContextError
 from openstategraph.memory import async_capable
+from openstategraph.model_readiness import unmet_model_requirement, would_reach_no_model
 from openstategraph.run_doors import invoke_run
 from openstategraph.run_journal import run_turn
 from openstategraph.schema import normalize_document
@@ -174,7 +175,7 @@ def run_workflow(
     `human.approval` node needs `/api/runs/stream`, which is what both
     shipped UIs use.
     """
-    from openstategraph.compile.node_runtime import RunState
+    from openstategraph.compile.node_runtime import RunState, drives_a_model
     from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
     # Ollama cloud is the default (see `resolve_model`), so a model is
@@ -251,6 +252,18 @@ def run_workflow(
                 checkpointer=services.checkpointer_for(document.get("settings"), slug),
                 store=services.memory_store,
             )
+            # Built, therefore knowable: whether anything in this graph — or
+            # anything it mounts — will reach a model. `osg-agent-experience/48`:
+            # with no provider configured this door used to run half the graph
+            # and die inside a node. See `model_readiness` for why the answer
+            # is the readiness sentence and not a new one.
+            unmet = unmet_model_requirement(
+                no_model=would_reach_no_model(
+                    drives_model=drives_a_model(runtime), model=model
+                )
+            )
+            if unmet is not None:
+                raise HTTPException(status_code=503, detail=unmet)
             # `None` means *pass no argument at all* — see `validate_run_context`.
             supplied: dict[str, Any] = (
                 {"context": run_context} if run_context is not None else {}
@@ -269,6 +282,12 @@ def run_workflow(
                 },
                 **supplied,
             )
+        except HTTPException:
+            # The door's own refusal, already carrying its status and its
+            # sentence. Re-raised rather than swallowed: wrapping it below
+            # would turn a 503 that says what to do into a 502 that says
+            # `HTTPException`.
+            raise
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
 
@@ -492,6 +511,7 @@ async def run_workflow_stream(
     """
     from openstategraph.compile.node_runtime import (
         RunState,
+        drives_a_model,
     )
     from openstategraph.compile.workflow_compiler import WorkflowCompiler, safe_name
 
@@ -541,6 +561,19 @@ async def run_workflow_stream(
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
+
+    # **This is the door the ticket was actually filed from**
+    # (`osg-agent-experience/48`). The editor's Run button and `/chat` both
+    # stream, so the run the owner watched — axis resolved, fifteen lenses
+    # scored, routed, then a worker dead on a credential — came through here.
+    # Guarding only the blocking door would have left the reported symptom
+    # exactly as it was. Outside the `try` above, so the refusal is not
+    # re-wrapped as a 502.
+    unmet = unmet_model_requirement(
+        no_model=would_reach_no_model(drives_model=drives_a_model(runtime), model=model)
+    )
+    if unmet is not None:
+        raise HTTPException(status_code=503, detail=unmet)
 
     # LangGraph node names are `safe_name(node_id)` (colons are illegal),
     # so events are translated back to the canvas's own ids — otherwise

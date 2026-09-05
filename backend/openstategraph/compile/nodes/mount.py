@@ -464,6 +464,12 @@ def _subgraph(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Com
             # grandparent sees a gate two levels down, and taken after
             # `build()` for the reason the three lines above are.
             self._holds_a_gate = self._holds_a_gate or child_runtime._holds_a_gate
+            # Fifth, and the same shape: a parent of nothing but mounts still
+            # reaches a model when a child does, so the run door above it must
+            # be told (`osg-agent-experience/48`). Unioned here for the same
+            # reason the gate is — the question is asked one level up from
+            # where the answer lives.
+            self._drives_a_model = self._drives_a_model or child_runtime._drives_a_model
             # And the one question only this line can answer: a mount that
             # keeps no record, over a workflow that pauses. It *does*
             # pause — the closure hands the interrupt to the parent's

@@ -264,6 +264,25 @@ class TestTheSentenceIsNotAheadOfTheCode:
         } <= classes
 
 
+class _DeferredRaise:
+    """A model object that is not `chat_model.UnconfiguredProvider`.
+
+    Enough to get past the readiness door `osg-agent-experience/48` installed
+    — that door refuses only when the model this run holds is the stand-in for
+    an unconfigured installation — and it still raises the moment a node asks
+    it for anything, which is what these tests have always let happen.
+    """
+
+    def __getattr__(self, name: str):
+        raise RuntimeError("this test never intended to call a model")
+
+
+def _give_it_a_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    from openstategraph import chat_model as chat_model_module
+
+    monkeypatch.setattr(chat_model_module, "build_chat_model", lambda _n: _DeferredRaise())
+
+
 class TestADocumentNamingAPluginNobodyInstalled:
     """The other half of "which one ran": *none of them*, and it says so.
 
@@ -311,6 +330,12 @@ class TestADocumentNamingAPluginNobodyInstalled:
 
     def _run(self, monkeypatch: pytest.MonkeyPatch, audience: str) -> dict:
         install(monkeypatch)  # an environment with no plugins at all
+        # This class is about a *tool type*, not about credentials, and since
+        # `osg-agent-experience/48` a model-driven graph on an installation
+        # with no provider configured is refused at the door before any of it
+        # runs. So the run is given a model — one that still raises if a node
+        # actually calls it, because nothing here needs it to answer.
+        _give_it_a_model(monkeypatch)
         response = TestClient(create_app()).post(
             "/api/runs",
             json={"workflow": self.DOCUMENT, "question": "hi", "audience": audience},

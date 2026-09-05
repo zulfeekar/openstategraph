@@ -765,6 +765,19 @@ class TestRuns:
 
         monkeypatch.setattr(wc.WorkflowCompiler, "build", _fake_build)
 
+        # The run never reaches a model — `_invoke` above replaces the whole
+        # graph — but since `osg-agent-experience/48` the door asks whether it
+        # *could*, and refuses a model-driven graph on an installation with no
+        # provider configured. Hand it one that is not the unconfigured
+        # stand-in; nothing here ever calls it.
+        class _NeverCalled:
+            def __getattr__(self, name: str) -> Any:
+                raise RuntimeError("this test never intended to call a model")
+
+        from openstategraph import chat_model as chat_model_module
+
+        monkeypatch.setattr(chat_model_module, "build_chat_model", lambda _n: _NeverCalled())
+
         evaluator_optimizer = json.loads(
             (
                 Path(__file__).resolve().parents[1]

@@ -341,6 +341,11 @@ have to write a Python file to find out whether a package works.
 | `--context k=v` | supply one declared run-context value; repeatable. It is `key=value`, and JSON is refused with **2**. A key the workflow does not declare is refused with **1** and a sentence naming the workflow |
 | `--json` | the whole `RunResult` rather than the answer text |
 
+**A run that needs a model and has none exits 1 before anything executes**, with
+the same sentence `openstategraph providers` prints as its header. A package
+whose graph reaches no model — functions, tools, outputs — is not refused and
+runs with no provider configured at all.
+
 **A paused run exits 1.** A run stopped at a `human.approval` gate has not
 failed and has not answered — it is waiting — so it prints the pause, the
 thread id and the exact `resume` line that finishes it, and does not claim

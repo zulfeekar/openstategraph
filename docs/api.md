@@ -513,6 +513,19 @@ without one of the three means *the connection dropped*, and an aborted
 `fetch` means *you stopped it*. Never a silent success, and never a spinner
 that runs forever.
 
+#### When there is nothing to run the model with
+
+`POST /api/runs` answers **503** before a single node executes when the
+compiled graph — or anything it mounts — will reach a model and this
+deployment has no provider configured. The `detail` is the same sentence
+`GET /api/providers` publishes as `run_readiness` and `openstategraph
+providers` prints as its header, so a client never has to word it. A graph of
+functions, tools and outputs is not refused: it needs no model and runs on an
+installation with none.
+
+It is a fact about the *deployment*, never about the document — the identical
+workflow runs the moment a credential exists, and `validated` is untouched.
+
 #### When the step budget runs out
 
 A run that laps a cycle until its **step budget** is spent ends as an `error`
