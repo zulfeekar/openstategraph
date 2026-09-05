@@ -59,7 +59,7 @@ not exist*. Add the second index and it resolves:
 ```bash
 pip install --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple/ \
-            "openstategraph[ollama]==0.3.0rc14"
+            "openstategraph[ollama]==0.3.0rc15"
 ```
 
 That was run into an empty virtualenv and installs the distribution plus

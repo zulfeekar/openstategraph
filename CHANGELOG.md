@@ -3,6 +3,60 @@
 ## Unreleased
 
 ### Added
+- **`docs/modules.md` — a brief on each of the 43 built-in node types, linked**
+  (`docs-onramp/04`). Every brief already existed in `compile/port_specs.json`
+  and nothing carried it: 13 types were named in no file under `docs/`. The page
+  is generated from the vocabulary itself, never typed, so it states no number a
+  human has to keep true.
+- **`docs/prebuilt-tools.md`** (`docs-onramp/12`) — the ten prebuilt tool cards
+  had no page, so the only description of one was a CLI verb a reader had to
+  already know to run.
+- **A refusal names the next step** (`docs-onramp/09`). `run` against a machine
+  with no credential said what was wrong and not what to do; the wording is
+  composed once in `model_readiness.unmet_model_requirement`, so the `error:`
+  line, the 503 body and the MCP `error`/`findings` pair all name
+  `openstategraph providers` and `openstategraph env-example`.
+- **`editor_only` on a node descriptor** (`osg-agent-experience/72`) — a palette
+  card the backend cannot run says so on every door (the catalogue, `nodes`,
+  `docs/modules.md`, and a registered document check) instead of at the end of a
+  paid run.
+
+### Changed
+- **The README is a front door again** (`docs-onramp/01`, `02`, `05`, `06`).
+  It was 829 lines and a stranger's path was 148 of them; the four spin-up
+  paths each read as *the* way with none saying whose it was; the
+  documentation index was named at line 792 of 829 and did not name every
+  page; and the first instruction was "Press Run" when the run needs a
+  credential nobody had set.
+- **`init` writes an agent config a venv install can run** (`docs-onramp/10`).
+  All four configs carried a bare `"command": "openstategraph"`, which is right
+  for the `uv tool install` route and wrong for a project venv, an editable
+  checkout or an unre-sourced pipx shell — and the failure is an agent showing
+  no tools and no reason. The command is resolved once, and `init` says which of
+  the three outcomes it wrote.
+- **`--help` no longer prints internal ticket ids** (`docs-onramp/08`). Eleven
+  strings across the parser named a file under `.scratch/`, which ships in no
+  wheel; the provenance moved into comments beside the strings.
+
+### Fixed
+- **A reloaded tab put its overnight draft back over a file rewritten that
+  morning** (`osg-agent-experience/68`) — the reload alone, with no drag, no
+  keystroke and no Save. Three of the four writers of a `workflow.json` could
+  not tell anybody they had written (`69`), a tab that did not write learned
+  nothing and was told to reload, the stale-draft guard was tested and connected
+  to nothing (`70`), and a subject is a frame rather than a socket, so a tab now
+  holds one live stream (`71`).
+- **Documented commands are held against the real parser everywhere, not on one
+  page** (`docs-onramp/07`): `openstategraph test` was in a quickstart and no
+  verb by that name has ever existed.
+- **31 of 43 "Read more" links resolved and named nothing the reader had
+  clicked** (`docs-onramp/11`); the Email card's brief named a directory the
+  tool stopped writing to (`13`).
+- **A two-second deadline failed a real patrol on a loaded runner**
+  (`stable-beta-public/32`) — the two real-patrol cases now wait under a ceiling
+  only a hung server reaches.
+
+### Added
 - **A *Recommend a shape* step in the bundled skill, and `references/shapes.md`
   behind it** (`osg-agent-experience/49`). The interview asked eight questions,
   filed the cards and never said *what shape this concept should be* — so one
@@ -295,6 +349,15 @@
 - **Docs**: `docs/the-patrol-board.md` is the board's own page — the columns,
   the evidence gate, the copy-instruction flow — with `docs/cli.md` and
   `docs/mcp.md` carrying the two doors, and `docs/openapi.json` regenerated.
+
+## 0.3.0rc15 — 2026-09-06
+Everything under *Unreleased* above this line at the time of the cut. The
+pre-release that ships the docs onramp: a README that is a front door rather
+than a reference, `docs/modules.md` and `docs/prebuilt-tools.md` carrying a
+brief on every built-in card, a credential refusal that names the next step,
+and an `init` whose agent configs a project venv can actually run. Until this
+cut the installed README described three doors the installed package did not
+have (`docs-onramp/09`, `10`, `11`).
 
 ## 0.3.0rc14 — 2026-09-05
 Everything under *Unreleased* above this line at the time of the cut. The
