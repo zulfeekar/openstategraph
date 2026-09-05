@@ -644,6 +644,20 @@
      `position: static`, which is why `.panel` never looked like the
      winner. */
   --z-grip: calc(var(--z-panel) + 1);
+  /* The run dock's whole row, one step above the panels *and* their grips
+     (`stable-beta-public/24`). The dock is a region above the stage and the
+     panels are inside it — the dock pushes the stage down rather than
+     covering it — so nothing in the stage may paint over the dock's row. The
+     3px its grip overhangs into the stage is where that claim gets tested,
+     and with both at `--z-panel` it failed there: `.run-dock` is its own
+     stacking context, so no number on a grip inside it can lift that grip
+     past a *sibling* of the dock, and `.panel` is one, later in the document.
+     `+ 2` rather than `+ 1` because `--z-grip` already holds `+ 1`: a dock
+     at `+ 1` would tie with the column's grip and lose to it on document
+     order at the crossing, which is the same defect moved sideways. Still
+     under `--z-topbar`, so the chrome that is allowed to cover it still
+     does. */
+  --z-dock: calc(var(--z-panel) + 2);
   --z-topbar: 30;
   --z-floating: 40;
   --z-dragging: 50;

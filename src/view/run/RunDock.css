@@ -21,7 +21,11 @@
      floating over the canvas, and the line is what says so. On its lower
      edge, which is the edge it shares with the paper. */
   border-bottom: var(--border-width-rule) solid var(--color-rule);
-  z-index: var(--z-panel);
+  /* `stable-beta-public/24`: the dock's own row, one step above anything in
+     the stage. Not `--z-panel` — this element and `.panel` are what actually
+     compete, and while they tied the grip below lost its last pixel to
+     whichever came later in the document. See the token's own comment. */
+  z-index: var(--z-dock);
 
   /* The owner's rule of thumb, which this dock now keeps with the rest of
      the app rather than beside it. `memory-and-replay/64` minted a local

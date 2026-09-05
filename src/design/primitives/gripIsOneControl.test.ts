@@ -223,4 +223,57 @@ describe('and the surface it edges cannot cover it — `stable-beta-public/22`',
       /z-index:\s*var\(--z-panel\);/,
     );
   });
+
+  /**
+   * **And the same seven pixels one axis over — `stable-beta-public/24`.**
+   *
+   * Measured on 8124 at 1103px with the dock, the chat and the inspector all
+   * open, `document.elementFromPoint` walked down the dock's horizontal grip
+   * at two x values in one page:
+   *
+   * ```
+   * x=300 (canvas)   y 351..357  grip x 7
+   * x=800 (column)   y 351..356  grip x 6, y 357 -> panel__header
+   * ```
+   *
+   * `22`'s fix is not the cause and could not be: the number above is spent
+   * *inside* `.run-dock`, which is `position: relative; z-index:
+   * var(--z-panel)` and therefore a stacking context of its own. No number on
+   * a grip in there can lift that grip past a **sibling of the dock**, and
+   * `.panel` is one — carrying the same `--z-panel`, later in the document,
+   * so document order settles it and the grip loses its last row wherever the
+   * column reaches.
+   *
+   * So the two elements actually competing are the dock and the panel, and
+   * the fix is between *them*. It is a token step rather than a number,
+   * because the fact worth writing down is a claim about the layout: **the
+   * dock is a region above the stage, and the panels are inside the stage.**
+   * The dock pushes the stage down rather than covering it, so nothing in the
+   * stage should ever paint over the dock's row — the 3px its grip overhangs
+   * into the stage is exactly where that claim gets tested.
+   *
+   * `+ 2` rather than `+ 1`, and the extra step is load-bearing: `--z-grip`
+   * is already `--z-panel + 1`, so a dock at `+ 1` would tie with the
+   * *column's* grip and lose to it on document order at the crossing — the
+   * same defect moved three pixels to the left rather than fixed.
+   */
+  it('declares --z-dock above the panels and their grips, derived from the scale', () => {
+    const scale = zScale();
+    expect(scale['--z-dock']).toMatch(/var\(--z-panel\)/);
+    expect(resolve(scale, '--z-dock')).toBeGreaterThan(resolve(scale, '--z-grip'));
+  });
+
+  it('spends it on .run-dock, which is the element the panel actually competes with', () => {
+    expect(ruleBody(at('view/run/RunDock.css'), '.run-dock')).toMatch(
+      /z-index:\s*var\(--z-dock\);/,
+    );
+  });
+
+  it('leaves the dock below the chrome that is allowed to cover it', () => {
+    const scale = zScale();
+    // A token step, not a scramble up the scale: the top bar, the popovers
+    // and the modals still win, and a dock that outranked them would be a
+    // different bug with the same shape.
+    expect(resolve(scale, '--z-dock')).toBeLessThan(resolve(scale, '--z-topbar'));
+  });
 });
