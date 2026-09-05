@@ -22,11 +22,11 @@ about one property of one context. The next one due is
 the compiled plan keeps one — which needs the same nodes, the same edges and
 the same catalogue, and so needs no new machinery here.
 
-Six of them are defined in this module, beside the registry they register into.
+Seven of them are defined in this module, beside the registry they register into.
 `test_a_dispatch_table_does_not_hold_its_targets.py` does not see that — it
 looks for `registry.register(key, target)`, and a decorator has no such pair —
 so the claim is made here rather than left to a census that cannot check it:
-these six are one reason to change, in the sense that module's docstring grants
+these seven are one reason to change, in the sense that module's docstring grants
 `compile/reducers.py` its four named reducers. They are the *same* question
 asked of six properties, they share `_typed_nodes` and one skip rule, and a
 seventh registers from wherever it is written.
@@ -83,6 +83,10 @@ class FindingClass(str, Enum):
     BRANCH_FAN_OUT = "branch-fan-out"
     #: More producers arriving at one input than that port declares it takes.
     PORT_OVERFULL = "port-overfull"
+    #: A `route.check` whose `fallback` port has no edge, so a verdict naming
+    #: no branch — including the empty answer a raised check produces — has
+    #: nowhere to go.
+    UNWIRED_FALLBACK = "unwired-fallback"
 
 
 @dataclass(frozen=True)
@@ -128,6 +132,10 @@ class CheckContext:
         """This build's field schema for a type, or `None` if it has none."""
         return CATALOGUE.field_schema.get(node_type)
 
+
+#: The one out-port that is a destination rather than a branch — see
+#: `unwired_fallback`.
+FALLBACK_PORT = "fallback"
 
 #: The checks, in report order. Appended to by `register_document_check`.
 DOCUMENT_CHECKS: list[Callable[[CheckContext], Iterable[DocumentFinding]]] = []
@@ -725,6 +733,56 @@ def port_overfull(context: CheckContext) -> Iterable[DocumentFinding]:
             f"connection{'' if cap == 1 else 's'} and {len(arriving)} edges arrive at it, "
             f"from {sources}. Nothing decides between them, so they can produce in the "
             "same step and the port holds one value — all but one of them is discarded.",
+        )
+
+
+@register_document_check
+def unwired_fallback(context: CheckContext) -> Iterable[DocumentFinding]:
+    """A `route.check` with no edge leaving its `fallback` port.
+
+    `osg-agent-experience/60`. An unwired optional out-port is ordinary
+    everywhere else, and on this one node type it is not: `fallback` is where
+    a verdict naming no branch goes, and `call_check` renders a raised
+    exception as an empty answer — so it is also where the check's *own*
+    failure goes. Unwired, `_router_for` falls through to whichever
+    destination happens to be first, because a stall there would be a hang
+    rather than an error, and the run ends with an `unrouted` entry nobody
+    reads.
+
+    Asked of `route.check` alone, off the catalogue rather than by name: it is
+    the only type declaring a port called `fallback`, and a second one that
+    declared it would be asked the same question by existing. A grader's
+    unwired `revise` is a different finding with its own sentence
+    (`UNWIRED_REVISE`), and `support-triage` ships one on purpose.
+    """
+    for node_id, node in context.nodes.items():
+        node_type = str(node.get("type") or "")
+        record = _record_for(node_type)
+        if record is None:
+            continue
+        if not any(
+            port.get("id") == FALLBACK_PORT and port.get("direction") == "out"
+            for port in record.get("ports") or ()
+        ):
+            continue
+        wired = any(
+            isinstance(edge, dict)
+            and isinstance(edge.get("source"), dict)
+            and str((edge["source"] or {}).get("nodeId") or "") == node_id
+            and str((edge["source"] or {}).get("portId") or "") == FALLBACK_PORT
+            for edge in context.document.get("edges") or ()
+        )
+        if wired:
+            continue
+        yield DocumentFinding(
+            FindingClass.UNWIRED_FALLBACK,
+            f"{node_id}.{FALLBACK_PORT}",
+            f'Node "{node_id}" ({node_type}) has nothing wired to its "fallback" port, '
+            "which is where a verdict naming none of its branches goes — including the "
+            "empty answer a check that raised produces. Unwired, the run takes whichever "
+            "destination happens to be first and records the loss instead of routing it. "
+            'Wire "fallback" to the node that should handle an answer this fork did not '
+            "recognise.",
         )
 
 

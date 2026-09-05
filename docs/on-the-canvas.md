@@ -284,6 +284,15 @@ case-insensitively and a branch's own id works as well as its name, but nothing
 outside your own list is ever taken as a branch: an unrecognised answer goes to
 `fallback`, never to a guess.
 
+It is a **port**, not a field. The Router beside it — `route.classifier` — has
+a `fallback` *field* naming one of its branches, and the two nodes usually sit
+in the same document, which is how `"fallback": "route"` ends up in a check
+router's data (`osg-agent-experience/60`; `validate` catches that and says so).
+Wire it like any other edge, and do wire it: left unwired there is nowhere for
+an unrecognised verdict to go, the run takes whichever destination happens to be
+first and records the loss, and `validate` now reports the unwired port before
+the run rather than after it.
+
 Reach for it when the decision is a **fact the run already has**. The case it
 was built for: a question that names no date range must be asked back rather
 than answered on an assumed window. A `resolve.vocabulary` already reports the

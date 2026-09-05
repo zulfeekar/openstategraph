@@ -120,7 +120,11 @@ export const routeCheckNode: INodeDefinition = defineNode(
           'The package function to run, named the way `function.<name>` names it — this ' +
           'node calls that same function, not a model. It is called as `fn(text)`. It ' +
           'returns the name of one of the ' +
-          'branches below; anything else, including nothing at all, takes the fallback. ' +
+          'branches below; anything else, including nothing at all, leaves by the ' +
+          '`fallback` port. That is a port and not a field — you wire it like any other ' +
+          'edge, unlike the classifier’s `fallback`, which is a field naming a branch. ' +
+          'Left unwired, a verdict this node does not recognise has nowhere to go: the ' +
+          'run takes whichever destination happens to be first and records the loss. ' +
           'A branch’s own id is accepted as well as its name, and case and surrounding ' +
           'space are forgiven.',
         defaultValue: '',
