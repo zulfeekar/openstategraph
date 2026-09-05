@@ -90,8 +90,17 @@ class TestAnOutputPrintsWhatReachesIt:
     `text` that loses to arriving content would not have produced the sentence
     the try-folder session needed — and a `text` that wins would let a typed
     field silently discard a run's answer at the one node where "the run's
-    answer" is defined. That is a design decision rather than a gap, so it is
-    filed (`osg-agent-experience/55`) and the docs say what is true today.
+    answer" is defined.
+
+    **`osg-agent-experience/55` settled the rest of it, and this class is what
+    moved.** The sentence got its own node type — `output.static` — so the
+    decision here is now permanent rather than provisional: the field stays
+    off `output.formatted`, because the ambiguity it would carry has somewhere
+    honest to live instead. The two assertions below therefore assert
+    *different* things than they used to: not "we have not done this yet", but
+    "these are two node types and neither has grown the other's semantics".
+    `test_a_static_output_prints_its_own_sentence.py` owns the new type's own
+    behaviour.
     """
 
     def test_the_output_declares_no_text_field(self) -> None:
@@ -104,6 +113,12 @@ class TestAnOutputPrintsWhatReachesIt:
         assert "text" not in {field["key"] for field in record["fields"]}
         assert "format" in {field["key"] for field in record["fields"]}
 
+    def test_the_static_output_is_where_a_sentence_lives(self) -> None:
+        """The other type, and the one field it has that its sibling must not."""
+        record = next(node for node in CATALOGUE.nodes if node["type"] == "output.static")
+        assert "text" in {field["key"] for field in record["fields"]}
+        assert "format" not in {field["key"] for field in record["fields"]}
+
     def test_the_page_says_where_a_sentence_comes_from(self) -> None:
         from pathlib import Path
 
@@ -112,3 +127,6 @@ class TestAnOutputPrintsWhatReachesIt:
         ).read_text(encoding="utf-8")
         assert "An Output prints what reaches it" in page
         assert "has no text field" in page
+        # And the sentence a reader needs next, which the page did not have
+        # until the node existed to point them at.
+        assert "A Static Output prints a sentence you wrote" in page

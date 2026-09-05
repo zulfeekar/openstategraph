@@ -33,6 +33,8 @@ KNOWN_NODE_TYPES = frozenset({
     "resolve.vocabulary", "resolve.source",
     "orchestrate.supervisor",
     "orchestrate.worker", "function.format_report", "output.formatted",
+    # The exit that speaks rather than reports (`osg-agent-experience/55`).
+    "output.static",
     # Spread, not spelled (ticket 08): a third organism must reach the
     # architect's own view of the platform without anybody remembering to
     # come here — this was one of the two sites nobody thinks to check.

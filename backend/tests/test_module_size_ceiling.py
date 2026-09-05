@@ -252,6 +252,12 @@ node type is 69 code lines in `compile/nodes/route_check.py`, none of it
 here — which is what `docs-and-gaps/03`'s split was for, and the measurable
 difference from the twenty families this module used to hold inline.
 
+**581 -> 583** (`osg-agent-experience/55`). Two lines, the same shape again:
+one binding in the class body and one `registry.register` call for
+`output.static`. Its implementation is in `compile/nodes/io.py`, beside the
+exit it is a sibling of — adjacency there is load-bearing, because the whole
+decision is that the two exits differ and a reader has to be able to see how.
+
 """
 
 CLI = """
@@ -1187,7 +1193,7 @@ it.
 
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(660, KANBAN_STORE),
-    "compile/node_runtime.py": Recorded(581, NODE_RUNTIME),
+    "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
     "cli.py": Recorded(1648, CLI),
     "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),

@@ -23,6 +23,7 @@ import {
   memorySegmentNode,
 } from './memory/MemorySegmentNode';
 import { formattedOutputExecutor, formattedOutputNode } from './output/FormattedOutputNode';
+import { staticOutputExecutor, staticOutputNode } from './output/StaticOutputNode';
 import { groupNode } from './annotate/GroupNode';
 import { noteNode } from './annotate/NoteNode';
 import {
@@ -139,6 +140,11 @@ export function registerNodeCatalogue(
       // so a node that names one is grammar every document can use.
       mcpServerNode,
       formattedOutputNode,
+      // The exit that speaks rather than reports (`osg-agent-experience/55`).
+      // A second type rather than a `text` field on the one above: a field
+      // there has two readings, one of which never fires on the branch that
+      // wants it and the other of which can discard a run's answer.
+      staticOutputNode,
       groupNode,
       noteNode,
     ].map(withEffort),
@@ -166,6 +172,7 @@ export function registerNodeCatalogue(
     ...PLATFORM_TOOL_NODES.map((entry) => entry.executor),
     mcpServerExecutor,
     formattedOutputExecutor,
+    staticOutputExecutor,
   ]);
 }
 
@@ -199,6 +206,7 @@ export const NODE_TYPE = {
   formatReport: FORMAT_REPORT_TYPE,
   subgraph: subgraphNode.id,
   formattedOutput: formattedOutputNode.id,
+  staticOutput: staticOutputNode.id,
   group: groupNode.id,
   note: noteNode.id,
   // Chinook database tools

@@ -1419,6 +1419,72 @@
       ]
     },
     {
+      "type": "output.static",
+      "kind": "standard",
+      "category": "output",
+      "scope": "app",
+      "label": "Static Output",
+      "description": "Prints a sentence you write — for a branch that must say something.",
+      "ports": [
+        {
+          "id": "when",
+          "direction": "in",
+          "type": "result",
+          "label": "when",
+          "required": true,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "text",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "text",
+          "kind": "textarea",
+          "label": "Text",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
       "type": "resolve.source",
       "kind": "standard",
       "category": "resolve",

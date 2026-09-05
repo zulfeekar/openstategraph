@@ -27,7 +27,7 @@ can register more without touching the editor.
 | `text` | amber | a prompt or question | `input.text`, each `route.classifier` branch | `agent.llm.prompt`, `orchestrate.supervisor.instruction`, `route.classifier.question` |
 | `skill` | orange | a system instruction that shapes behaviour | `input.skill`, `input.markdown` | the `skill` port of all five model-driven types: `agent.llm`, `route.classifier`, `route.grader`, `orchestrate.supervisor`, `orchestrate.worker` |
 | `tool` | violet | a callable handle | every tool node's `tool` port | `agent.llm.tools`, `orchestrate.worker.tools` |
-| `result` | green | a finished answer | `agent.llm.result`, `orchestrate.worker.result`, `route.grader.pass`, `guard.check.pass`, `route.check.fallback` (and its `branch:<id>` outputs), `function.format_report.report`, `human.approval.approved`, `guard.policy.allowed`, `guard.policy.blocked`, `memory.segment.onward`, `resolve.source.result`, `resolve.vocabulary.result`, `workflow.subgraph.result` | `route.grader.candidate`, `guard.check.candidate`, `route.check.candidate`, `function.format_report.candidate`, `human.approval.candidate`, `guard.policy.content`, `memory.segment.crossing`, `output.formatted.result`, `resolve.source.question`, `resolve.vocabulary.question`, `workflow.subgraph.input` |
+| `result` | green | a finished answer | `agent.llm.result`, `orchestrate.worker.result`, `route.grader.pass`, `guard.check.pass`, `route.check.fallback` (and its `branch:<id>` outputs), `function.format_report.report`, `human.approval.approved`, `guard.policy.allowed`, `guard.policy.blocked`, `memory.segment.onward`, `resolve.source.result`, `resolve.vocabulary.result`, `workflow.subgraph.result` | `route.grader.candidate`, `guard.check.candidate`, `route.check.candidate`, `function.format_report.candidate`, `human.approval.candidate`, `guard.policy.content`, `memory.segment.crossing`, `output.formatted.result`, `output.static.when`, `resolve.source.question`, `resolve.vocabulary.question`, `workflow.subgraph.input` |
 | `feedback` | red | a rejection, travelling **upstream** | `route.grader.revise`, `guard.check.revise`, `human.approval.rejected` | `agent.llm.feedback`, `orchestrate.supervisor.feedback`, `route.classifier.feedback` |
 | `worker` | blue | a fan-out *declaration* | `orchestrate.supervisor.workers` | `orchestrate.worker.dispatch` |
 
@@ -111,12 +111,19 @@ and an explicit `0` both mean what they say.
 unlimited without declaring anything, so `orchestrate.supervisor.workers` and
 every tool node's `tool` port fan out freely and are not buses.
 
-Eight inputs are buses today: `agent.llm.tools` and `orchestrate.worker.tools`;
-`function.format_report.candidate`; and the `skill` input of all five
-model-driven types — `agent.llm.skill`, `route.classifier.skill`,
+Nine inputs are buses today: `agent.llm.tools` and `orchestrate.worker.tools`;
+`function.format_report.candidate`; `output.static.when`; and the `skill` input
+of all five model-driven types — `agent.llm.skill`, `route.classifier.skill`,
 `route.grader.skill`, `orchestrate.supervisor.skill` and
 `orchestrate.worker.skill`. A `skill` input takes many deliberately: layering
 two rules documents onto one agent is the point of the family.
+
+`output.static.when` is the odd one, and it is a bus for a reason none of the
+others share: **it takes many because it reads none of them**. The port is how
+a branch *reaches* that exit, not what the exit prints — so two branches that
+both end in the same fixed reply are one node, and capping it at one link would
+force a second copy of the sentence onto the canvas to say so
+(`osg-agent-experience/55`).
 
 **Prefer varying the number of ports over toggling one port's cardinality.**
 `ports` is a function of node data, so a node whose port *count* depends on

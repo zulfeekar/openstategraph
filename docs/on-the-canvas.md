@@ -280,15 +280,30 @@ question was classified onto a data branch and never asked.
 
 Each branch takes **one** edge, like every other conditional way out.
 
-**An Output prints what reaches it, and nothing else.** It has no text field,
-which is the one thing to know before you draw the ask-back: the sentence a
-user reads has to be *produced* by something upstream, so a branch that exists
-to ask a question runs a package function returning that sentence
-(`function.<name>`) and the Output renders it. Wiring the branch straight to an
-Output publishes whatever the branch was carrying — the user's own question,
-usually, handed back to them. The one thing an Output supplies on its own is
-the floor beneath an empty run: a run that reaches it with nothing at all says
-so, rather than reporting a success that says nothing (`osg-agent-experience/46`).
+**An Output prints what reaches it, and nothing else.** It has no text field.
+Wiring a branch straight to one publishes whatever that branch was carrying —
+the user's own question, usually, handed back to them. The one thing an Output
+supplies on its own is the floor beneath an empty run: a run that reaches it
+with nothing at all says so, rather than reporting a success that says nothing
+(`osg-agent-experience/46`).
+
+**A Static Output prints a sentence you wrote, and nothing else** — the exit
+to draw the ask-back onto. One field, one inbound port called `when`, and the
+port's value is never printed: it is how the branch *reaches* this exit, not
+what the exit says. It is required, because an exit nothing wires to is never
+run; it takes many links, because two branches that end in the same reply are
+one node. Your `{{key}}` slots are filled from the run's context, exactly as
+they are in an Input's prompt.
+
+Two node types rather than one field on the first, deliberately
+(`osg-agent-experience/55`). A `text` field on an Output would have to either
+lose to arriving content — and something always arrives on an ask-back branch,
+which is why that reading never fires — or win over it, which would let a typed
+field silently discard a run's answer at the one node where "the run's answer"
+is defined. With two types the ambiguity has nowhere to live, and which
+behaviour is in force is legible from the canvas rather than from a precedence
+rule. The older shape — a `function.<name>` returning a constant, one node in
+front of an Output — still works and is now one node more than you need.
 
 The safety net underneath is the **step budget**. It is counted in
 *supersteps*, not laps: with a fan-out, one lap can cost several. Do not read

@@ -164,7 +164,8 @@ The gist of what comes back:
     // …and the rest. The grammar: annotate.group, annotate.note,
     //  function.format_report, guard.check, guard.policy, human.approval, input.markdown,
     //  input.skill, input.text, memory.segment, orchestrate.supervisor,
-    //  orchestrate.worker, output.formatted, resolve.source, resolve.vocabulary,
+    //  orchestrate.worker, output.formatted, output.static, resolve.source,
+    //  resolve.vocabulary,
     //  route.check, route.classifier, route.grader, workflow.subgraph.
     //
     //  Then every bindable tool, which is the half that matters when you are

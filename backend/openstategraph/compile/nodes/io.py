@@ -171,6 +171,100 @@ def _input(self: "NodeRuntime", node_id: str, node: dict[str, Any], _plan: Compi
     return run
 
 
+def _exit_row(self: "NodeRuntime", node_id: str, node: dict[str, Any]) -> dict[str, Any]:
+    """What an exit is called and where it sits, read once at build time.
+
+    `launch-readiness/174`. `self._types` is built in document order, which is
+    the order a reader sees the desks drawn in and the order `published_answer`
+    joins them. Shared by both exits (`osg-agent-experience/55`): two exits
+    that publish differently must still be *published* identically, or a door
+    reading `published` learns which builder ran, which is not its business.
+    """
+    return {
+        "title": str(node.get("title") or ""),
+        "order": list(self._types).index(node_id) if node_id in self._types else 0,
+    }
+
+
+def _exit_update(node_id: str, exit_row: dict[str, Any], answer: str) -> dict[str, Any]:
+    """The three rows every exit writes, and the fourth only a spoken one does.
+
+    `published` says *this exit finished*, which is the one thing `outputs`
+    cannot say and `answer` cannot be asked: a document may legitimately have
+    two exits that both complete, and until this row existed the run kept one
+    answer and no door could tell that from a run with one exit.
+
+    `messages` is the conversation, and it is appended here for the reason the
+    long comment in `_output` gives — one writer, an open-ended set of readers.
+    The developer channel is filtered out of the record and kept in `answer`,
+    because the transport still owes it to that channel.
+    """
+    from langchain_core.messages import AIMessage
+
+    update: dict[str, Any] = {
+        "answer": answer,
+        "outputs": {node_id: answer},
+        "published": {node_id: exit_row},
+    }
+    if answer:
+        update["messages"] = [AIMessage(content=transcript_text(answer))]
+    return update
+
+
+def _static_output(
+    self: "NodeRuntime", node_id: str, node: dict[str, Any], _plan: CompiledPlan
+) -> Any:
+    """An exit that prints the author's own sentence, whatever reached it.
+
+    `osg-agent-experience/55`, and it is `46`'s question answered by *not*
+    answering it in the place it was asked. `46` offered `output.formatted` an
+    optional `text` field and declined it, because the field has two readings
+    and neither serves the case:
+
+    - **fallback** — `text` only when nothing arrives — never fires on the
+      branch that wants it. An ask-back branch always carries something: the
+      user's own question, which is precisely the sentence that must not be
+      printed.
+    - **override** — `text` wins — puts a typed field in a position to
+      silently discard a run's answer at the one node where "the run's answer"
+      is defined.
+
+    A second *type* has neither problem, because the ambiguity has nowhere to
+    live: `output.formatted` prints what reaches it, always; this one prints
+    its own text, always, and a reader can see which from the canvas.
+
+    **Three things `_output` does that this deliberately does not**, each an
+    absence with a reason rather than an omission:
+
+    - `UNGUARDED_EXIT`. An outbound policy guards *model-produced* content on
+      its way to a reader. This node's content is the author's, typed into the
+      document the policy is written beside, so the finding would be noise at
+      the one node that cannot produce the thing it warns about.
+    - `_report_undeclared_fallback`, for the same reason one axis over: the
+      walk asks whether a model-supplied quantity can reach a reader with
+      nothing between, and no quantity passes through here at all.
+    - `take_notes()` — and this one would be a *defect*, not merely noise. It
+      **drains**, so a static exit that called it would consume the
+      substitution disclosure belonging to whichever exit actually answered.
+      A sentence nothing produced has nothing to disclose about.
+
+    What it does keep is the floor: a blank exit says so rather than reporting
+    a success that says nothing.
+    """
+    configured = _text(node.get("data") or {}, "text")
+    exit_row = _exit_row(self, node_id, node)
+
+    def run(_state: RunState) -> dict[str, Any]:
+        # The author's own text, so the author's own `{{key}}` slots are
+        # filled from the run's context — the same rule `_static_text` and
+        # `_input`'s configured branch follow, and for the same reason: this
+        # is the author's string, never the caller's.
+        answer = render_run_context(configured).strip()
+        return _exit_update(node_id, exit_row, answer or NO_ANSWER_PRODUCED)
+
+    return run
+
+
 def _output(self: "NodeRuntime", node_id: str, _node: dict[str, Any], plan: CompiledPlan) -> Any:
     """Collects whatever reached it as the run's answer."""
     sources = upstream_sources(plan, node_id)
@@ -178,10 +272,7 @@ def _output(self: "NodeRuntime", node_id: str, _node: dict[str, Any], plan: Comp
     # once at build time so the run carries no lookup (`launch-readiness/174`).
     # `self._types` is built in document order, which is the order a reader
     # sees the desks drawn in and the order `published_answer` joins them.
-    exit_row = {
-        "title": str(_node.get("title") or ""),
-        "order": list(self._types).index(node_id) if node_id in self._types else 0,
-    }
+    exit_row = _exit_row(self, node_id, _node)
     # Guardrails ticket 02: the outbound guard is a node you place, and
     # what makes its absence loud is here. Only reported when the document
     # *has* a policy — see `Finding.UNGUARDED_EXIT` for why the absent
@@ -271,11 +362,7 @@ def _output(self: "NodeRuntime", node_id: str, _node: dict[str, Any], plan: Comp
         # `RunState.published`: a document may legitimately have two exits
         # that both complete, and until this row existed the run kept one
         # answer and no door could tell that from a run with one exit.
-        update: dict[str, Any] = {
-            "answer": answer,
-            "outputs": {node_id: answer},
-            "published": {node_id: exit_row},
-        }
+        update: dict[str, Any] = _exit_update(node_id, exit_row, answer)
         if answer:
             # The thread record's other half (ticket 73): the answer is
             # logged where every path converges, agent or not.

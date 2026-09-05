@@ -584,6 +584,7 @@ class NodeRuntime:
     _input = io._input
     _static_text = io._static_text
     _output = io._output
+    _static_output = io._static_output
     _passthrough = io._passthrough
     _resolve_vocabulary = resolvers._resolve_vocabulary
     _resolve_source = resolvers._resolve_source
@@ -651,6 +652,12 @@ class NodeRuntime:
         registry.register("orchestrate.worker", self._worker)
         registry.register("function.format_report", self._format_report_function)
         registry.register("output.formatted", self._output)
+        # The exit that speaks rather than reports (`osg-agent-experience/55`).
+        # A second *type* rather than a `text` field on the one above: a field
+        # there has two possible readings, one of which never fires on the
+        # branch that wants it and the other of which can silently discard a
+        # run's answer. Two types, and the ambiguity has nowhere to live.
+        registry.register("output.static", self._static_output)
         # The first convention arm, which was only ever a closed set nobody
         # had registered. The constant, not the literal (install-experience
         # 08): "which node types mount a child" is one fact, and this was one
