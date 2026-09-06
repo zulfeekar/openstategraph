@@ -99,13 +99,20 @@ claim underneath it is atomic against the database rather than advisory.
 The wire names for the same four are `detected`, `needsYou`, `inProgress` and
 `resolved`; that is what an agent filtering the board asks for.
 
-### Three tabs, and two of them say they are not built
+### Three tabs, and what each one has behind it
 
-The board has tabs — `Workflows`, `OSG Engineering` and `GitHub`. Only the
-first has anything behind it. The other two say `Not configured` and
-`Not available` in as many words instead of showing four empty columns,
-because empty columns are a claim (*a patrol ran and found nothing*) rather
-than a state.
+The board has tabs — `Workflows`, `OSG Engineering` and `GitHub`.
+
+`Workflows` is this project's own board and is always live. **`OSG
+Engineering` is the shared maintainers' board, and it is live whenever
+`OPENSTATEGRAPH_KANBAN_URL` names one** — same four columns, same cards, same
+live updates, reading the rows whose `board` column says so. Unset, it says
+`Not configured` and names that variable, so the sentence tells you what to
+set rather than only that something is missing. `GitHub` says `Not available`,
+because this product has no GitHub connection yet.
+
+Neither unbuilt tab shows four empty columns, because empty columns are a
+claim (*a patrol ran and found nothing*) rather than a state.
 
 ---
 
@@ -341,6 +348,13 @@ opens and recorded so they are applied once. They are ordinary Postgres: a
 maintainer with a migration CLI pushes the same directory, and a stranger with
 their own database runs the same files by hand. Every file is written to be
 safe to apply twice, which is what lets those two paths coexist.
+
+Two appliers means two ledgers, and the store reads both: a file the CLI
+already pushed is one the store leaves alone, because the question a runner
+asks is what the *database* is at rather than what it happens to have written
+down itself (`team-board-and-gap-reports/13`). Each file goes to the server
+whole, through libpq's simple query protocol — the one that takes a script
+rather than a single command, which is what a `.sql` file is.
 
 **Row level security is on and forced**, with policies keyed on
 `project_hash`. Read that precisely, because the honest version is narrower

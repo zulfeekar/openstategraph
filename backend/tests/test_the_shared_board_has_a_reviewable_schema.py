@@ -16,8 +16,12 @@ to the four things a reader cannot check by eye on a database they cannot see:
 - **RLS is on and forced on every table these files create**, with every
   policy carrying an ownership predicate on `project_hash` rather than a bare
   role;
-- **the package never learns the word Supabase.** The owner's decision, and
-  the reason the store is "a Postgres URL" and nothing more.
+- **the package learns the word Supabase in exactly one place.** The owner's
+  decision, and the reason the store is "a Postgres URL" and nothing more. The
+  one exception is the *other* applier's migration ledger, which the runner
+  has to read by its real name to know what the database is already at
+  (`team-board-and-gap-reports/13`); it is recorded with its argument beside
+  the two assertions that keep it to a table name.
 """
 
 from __future__ import annotations
@@ -187,16 +191,60 @@ def test_the_cli_reads_the_same_bytes_the_store_applies() -> None:
     assert link.resolve() == (PACKAGE_ROOT / "kanban_migrations").resolve()
 
 
+#: The one shipped module allowed to name the vendor, and the only thing it is
+#: allowed to name — `team-board-and-gap-reports/13`.
+#:
+#: The shared database has two appliers: this package's runner and the
+#: maintainers' migration CLI, pointed at the same directory by the symlink
+#: above. The owner's project was already at head the first time the store
+#: opened it, because the CLI had pushed both files; a runner reading only its
+#: own ledger concludes nothing has ever been applied and re-applies
+#: everything. It would survive that — every file is idempotent — but a
+#: migration runner whose correctness rests on nothing it does mattering is
+#: not a migration runner, so the applied set is the union of both ledgers.
+#:
+#: Reading the other applier's ledger means calling it by its name, and the
+#: name is the vendor's. That is the whole exception and it is deliberately
+#: this narrow: **an identifier in a shared database**, in one constant, in one
+#: module. Not an SDK, not a client, not a key, not a URL, not an install
+#: dependency — those are what the rule above exists to keep out, and they are
+#: what the assertions below still refuse. The alternative was to pretend the
+#: other applier is not there, which is quieter and false.
+VENDOR = "supabase"
+VENDOR_EXCEPTION = ("kanban_postgres.py", "supabase_migrations.schema_migrations")
+
+
 def test_no_shipped_module_learns_the_word_supabase() -> None:
     """The owner's decision, as an instrument. From the package's point of
     view the team board is a Postgres URL — no vendor name, no SDK, no key.
     The repository knows the word (this test does, and so does the directory
-    the CLI reads); the wheel does not."""
+    the CLI reads); the wheel knows it in exactly one constant, recorded above.
+    """
+    module, _ = VENDOR_EXCEPTION
     offenders = [
         path.relative_to(PACKAGE_ROOT)
         for path in PACKAGE_ROOT.rglob("*")
         if path.is_file()
         and path.suffix in {".py", ".sql", ".json", ".yaml", ".yml", ".md"}
-        and "supabase" in path.read_text(encoding="utf-8", errors="ignore").lower()
+        and VENDOR in path.read_text(encoding="utf-8", errors="ignore").lower()
     ]
-    assert offenders == [], f"shipped files name the vendor: {offenders}"
+    assert [str(path) for path in offenders] == [module], (
+        f"shipped files name the vendor: {offenders}"
+    )
+
+
+def test_the_one_exception_is_a_table_name_and_nothing_else() -> None:
+    """An exception with no edge is a repeal. Every occurrence of the word in
+    the one module allowed to carry it is part of the schema-qualified ledger
+    name — so a later commit cannot import a client, dial an API or read a key
+    under cover of a precedent this test recorded."""
+    module, identifier = VENDOR_EXCEPTION
+    text = (PACKAGE_ROOT / module).read_text(encoding="utf-8").lower()
+    assert text.count(VENDOR) == text.count(identifier), (
+        f"{module} names the vendor somewhere other than {identifier}"
+    )
+    from openstategraph.kanban_postgres import CLI_LEDGER_TABLE
+
+    assert CLI_LEDGER_TABLE == identifier
+    for forbidden in ("import supabase", "supabase.co", "supabase.com", "supabase_key"):
+        assert forbidden not in text, forbidden

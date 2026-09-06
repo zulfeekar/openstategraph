@@ -75,6 +75,36 @@ MIGRATIONS_DIR = Path(__file__).parent / "kanban_migrations"
 #: recorded and a ledger is not schema anybody reviews.
 LEDGER_TABLE = "public.kanban_schema_migrations"
 
+#: The *other* applier's ledger, read and never written —
+#: `team-board-and-gap-reports/13`.
+#:
+#: The shared database has two appliers by design: this runner, and the
+#: maintainers' migration CLI pointed at the same directory by a symlink. The
+#: owner's project was already at head when the store first opened it, because
+#: the CLI had pushed both files the day before — and a runner that reads only
+#: its own ledger concludes that nothing has ever been applied. Every file is
+#: idempotent, so it would have "worked"; a migration runner whose correctness
+#: rests on nothing it does mattering is not one. So the applied set is the
+#: union of the two ledgers, resolved through one seam.
+#:
+#: This is the one place in the package that names the tool it shares the
+#: database with, and `test_the_shared_board_has_a_reviewable_schema` records
+#: the exception with its argument. It is an identifier in a database somebody
+#: else's tool created — not an SDK, a key, a client, or a dependency — and the
+#: honest alternative is to pretend the other applier is not there.
+CLI_LEDGER_TABLE = "supabase_migrations.schema_migrations"
+
+
+class MigrationFailed(RuntimeError):
+    """A migration script libpq refused.
+
+    Its own class rather than a bare `RuntimeError` because the caller that
+    matters is `open_postgres_kanban_store`, which has to give the pool back
+    before it re-raises, and "which exception means the schema is not there"
+    should not be a string match.
+    """
+
+
 #: Column order, derived from the `Card` dataclass rather than typed again.
 #: The two the table has and a card does not are named separately.
 CARD_COLUMNS: tuple[str, ...] = tuple(field.name for field in dataclasses.fields(Card))
@@ -84,6 +114,62 @@ def migration_files() -> tuple[Path, ...]:
     """Every migration, in the order both appliers run them: filename order,
     which is version order because the prefix is digits."""
     return tuple(sorted(MIGRATIONS_DIR.glob("*.sql")))
+
+
+def _run_script(conn: Any, path: Path) -> None:
+    """One migration file, applied whole — `team-board-and-gap-reports/13`.
+
+    `Connection.execute` speaks the **extended** query protocol, which carries
+    exactly one command per message; handing it a file of twenty raises
+    *cannot insert multiple commands into a prepared statement*, which is how
+    the first live open of this store died. `pgconn.exec_` is libpq's **simple**
+    query protocol: a whole script in, one result out, which is the shape a
+    migration file has.
+
+    A splitter was the alternative the ticket allowed and is not what this is,
+    for the reason a splitter always loses: to know where a `;` ends a
+    statement it must track dollar-quoting, string literals, comments and
+    nested `$function$` bodies — a small SQL lexer maintained here, in a
+    package whose only job is to hand somebody else's parser the bytes. libpq
+    already has that parser.
+
+    `exec_` does not raise. It returns a result carrying a status, so a runner
+    that does not read it applies a broken file, records it as applied, and
+    never runs it again. The file name goes in the message because libpq's own
+    error says which *statement* failed and nothing about which file it was in.
+    """
+    from psycopg import pq
+
+    result = conn.pgconn.exec_(path.read_text(encoding="utf-8").encode("utf-8"))
+    if result.status in (
+        pq.ExecStatus.COMMAND_OK,
+        pq.ExecStatus.TUPLES_OK,
+        pq.ExecStatus.EMPTY_QUERY,
+    ):
+        return
+    detail = bytes(result.error_message or b"").decode("utf-8", "replace").strip()
+    raise MigrationFailed(f"{path.name} was refused by the database: {detail}")
+
+
+def _applied_versions(conn: Any) -> set[str]:
+    """Every version this database has already had applied, by either applier.
+
+    Two ledgers, one seam, unioned — see `CLI_LEDGER_TABLE` for why the second
+    one is read at all. It is asked for by `to_regclass` rather than by
+    catching the error from selecting it: a database nobody has pushed to with
+    that CLI simply has no such schema, and that is an ordinary state of
+    affairs rather than something worth logging a failed statement for.
+    """
+    versions = {
+        row["version"] for row in conn.execute(f"select version from {LEDGER_TABLE}")
+    }
+    present = conn.execute(
+        "select to_regclass(%s) as present", (CLI_LEDGER_TABLE,)
+    ).fetchone()
+    if present is None or present["present"] is None:
+        return versions
+    rows = conn.execute(f"select version from {CLI_LEDGER_TABLE}").fetchall()
+    return versions | {row["version"] for row in rows}
 
 
 def _row_to_card(row: dict[str, Any]) -> Card:
@@ -162,26 +248,39 @@ class PostgresKanbanStore(AbstractKanbanStore):
         """
         if self._migrated:
             return
-        self._migrated = True
         with self._ensure_pool().connection() as conn:
             conn.execute(
                 f"create table if not exists {LEDGER_TABLE} ("
                 "version text primary key, applied_at timestamptz not null default now())"
             )
-            applied = {
-                row["version"]
-                for row in conn.execute(f"select version from {LEDGER_TABLE}")
-            }
+            applied = _applied_versions(conn)
             for path in migration_files():
                 version = path.name.split("_", 1)[0]
                 if version in applied:
                     continue
-                conn.execute(path.read_text(encoding="utf-8"))
+                _run_script(conn, path)
                 conn.execute(
                     f"insert into {LEDGER_TABLE} (version) values (%s) "
                     "on conflict (version) do nothing",
                     (version,),
                 )
+        self._migrated = True
+
+    # -- giving the pool back ---------------------------------------------
+
+    def close(self) -> None:
+        """Hand the pool back. Idempotent, because the two ways out of a store
+        — `close()` and leaving the `with` — must be able to happen both."""
+        pool, self._pool = self._pool, None
+        self._migrated = False
+        if pool is not None:
+            pool.close()
+
+    def __enter__(self) -> PostgresKanbanStore:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
     # -- what `AbstractKanbanStore` decides with ---------------------------
 
@@ -325,9 +424,23 @@ def open_postgres_kanban_store(url: str) -> PostgresKanbanStore:
     database nobody can reach fails when the board is opened, with
     `OPENSTATEGRAPH_KANBAN_URL` named in the sentence, rather than at the
     moment somebody files their first card into nothing.
-    """
-    from openstategraph.postgres import open_pool
 
-    store = PostgresKanbanStore(url, pool=open_pool(url, env_var=KANBAN_URL_ENV))
-    store._migrate()
+    And a pool that opened is given back if anything after it fails
+    (`team-board-and-gap-reports/13`). The first live open raised on its own
+    first migration file and then hung for five seconds on
+    *couldn't stop thread 'pool-1-worker-0'*, because the pool had workers and
+    nothing owned it: the store had not been returned and the caller had
+    nothing to close. Every exit path from here closes it or hands back a store
+    that can.
+    """
+    from openstategraph import postgres
+
+    store = PostgresKanbanStore(
+        url, pool=postgres.open_pool(url, env_var=KANBAN_URL_ENV)
+    )
+    try:
+        store._migrate()
+    except Exception:
+        store.close()
+        raise
     return store
