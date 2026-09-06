@@ -245,6 +245,24 @@ STALE_THRESHOLD_SECONDS = 3600
 #: "no such column" for a column a user is looking straight at.
 BOARD_COLUMNS: tuple[str, ...] = ("detected", "needsYou", "inProgress", "resolved")
 
+#: The boards a card can be on — the `board` column's values, and the tab ids
+#: `src/view/board/boardTabs.ts` declares (`team-board-and-gap-reports/04`).
+#:
+#: The owner's decision of 2026-09-05 is **one table, a `board` column**, so
+#: these are two boards inside whatever store `open_kanban_store` opens rather
+#: than two stores. Which store answers is that function's job and `02` settled
+#: it; which *rows* are this tab's is this tuple.
+#:
+#: `BOARD_TABS` carries a third tab, `github`, which has no store behind it.
+#: That is why this is not simply the tab list: a tab is a thing a person can
+#: click, a board is a value a row carries, and the day the third gets a store
+#: is the day it earns a place here. Pinned against the TypeScript union by
+#: `test_the_team_tab_has_something_to_show.py`, for the reason `BOARD_COLUMNS`
+#: is: two spellings of one vocabulary in two languages drift silently.
+LOCAL_BOARD = "workflows"
+TEAM_BOARD = "osgEngineering"
+BOARD_IDS: tuple[str, ...] = (LOCAL_BOARD, TEAM_BOARD)
+
 #: `src/view/board/cardPriority.ts`'s two unions, same pin.
 BOARD_AREAS: tuple[str, ...] = ("ui", "ux", "frontend", "backend", "test", "docs")
 BOARD_PRIORITIES: tuple[str, ...] = ("high", "med", "low")
@@ -667,6 +685,41 @@ def flagged_stale(store: "IKanbanStore", *, threshold_seconds: int) -> list[str]
 #: jobs is one mistake away from a project's checkpoints and its board being
 #: the same database by accident.
 KANBAN_URL_ENV = "OPENSTATEGRAPH_KANBAN_URL"
+
+
+@dataclass(frozen=True)
+class TeamBoardStatus:
+    """Whether a team board is configured, and the variable that would say so.
+
+    `team-board-and-gap-reports/04`. Two fields, and the second is the one that
+    matters: a tab reading *"not configured"* and stopping there is the state
+    this ticket found, and what makes it actionable is naming the variable —
+    `CLAUDE.md`'s Ollama rule on a surface.
+
+    **The name, never the value.** `OPENSTATEGRAPH_KANBAN_URL` holds a URI with
+    a password in it, and this type has nowhere to put one on purpose: the
+    editor needs a boolean and a variable a maintainer can set, see and revoke,
+    and a status endpoint that answered with the URI would ship a worse defect
+    than the one it fixes.
+    """
+
+    configured: bool
+    env_var: str
+
+
+def team_board_status() -> TeamBoardStatus:
+    """Is a shared board configured on this process?
+
+    Reads one environment variable and opens no socket — deliberately the same
+    bargain `GET /api/health`'s `model_configured` already makes, and the same
+    limit: a board that is configured and unreachable is a different question
+    this does not answer. Whitespace is not a configuration, matching
+    `open_kanban_store`, which strips before it decides.
+    """
+    return TeamBoardStatus(
+        configured=bool(os.environ.get(KANBAN_URL_ENV, "").strip()),
+        env_var=KANBAN_URL_ENV,
+    )
 
 
 class KanbanStoreRegistry:

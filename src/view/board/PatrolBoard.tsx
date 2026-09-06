@@ -3,7 +3,7 @@ import { PlugZap, Radar } from 'lucide-react';
 import { Button, Icon, PanelEmpty, Tabs } from '@design/primitives';
 import { Dialog } from '@view/overlays/Dialog';
 import { PatrolColumn } from './PatrolColumn';
-import { BOARD_TABS, boardTabState, type BoardTabId } from './boardTabs';
+import { BOARD_TABS, boardTabState, type BoardConfig, type BoardTabId } from './boardTabs';
 import { BOARD_COLUMNS, type BoardCard } from './patrolBoardModel';
 import {
   BOARD_EMPTY_BODY,
@@ -57,6 +57,20 @@ export interface PatrolBoardProps {
    * "polished".
    */
   readonly statusLine?: string | null;
+  /**
+   * What the backend said about the environment — `team-board-and-gap-reports
+   * /04`. Optional, and `undefined` means *nobody has answered yet*, which
+   * `boardTabState`'s own default reads as unconfigured: the conservative
+   * sentence rather than an optimistic empty board.
+   */
+  readonly config?: BoardConfig;
+  /**
+   * Which tab is showing. The caller owns the cards, so it has to know which
+   * board to load them for — `board` is the discriminator on the row and the
+   * tab is the board. Optional, same rule as `onAnswer`: a caller that does
+   * not care simply is not told, and the tab still switches.
+   */
+  readonly onTabChange?: (tab: BoardTabId) => void;
 }
 
 /**
@@ -86,9 +100,15 @@ export function PatrolBoard({
   onRelease,
   onRefresh,
   statusLine = null,
+  config,
+  onTabChange,
 }: PatrolBoardProps) {
   const [tab, setTab] = useState<BoardTabId>('workflows');
-  const state = boardTabState(tab);
+  const state = boardTabState(tab, config);
+  const showTab = (next: BoardTabId) => {
+    setTab(next);
+    onTabChange?.(next);
+  };
 
   const patrolButton = (
     <Button variant="primary" icon={<Icon glyph={Radar} size="sm" />} onClick={onPatrol}>
@@ -115,7 +135,7 @@ export function PatrolBoard({
       onClose={onClose}
       footer={footer}
     >
-      <Tabs tabs={BOARD_TABS} active={tab} onChange={setTab} />
+      <Tabs tabs={BOARD_TABS} active={tab} onChange={showTab} />
 
       {statusLine ? <p className="patrol-board__status">{statusLine}</p> : null}
 

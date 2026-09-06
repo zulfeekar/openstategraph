@@ -1325,6 +1325,19 @@ export interface IRuntimeClient {
 export interface RuntimeHealth {
   readonly modelConfigured: boolean;
   readonly editorStale: boolean | null;
+  /**
+   * Whether a **shared** kanban board is configured on the process serving
+   * this editor, and the name of the variable that decides it —
+   * `team-board-and-gap-reports/04`. The name, never the value: the variable
+   * holds a URI with a password in it and the backend deliberately publishes
+   * only what a maintainer would need to act.
+   *
+   * The name is empty when the backend did not say one, which is what an
+   * older process answers. A surface reading it must treat that as *say
+   * nothing*, the same rule `editorStale`'s `null` already carries.
+   */
+  readonly teamBoardConfigured: boolean;
+  readonly teamBoardEnvVar: string;
 }
 
 /** Injected so tests need no server and no network. */
@@ -2037,9 +2050,14 @@ export class RuntimeClient implements IRuntimeClient {
    * an honest empty board, but "could not ask" is a third state and folding
    * it into the other two would show a false all-clear.
    */
-  async kanbanCards(): Promise<Result<readonly KanbanCardRow[], string>> {
+  async kanbanCards(board?: string): Promise<Result<readonly KanbanCardRow[], string>> {
+    // Built in two steps rather than with a conditional inside the template,
+    // for `LiveEventStream.wantedUrl()`'s reason: `contractDrift.test.ts`
+    // reads the paths this client calls straight out of the source, and a `?`
+    // inside the literal ends the path it can see.
+    const query = board ? `?board=${encodeURIComponent(board)}` : '';
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}/api/kanban/cards`);
+      const response = await this.fetchImpl(`${this.baseUrl}/api/kanban/cards${query}`);
       if (!response.ok) return Err(`Could not read kanban cards (${response.status})`);
       const rows = (await response.json()) as KanbanCardRow[];
       return Ok(rows);
@@ -2230,6 +2248,8 @@ export class RuntimeClient implements IRuntimeClient {
         // `false` for the wheel's `null`, which is the one claim the backend
         // deliberately refuses to make about itself.
         editorStale: typeof stale === 'boolean' ? stale : null,
+        teamBoardConfigured: payload['team_board_configured'] === true,
+        teamBoardEnvVar: asString(payload['team_board_env']),
       });
     } catch {
       return Err('Runtime is not reachable');

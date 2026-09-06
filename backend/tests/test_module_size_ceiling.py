@@ -1211,6 +1211,16 @@ wire is told the encoding is the store's business and not theirs.
 are again the load-bearing half: an empty digest means *I cannot tell you which
 version*, and a reader who takes it for *unchanged* turns the guard off exactly
 where it is needed.
+
+`556 -> 566`, 2026-09-06 (`team-board-and-gap-reports/04`). Nine lines and an
+import: the two fields `GET /api/health` grew so the board's team tab can stop
+saying *not configured* when something is configured — a boolean, and the
+**name** of the variable that decides it. The documentation is once again the
+load-bearing half, and here it is a rule rather than a note: the name travels
+and the value never does, because that variable holds a URI with a password in
+it. The default on `team_board_env` is imported from `kanban_store` rather than
+retyped, so the published contract cannot come to name a variable the process
+does not read.
 """
 
 #: `team-board-and-gap-reports/02`, 2026-09-06. **Departed this table**, which
@@ -1319,7 +1329,7 @@ RECORDED: dict[str, Recorded] = {
     "mcp_server.py": Recorded(990, MCP_SERVER),
     "api/routes/workflows.py": Recorded(619, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
-    "api/schemas.py": Recorded(557, SCHEMAS),
+    "api/schemas.py": Recorded(566, SCHEMAS),
 }
 
 

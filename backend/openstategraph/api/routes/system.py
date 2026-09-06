@@ -253,16 +253,28 @@ def health() -> HealthResponse:
     is a different question, and one this endpoint has never answered.
     """
     from openstategraph.editor_freshness import editor_is_stale
+    from openstategraph.kanban_store import team_board_status
     from openstategraph.providers import ProviderEnvironment, provider_catalogue
 
     configured = any(
         ProviderEnvironment(spec).is_configured() for spec in provider_catalogue().list()
     )
+    # The board's own version of the same question
+    # (`team-board-and-gap-reports/04`): the **name** of the variable that
+    # configures a shared board, and whether it is set. Here rather than on a
+    # status route of its own because this endpoint is already the one place
+    # that answers "what does the environment name", and the board tab needs
+    # exactly that and nothing more. The value never leaves this process.
+    team_board = team_board_status()
     # Still cheap: two `stat` walks over a directory the process already sits
     # in, and `None` the moment there is no source tree to compare against —
     # which is every installed wheel.
     return HealthResponse(
-        ok=True, model_configured=configured, editor_stale=editor_is_stale()
+        ok=True,
+        model_configured=configured,
+        editor_stale=editor_is_stale(),
+        team_board_configured=team_board.configured,
+        team_board_env=team_board.env_var,
     )
 
 

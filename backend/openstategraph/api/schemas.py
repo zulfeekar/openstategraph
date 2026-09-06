@@ -7,6 +7,7 @@ from typing import Annotated, Any, Literal
 from pydantic import AfterValidator, AliasChoices, BaseModel, Field, WithJsonSchema, model_validator
 
 from openstategraph.api.workflow_store import SLUG_PATTERN, is_slug
+from openstategraph.kanban_store import KANBAN_URL_ENV
 
 
 def _must_be_a_slug(value: str) -> str:
@@ -83,6 +84,23 @@ class HealthResponse(BaseModel):
             "At least one provider has its credentials set. "
             "Not a reachability check."
         )
+    )
+    #: Whether a **shared** kanban board is configured on this process —
+    #: `team-board-and-gap-reports/04`. The same shape of fact as
+    #: `model_configured` beside it, about a different variable: it reads the
+    #: environment and opens no socket, so a board that is configured and
+    #: unreachable is a different question this has never answered.
+    team_board_configured: bool = False
+    #: The **name** of the variable that decides it, never its value. The
+    #: variable holds a URI with a password in it; what the editor needs is a
+    #: boolean and something a maintainer can be told to set. A default rather
+    #: than a required field so a client reading an older process still parses.
+    team_board_env: str = Field(
+        default=KANBAN_URL_ENV,
+        description=(
+            "The environment variable that configures the shared board. "
+            "The name only — the value is never published."
+        ),
     )
 
 

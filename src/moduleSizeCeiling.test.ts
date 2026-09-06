@@ -216,7 +216,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       part of it this module knows. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 901,
+    lines: 906,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -389,7 +389,18 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       card reached \`finished\`. The same bill this entry's own argument
       describes: a field of the published contract, documented at its
       declaration, pinned to \`docs/openapi.json\` by the drift test rather than
-      by codegen. No behaviour, and no new reason to change.`,
+      by codegen. No behaviour, and no new reason to change.
+
+      **901 -> 906** (\`team-board-and-gap-reports/04\`). Two declared fields on
+      \`RuntimeHealth\` — whether a shared board is configured, and the **name**
+      of the variable that decides it — plus a two-line query on
+      \`kanbanCards()\` for the board a read is about. Same bill as the entry
+      above: fields of the published contract, mirrored by hand where
+      \`docs/openapi.json\` is the pin. The query is built in two steps rather
+      than inside the template for \`LiveEventStream.wantedUrl()\`'s reason —
+      \`contractDrift.test.ts\` reads the paths this client calls out of the
+      source, and a \`?\` in the literal ends the path it can see. No new
+      reason to change.`,
   },
 };
 

@@ -53,6 +53,8 @@ from openstategraph.api.schemas import (
 from openstategraph.api.sse_contract import sse_responses
 from openstategraph.api.streaming import _sse, stop_when_client_leaves_async
 from openstategraph.kanban_store import (
+    BOARD_IDS,
+    LOCAL_BOARD,
     STALE_THRESHOLD_SECONDS,
     MissingEvidenceError,
     StageOrderError,
@@ -147,7 +149,7 @@ async def _run_patrol_in_background(
     summary="Every card in this project's kanban store, current stage included",
     tags=["Kanban"],
 )
-def list_kanban_cards(services: Services) -> list[KanbanCardResponse]:
+def list_kanban_cards(services: Services, board: str = LOCAL_BOARD) -> list[KanbanCardResponse]:
     """An empty list, never an error, when nothing has been filed yet —
     `kanban-patrol/19`'s own rule for an unattended-nothing board: a patrol
     that ran and found nothing is a different claim from a patrol that
@@ -160,7 +162,27 @@ def list_kanban_cards(services: Services) -> list[KanbanCardResponse]:
     disconnected — that is this route doing exactly what it always did,
     which is the whole reason "refetch plus subscribe" is a correct answer
     and not a workaround.
+
+    **`board` picks the tab, not the store** (`team-board-and-gap-reports/04`).
+    The owner's decision is one table with a `board` column, so the local and
+    the shared board are two sets of rows in whatever store
+    `open_kanban_store` opens — that dispatch is `02`'s and is untouched here.
+    The default is the board that has always been there, so every existing
+    caller reads exactly what it read before.
     """
+    if board not in BOARD_IDS:
+        # Refused by name rather than answered with the local board's rows —
+        # the same rule `open_kanban_store` applies to a scheme nothing claims
+        # (`team-board-and-gap-reports/02`): a quiet fallback is two people
+        # disagreeing about what the board says. `github` is a tab and not a
+        # board, and this is the sentence that says which.
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{board!r} is not a board on this product (boards: "
+                f"{', '.join(BOARD_IDS)}). A tab is not always a board."
+            ),
+        )
     store = open_kanban_store(services.store.root)
     stale_ids = set(flagged_stale(store, threshold_seconds=STALE_THRESHOLD_SECONDS))
     return [
@@ -169,6 +191,7 @@ def list_kanban_cards(services: Services) -> list[KanbanCardResponse]:
         # and an agent cannot come to read different cards.
         KanbanCardResponse(**card_row(card, stale=card.task_id in stale_ids))
         for card in store.list_cards()
+        if card.board == board
     ]
 
 

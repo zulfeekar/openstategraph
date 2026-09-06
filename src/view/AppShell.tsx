@@ -20,9 +20,8 @@ import { ShortcutsDrawer } from './overlays/ShortcutsDrawer';
 import { CredentialsDialog } from './overlays/CredentialsDialog';
 import { McpServersDialog } from './overlays/McpServersDialog';
 import { PatrolBoard } from './board/PatrolBoard';
-import { mapKanbanCardToBoardCard } from './board/kanbanCardMapping';
 import type { BoardCard } from './board/patrolBoardModel';
-import { useKanbanChanges } from './board/useKanbanChanges';
+import { useBoardRows } from './board/useBoardRows';
 import { usePatrolStatus } from './board/usePatrolStatus';
 import { patrolStatusLine } from './board/patrolStatusLine';
 import { AccessibilityCheck } from './overlays/AccessibilityCheck';
@@ -228,35 +227,16 @@ export function AppShell() {
    */
   const [patrolBoardOpen, setPatrolBoardOpen] = useState(false);
   /**
-   * Real rows, `kanban-patrol/19` — read on open, refreshed by hand
-   * (`onRefresh` on `PatrolBoard`), and **live since
-   * `osg-agent-experience/36`**: `useKanbanChanges` below refetches through
-   * this same loader whenever the server sees the store move, so an agent
-   * moving a card no longer needs a click. `null` until the first read
-   * returns, so the
-   * board can tell "hasn't asked yet" from "asked, found nothing" — the same
-   * three-state honesty `19` already applies to a card's own absent fields.
+   * The board's rows, its live feed and what the environment says is behind
+   * its tabs — `kanban-patrol/19`, `osg-agent-experience/36` and
+   * `team-board-and-gap-reports/04`, in one collaborator rather than four
+   * pieces of state here. It came out when this module crossed the module
+   * ceiling and the census asked which of the two things it was: which rows
+   * the board shows is a second reason to change, not one more line of the
+   * shell's own job. `useBoardRows` carries the argument in full.
    */
-  const [kanbanCards, setKanbanCards] = useState<readonly BoardCard[] | null>(null);
-  const refreshKanbanCards = useCallback(() => {
-    const client = new RuntimeClient();
-    void client.kanbanCards().then((result) => {
-      if (!result.ok) return; // stays whatever it last was — an unreachable
-      // backend is not evidence the board is empty.
-      setKanbanCards(result.value.map((row) => mapKanbanCardToBoardCard(row, Date.now())));
-    });
-  }, []);
-  useEffect(() => {
-    if (patrolBoardOpen) refreshKanbanCards();
-  }, [patrolBoardOpen, refreshKanbanCards]);
-  /**
-   * And live from there on — `osg-agent-experience/36`. An agent attending a
-   * card is another process writing `kanban.sqlite`, so the board's rows go
-   * stale the moment it opens; this subscribes to the server's watch of that
-   * file for exactly as long as the board is on screen, and refetches through
-   * the same loader the manual Refresh uses.
-   */
-  useKanbanChanges(patrolBoardOpen, refreshKanbanCards);
+  const boardRows = useBoardRows(patrolBoardOpen);
+  const refreshKanbanCards = boardRows.refresh;
   /**
    * The board's live line — kanban-patrol/07. Mounted unconditionally
    * (not gated on `patrolBoardOpen`) because a patrol started from an
@@ -1083,7 +1063,9 @@ export function AppShell() {
       {mcpServersOpen ? <McpServersDialog onClose={() => setMcpServersOpen(false)} /> : null}
       {patrolBoardOpen ? (
         <PatrolBoard
-          cards={kanbanCards ?? undefined}
+          cards={boardRows.cards ?? undefined}
+          config={boardRows.config ?? undefined}
+          onTabChange={boardRows.showBoard}
           statusLine={patrolStatusLine(patrolStatus)}
           onRefresh={refreshKanbanCards}
           onClose={() => setPatrolBoardOpen(false)}
