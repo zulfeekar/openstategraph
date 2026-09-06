@@ -3,7 +3,7 @@
 `guard.check` gained a second argument in `osg-agent-experience/50` — a
 `RunSummary`, which counted the run's tool calls and remembered the last
 failure. That answered *"did any evidence arrive"* and could not answer the
-question the live `cpl-analyst` run actually needed answered: *is this figure
+question the live adopter run actually needed answered: *is this figure
 a figure the run retrieved*.
 
 Two findings in one published answer on 2026-09-06:
