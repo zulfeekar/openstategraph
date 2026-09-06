@@ -17,6 +17,7 @@ about today's backlog rather than about the checker.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -46,11 +47,72 @@ def script() -> ModuleType:
     return _script()
 
 
-def ticket(script: ModuleType, status: str, body: str = "") -> object:
+#: Every sha spelled out below is a **fixture id and resolves to nothing here**
+#: — `f1c71xx`, deliberately unlike a real hash. The docstrings still name the
+#: real commits they are an account of, in backticks, because that is prose and
+#: nothing reads it; a literal in code is either fixture data or a pin on this
+#: checkout's history, and `stable-beta-public/35` is what the second one costs.
+#: `backend/tests/test_a_test_does_not_pin_this_checkouts_history.py` is the census.
+#:
+#: Subjects this test chooses, for commits this test makes — `stable-beta-public/35`.
+#: Distinct enough that a row pairing the wrong one is visible at a glance.
+FIRST_SUBJECT = "Teach the fixture repository to carry a first commit"
+SECOND_SUBJECT = "And a second, whose subject this test chose itself"
+
+
+@pytest.fixture
+def fixture_repo(tmp_path: Path) -> tuple[Path, str, str]:
+    """A two-commit git repository of this test's own making.
+
+    `stable-beta-public/35`. The three tests below used to name `7c776f3` and
+    `6fd010b` — real commits of the beta repository — and assert their subject
+    lines. That is a test of the checkout rather than of the code, and it went
+    red on the first CI run of the public repository (2026-09-07, run
+    34065336942), whose history is one parentless commit: three failures,
+    `assert '(no such commit here)' == 'Name our ste…'`, green everywhere else.
+    A shallow clone or a fork fails the same way, and `fetch-depth: 0` only
+    hid it on the one clone CI happened to make.
+
+    So the history is built here. Identity is set **locally**, because a
+    machine with no `user.email` cannot commit and CI is such a machine.
+    """
+    repo = tmp_path / "a-repository-of-our-own"
+    repo.mkdir()
+
+    def git(*args: str) -> str:
+        result = subprocess.run(
+            ["git", *args], cwd=repo, capture_output=True, text=True, check=True
+        )
+        return result.stdout.strip()
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.name", "Ledger Fixture")
+    git("config", "user.email", "fixture@example.invalid")
+
+    shas: list[str] = []
+    for subject in (FIRST_SUBJECT, SECOND_SUBJECT):
+        (repo / "a-file.txt").write_text(f"{subject}\n", encoding="utf-8")
+        git("add", "a-file.txt")
+        git(
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "-m",
+            f"{subject}\n\nBody.\n\nTicket: a-map/07\n",
+        )
+        shas.append(git("rev-parse", "--short=7", "HEAD"))
+
+    return repo, shas[0], shas[1]
+
+
+def ticket(
+    script: ModuleType, status: str, body: str = "", path: Path | None = None
+) -> object:
     return script.Ticket(
         map_name="a-map",
         number="07",
-        path=Path("07-a-ticket.md"),
+        path=path or Path("07-a-ticket.md"),
         status=status,
         body=body,
     )
@@ -76,7 +138,7 @@ class TestWhatCountsAsOpen:
             "**resolved** 2026-08-18",
             "closed",
             "done 2026-08-16",
-            "resolved (7782285)",
+            "resolved (f1c7103)",
             "**backlog** (owner, 2026-08-18 — parked deliberately)",
         ],
     )
@@ -171,41 +233,41 @@ class TestATrailerNamingATicketThatDoesNotExist:
     """
 
     def test_a_trailer_naming_no_file_is_reported(self, script: ModuleType) -> None:
-        claimed = {"production-ready/100": ["9c39c4c"]}
+        claimed = {"production-ready/100": ["f1c7100"]}
         known: set[str] = {"production-ready/99"}
 
         assert script.missing_ticket_files(claimed, known) == [
-            ("production-ready/100", ["9c39c4c"])
+            ("production-ready/100", ["f1c7100"])
         ]
 
     def test_a_trailer_naming_a_real_ticket_is_not(self, script: ModuleType) -> None:
-        claimed = {"production-ready/46": ["7782285"]}
+        claimed = {"production-ready/46": ["f1c7103"]}
         known = {"production-ready/46"}
 
         assert script.missing_ticket_files(claimed, known) == []
 
     def test_several_missing_ids_are_all_reported(self, script: ModuleType) -> None:
         claimed = {
-            "production-ready/100": ["9c39c4c"],
-            "production-ready/101": ["6aae666"],
-            "production-ready/102": ["578ccec"],
+            "production-ready/100": ["f1c7100"],
+            "production-ready/101": ["f1c7101"],
+            "production-ready/102": ["f1c7102"],
         }
         known: set[str] = set()
 
         assert script.missing_ticket_files(claimed, known) == [
-            ("production-ready/100", ["9c39c4c"]),
-            ("production-ready/101", ["6aae666"]),
-            ("production-ready/102", ["578ccec"]),
+            ("production-ready/100", ["f1c7100"]),
+            ("production-ready/101", ["f1c7101"]),
+            ("production-ready/102", ["f1c7102"]),
         ]
 
     def test_the_map_filter_narrows_it(self, script: ModuleType) -> None:
         """A `--map production-ready` run must not report a missing `ship-it`
         ticket — that ticket is out of scope, not evidence of drift here."""
-        claimed = {"production-ready/100": ["a0eff1a"], "ship-it/03": ["fcfe3c7"]}
+        claimed = {"production-ready/100": ["f1c7104"], "ship-it/03": ["f1c7105"]}
         known: set[str] = set()
 
         assert script.missing_ticket_files(claimed, known, map_filter="production-ready") == [
-            ("production-ready/100", ["a0eff1a"])
+            ("production-ready/100", ["f1c7104"])
         ]
 
     def test_it_runs_end_to_end_against_the_real_repository(self, script: ModuleType) -> None:
@@ -306,7 +368,7 @@ class TestAPartialIsExemptFromBothChecks:
     def test_the_trailer_check_exempts_it(self, script: ModuleType) -> None:
         partial = ticket(script, "partially resolved (part 2 open)")
 
-        assert not script.is_trailer_drift(partial, ["fcfe3c7"])
+        assert not script.is_trailer_drift(partial, ["f1c7105"])
 
     def test_a_plainly_open_ticket_with_a_trailer_is_still_drift(
         self, script: ModuleType
@@ -314,10 +376,10 @@ class TestAPartialIsExemptFromBothChecks:
         """The exemption must not swallow the defect the check exists for."""
         drifted = ticket(script, "open")
 
-        assert script.is_trailer_drift(drifted, ["a0eff1a"])
+        assert script.is_trailer_drift(drifted, ["f1c7104"])
 
     def test_a_closed_ticket_is_not_drift(self, script: ModuleType) -> None:
-        assert not script.is_trailer_drift(ticket(script, "resolved 2026-08-19"), ["a0eff1a"])
+        assert not script.is_trailer_drift(ticket(script, "resolved 2026-08-19"), ["f1c7104"])
 
     def test_an_open_ticket_with_no_commits_is_not_drift(self, script: ModuleType) -> None:
         assert not script.is_trailer_drift(ticket(script, "open"), [])
@@ -353,35 +415,53 @@ class TestADriftRowCarriesItsOwnEvidence:
     to print more of them.
     """
 
-    def test_it_reads_a_commit_subject(self, script: ModuleType) -> None:
-        """Pinned against the commit the ticket is about. It is pushed to two
-        remotes, so its subject cannot be rewritten."""
-        assert script.commit_subject("7c776f3") == (
-            "Name our step budget beside LangGraph's, since ours is the one in force"
-        )
+    def test_it_reads_a_commit_subject(
+        self, script: ModuleType, fixture_repo: tuple[Path, str, str]
+    ) -> None:
+        """Read out of the repository the test built, not out of this one."""
+        repo, first, _second = fixture_repo
 
-    def test_a_sha_this_repository_does_not_have_is_not_fatal(
-        self, script: ModuleType
+        assert script.commit_subject(first, repo=repo) == FIRST_SUBJECT
+
+    def test_a_sha_that_repository_does_not_have_is_not_fatal(
+        self, script: ModuleType, fixture_repo: tuple[Path, str, str]
     ) -> None:
         """A report is not the place to raise. The third check already exists
-        for commits this repository does not have."""
-        assert script.commit_subject("0000000") == "(no such commit here)"
+        for commits a repository does not have."""
+        repo, _first, _second = fixture_repo
+
+        assert script.commit_subject("0000000", repo=repo) == "(no such commit here)"
 
     def test_the_row_pairs_the_ticket_file_with_the_commit_subject(
-        self, script: ModuleType
+        self, script: ModuleType, fixture_repo: tuple[Path, str, str], tmp_path: Path
     ) -> None:
-        drifted = ticket(script, "open")
+        repo, first, _second = fixture_repo
+        path = tmp_path / "07-a-ticket.md"
+        path.write_text("# 07 — A ticket\n\nStatus: open\n", encoding="utf-8")
 
-        row = script.drift_row(drifted, ["7c776f3"])
+        row = script.drift_row(ticket(script, "open", path=path), [first], repo=repo)
 
         assert "07-a-ticket.md" in row
-        assert "7c776f3" in row
-        assert "Name our step budget beside LangGraph's" in row
+        assert first in row
+        assert FIRST_SUBJECT in row
 
-    def test_every_commit_on_a_row_gets_its_subject(self, script: ModuleType) -> None:
-        drifted = ticket(script, "open")
+    def test_every_commit_on_a_row_gets_its_subject(
+        self, script: ModuleType, fixture_repo: tuple[Path, str, str]
+    ) -> None:
+        repo, first, second = fixture_repo
 
-        row = script.drift_row(drifted, ["7c776f3", "6fd010b"])
+        row = script.drift_row(ticket(script, "open"), [first, second], repo=repo)
 
-        assert "Name our step budget" in row
-        assert "The file a skill names is the skill" in row
+        assert FIRST_SUBJECT in row
+        assert SECOND_SUBJECT in row
+
+    def test_the_trailer_those_commits_carry_is_read_from_that_repository_too(
+        self, script: ModuleType, fixture_repo: tuple[Path, str, str]
+    ) -> None:
+        """The seam is one parameter and it reaches every git call, so the
+        whole ledger can be pointed at a repository the test made."""
+        repo, first, second = fixture_repo
+
+        assert script.resolving_commits(repo=repo) == {"a-map/07": [second, first]}
+        assert script.commit_exists(first, repo=repo)
+        assert not script.commit_exists("0000000", repo=repo)

@@ -183,11 +183,17 @@ def is_trailer_drift(ticket: Ticket, commits: list[str]) -> bool:
     return ticket.is_open and not ticket.is_partial and bool(commits)
 
 
-def resolving_commits() -> dict[str, list[str]]:
-    """Ticket id → the commits whose trailer names it."""
+def resolving_commits(repo: Path = REPO) -> dict[str, list[str]]:
+    """Ticket id → the commits whose trailer names it.
+
+    ``repo`` is the one seam every git call in this module goes through, and it
+    exists so a test can build a history instead of asserting about ours —
+    `stable-beta-public/35`. It defaults to this checkout, which is what the
+    report wants and what every caller in `main` passes.
+    """
     log = subprocess.run(
         ["git", "log", "--format=%H%x1f%B%x1e"],
-        cwd=REPO,
+        cwd=repo,
         capture_output=True,
         text=True,
         check=False,
@@ -231,7 +237,7 @@ def missing_ticket_files(
     return missing
 
 
-def commit_subject(sha: str) -> str:
+def commit_subject(sha: str, repo: Path = REPO) -> str:
     """The commit's own first line, or a placeholder if it is not here.
 
     Never raises: this is report text, and the "cites a commit this repository
@@ -239,7 +245,7 @@ def commit_subject(sha: str) -> str:
     """
     result = subprocess.run(
         ["git", "log", "-1", "--format=%s", sha],
-        cwd=REPO,
+        cwd=repo,
         capture_output=True,
         text=True,
         check=False,
@@ -249,7 +255,7 @@ def commit_subject(sha: str) -> str:
     return result.stdout.strip() or "(no such commit here)"
 
 
-def drift_row(ticket: Ticket, commits: list[str]) -> str:
+def drift_row(ticket: Ticket, commits: list[str], repo: Path = REPO) -> str:
     """One shipped-but-open row, carrying the evidence a reader needs — `21`.
 
     For five days the ledger printed ``launch-readiness/94  ← 7c776f3`` on
@@ -272,15 +278,15 @@ def drift_row(ticket: Ticket, commits: list[str]) -> str:
     skipped.
     """
     lines = [f"{ticket.id} {ticket.path.name}"]
-    lines.extend(f"    ← {sha}  {commit_subject(sha)}" for sha in commits)
+    lines.extend(f"    ← {sha}  {commit_subject(sha, repo)}" for sha in commits)
     return "\n  ".join(lines)
 
 
-def commit_exists(sha: str) -> bool:
+def commit_exists(sha: str, repo: Path = REPO) -> bool:
     return (
         subprocess.run(
             ["git", "cat-file", "-e", f"{sha}^{{commit}}"],
-            cwd=REPO,
+            cwd=repo,
             capture_output=True,
             check=False,
         ).returncode

@@ -152,12 +152,18 @@ jobs:
         # PYTHON_VERSIONS — the parity test reads this list.
         python-version: ["3.11", "3.13"]
     steps:
+      # A shallow checkout, deliberately (stable-beta-public/35). This job
+      # carried `fetch-depth: 0` because test_ticket_ledger.py asserted the
+      # subject lines of two real commits — a test of the checkout, which fell
+      # over anyway on the public repository's own history (2026-09-07, run
+      # 34065336942). Those three tests now build a two-commit repository in
+      # `tmp_path` and point the ledger at it, and nothing else under
+      # `backend/tests/` reads history: the only other git calls are
+      # `git ls-files` and `rev-parse --git-common-dir`, neither of which needs
+      # a commit. `test_a_test_does_not_pin_this_checkouts_history.py` is what
+      # keeps that true — and it under-reports rather than fails on a shallow
+      # clone, so this line cannot come back as a way of passing it.
       - uses: actions/checkout@v4
-        # Full history: test_ticket_ledger.py reads real commit subjects, and a
-        # shallow clone answers "(no such commit here)" for every one of them —
-        # the three reds on the first run after the billing block lifted
-        # (stable-beta-public/01, 2026-09-05).
-        with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "${{ matrix.python-version }}" }
       # `[all]` because a checkout exercises every surface — the HTTP API, the
