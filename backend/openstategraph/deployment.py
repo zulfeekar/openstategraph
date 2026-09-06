@@ -102,6 +102,8 @@ def refusal(count: int, source: str) -> str:
     Four things, in the order a reader needs them: what was asked, why it is
     refused, what *not* to try, and the exact line to type instead.
     """
+    from openstategraph.install_hint import install_hint
+
     return (
         f"{source} asks for {count} workers, and OpenStateGraph supports exactly one.\n"
         "\n"
@@ -114,7 +116,7 @@ def refusal(count: int, source: str) -> str:
         "    queue, so a workflow published on one worker never reaches a browser\n"
         "    subscribed to another.\n"
         "\n"
-        "Configuring Postgres (`pip install 'openstategraph[postgres]'`,\n"
+        f"Configuring Postgres (`{install_hint('postgres')}`,\n"
         "OPENSTATEGRAPH_POSTGRES_URL) fixes the first and is worth doing for\n"
         "durability — but it is NOT enough to lift this limit, because the event\n"
         "fan-out has no cross-process transport yet. Both halves or neither.\n"

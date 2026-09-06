@@ -325,10 +325,9 @@ class ProviderStatusResponse(BaseModel):
     )
     install_hint: str = Field(
         description=(
-            "The exact `pip install` line for this provider's integration, "
-            "e.g. `pip install 'openstategraph[openai]'` — the same string "
-            "`ProviderSpec.install_hint` composes for the CLI, so the picker "
-            "never invents its own phrasing."
+            "The exact command that adds this provider's integration on this "
+            "machine — the same string `ProviderSpec.install_hint` composes "
+            "for the CLI, so the picker never invents its own phrasing."
         )
     )
     extra: str = Field(

@@ -233,7 +233,8 @@ def command_note(server: ServerDescriptor) -> str:
     return (
         f"the four files run `{server.command}`, which is not on this shell's PATH and has "
         "no console script beside this interpreter either — your agent will not be able to "
-        "start it. Install the wheel (or `uv tool install openstategraph`) and re-run init."
+        "start it. Reinstall the package so its console script lands on PATH, then re-run "
+        "init."
     )
 
 

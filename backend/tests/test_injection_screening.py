@@ -83,9 +83,13 @@ class TestTheGapIsOneLine:
         assert str(gap.message).count("\n") == 0
 
     def test_it_names_the_exact_command(self) -> None:
+        """`osg-agent-experience/82`: composed by `install_hint`, not hand-written —
+        a literal here would pin one machine's answer rather than this one's."""
+        from openstategraph.install_hint import install_hint
+
         gap = injection.readiness()
         assert gap is not None
-        assert "pip install 'openstategraph[bastion]'" in gap.message
+        assert install_hint("bastion") in gap.message
 
     def test_it_says_what_is_not_happening_rather_than_what_failed(self) -> None:
         gap = injection.readiness()

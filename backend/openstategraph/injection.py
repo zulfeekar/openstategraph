@@ -90,10 +90,12 @@ class ScreeningGap:
         *now*: the run went ahead without screening. "Import failed" describes
         our machinery; "this ran unscreened" describes their system.
         """
+        from openstategraph.install_hint import install_hint
+
         return (
             "This workflow asked for prompt-injection screening and ran without it — "
             f"the {DISTRIBUTION} integration is not installed "
-            f"(pip install 'openstategraph[{EXTRA}]')."
+            f"({install_hint(EXTRA)})."
         )
 
 

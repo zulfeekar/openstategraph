@@ -117,9 +117,10 @@ def open_pool(url: str, *, env_var: str = POSTGRES_URL_ENV) -> Any:
         from psycopg.rows import dict_row
         from psycopg_pool import ConnectionPool
     except ImportError as exc:
+        from openstategraph.install_hint import install_hint
+
         raise ImportError(
-            f"{env_var} is set, but psycopg is not installed — "
-            "pip install 'openstategraph[postgres]'"
+            f"{env_var} is set, but psycopg is not installed — {install_hint('postgres')}"
         ) from exc
 
     pool = ConnectionPool(
@@ -154,9 +155,11 @@ def checkpointer(url: str) -> Any:
     try:
         from langgraph.checkpoint.postgres import PostgresSaver
     except ImportError as exc:
+        from openstategraph.install_hint import install_hint
+
         raise ImportError(
             f"{POSTGRES_URL_ENV} is set, but langgraph-checkpoint-postgres is not "
-            "installed — pip install 'openstategraph[postgres]'"
+            f"installed — {install_hint('postgres')}"
         ) from exc
 
     pool = open_pool(url)
@@ -171,9 +174,11 @@ def store(url: str) -> Any:
     try:
         from langgraph.store.postgres import PostgresStore
     except ImportError as exc:
+        from openstategraph.install_hint import install_hint
+
         raise ImportError(
             f"{POSTGRES_URL_ENV} is set, but langgraph-checkpoint-postgres is not "
-            "installed — pip install 'openstategraph[postgres]'"
+            f"installed — {install_hint('postgres')}"
         ) from exc
 
     pool = open_pool(url)

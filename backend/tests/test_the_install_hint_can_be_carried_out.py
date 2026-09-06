@@ -25,6 +25,7 @@ MSAL one beside it, and the CLI's "uvicorn is required" — asks it instead.
 
 from __future__ import annotations
 
+import ast
 import re
 import sys
 import tomllib
@@ -41,6 +42,38 @@ from openstategraph.install_hint import (
 )
 
 REPO = Path(__file__).resolve().parents[2]
+
+
+def _non_docstring_string_literals(path: Path) -> list[str]:
+    """Every string literal in `path`, except a module's/class's/function's
+    own docstring.
+
+    A docstring is, by Python's own definition, the first statement of a
+    module/class/function body when that statement is a bare string
+    expression — so it is found the same way the interpreter finds it,
+    walking the AST rather than guessing from indentation or quote style. A
+    comment needs no such carve-out: `ast.parse` throws every comment away
+    before this function ever sees the tree.
+    """
+    tree = ast.parse(path.read_text("utf-8"), filename=str(path))
+    docstrings: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(node, "body", [])
+            if (
+                body
+                and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)
+            ):
+                docstrings.add(id(body[0].value))
+    return [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstrings
+    ]
 
 UV_TOOL = Installation(shape="uv-tool", version="0.3.0rc15", extras=("ollama", "server"))
 VENV = Installation(shape="venv", version="0.3.0rc15", extras=("server",))
@@ -95,6 +128,27 @@ class TestTheOtherExtrasSurvive:
         )
 
 
+class TestTheCommandCannotWrapItself:
+    """`osg-agent-experience/83`: `install_hint` composes a command, never a
+    paragraph — `textwrap` never touches it, so nothing it returns can arrive
+    pre-broken at a caller that (correctly) wraps everything else.
+
+    Pinned against the widest case this module can produce: every known
+    extra already present, on a `uv tool` install, pre-release — the one
+    shape that must carry the union (`TestTheOtherExtrasSurvive` above) and
+    therefore composes the longest possible `'openstategraph[...]'` spec.
+    """
+
+    def test_the_rendered_command_has_no_newline_for_the_longest_extras_union(
+        self,
+    ) -> None:
+        widest = Installation(
+            shape="uv-tool", version="0.3.0rc15", extras=tuple(sorted(EXTRA_MARKERS))
+        )
+        hint = install_hint("mssql", installation=widest)
+        assert "\n" not in hint
+
+
 class TestThePreReleaseFlags:
     def test_a_pre_release_carries_the_index_flags_and_an_exact_version(self) -> None:
         hint = install_hint("mssql", installation=UV_TOOL)
@@ -147,31 +201,40 @@ class TestEveryExtraNamedIsOneThatExists:
         assert prebuilt_databricks.DRIVER_MODULES == EXTRA_MARKERS["databricks"]
 
     def test_the_surfaces_this_ticket_names_compose_no_line_of_their_own(self) -> None:
-        """One owner, for the surfaces `79` measured.
+        """One owner, for every module — not a named tuple (`osg-agent-experience/82`).
 
-        Deliberately not the whole package. `injection.py`, `deployment.py` and
-        `postgres.py` still write `pip install 'openstategraph[...]'` into their
-        own sentences, and they have exactly the two defects this ticket is
-        about; converting them is `osg-agent-experience/82` rather than an
-        unreviewed sweep through four modules this session does not own. What
-        is asserted is what shipped: the warehouse family, the MSSQL login and
-        the CLI's own refusals ask the helper.
+        `79` converted the surfaces it measured; `injection.py`, `deployment.py`
+        and `postgres.py` still composed their own `pip install
+        'openstategraph[...]'` / `uv tool install` line, with both of 79's
+        defects (a `pip` line a `uv tool` install cannot use, a single named
+        extra a `--force` reinstall would drop every sibling of). `82` routed
+        all five call sites through `install_hint`, so this scans the whole
+        package rather than the tuple of files `79` happened to touch — the
+        next hand-written install line is red wherever it lands.
+
+        Docstrings are not call sites — they *explain* the shape of a command,
+        they do not compose one a reader will paste — so this walks each
+        module's AST and skips exactly the string literals that are a module's,
+        class's or function's own docstring. A comment is skipped for a
+        cheaper reason: `ast.parse` never sees one at all. `install_hint.py`
+        is the one recorded exception — it is the only module allowed to
+        contain the sentence, because it is the only one that composes it.
         """
         package = REPO / "backend" / "openstategraph"
-        converted = (
-            "prebuilt_warehouse.py",
-            "prebuilt_mssql.py",
-            "prebuilt_databricks.py",
-            "mssql_connection.py",
-            "_extras.py",
-        )
-        offenders = [
-            name
-            for name in converted
-            if re.search(
-                r"install '?openstategraph\[\{?[a-z]", (package / name).read_text("utf-8")
-            )
-        ]
+        pattern = re.compile(r"pip install 'openstategraph\[|uv tool install")
+        exceptions = {"install_hint.py"}
+        offenders: dict[str, list[str]] = {}
+        for path in sorted(package.rglob("*.py")):
+            relative = path.relative_to(package).as_posix()
+            if path.name in exceptions:
+                continue
+            hits = [
+                literal
+                for literal in _non_docstring_string_literals(path)
+                if pattern.search(literal)
+            ]
+            if hits:
+                offenders[relative] = hits
         assert not offenders, offenders
 
 

@@ -401,16 +401,56 @@ class TestTheDefaultIsShown:
         # `osg-agent-experience/79`: the remedy is composed for the installation
         # it is printed on, so it is asserted through `install_hint` rather than
         # transcribed — a literal here would pin one machine's answer.
-        #
-        # Whitespace-normalised, and that is a finding rather than a
-        # convenience: `providers` prints this line through `textwrap.fill`,
-        # which breaks the command across lines at its spaces, and a command
-        # pasted from two lines runs as two commands. Filed as
-        # `osg-agent-experience/83` — it is a second instance of 79's own law
-        # (do not print a fix that cannot be carried out) in a place 79 did
-        # not own, and it predates this change: a short `pip install` line
-        # could already land on a wrap point.
         assert install_hint("anthropic") in " ".join(out.split())
+        # `osg-agent-experience/83`, fixed rather than merely worked around:
+        # this line used to reach `install_hint` through `textwrap.fill`, which
+        # breaks a command at its own spaces and hyphens — a command split
+        # across two printed lines is not one that can be pasted. So this is
+        # the same assertion with the whitespace-normalising workaround
+        # removed: the command now survives verbatim, on one physical line of
+        # `out`, exactly as `install_hint` composed it.
+        assert install_hint("anthropic") in out
+
+    def test_the_command_never_wraps_even_when_the_reason_does(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """`osg-agent-experience/83`'s done-when: no printed line ends mid-flag.
+
+        `openstategraph providers` on a bare install is the widest case —
+        `default.reason` is `no_provider_message()`, which quotes a real
+        shell command inside a sentence `cmd_providers` still wraps with
+        `textwrap.fill`. `serve`'s no-provider warning
+        (`no_provider_warning`) and `init`'s `[mcp]` line
+        (`missing_server_note`) print through the same `install_hint`
+        machinery but were never wrapped in the first place — asserted here
+        too, so the property is checked everywhere it applies rather than
+        only where a bug happened to be found.
+        """
+        from openstategraph import cli
+        from openstategraph.agent_config import missing_server_note
+
+        _installed(monkeypatch)
+        assert cli.main(["providers"]) == 0
+        out = capsys.readouterr().out
+
+        command = install_hint("anthropic")
+        assert command in out
+        for line in out.splitlines():
+            if line.lstrip().startswith(("pip install", "uv tool install")):
+                # `install_hint` always ends its command with the quoted spec
+                # (`'openstategraph[...]'`) — the line that starts a command
+                # carries it all the way there, with no wrap point cutting it
+                # off mid-flag.
+                assert line.rstrip().endswith("'"), line
+
+        warning = cli.no_provider_warning()
+        assert warning is not None
+        assert command in warning
+        assert "\n" not in warning
+
+        note = missing_server_note()
+        if note is not None:  # `None` on a checkout that already has `[mcp]`
+            assert "\n" not in note
 
     def test_serve_states_the_default_and_the_root_before_it_binds(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

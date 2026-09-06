@@ -814,7 +814,26 @@ class ProviderCatalogue:
         joined = (
             names[0] if len(names) == 1 else ", ".join(names[:-1]) + f" or {names[-1]}"
         )
-        return f"install {joined} — e.g. {specs[0].install_hint}"
+        return f"install {joined} — e.g. {self.install_command()}"
+
+    def install_command(self) -> str | None:
+        """The one worked command `install_choices` quotes — alone, for a
+        caller that must not let it wrap.
+
+        `osg-agent-experience/83`: the sentence `install_choices` composes
+        embeds a real shell command, and a caller that prints that sentence
+        through `textwrap.fill` breaks the command at its own spaces and
+        hyphens — `--extra-\\nindex-url` is not a flag, and two lines pasted
+        together run as two commands. `no_provider_warning` prints the whole
+        sentence verbatim on stderr and stays single-line on purpose (nothing
+        there wraps it); a caller that *does* wrap the prose can ask for this
+        instead and print it raw, on its own line, underneath.
+
+        `None` only when no provider is registered at all — there is no
+        install line to quote.
+        """
+        specs = list(self._specs.values())
+        return specs[0].install_hint if specs else None
 
     def no_provider_message(self) -> str:
         """The one sentence for an install that can run nothing at all."""

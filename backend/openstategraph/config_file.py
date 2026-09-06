@@ -684,8 +684,8 @@ project_id: {project_id}
 # The model used when nothing more specific asked for one.
 #
 # Left commented on purpose: with no line here the project inherits whatever
-# provider integration is installed, which is what makes
-# `pip install 'openstategraph[anthropic]'` mean "Anthropic is my default".
+# provider integration is installed, which is what makes installing the
+# anthropic extra mean "Anthropic is my default".
 # Uncomment to pin this project to one model — a written statement outranks a
 # credential that merely happens to be exported on somebody's machine.
 #
