@@ -1186,9 +1186,12 @@ Three facts, all load-bearing, recorded at `_discovered_function` in
   constraint rather than an oversight.
 - **A `guard.check` function may take a second parameter, and only that node
   passes one.** `fn(text, summary)` receives a `RunSummary` — how many tool
-  calls this run made, how many came back, and the last failure's tool and
-  message. It is a small frozen value object, not graph state, which is why it
-  does not reopen the bullet above: a check can answer *"no evidence arrived"*
+  calls this run made, how many came back, the last failure's tool and
+  message, and — `osg-agent-experience/86` — `summary.retrieved`, the
+  statements this run sent with what came back from each, beside
+  `summary.contains(value)`. It is a small frozen value object, not graph
+  state, which is why it does not reopen the bullet above: a check can answer
+  *"no evidence arrived"*, or *"that figure is in no row this run fetched"*,
   without a place to hide control flow in. One parameter is still the contract
   and still works unchanged (`osg-agent-experience/50`).
 - **A raised exception becomes readable output**, the same errors-are-data rule

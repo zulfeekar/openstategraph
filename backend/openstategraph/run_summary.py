@@ -29,6 +29,37 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class Retrieved:
+    """One statement this run sent, and what came back from it.
+
+    `osg-agent-experience/86`. The **same five fields** the run record
+    publishes, read by the same function
+    (`executed_statements.statements_executed`) — so how a query exchange is
+    read off `tool_use`, and what a credential looks like, each keep the one
+    owner they already had. A second reader of `tool_use[node]["queries"]`
+    would be the duplication this module's own docstring refuses one paragraph
+    up.
+    """
+
+    #: The graph node whose loop made the call. A mounted child's node arrives
+    #: here as `<mount>/<child node>`, which is how the record spells it.
+    node: str = ""
+    #: The tool that answered.
+    tool: str = ""
+    #: The statement, credentials scrubbed. Never truncated — it is the
+    #: evidence.
+    statement: str = ""
+    #: What came back, capped where it was recorded
+    #: (`reporting.QUERY_RESULT_RECORD_CAP`) and credentials scrubbed.
+    result: str = ""
+    #: Whether that cap took anything. Present on every row, never only on the
+    #: cut ones: a result that ended and a result the cap took read the same
+    #: otherwise, and a check that compares against a head it believes is whole
+    #: is worse than no check.
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
 class RunSummary:
     """The tools this run reached, and what came back.
 
@@ -52,6 +83,17 @@ class RunSummary:
     last_error: str = ""
     #: Which tool said it. Empty when nothing failed.
     last_error_tool: str = ""
+    #: Every statement this run sent and what came back, in record order
+    #: (`osg-agent-experience/86`). The four counters above answer *did any
+    #: evidence arrive*; this answers *is this figure a figure the run
+    #: retrieved*, which is the one class of defect a machine can settle with
+    #: no model and no cost — a misspelt category and a zero from a window the
+    #: warehouse holds rows for are both string containment against these, and
+    #: neither is answerable against the candidate's prose.
+    #:
+    #: Empty for a node that called a tool which sends no statements: only a
+    #: recognised query exchange is recorded, which is `queries`' own rule.
+    retrieved: tuple[Retrieved, ...] = ()
 
     @property
     def every_call_failed(self) -> bool:
@@ -63,18 +105,65 @@ class RunSummary:
         """
         return self.calls > 0 and self.succeeded == 0
 
+    @property
+    def any_truncated(self) -> bool:
+        """Whether the record cap took any part of any result.
 
-def _rows(tool_use: Any, nodes: Any = ()) -> list[dict[str, Any]]:
+        A check reading `retrieved` is reading a **head** when this is true,
+        so absence of a value proves nothing about the row it was cut from.
+        Stated as a field rather than left to be rediscovered as a bug, the
+        way `QUERY_RESULT_RECORD_CAP` states it where the cut is made.
+        """
+        return any(row.truncated for row in self.retrieved)
+
+    def contains(self, value: str) -> bool:
+        """Whether any result this run retrieved carries `value`.
+
+        Containment, not equality, because a result is a table and a value is
+        one cell of it. Two normalisations and no more, each because a model
+        writing prose from rows applies exactly it:
+
+        - **case**, so `NAPHTHA` in a heading matches `Naphtha` in a cell;
+        - **thousands separators**, so `1,454,449` matches `1454449` — the
+          separator is the model's own, added on the way into a sentence.
+
+        Whitespace is left alone: collapsing it would let a needle match
+        across two cells, and a check that reports a value as retrieved when
+        it never was is worse than one that reports nothing.
+
+        An empty or blank `value` is False rather than True. Containment of
+        nothing is trivially satisfiable, and a check that silently passes
+        every candidate is the failure mode this module exists to end.
+        """
+        needle = _comparable(value)
+        if not needle:
+            return False
+        return any(needle in _comparable(row.result) for row in self.retrieved)
+
+
+def _comparable(text: str) -> str:
+    """`text` as `RunSummary.contains` compares it — casefolded, unseparated.
+
+    One function so the needle and the haystack are normalised identically.
+    Two normalisations exactly, argued at the method that calls it.
+    """
+    return str(text or "").replace(",", "").strip().casefold()
+
+
+def _named_rows(tool_use: Any, nodes: Any = ()) -> dict[str, dict[str, Any]]:
     """The rows to read, narrowed to `nodes` when any of them are present.
 
     Same shape as `unbound_capability_claim`'s: named nodes if the caller knew
     which ones it meant, every row otherwise. A grader knows its own upstream;
     a guard's candidate is whatever reached it, so it reads the run.
+
+    Keyed rather than listed (`osg-agent-experience/86`): a retrieved row names
+    the node that fetched it, and `statements_executed` reads a table.
     """
     table = tool_use if isinstance(tool_use, dict) else {}
     named = [str(n) for n in (nodes or []) if str(n) in table]
     chosen = named or list(table)
-    return [table[key] for key in chosen if isinstance(table.get(key), dict)]
+    return {key: table[key] for key in chosen if isinstance(table.get(key), dict)}
 
 
 def summarise_run(tool_use: Any, nodes: Any = ()) -> RunSummary:
@@ -85,10 +174,13 @@ def summarise_run(tool_use: Any, nodes: Any = ()) -> RunSummary:
     error. Strict in trusting: nothing is inferred from `ran` alone, because
     `ran` is a set of names and says nothing about how a call went.
     """
+    from openstategraph.executed_statements import statements_executed
+
+    rows = _named_rows(tool_use, nodes)
     tools: list[str] = []
     calls = failed = 0
     last_error = last_error_tool = ""
-    for row in _rows(tool_use, nodes):
+    for row in rows.values():
         for name in row.get("ran") or []:
             if str(name) not in tools:
                 tools.append(str(name))
@@ -104,6 +196,16 @@ def summarise_run(tool_use: Any, nodes: Any = ()) -> RunSummary:
         failed=failed,
         last_error=last_error,
         last_error_tool=last_error_tool,
+        retrieved=tuple(
+            Retrieved(
+                node=str(entry.get("node") or ""),
+                tool=str(entry.get("tool") or ""),
+                statement=str(entry.get("statement") or ""),
+                result=str(entry.get("result") or ""),
+                truncated=bool(entry.get("truncated")),
+            )
+            for entry in statements_executed(rows)
+        ),
     )
 
 
@@ -181,6 +283,7 @@ def evidence_for_grader(summary: RunSummary) -> str:
 
 
 __all__ = [
+    "Retrieved",
     "RunSummary",
     "evidence_for_grader",
     "every_tool_call_failed",

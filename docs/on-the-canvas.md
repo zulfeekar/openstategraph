@@ -358,6 +358,14 @@ returned anything, and the last failure's tool and message), so a check can say
 *"no evidence arrived"* rather than arguing with the prose; one parameter is
 still the contract.
 
+That record also carries the rows themselves. `summary.retrieved` is every
+statement this run sent and what came back — `node`, `tool`, `statement`,
+`result`, `truncated` — and `summary.contains(value)` asks whether any of those
+results carries a value, blind to case and to the thousands separators a model
+adds. So a check can refuse a figure or a spelling that appears in **no row the
+run actually fetched**, which is the one class of wrong answer a machine can
+settle with no model and no cost (`osg-agent-experience/86`).
+
 Reach for it whenever the check is **decidable without judgement**: a schema
 rule, a lookup against a known set, a format. Routing a deterministic check
 through a model is not merely wasteful — the model relays what it was told, so

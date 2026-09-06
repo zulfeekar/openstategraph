@@ -88,8 +88,13 @@ export const guardCheckNode: INodeDefinition = defineNode(
           'second parameter — `fn(text, summary)` — and it also receives this ' +
           'run’s record of its own tool calls: how many were made, how many ' +
           'came back, and the last failure’s tool and message, so a check can ' +
-          'say “no evidence arrived” instead of arguing with the prose. One ' +
-          'parameter still works and is still the contract.',
+          'say “no evidence arrived” instead of arguing with the prose. That ' +
+          'record also carries `summary.retrieved` — every statement this run ' +
+          'sent and what came back, each with `node`, `tool`, `statement`, ' +
+          '`result` and `truncated` — and `summary.contains(value)`, so a check ' +
+          'can refuse a figure or a name that appears in no row the run ' +
+          'actually fetched. One parameter still works and is still the ' +
+          'contract.',
         defaultValue: '',
         onCard: true,
       },
