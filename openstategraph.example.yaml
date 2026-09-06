@@ -1,0 +1,108 @@
+# OpenStateGraph — providers and model defaults.
+#
+# Copy to `openstategraph.yaml` in your project root (or point
+# OPENSTATEGRAPH_CONFIG at it anywhere) and edit. This file is meant to be
+# committed and read: by a person, by a coding agent, and in review.
+#
+# It is found by walking UP from wherever you ran the command to the git root,
+# so `cd workflows/starter && openstategraph run .` still sees your project's
+# file. If you would rather not add a file at all, the same keys go in
+# `pyproject.toml` under `[tool.openstategraph]` — a project with both gets
+# this one.
+#
+# ---------------------------------------------------------------------------
+# NO SECRETS. EVER. This file is committed, so a key here is a leaked key.
+# The loader does not merely discourage that — it REFUSES to load a file
+# containing a key-shaped field name (api_key, token, secret, …) or a
+# key-shaped value (sk-…, ghp_…, AIza…), and tells you to use .env instead.
+#
+# Name the variable, never the value:      api_key_env: ANTHROPIC_API_KEY
+# Put the value in .env, which is gitignored. See .env.example.
+# ---------------------------------------------------------------------------
+#
+# Precedence, lowest to highest — every adjacent pair is covered by a test in
+# backend/tests/test_config_file.py::TestPrecedence:
+#
+#   installation default  <  this file  <  workflow settings.model
+#                     <  a node's own model  <  the caller's model= argument
+#
+# The one that surprises people: A CREDENTIAL IN YOUR ENVIRONMENT DOES NOT
+# BEAT THIS FILE. Having ANTHROPIC_API_KEY exported for some other tool is a
+# fact about your machine, not a request about this project, and it used to
+# silently move every run off the model named below.
+#
+# What the environment DOES still beat this file for is anything that says
+# what to do rather than what exists — OPENSTATEGRAPH_WORKFLOWS_ROOT, and
+# OPENSTATEGRAPH_<PROVIDER>_MODEL, which changes the model of whichever
+# provider wins. That is the original reasoning, kept where it holds: this
+# file is committed and shared, the environment is the machine in front of
+# you, and a colleague's committed choice must not outrank yours.
+
+version: 1
+
+# The model used when nothing more specific was asked for. Full
+# `provider:model` form, or a bare prefix — `ollama:` and `ollama` both mean
+# that provider's own default. Omit the key entirely to inherit the instance
+# default: the provider integration you have installed, which is what makes
+# `pip install 'openstategraph[anthropic]'` mean "Anthropic is my default".
+default_model: ollama:gpt-oss:120b-cloud
+
+# Where <slug>/workflow.json packages live, when it is not ./workflows.
+# A first-class key since scale-and-adopt ticket 02, and undocumented here
+# until install-experience T6 — which is how a key nobody knew about ends up
+# with a project that has one and a reader who cannot find out why.
+#
+# **Relative to THIS FILE, never to the directory you happen to be standing
+# in.** The file is committed and shared; the working directory is wherever a
+# process was started from, so resolving against it would make one committed
+# line mean a different directory per developer — and a different one again
+# when a supervisor starts the same service from /.
+#
+# `openstategraph init my_demo --workflows-dir flows` writes this line for you.
+# OPENSTATEGRAPH_WORKFLOWS_ROOT still beats it: a direction outranks a shared
+# statement of fact.
+#
+# workflows_dir: workflows
+
+providers:
+  # Adjusting a provider this framework already knows about: every field you
+  # omit is inherited from the built-in, so this changes one string and leaves
+  # the env vars, aliases, extra and endpoint alone.
+  #
+  # Inherited is not the same as settable. A provider's endpoint
+  # (`endpoint_env` / `default_endpoint`) is carried over from the built-in but
+  # cannot be *declared* here — point `OLLAMA_HOST` at your own daemon instead.
+  - name: anthropic
+    default_model: claude-haiku-4-5
+    api_key_env: ANTHROPIC_API_KEY
+
+  - name: openai
+    default_model: gpt-4.1-mini
+    api_key_env: OPENAI_API_KEY
+
+  # Ollama means Ollama CLOUD in this project, never a local model — a local
+  # model turns a wiring bug and a capability gap into the same symptom. Name
+  # a local model explicitly in a node if you really want one.
+  #
+  # Credentials: `OLLAMA_API_KEY` for the cloud, or `OLLAMA_HOST` for a daemon
+  # you run (it owns its own auth). Either alone is enough; with neither,
+  # Ollama is not configured. Until providers-and-credentials ticket 02 it
+  # declared no environment variables at all and so was always treated as
+  # configured — that was an ambient local-daemon credential, not a keyless
+  # provider.
+  - name: ollama
+    default_model: gpt-oss:120b-cloud
+
+  # Introducing a provider this framework has never heard of. No fork, no code:
+  # `extra` names the pip extra carrying its LangChain integration, and the
+  # model string becomes `nvidia:meta/llama-3.3-70b-instruct`.
+  #
+  # (The other way to add one — for a plugin author shipping a package rather
+  # than editing a project — is the `openstategraph.providers` entry point
+  # group. Same ProviderSpec, same catalogue, no privileged fields.)
+  #
+  # - name: nvidia
+  #   label: NVIDIA NIM
+  #   default_model: meta/llama-3.3-70b-instruct
+  #   extra: nvidia
+  #   api_key_env: NVIDIA_API_KEY

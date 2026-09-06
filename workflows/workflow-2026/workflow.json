@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "name": "Workflow 2026",
+  "savedAt": "2026-08-20T10:32:21.955940+00:00",
+  "document": {
+    "version": 3,
+    "name": "Workflow 2026",
+    "settings": {
+      "purpose": "Asks the platform about itself: one agent with the repo-listing and workflow-describing tools, answering questions about what is here."
+    },
+    "nodes": [
+      {
+        "id": "node:agent.llm-1",
+        "type": "agent.llm",
+        "position": {
+          "x": 736,
+          "y": 224
+        },
+        "size": {
+          "width": 300,
+          "height": 439
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rubric": "",
+          "rulesMode": "extend",
+          "summarize": true,
+          "systemPrompt": "Answer the question directly and completely.",
+          "tier": "react",
+          "timeoutSeconds": "",
+          "tokenBudget": 5400
+        },
+        "title": "Agent"
+      },
+      {
+        "id": "node:input.markdown-1",
+        "type": "input.markdown",
+        "position": {
+          "x": 400,
+          "y": 592
+        },
+        "size": {
+          "width": 252,
+          "height": 255
+        },
+        "parentId": null,
+        "data": {
+          "content": "",
+          "filename": "agent-skill.md",
+          "instruction": "\n\nDRAFT MARKER for ticket 07 restore-branch proof.",
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        }
+      },
+      {
+        "id": "node:input.text-1",
+        "type": "input.text",
+        "position": {
+          "x": 416,
+          "y": 224
+        },
+        "size": {
+          "width": 260,
+          "height": 195
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "prompt": "show me the repo list",
+          "timeoutSeconds": ""
+        },
+        "title": "Question"
+      },
+      {
+        "id": "node:output.formatted-1",
+        "type": "output.formatted",
+        "position": {
+          "x": 1200,
+          "y": 432
+        },
+        "size": {
+          "width": 260,
+          "height": 159
+        },
+        "parentId": null,
+        "data": {
+          "format": "json",
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Answer"
+      },
+      {
+        "id": "node:tool.platform-describe-workflow-2",
+        "type": "tool.platform-describe-workflow",
+        "position": {
+          "x": 760,
+          "y": 1064
+        },
+        "size": {
+          "width": 252,
+          "height": 90
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        }
+      },
+      {
+        "id": "node:tool.platform-ls-1",
+        "type": "tool.platform-ls",
+        "position": {
+          "x": 256,
+          "y": 1248
+        },
+        "size": {
+          "width": 252,
+          "height": 90
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "node:agent.llm-1",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "node:output.formatted-1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "node:input.markdown-1",
+          "portId": "skill"
+        },
+        "target": {
+          "nodeId": "node:agent.llm-1",
+          "portId": "skill"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "node:input.text-1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "node:agent.llm-1",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "node:tool.platform-describe-workflow-2",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "node:agent.llm-1",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "node:tool.platform-ls-1",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "node:agent.llm-1",
+          "portId": "tools"
+        }
+      }
+    ]
+  },
+  "published": false
+}

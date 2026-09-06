@@ -1,0 +1,852 @@
+"""The orchestrator ladder: ``IOrchestrator`` → ``BaseOrchestrator`` → ``Orchestrator``.
+
+This is the **graph-engineering** half of the pattern documented in
+`.scratch/fullstack-langgraph/decisions/loop-graph-harness.md`. An orchestrator's
+job is narrow and mechanical: turn one instruction into a **bounded list of named
+subtasks**. It does not run them — that is a graph concern (`Send` fan-out to a
+declared worker node, ticket 27) — and it does not judge the results — that is the
+grader's job. One reason to change: how an instruction becomes subtasks.
+
+Same shape as Router and Grader, for the same reason: the mechanics (bounding the
+count, giving every subtask an id, falling back to a single subtask rather than
+zero) are not domain knowledge, so they are declared once on the base.
+"""
+
+from __future__ import annotations
+
+import asyncio
+
+from openstategraph.messages import content_text
+
+import logging
+import re
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
+from typing import Any, ClassVar, Protocol, runtime_checkable
+
+from pydantic import BaseModel, Field
+
+from openstategraph.abc.async_doors import ainvoke_model, install_doors
+from openstategraph.abc.prompt import SystemPrompt
+
+#: A runaway split (a numbered list with 500 items, say) must not fan out to 500
+#: subagents. Bounding here is cheaper and more reliable than trusting the
+#: instruction author or a model to self-limit.
+MAX_SUBTASKS = 8
+
+logger = logging.getLogger(__name__)
+
+
+def archetype_slug(text: str) -> str:
+    """A worker archetype's dispatch key, from its human-readable name.
+
+    Lowercase; alphanumerics and `_` survive; every other run of characters
+    collapses to a single `-`. `_` is deliberately preserved — the router's
+    port-id slug once collapsed it and silently dropped two branches' edges
+    (see the map's "slug bug" entry); this slug does not repeat that.
+    """
+    out: list[str] = []
+    for ch in text.strip().lower():
+        if ch.isalnum() or ch == "_":
+            out.append(ch)
+        elif out and out[-1] != "-":
+            out.append("-")
+    return "".join(out).strip("-")
+
+
+def _resolve_label(line: str, valid: set[str], by_name: dict[str, str]) -> str:
+    """One line of the model's reply, resolved to a wired archetype key or "".
+
+    Tolerant, because the prompt taught the model the shape it answered in.
+    The roster is rendered `- {key}: {name} — {description}`, so
+    `archetype-orchestrator-report` was labelled
+
+        researcher: compile_best_practices
+        writer: draft_onboarding_agenda
+
+    and slugifying the whole line matched nothing. **Every** subtask fell to
+    the default worker and the wired Writer never ran once
+    (`every-workflow-green` 17) — a two-archetype graph silently behaving like
+    a one-archetype graph.
+
+    So the line is tried whole, then as its head before a separator, and a
+    leading list marker is dropped. Each candidate is still checked against
+    the wired keys and names: tolerance in *reading* the answer, never in
+    trusting it. An invented label still resolves to "" and still lands on the
+    default, which is ticket 37's rule and the reason a tool-less worker cannot
+    be handed a subtask on a model's say-so.
+    """
+    stripped = line.strip(" \t\"'`.,:;")
+    # "1. researcher" / "- researcher" — the enumeration the prompt asked for.
+    stripped = re.sub(r"^\s*(?:\d+[.)]|[-*])\s*", "", stripped)
+    candidates = [stripped]
+    for separator in (":", " - ", " — ", ","):
+        head, found, _ = stripped.partition(separator)
+        if found and head.strip():
+            candidates.append(head.strip())
+    for candidate in candidates:
+        slug = archetype_slug(candidate)
+        if slug in valid:
+            return slug
+        if slug in by_name:
+            return by_name[slug]
+    return ""
+
+
+def archetype_key(node: dict[str, Any]) -> str:
+    """The dispatch key for one worker node — its title, slugified.
+
+    Ticket 37's resolution verbatim: the label matches the worker node's
+    archetype *name* (its node title, slugified), not its id, so the planning
+    prompt and the dispatch map share one string. An untitled worker falls
+    back to its id — unique by construction, and irrelevant in the
+    single-worker case where no labelling happens at all.
+    """
+    title = str(node.get("title") or "").strip()
+    return archetype_slug(title) if title else str(node.get("id") or "")
+
+
+def default_worker_node(worker_nodes: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
+    """Where an unlabelled or unrecognised subtask lands.
+
+    Declared here, once, because two layers need the same answer and had it
+    written twice: the compiler builds the fan-out router's fallback
+    destination, and the orchestrator node records *which archetype actually
+    ran* a subtask (ticket 17) — and a run result that disagreed with the
+    dispatch would be worse than no record at all.
+
+    Exactly one default is the validated shape (`singleDefaultWorkerRule`);
+    the first card claiming it wins here so a mis-authored document still
+    runs, and with none claimed the first wired archetype is the default.
+    """
+    for node in worker_nodes:
+        if (node.get("data") or {}).get("default"):
+            return node
+    return worker_nodes[0] if worker_nodes else None
+
+
+class Archetype(BaseModel):
+    """One wired worker kind the supervisor can dispatch to.
+
+    `key` is the dispatch key (`archetype_key` of the worker node); `name` and
+    `description` are what the planning prompt shows the model.
+    """
+
+    key: str
+    name: str
+    description: str = ""
+
+
+class Subtask(BaseModel):
+    """One unit of dispatchable work.
+
+    `id` is stable and human-readable — it becomes part of the `Send` payload and
+    the key results are joined under, so a trace can attribute a result to the
+    instruction fragment that produced it without re-deriving anything.
+
+    `archetype` is the dispatch key of the worker kind this subtask was
+    labelled for. Empty means "no trusted label" — the fan-out router reads
+    that as "use the default worker", so a misroute degrades to today's
+    single-archetype behaviour instead of a silent wrong answer.
+    """
+
+    id: str
+    instruction: str
+    archetype: str = ""
+
+
+@runtime_checkable
+class IOrchestrator(Protocol):
+    """The contract consumers depend on."""
+
+    def plan(
+        self,
+        instruction: str,
+        *,
+        generation: int = 0,
+        archetypes: list["Archetype"] | None = None,
+        feedback: str = "",
+        notes: list[str] | None = None,
+    ) -> list[Subtask]: ...
+
+
+class BaseOrchestrator(ABC):
+    """Shared bounding and fallback behaviour, declared once.
+
+    Subclasses supply `split(instruction)` — how an instruction decomposes — and
+    inherit the bounding, the id assignment and the empty-instruction fallback.
+    """
+
+    #: The planning call's locked machinery, as one object
+    #: (install-experience 19).
+    PROMPT: ClassVar[SystemPrompt] = SystemPrompt(
+        preamble=(
+            "You are an orchestrator. Your only job is to split one instruction into "
+            "independent subtasks that can run in parallel. You never do the work "
+            "yourself."
+        ),
+        output_contract=(
+            "Reply with one subtask per line, each a complete, self-contained "
+            "instruction. No numbering, no preamble, no explanation."
+        ),
+    )
+
+    #: The labelling call's locked machinery. A separate declaration rather
+    #: than a variant of `PROMPT`, because it is a different call with a
+    #: different contract. The literal phrase "one archetype key per line" is
+    #: load-bearing: tests (and any scripted model) recognise a labelling call
+    #: by it.
+    LABEL_PROMPT: ClassVar[SystemPrompt] = SystemPrompt(
+        preamble=(
+            "You are a supervisor assigning subtasks to specialist workers. For "
+            "each subtask, pick the one worker archetype best suited to it."
+        ),
+        output_contract=(
+            "Reply with exactly one archetype key per line, one line per subtask, "
+            "in the same order as the subtasks. Use only the keys listed above. "
+            "No numbering, no explanation."
+        ),
+    )
+
+    def __init__(
+        self,
+        *,
+        max_subtasks: int = MAX_SUBTASKS,
+        rules: str = "",
+        skill: str = "",
+        replace_rules: bool = False,
+        model: Any = None,
+        context: str = "",
+    ) -> None:
+        self.max_subtasks = max_subtasks
+        self.model = model
+        #: **The two prompts this orchestrator drives a model with, composed
+        #: once and held** (install-experience 19). The developer's inline
+        #: `rules` and the wired skill file's body were three attributes whose
+        #: only job was to be reassembled into a `SystemPrompt`; they are its
+        #: rules layers (`docs/decisions/skill-layer.md`).
+        #:
+        #: Two, not one, because this family genuinely makes two different
+        #: calls: planning a split, and assigning each subtask to a worker
+        #: archetype. Both wear the same developer rules over different locked
+        #: machinery, which is exactly what a `SystemPrompt` per call is for.
+        #: The split itself is deterministic when no model is configured, so on
+        #: many runs neither of these is ever rendered.
+        #: `context` is the generated run-context block
+        #: (`organisms-first-class/72`), and it rides on **both** prompts. A
+        #: sentence composed into one call and not the other is the defect
+        #: `advisor_context` already cost this repository once: labelling is
+        #: as much a decision about the run as planning is, and a supervisor
+        #: that knows the tenant while planning and forgets it while assigning
+        #: is a supervisor nobody can predict.
+        self.prompt = self.PROMPT.with_rules(
+            rules, replace_defaults=replace_rules
+        ).with_skill(skill).with_context(context)
+        self.label_prompt = self.LABEL_PROMPT.with_rules(
+            rules, replace_defaults=replace_rules
+        ).with_skill(skill).with_context(context)
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Give every subclass the half of each pair it did not write.
+
+        Three pairs rather than one, and that is this family's shape rather
+        than an excess: `plan` is built from `split` and `label`, so `aplan`
+        can only await a model if both of those are awaitable too. A door that
+        satisfied `asplit` and left `aplan` calling the synchronous one would
+        put a model call back on the event loop by the longest route available
+        — which is precisely the mistake `async-first/10` exists to avoid.
+
+        The timing matters more here than on the other two ladders. `split` is
+        `@abstractmethod`, and `__init_subclass__` runs inside `type.__new__`,
+        which `ABCMeta.__new__` calls **before** it computes
+        `__abstractmethods__`. So a subclass that writes only `asplit` comes
+        out concrete rather than abstract-and-half-finished, and `split` can
+        stay abstract for everybody else. `abc/tool.py` does the same thing for
+        the same reason.
+        """
+        super().__init_subclass__(**kwargs)
+        install_doors(
+            cls,
+            BaseOrchestrator,
+            [("split", "asplit"), ("label", "alabel"), ("plan", "aplan")],
+        )
+
+    @abstractmethod
+    def split(self, instruction: str, feedback: str = "") -> list[str]:
+        """Turns one instruction into raw subtask strings. The extension point.
+
+        `feedback` is a grader's rejection of the *previous* plan's results,
+        and it is passed **into** the split rather than folded in afterwards
+        (ticket 23). A deterministic implementation ignores it — a regex
+        cannot act on a critique — and a model-driven one re-plans with it,
+        which is what makes the supervisor's `feedback` port mean what its
+        name says.
+        """
+
+    async def asplit(self, instruction: str, feedback: str = "") -> list[str]:
+        """`split`, awaited. **Concrete — the default is a thread.**
+
+        The base has no split of its own to await, so the default is what
+        LangChain's own default is one rung down (`BaseTool._arun` ends in
+        `run_in_executor(None, self._run, ...)`, read off the installed
+        `langchain-core 1.5.3`): run the synchronous body somewhere that is not
+        the event loop. It is a safety net rather than the path anything in
+        this tree takes — `Orchestrator` writes a native `asplit` because a
+        regular expression has nothing to await, and `PlanningOrchestrator`
+        writes one because its planning call genuinely does.
+
+        A subclass that writes only `split` gets a door installed over it that
+        does exactly this; a subclass that writes only `asplit` gets a
+        synchronous door installed over *that*, and stays constructible.
+        """
+        return await asyncio.to_thread(self.split, instruction, feedback)
+
+    def label(
+        self,
+        subtasks: list[Subtask],
+        archetypes: list[Archetype],
+        *,
+        notes: list[str] | None = None,
+    ) -> list[str]:
+        """One archetype key per subtask — hybrid routing (ticket 37).
+
+        Model present: one call labels every subtask against the wired
+        archetype names, and anything the call produces is **validated**
+        against those keys — an invented label is not trusted and collapses
+        to `""` (the default worker), because dispatching a subtask to a
+        tool-less worker on the model's say-so is a silent wrong answer.
+
+        No model: a deterministic name-mention fallback (the archetype's own
+        name or key appearing in the subtask text), so the orchestrator still
+        works — degraded but honest — with no model configured, the same
+        stance the deterministic `split()` already takes.
+        """
+        settled = self._labels_without_a_model(subtasks, archetypes)
+        if settled is not None:
+            return settled
+
+        try:
+            reply = self.model.invoke(self._labelling_messages(subtasks, archetypes))
+            # A repr is one line, so the label split below collapsed every
+            # subtask to the default worker — inside an `except Exception`,
+            # so silently. See `openstategraph.messages`.
+            raw = content_text(reply.content)
+        except Exception:
+            return self._labelling_failed(subtasks, notes)
+
+        return self._labels_from(raw, subtasks, archetypes, notes)
+
+    async def alabel(
+        self,
+        subtasks: list[Subtask],
+        archetypes: list[Archetype],
+        *,
+        notes: list[str] | None = None,
+    ) -> list[str]:
+        """`label`, awaited. The labelling call's async door (`async-first/05`).
+
+        Identical in every respect a caller can observe: the same
+        no-model fallback answers without touching a model, the same roster is
+        rendered, the same **strict** resolution against the wired keys
+        discards an invented archetype, and the same `notes` sink hears about
+        it. Only the model call is awaited.
+
+        **The `except Exception` below is the shape that would swallow a stop
+        if it could.** `asyncio.CancelledError` inherits from `BaseException`,
+        so it cannot, and a cancelled labelling call propagates instead of
+        collapsing the whole fan-out onto the default worker — which is
+        `every-workflow-green` 17's symptom exactly, and would be invisible.
+        Pinned by a test rather than left to a property of the language.
+        """
+        settled = self._labels_without_a_model(subtasks, archetypes)
+        if settled is not None:
+            return settled
+
+        try:
+            reply = await ainvoke_model(
+                self.model, self._labelling_messages(subtasks, archetypes)
+            )
+            raw = content_text(reply.content)
+        except Exception:
+            return self._labelling_failed(subtasks, notes)
+
+        return self._labels_from(raw, subtasks, archetypes, notes)
+
+    def _labels_without_a_model(
+        self, subtasks: list[Subtask], archetypes: list[Archetype]
+    ) -> list[str] | None:
+        """Every labelling answer a model is not needed for. One place, two doors.
+
+        `None` means a model call is required. Extracted rather than written
+        twice because the deterministic branch is the honest zero-token path
+        and an async body that reimplemented it could quietly start awaiting
+        something for a name match.
+        """
+        if not archetypes:
+            return ["" for _ in subtasks]
+        if len(archetypes) == 1:
+            return [archetypes[0].key for _ in subtasks]
+        if self.model is None:
+            labels = []
+            for task in subtasks:
+                # Match on the fragment itself, never the appended parent
+                # context — the context names the whole request and would
+                # make every fragment "mention" every archetype in it.
+                text = task.instruction.split(CONTEXT_PREFIX)[0].lower()
+                match = next(
+                    (
+                        a.key
+                        for a in archetypes
+                        if a.name.lower() in text or a.key.replace("-", " ") in text
+                    ),
+                    "",
+                )
+                labels.append(match)
+            return labels
+        return None
+
+    def _labelling_messages(
+        self, subtasks: list[Subtask], archetypes: list[Archetype]
+    ) -> list[Any]:
+        """The roster and the listing, rendered once for both doors."""
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        roster = "\n".join(
+            f"- {a.key}: {a.name}" + (f" — {a.description}" if a.description else "")
+            for a in archetypes
+        )
+        listing = "\n".join(f"{i + 1}. {t.instruction}" for i, t in enumerate(subtasks))
+        prompt = self.label_prompt.with_context(
+            f"Worker archetypes:\n{roster}", f"Subtasks:\n{listing}"
+        )
+        return [
+            SystemMessage(content=prompt.render()),
+            HumanMessage(content="Label the subtasks."),
+        ]
+
+    def _labelling_failed(
+        self, subtasks: list[Subtask], notes: list[str] | None
+    ) -> list[str]:
+        """A labelling failure must not kill the plan — everything falls to the
+        default worker, which is a working (single-archetype) run. It was also
+        completely silent, which is the half of ticket 17 the run result cannot
+        fix: a whole plan collapsing onto the default worker looked identical
+        whether the model chose it or the call never happened."""
+        note = "archetype labelling failed; every subtask falls to the default worker"
+        logger.warning("%s", note)
+        if notes is not None:
+            notes.append(note)
+        return ["" for _ in subtasks]
+
+    def _labels_from(
+        self,
+        raw: str,
+        subtasks: list[Subtask],
+        archetypes: list[Archetype],
+        notes: list[str] | None,
+    ) -> list[str]:
+        """Read the model's answer. Tolerant in reading, strict in trusting."""
+        valid = {a.key for a in archetypes}
+        # Names normalise to keys, so "Weather Worker" and `weather-worker`
+        # are the same answer — one string, two spellings.
+        by_name = {archetype_slug(a.name): a.key for a in archetypes}
+        lines = [line.strip() for line in raw.splitlines() if line.strip()]
+        labels = []
+        for line in lines[: len(subtasks)]:
+            resolved = _resolve_label(line, valid, by_name)
+            if not resolved:
+                # Reported, not just logged. A whole fan-out collapsing onto
+                # one worker is the thing this run most needs to say about
+                # itself, and it was saying it to a logger nobody reads
+                # (`every-workflow-green` 17). `notes` is the caller's sink —
+                # the same one `plan` already uses to reach the developer
+                # channel.
+                note = (
+                    f"The planner labelled a subtask {line.strip()!r}, which matches no "
+                    f"wired worker, so it ran on the default one. Wired: "
+                    f"{', '.join(sorted(valid))}."
+                )
+                logger.warning("%s", note)
+                if notes is not None:
+                    notes.append(note)
+            labels.append(resolved)
+        # A short reply pads with the default; a long one was truncated above.
+        labels.extend("" for _ in range(len(subtasks) - len(labels)))
+        return labels
+
+    def plan(
+        self,
+        instruction: str,
+        *,
+        generation: int = 0,
+        archetypes: list[Archetype] | None = None,
+        feedback: str = "",
+        notes: list[str] | None = None,
+    ) -> list[Subtask]:
+        """Splits, bounds, and ids. Subclasses should not need to override this.
+
+        `notes` is an optional sink for what the caller should tell someone
+        about — the same shape `api/registries.runtime_warnings` uses. Today
+        it carries exactly one thing, and it is a bug this signature exists to
+        close: hitting `maxSubtasks` used to be a silent `pieces[:cap]`, so a
+        three-part brief could ship a three-section report with its third part
+        never planned at all. A caller that passes no sink still gets the log
+        line.
+
+        `generation` is folded into every id so that **replanning never reuses
+        an id from an earlier attempt**. Found by running a real revise loop:
+        every call starts numbering at `task-1`, so a second orchestrator pass
+        after a rejection produces `task-1`/`task-2` again — silently aliasing
+        onto whatever the *rejected* attempt's results were keyed under in the
+        shared `worker_results` dict, blending stale and fresh work under one
+        key. The caller (the orchestrator node) passes its own attempt count;
+        this class has no notion of "which attempt" on its own.
+        """
+        subtasks = self._bounded(self.split(instruction, feedback), instruction, generation, notes)
+        if not subtasks or not archetypes:
+            return subtasks
+        return self._with_labels(subtasks, self.label(subtasks, archetypes, notes=notes))
+
+    async def aplan(
+        self,
+        instruction: str,
+        *,
+        generation: int = 0,
+        archetypes: list[Archetype] | None = None,
+        feedback: str = "",
+        notes: list[str] | None = None,
+    ) -> list[Subtask]:
+        """`plan`, awaited. The orchestrator's async door (`async-first/05`).
+
+        The verb `async-first/10` needs, and the reason this family grew three
+        doors instead of one: both model calls a plan can make live *below*
+        this method, so awaiting here is only worth something if `asplit` and
+        `alabel` are awaited too. Everything between them — the bounding, the
+        deduplication, the parent-context suffix, the generation-scoped ids —
+        is the same code, called from both doors rather than mirrored into two.
+
+        Nothing here catches, so a cancel propagates: see `alabel` for why that
+        matters more than it looks.
+        """
+        pieces = await self.asplit(instruction, feedback)
+        subtasks = self._bounded(pieces, instruction, generation, notes)
+        if not subtasks or not archetypes:
+            return subtasks
+        labels = await self.alabel(subtasks, archetypes, notes=notes)
+        return self._with_labels(subtasks, labels)
+
+    @staticmethod
+    def _with_labels(subtasks: list[Subtask], labels: list[str]) -> list[Subtask]:
+        return [
+            task.model_copy(update={"archetype": label})
+            for task, label in zip(subtasks, labels)
+        ]
+
+    def _bounded(
+        self,
+        raw_pieces: list[str],
+        instruction: str,
+        generation: int,
+        notes: list[str] | None,
+    ) -> list[Subtask]:
+        """Everything a plan does between splitting and labelling.
+
+        A private method rather than a repeated block, because it is the half
+        of `plan` that has nothing to do with a model and every rule in it was
+        found live — the `maxSubtasks` ceiling that used to drop a real item
+        silently, the conjunction fragment that loses its shared predicate, the
+        near-duplicate that dispatches the same work twice, and the generation
+        prefix that stops a replan aliasing onto a rejected attempt's results.
+        Two copies of that is two places for one of them to go missing.
+        """
+        pieces = [p.strip() for p in raw_pieces if p.strip()]
+        # Never zero subtasks: an instruction that does not split is still one
+        # unit of work, not a dead end.
+        if not pieces:
+            pieces = [instruction.strip()] if instruction.strip() else []
+        if not pieces:
+            return []
+
+        # Two hygiene rules, both found live (ticket 61's residual). First:
+        # a conjunction split loses the shared predicate — "compare the
+        # weather in Oslo and Madrid" leaves the fragment "Madrid.", and a
+        # worker handed only that drifts back to whatever it saw last. A
+        # fragment (short, and not the whole instruction) carries its parent
+        # as explicit context. Second: near-duplicate pieces collapse to one
+        # — dispatching the same work twice doubles cost and lets two answers
+        # disagree.
+        if len(pieces) > 1:
+            pieces = [
+                piece if len(piece.split()) >= 3
+                else f"{piece} {CONTEXT_SUFFIX.format(instruction.strip())}"
+                for piece in pieces
+            ]
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for piece in pieces:
+            key = " ".join(piece.lower().split()).rstrip(".!?")
+            if key not in seen:
+                seen.add(key)
+                deduped.append(piece)
+        pieces = deduped
+
+        truncated = pieces[: self.max_subtasks]
+        if len(pieces) > len(truncated):
+            dropped = len(pieces) - len(truncated)
+            note = (
+                f"Planned {len(pieces)} subtasks but Max subtasks is "
+                f"{self.max_subtasks} — the last {dropped} were dropped and never "
+                "ran. Raise Max subtasks, or write a shorter brief."
+            )
+            logger.warning("%s", note)
+            if notes is not None:
+                notes.append(note)
+        prefix = f"task-{generation}-" if generation else "task-"
+        return [
+            Subtask(id=f"{prefix}{i + 1}", instruction=text) for i, text in enumerate(truncated)
+        ]
+
+
+#: Ordered so a numbered list is tried before falling back to conjunctions —
+#: "1. X and Y" should split into two numbered items, not further on "and".
+_NUMBERED = re.compile(r"(?:^|\n)\s*\d+[.)]\s*")
+_SEMICOLON = re.compile(r"\s*;\s*")
+_AND = re.compile(r"\s+and\s+", re.IGNORECASE)
+
+#: How a fragment carries what it was cut out of. One spelling, because three
+#: places share it: a conjunction fragment, a numbered list's preamble, and
+#: `label()`, which must match on the fragment and never on the context it
+#: carries — the context names the whole request, so every fragment would
+#: otherwise "mention" every archetype in it.
+CONTEXT_PREFIX = "(part of the request:"
+CONTEXT_SUFFIX = CONTEXT_PREFIX + " {0})"
+
+
+def deterministic_split(instruction: str) -> list[str]:
+    """Separators an instruction author would naturally use, tried in order.
+
+    A module function rather than a method because two classes need it: the
+    deterministic `Orchestrator` *is* this, and `PlanningOrchestrator` falls
+    back to it when the planning call cannot be made or comes back unusable.
+
+    **A leading summary above a numbered list is context, not a task**
+    (ticket 15, batch B). `re.split` hands back whatever precedes the first
+    numbered item as piece #1, so a brief written the way anyone writes one
+    planned one subtask too many — and with `maxSubtasks` set to the list's
+    own length, the ceiling then dropped the *last real item*. Observed live:
+    a three-part brief whose judgement step never ran, in a report that had
+    its three sections and looked complete. The summary is attached to every
+    item instead of discarded, because a `Send` payload carries only the
+    subtask text and the judgement item is unanswerable without it.
+    """
+    match = _NUMBERED.search(instruction)
+    if match:
+        parts = _NUMBERED.split(instruction)
+        head = parts[0].strip()
+        items = [p.strip() for p in parts[1:] if p.strip()]
+        if not items:
+            return [instruction]
+        if head:
+            return [f"{item} {CONTEXT_SUFFIX.format(head)}" for item in items]
+        return items
+    if ";" in instruction:
+        return _SEMICOLON.split(instruction)
+    if _AND.search(instruction):
+        return _AND.split(instruction)
+    return [instruction]
+
+
+class Orchestrator(BaseOrchestrator):
+    """The default: deterministic decomposition, no model required.
+
+    Splits on explicit separators an instruction author would naturally use —
+    numbered lists, semicolons, or literal "and" — rather than asking a model to
+    decide, which is both cheaper and reproducible. This mirrors the checklist's
+    own guidance: "keep control model-driven only where a rule cannot express the
+    decision," and decomposing a punctuated list is exactly a rule's job.
+
+    **It is no longer the only strategy, and that is ticket 15's substance.**
+    Splitting English on the literal word "and" splits grammar, not tasks:
+    "two arguments for and against daily standups" became "…two arguments
+    for" and "against daily standups", and the worker handed the first
+    fragment asked the user what they meant. Deciding what the independent
+    units of an English request *are* is a judgement, so a card that writes
+    rules gets `PlanningOrchestrator` and a card that writes none keeps this,
+    free and reproducible. The "and" branch survives here rather than being
+    removed because removing it would silently halve the subtask count of
+    every rule-less package that relies on it today; it is the last resort of
+    the zero-token path, not the product's answer to ordinary prose.
+    """
+
+    def split(self, instruction: str, feedback: str = "") -> list[str]:
+        # `feedback` is deliberately unread: a regex cannot act on a critique,
+        # and an earlier attempt to make it "notice" one — by joining it onto
+        # the instruction with a semicolon — turned the grader's rejection
+        # text into its own dispatched subtask (see `_orchestrator`).
+        return deterministic_split(instruction)
+
+    async def asplit(self, instruction: str, feedback: str = "") -> list[str]:
+        """Written out rather than left to the installed door, on purpose.
+
+        The default door runs the synchronous body in a worker thread, which
+        is right for anything that blocks and absurd for a regular expression:
+        the zero-token path would start paying a thread hop for a `re.split`.
+        This is the shape `abc/tool.py`'s `_aexecute` docstring warns about
+        read the other way round — a body with nothing to await gains nothing
+        from a thread either.
+        """
+        return deterministic_split(instruction)
+
+
+class PlanningOrchestrator(BaseOrchestrator):
+    """One planning call, in the same shape every other model-driven node uses.
+
+    The base already declared `PREAMBLE` and `OUTPUT_CONTRACT` for exactly
+    this call and nothing ever made it — the class docstring's own invitation
+    ("override `split` to call `self.model`") is what this is. So there is no
+    new prompt machinery here: the locked halves were already written, the
+    developer's `rules` are the one editable layer, and the contract renders
+    last so "explain your reasoning" cannot countermand the output shape.
+
+    Structured output is the line-per-subtask contract rather than a schema
+    parameter, matching Router and Grader: it is the shape every provider in
+    the picker can hold, and CLAUDE.md records what happens when a model
+    cannot hold `response_format`.
+
+    Degrades rather than fails. A planning call that raises, or comes back
+    empty, falls back to `deterministic_split` — an orchestrator that plans
+    nothing is a dead run, and the deterministic path is a working, honest,
+    zero-token answer.
+    """
+
+    def split(self, instruction: str, feedback: str = "") -> list[str]:
+        if self.model is None:
+            return deterministic_split(instruction)
+
+        try:
+            reply = self.model.invoke(self._planning_messages(instruction, feedback))
+            raw = content_text(reply.content)
+        except Exception:
+            return self._planning_failed(instruction)
+
+        return self._planned_pieces(raw, instruction)
+
+    async def asplit(self, instruction: str, feedback: str = "") -> list[str]:
+        """`split`, awaited — the one genuinely async body on this ladder.
+
+        This is the model call `async-first/10` is waiting on. Everything else
+        is unchanged: no model still takes the deterministic path with nothing
+        awaited, and a call that raises still degrades to it rather than
+        killing the plan.
+
+        The `except Exception` here is the shape that would swallow a stop if
+        it could — a cancelled planning call silently becoming a regex split
+        would be a run that answered after the client asked it not to. It
+        cannot: `CancelledError` is a `BaseException`, pinned by a test.
+        """
+        if self.model is None:
+            return deterministic_split(instruction)
+
+        try:
+            reply = await ainvoke_model(
+                self.model, self._planning_messages(instruction, feedback)
+            )
+            raw = content_text(reply.content)
+        except Exception:
+            return self._planning_failed(instruction)
+
+        return self._planned_pieces(raw, instruction)
+
+    def _planning_messages(self, instruction: str, feedback: str) -> list[Any]:
+        """The planning prompt, rendered once for both doors."""
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        context = [f"Plan at most {self.max_subtasks} subtasks."]
+        if feedback:
+            # Ticket 23: the rejection reaches the *plan*, not just each
+            # subtask's text. It is the only thing that can change the
+            # division of labour between one lap and the next.
+            context.append(
+                "A previous attempt at this work was rejected. Plan differently "
+                f"in light of it:\n{feedback}"
+            )
+        prompt = self.prompt.with_context(*context)
+        return [
+            SystemMessage(content=prompt.render()),
+            HumanMessage(content=instruction),
+        ]
+
+    @staticmethod
+    def _planning_failed(instruction: str) -> list[str]:
+        logger.warning("planning call failed; falling back to the deterministic split")
+        return deterministic_split(instruction)
+
+    @staticmethod
+    def _planned_pieces(raw: str, instruction: str) -> list[str]:
+        pieces = [_unlisted(line) for line in raw.splitlines()]
+        pieces = [piece for piece in pieces if piece]
+        return pieces or deterministic_split(instruction)
+
+
+#: A leading list marker on a planned subtask. The contract forbids numbering,
+#: and models emit it anyway — stripping it here is cheaper than a re-ask, and
+#: leaving it in would put "1." inside the instruction a worker is handed.
+_LIST_MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
+
+
+def _unlisted(line: str) -> str:
+    return _LIST_MARKER.sub("", line).strip().strip("\"'`")
+
+
+def orchestrator_for(
+    *,
+    max_subtasks: int = MAX_SUBTASKS,
+    rules: str = "",
+    skill: str = "",
+    replace_rules: bool = False,
+    model: Any = None,
+    context: str = "",
+) -> BaseOrchestrator:
+    """The one place configuration chooses a decomposition strategy.
+
+    Two rules, and both are about not charging for something nobody asked
+    for. A card with **authored rules** (typed inline or wired as a skill)
+    is a card whose developer wrote planning prose, and until ticket 15 that
+    prose reached only the archetype-labelling call — so the shipped `team`
+    template's "Split the task into the smallest set of independent
+    subtasks." changed nothing whatsoever. It now drives a planning call.
+    A card with **no** rules keeps the deterministic splitter, which is free,
+    reproducible, and good at the punctuated lists it was written for.
+
+    No model, no planning call: the deterministic path is what "works with no
+    model configured at all" means for this node, and it is not negotiable
+    away by a rules string.
+    """
+    authored = bool((rules or "").strip() or (skill or "").strip())
+    cls = PlanningOrchestrator if authored and model is not None else Orchestrator
+    return cls(
+        max_subtasks=max_subtasks,
+        rules=rules,
+        skill=skill,
+        replace_rules=replace_rules,
+        model=model,
+        context=context,
+    )
+
+
+__all__ = [
+    "Archetype",
+    "BaseOrchestrator",
+    "CONTEXT_SUFFIX",
+    "Field",
+    "IOrchestrator",
+    "MAX_SUBTASKS",
+    "Orchestrator",
+    "PlanningOrchestrator",
+    "Subtask",
+    "archetype_key",
+    "archetype_slug",
+    "default_worker_node",
+    "deterministic_split",
+    "orchestrator_for",
+]

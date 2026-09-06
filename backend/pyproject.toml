@@ -1,0 +1,394 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openstategraph"
+version = "0.3.0rc17"
+description = "A compiler from a vendor-neutral workflow.json to a LangGraph StateGraph."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Zulfeekar Cheriyam Purath" }]
+keywords = ["langgraph", "langchain", "agents", "workflow", "compiler", "state-machine"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Compilers",
+    "Typing :: Typed",
+]
+
+# The lean core (docs/decisions/framework-packaging.md §3.1). Four direct
+# dependencies, ~36 distributions resolved, down from 79. "Four dependencies",
+# never "four packages": `package` is a settled word here for `workflows/<slug>/`
+# (CLAUDE.md), and this line is where the other sense kept being copied from. Everything a `load_workflow`
+# consumer may never touch — a web server, an MCP SDK, three provider SDKs and
+# the deepagents harness with its Google GenAI dependency — lives behind an
+# extra below and is already imported lazily at its one call site. Upper bounds
+# are deliberate: LangChain's published policy reserves breaking changes for
+# majors, so `<2` is a promise we can rely on rather than a guess.
+dependencies = [
+    "langgraph>=1.0,<2",
+    "langchain>=1.0,<2",
+    "langchain-core>=1.0,<2",
+    "pydantic>=2.9,<3",
+]
+
+# The console script (framework-packaging §3.2(a)) — argparse only, so it adds
+# nothing to the four-package floor above.
+[project.scripts]
+openstategraph = "openstategraph.cli:console_main"
+
+# These URLs point at the BETA repository (the live remote since 2026-08-15).
+# The stable home is github.com/zulfeekar/openstategraph, which receives the
+# code as one squashed commit only with the owner's explicit consent — that
+# consent-gated move includes re-pointing every URL below (and site/) in the
+# same change:
+#
+#   grep -rn "openstategraph-beta" backend/pyproject.toml site/
+#
+# EXTENSION_NAMESPACE is pinned (`org.openstategraph`, plugin_interop.py).
+[project.urls]
+# `Homepage` is the ONE decision here (stable-beta-public/34). The other three
+# are derived from it by `scripts/build_site.py`, which also writes every
+# `github.com` link on `site/`, so the public rename is this line plus
+# `python3 scripts/build_site.py --write`. `--check` runs in CI.
+Homepage = "https://github.com/zulfeekar/openstategraph"
+Repository = "https://github.com/zulfeekar/openstategraph"
+Source = "https://github.com/zulfeekar/openstategraph"
+Changelog = "https://github.com/zulfeekar/openstategraph/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/zulfeekar/openstategraph/blob/main/docs/adoption.md"
+
+[project.optional-dependencies]
+# One provider per extra: `init_chat_model` resolves exactly the one the
+# adopter's `model` string names, so installing three to use one was pure cost.
+anthropic = ["langchain-anthropic>=1.0,<2"]
+openai = ["langchain-openai>=1.0,<2"]
+ollama = ["langchain-ollama>=1.0,<2"]
+# Only a document containing an `agent.deep` node needs this — 52 distributions
+# on its own, including the Google GenAI SDK and cryptography.
+deep = ["deepagents>=0.7,<1"]
+# Only a document containing a `tool.mssql-query` node needs this
+# (`osg-agent-experience/34`). `prebuilt_mssql` imports it lazily at one seam,
+# so the unconfigured path — which is the whole of the first pass, there being
+# no live warehouse yet — needs no driver at all, and the base wheel's four
+# dependencies are unchanged. pyodbc still needs a system ODBC driver
+# (msodbcsql18) to reach a server; that is the vendor's floor, not ours, and
+# the tool's refusal names this extra rather than leaving an ImportError.
+# `msal` joins it for `osg-agent-experience/73`: ODBC Driver 18's own
+# `Authentication=ActiveDirectoryServicePrincipal` flow hung on the owner's Mac
+# for the full login timeout and reported `HYT00 Login timeout expired`, while
+# the same service principal answered MSAL in one round trip — with
+# AADSTS7000222, the real cause the driver had swallowed. So the token is
+# fetched here and handed to the driver, and the library that fetches it belongs
+# in the same extra as the driver: both are imported lazily at one seam each and
+# a document with no `tool.mssql-query` node needs neither. Pure Python, six
+# dependencies, no system library — a fraction of what pyodbc already asks for.
+mssql = ["pyodbc>=5.0,<6", "msal>=1.28,<2"]
+# Only a document containing a `tool.databricks-query` node needs this
+# (`osg-agent-experience/40`), on the same terms as `[mssql]` above:
+# `prebuilt_databricks` imports it lazily at one seam, so the unconfigured path
+# needs no driver and the base wheel's dependencies are unchanged. Unlike
+# pyodbc it needs no system driver — it speaks Thrift over HTTPS — so the extra
+# is the whole install. Verified against 4.5.0 on 2026-09-05; the floor is 3.4
+# because that is where the connector's own docs settle on the three-argument
+# `sql.connect(server_hostname=, http_path=, access_token=)` this leaf calls.
+databricks = ["databricks-sql-connector>=3.4,<5"]
+# Not an optional feature so much as an undeclared one: `memory.py` imports
+# these inside a try/except, so `settings.checkpointer: "sqlite"` and
+# OPENSTATEGRAPH_MEMORY_PATH degraded to in-memory in every install that
+# existed before this extra (ticket 04 makes that degradation loud).
+sqlite = [
+    "langgraph-checkpoint-sqlite>=3.1",
+]
+# The editor's HTTP API (`openstategraph.api.main`) — never on the consumer path.
+#
+# It depends on `[sqlite]` on purpose (ticket 05). The server's checkpointer
+# now defaults to a sqlite file, because a `human.approval` pause that dies on
+# restart is not a 1.0-shaped feature — and a default that needs an extra
+# nobody was told to install is a default that degrades for everyone. The
+# alternative, moving sqlite into the core four, was rejected: it drags
+# aiosqlite and the sqlite-vec binary wheel onto every `load_workflow`
+# consumer, most of whom never pause a run. So the cost lands on the extra
+# whose behaviour changed. A hand-rolled install without it still degrades
+# LOUDLY, never silently — `memory._open_sqlite_saver` names this line.
+server = [
+    "openstategraph[sqlite]",
+    # The upper bound is the same policy as `[mcp]` below, and for the same
+    # reason: it is a break we hit, not caution. FastAPI is 0.x, so *minors*
+    # are where it puts breaking changes — 0.141 changed what `include_router`
+    # leaves in `app.routes` (an opaque wrapper rather than a copy of each
+    # route), which broke a test that walked them. Found the same way the
+    # `mcp` break was: installing into a clean 3.11 environment while running
+    # the CI matrix, where this machine's cached 0.121 had been hiding it
+    # (ship-it ticket 50).
+    #
+    # A range for adopters, an exact pin for contributors — see `[dev]`. This
+    # bound is what stops the *next* silent break; the pin is what makes
+    # `docs/openapi.json` reproducible.
+    "fastapi>=0.115,<0.142",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
+    # The local MCP server is part of the developer experience (owner
+    # decision, `.scratch/osg-agent-experience/OWNER-DECISIONS.md`,
+    # osg-agent-experience/19): a coding agent that has just installed
+    # `[server,<provider>]` and is told "use OpenStateGraph MCP" needs a
+    # server to reach, not the missing-extra message. `[mcp]` stays a real,
+    # independently installable extra — this only makes `[server]`'s own
+    # requirement set a superset of it, the same self-reference `[sqlite]`
+    # above already uses.
+    "openstategraph[mcp]",
+]
+# The upper bound is not caution, it is a break we hit: `mcp` 2.0.0 removed
+# `mcp.server.fastmcp`, which `openstategraph.mcp_server` imports, so a fresh
+# `pip install 'openstategraph[mcp]'` produced an ImportError at the transport's
+# one entry point. Found by installing into a clean 3.11 environment while
+# adding the CI version matrix — the developer machine had a cached 1.25 and
+# was therefore blind to it. Same policy as the LangChain pins above: majors
+# are where these projects put breaking changes, so `<2` is a promise, not a
+# guess. Moving to 2.x is a deliberate migration of `mcp_server.py`.
+#
+# `langchain-mcp-adapters` is the other half and rides the same extra: `mcp`
+# alone lets us *be* an MCP server, and this lets a `tool.mcp` node *bind*
+# one. The floor is `>=0.3.0` and it is a measured requirement, not a
+# preference — 0.2.1 raises `ToolException` on a tool error and has no
+# `handle_tool_errors` parameter at all, so on 0.2.x the atom would have to
+# own error conversion to keep this project's errors-are-data rule. On 0.3.2
+# `handle_tool_errors` exists and defaults to True, verified live: a bad
+# argument comes back as `MCP error -32602: …` content rather than an
+# exception. `<0.4` is the same majors-are-where-breaks-live policy as every
+# pin above, applied to a 0.x package at its minor.
+mcp = ["mcp>=1.25,<2", "langchain-mcp-adapters>=0.3.0,<0.4"]
+# Durable state in a database an operations team already backs up
+# (scale-and-adopt ticket 06, `openstategraph/postgres.py`). Opt-in and never a
+# default, so it is an extra rather than part of `[server]`.
+#
+# `psycopg[binary]` rather than bare `psycopg`: langgraph-checkpoint-postgres
+# declares only the pure-Python package, which needs libpq and a compiler
+# present at install time — a `pip install` that fails on a slim container is
+# not an opt-in, it is a trap. `psycopg_pool` is a separate distribution and is
+# named explicitly because `postgres.py` imports it directly rather than
+# relying on it arriving transitively.
+#
+# NOTE: this does NOT lift the one-worker ceiling. The catalogue-events fan-out
+# is still in-process, and `openstategraph.deployment` refuses more than one
+# worker whether or not this is installed.
+postgres = [
+    "langgraph-checkpoint-postgres>=3.1,<4",
+    "psycopg[binary]>=3.2",
+    "psycopg-pool>=3.2",
+]
+# Prompt-injection and jailbreak screening, from a third party
+# (guardrails ticket 04, `openstategraph/injection.py`,
+# `docs/decisions/injection-screening.md`).
+#
+# **Deliberately absent from `[all]`, and that is the load-bearing line here.**
+# `bastion-prompt-protection` is AGPL-3.0-or-later, so an adopter who typed the
+# convenient install line would be taking a licence position they never chose.
+# It also brings a local ONNX model — `onnxruntime`, `huggingface-hub`,
+# `numpy`, `tokenizers` — into a product whose dependency floor is four
+# packages and whose install proof fits in a clean venv.
+#
+# `[all]` therefore means "everything this project can decide for you", not
+# "everything that exists". A workflow opts in with
+# `settings.injectionScreening`, and a run that asked for it without the extra
+# says so in one line rather than failing.
+bastion = ["bastion-prompt-protection>=1.3,<2"]
+all = [
+    "openstategraph[anthropic,openai,ollama,deep,sqlite,server,mcp,postgres,mssql,databricks]",
+]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    # **Pinned, and the pin is the point.** Every `async def` test in this
+    # repository needs a plugin to run at all, and without one pytest does not
+    # error -- it reports "async def functions are not natively supported" and
+    # *fails the test*. That is indistinguishable from a real failure in a
+    # summary line, and it is invisible on any machine that happens to have the
+    # plugin installed. It was: 44 async tests passed locally and failed on CI
+    # on 2026-08-27, because this line did not exist (async-first/15).
+    "pytest-asyncio>=1.4,<2",
+    # **Pinned exactly, and that is a decision.** `ci.yml` installed a bare
+    # `ruff` alongside this extra, so the gate's strictness tracked PyPI: a
+    # green run today and a red one tomorrow with no commit in between, and
+    # the reverse — a new rule's worth of real defects arriving as a mystery
+    # failure. A linter is a gate, and a gate that moves on its own is not one.
+    #
+    # The cost is stated rather than discovered: a pin rots quietly, and
+    # nothing here will tell you a newer ruff has something to say. Raising it
+    # is a deliberate commit, which is the point — the same bargain
+    # `docs/openapi.json` and `public_api.txt` already make by being committed
+    # and checked. `ci.yml` no longer installs ruff separately, so this line is
+    # the single place the version is chosen (`organisms-first-class` 47).
+    "ruff==0.14.10",
+    # mypy, not pyright: the backend CI job is Python-only, and pyright would
+    # drag Node.js (or a pip shim that downloads a Node bundle at runtime) into
+    # a job that has neither. mypy installs as one wheel next to pytest and
+    # ruff, and it is what langchain/langgraph themselves type-check with, so
+    # the vendored stubs we depend on are the ones it was tested against.
+    # Pinned exactly, for ruff's reason (`organisms-first-class` 47): a floor
+    # lets the gate move without a commit, and a mypy release that adds a
+    # check turns a clean tree red with nothing in the log to blame. The pin
+    # rots quietly; raising it is a deliberate commit somebody reads, and the
+    # price is that a new check never arrives for free.
+    "mypy==1.19.1",
+    # `ignore_missing_imports` does not cover a package that IS installed and
+    # simply ships no annotations — that is `import-untyped`, a separate code.
+    # PyYAML is such a package, and it arrives transitively with
+    # `langchain-core`, so the stubs are a real dependency of the gate rather
+    # than an optional nicety.
+    "types-PyYAML",
+    # **Exact, and it is the artifact that requires it.** `docs/openapi.json`
+    # is generated from the app and gated byte-exactly, so it is a build
+    # output — and a build output with an unpinned toolchain is not
+    # reproducible. Two FastAPI versions produce two documents (0.141 adds
+    # `ctx` and `input` to its own `ValidationError` schema), so a range would
+    # leave `generated-openapi` and `test_openapi_contract.py` red or green
+    # depending on what pip resolved that morning (ship-it ticket 50).
+    #
+    # Only contributors and CI pay this; `[server]` keeps a range, so an
+    # adopter is bounded but not pinned. Raising it is a deliberate pull
+    # request: bump here, regenerate the snapshot, and the diff shows exactly
+    # what the upgrade changed about the published contract — which is the
+    # whole reason that file is committed.
+    "fastapi==0.141.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["openstategraph"]
+
+# The built editor, copied into `openstategraph/api/static/editor` at build
+# time (scale-and-adopt ticket 01). See `backend/hatch_build.py` for where the
+# assets come from, why sourcemaps are excluded, and why a non-editable build
+# without them fails rather than shipping a canvas-less "visual builder".
+#
+# ONE distribution, not two. The alternative — a separate
+# `openstategraph-editor` that `[server]` depends on — buys a `load_workflow`
+# consumer 1.7 MB of wheel and costs a second PyPI name, a second version to
+# keep in lockstep, and a second clean-install proof. Against the ~150 MB that
+# langgraph + langchain + pydantic already put in their site-packages, 1.7 MB
+# is not a decision worth a release train. If it ever becomes one, it is one
+# `force_include` and one extra away, because every consumer already goes
+# through `api/editor_assets.py` to find the files.
+# Declared globally rather than per target, so the sdist carries the assets too
+# — `pip install --no-binary` and any downstream repackager then get the same
+# product rather than a silent 404.
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
+# Test configuration lives in the repo-root pytest.ini, not here — it already
+# covers both roots (backend/ and the workflow's own tools/), and pytest.ini
+# takes precedence over this file's [tool.pytest.ini_options] table when both
+# exist, so duplicating it here would be dead weight, not a real override.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# Errors-only to start: syntax errors and real defects (undefined names,
+# unused imports), zero style churn. Widening the select set is a deliberate
+# future step, not a default (ticket 50).
+select = ["E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# The pytest fixture-injection idiom, which ruff's F811 is scope-blind to.
+# `test_threads_show_the_resume_line.py` imports the `project` fixture from
+# `test_cli_resume` (the import is required — pytest resolves a fixture by the
+# name bound in the requesting module) and then names a test parameter
+# `project` so pytest injects it. Ruff reads every one of those parameters as a
+# redefinition of the import: nine violations for one correct idiom.
+#
+# Scoped to the one file and the one rule rather than ignored suite-wide, and a
+# `noqa` was tried first — it has to go on nine separate multi-line signatures,
+# which is more noise than the rule is worth. A redundant alias
+# (`import project as project`) was measured and does not help either.
+#
+# The structural fix — move the fixture into `tests/conftest.py`, so no import
+# exists to shadow — is real and was priced: it drags `_document` and
+# `_straight_through` into a suite-wide conftest for two modules' benefit, and
+# `project` rebinds three environment variables including a durable
+# checkpointer path. Not worth the blast radius to satisfy a false positive
+# (`organisms-first-class` 47).
+"tests/test_threads_show_the_resume_line.py" = ["F811"]
+
+# The type gate. Scoped to the shipped package — `tests/` deliberately stays
+# out, because a fixture that lies about a type is how a test proves an error
+# path, and forcing annotations there buys nothing a failing test would not
+# already catch.
+[tool.mypy]
+python_version = "3.11"
+files = ["openstategraph"]
+# The shipped gallery's own code, not ours (workflow-gallery ticket 07).
+# `openstategraph/examples/<slug>/` is a *workflow package* that happens to
+# live inside this distribution so a wheel carries it — its `tests/`, `tools/`
+# and `functions/` are written in the adopter's idiom, and they are exactly
+# what the docs tell an adopter their package should look like. Holding them to
+# the framework's strict gate would mean either annotating twenty example test
+# suites into something no adopter's package resembles, or weakening the gate
+# for the framework itself. `examples/__init__.py` — the catalogue, which IS
+# ours — stays inside `files` and is checked.
+#
+# Ruff is deliberately NOT scoped away: its `E9,F` set catches undefined names
+# and unused imports, which are real defects in shipped example code and cost
+# nothing to keep clean.
+exclude = "^openstategraph/examples/[^/]+/"
+# Vendor SDKs behind extras (mcp, deepagents, the provider packages, certifi)
+# are not installed in every environment this runs in; a missing stub must not
+# be the thing that fails the gate.
+ignore_missing_imports = true
+
+# Everything below is *on* and passing today. These are not aspirations: the
+# set was chosen by turning each flag on, fixing what it found, and keeping
+# the ones whose cost was a day's-worth of real annotations rather than a
+# rewrite. `disallow_untyped_defs` is the load-bearing one — it is what makes
+# every other check reach into function bodies at all.
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_any_generics = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_configs = true
+strict_equality = true
+
+# Deliberately OFF. `mcp_server.py` needs one `type: ignore` whose necessity
+# depends on whether the `[mcp]` extra is installed — CI installs `[all]` and a
+# lean dev checkout does not, so this flag would make the gate pass in one
+# environment and fail in the other. A gate that depends on an optional
+# dependency is worse than the ignore it polices.
+warn_unused_ignores = false
+
+# numpy is not ours, is never imported by our code, and is only here at all
+# because `[all]` includes `[databricks]`, whose connector depends on pandas
+# (`osg-agent-experience/56`). It still reaches mypy's graph, because a *hard*
+# dependency imports it: `mcp_server` -> `langchain_core.messages.utils` ->
+# `langchain_text_splitters.base` -> `tiktoken.core` -> `numpy.typing`. And
+# mypy parses every file in its graph under `python_version` above, so
+# numpy 2.4's PEP 695 `type` statements are a syntax error on 3.11 grammar —
+# one that failed the whole backend job on 3.13 (CI 33973261110) for a file
+# nothing here reads.
+#
+# Priced and rejected: raising `python_version` (it must stay at
+# `requires-python`, or the gate stops seeing what a 3.11 adopter sees), and
+# dropping `[databricks]` from `[all]` (that removes the extra from the
+# clean-install proof's coverage and changes the wheel footprint to hide a
+# type-checker problem). Skipping a package we do not import costs nothing
+# real: no annotation in `openstategraph/` mentions numpy, and
+# `tests/test_the_type_gate_survives_a_newer_stub.py` fails the day one does.
+#
+# `follow_imports_for_stubs` is not decoration. `follow_imports = "skip"` on
+# its own does NOT stop mypy parsing a `.pyi`, so without the second line this
+# whole section is a no-op that looks like a fix — measured against a
+# synthesised stub, and pinned next door.
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true

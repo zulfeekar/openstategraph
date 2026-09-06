@@ -1,0 +1,98 @@
+.menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-popover);
+  min-width: 176px;
+  max-width: 280px;
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface-raised);
+  border: var(--border-width-hairline) solid var(--color-border);
+  animation: menu-in var(--duration-fast) var(--ease-out);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1-5) var(--space-2);
+  border-radius: var(--radius-sm);
+  font: var(--type-body-md);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+  text-align: left;
+  transition: background-color var(--duration-instant) var(--ease-out);
+}
+
+.menu__item:hover:not(:disabled),
+.menu__item[data-highlighted='true'] {
+  background: var(--color-bg-hover);
+}
+
+.menu__item:disabled {
+  color: var(--color-text-quaternary);
+  cursor: not-allowed;
+}
+
+.menu__item--danger {
+  color: var(--color-danger);
+}
+
+.menu__item--danger:hover:not(:disabled) {
+  background: var(--color-danger-subtle);
+}
+
+.menu__item-icon {
+  display: flex;
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+.menu__item--danger .menu__item-icon {
+  color: currentColor;
+}
+
+.menu__item:disabled .menu__item-icon {
+  color: currentColor;
+}
+
+.menu__item-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu__item-shortcut {
+  flex: none;
+  font: var(--type-body-sm);
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+}
+
+.menu__separator {
+  height: 1px;
+  margin: var(--space-1) calc(-1 * var(--space-1));
+  background: var(--color-border);
+}
+
+.menu__label {
+  padding: var(--space-1-5) var(--space-2) var(--space-1);
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}

@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "name": "Approval In The Loop",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Approval In The Loop",
+    "settings": {
+      "purpose": "The only cycle a person closes: the run pauses at an approval, and a rejection with feedback re-enters the drafter exactly as a grader's revise would."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Request",
+        "data": {},
+        "position": { "x": 40, "y": 200 }
+      },
+      {
+        "id": "draft1",
+        "type": "agent.llm",
+        "title": "Draft",
+        "data": {
+          "systemPrompt": "Write the customer-facing message the user asks for.\n\nOne sentence. First person plural. Name what went wrong in plain words, and say what happens next. No excuses, no explanation of internal causes, no exclamation marks, no offer of compensation unless the request names one.\n\nWhen you are given feedback on a previous draft, that feedback came from the person who has to send this message. Treat it as the specification: change exactly what it names and leave the rest alone."
+        },
+        "position": { "x": 380, "y": 200 }
+      },
+      {
+        "id": "gate1",
+        "type": "human.approval",
+        "title": "Send it?",
+        "data": {
+          "message": "This message goes to a customer under your name. Approve to send it, or reject with a note saying what to change."
+        },
+        "position": { "x": 720, "y": 200 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Approved message",
+        "data": {},
+        "position": { "x": 1060, "y": 200 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "draft1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "draft1", "portId": "result" },
+        "target": { "nodeId": "gate1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "gate1", "portId": "rejected" },
+        "target": { "nodeId": "draft1", "portId": "feedback" }
+      },
+      {
+        "source": { "nodeId": "gate1", "portId": "approved" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      }
+    ]
+  }
+}

@@ -1,0 +1,97 @@
+# OpenStateGraph documentation
+
+**OpenStateGraph is a framework built on top of LangGraph and LangChain**: a
+document format (`workflow.json`), a compiler from it to a plain LangGraph
+`StateGraph`, and the node semantics the compiler emits — organised by atomic
+design, atoms through organisms. The canvas editor, the HTTP API and the MCP
+layer are optional surfaces over those three.
+
+Start with what you came here to do.
+
+| I want to… | Read | Then |
+| --- | --- | --- |
+| **decide whether this is for me** | [What this is](what-is-this.md) — the framework sentence, the atomic-design tiers, how the shape compares to other Lang\*-layered frameworks, the measured dependency footprint, and when *not* to use it | [The stability contract](stability.md) |
+| **understand what I am drawing** | [On the canvas](on-the-canvas.md) — the answers you need before the first drag: what a workflow is, the atom/molecule/organism tiers, how a revision loop is two edges, what a mount does (and why the Team card is gone), and why a template is a copy. Plus a glossary | [Patterns](patterns.md) |
+| **try it in fifteen minutes, on a clone** | [Getting started on a checkout](getting-started.md) — the contributor's path: `./start dev`, run the Chinook Assistant, ask it something in `/chat`. Or skip the clone: `openstategraph examples copy sql-qa` then `openstategraph run workflows/sql-qa "…"` — the gallery ships **inside the wheel**, and `workflows/` does not | [Patterns](patterns.md) |
+| **use it in a project of my own** | [Using it in your project](adoption.md) — the three consumption modes (fork/checkout, artifact, MCP), the CLI, `load_workflow`, `RunResult`, `as_tool()`, and the draft → Publish → `/chat` lifecycle | [The stability contract](stability.md) |
+| **add it to a service I already have** | [Adding it to a project you already have](adding-openstategraph-to-your-project.md) — the ordered walk a stranger follows: the install line that works today, `init` into a directory that is already yours, the smallest `workflow.json` that answers with no model call, and an existing `POST /chat` rewired through `Workflows().load(...).ask(...)` | [Wiring a workflow into your app](wiring-it-in.md) |
+| **add it to a codebase that already uses LangGraph** | [OpenStateGraph in a LangGraph codebase](openstategraph-in-a-langgraph-codebase.md) — for a reader who already has `StateGraph`s: what `.graph` is exactly, composition in both directions (your graph calling a workflow three ways; a workflow calling your code through `functions/`, `tools/` and an installed distribution), what crosses the state boundary and what structurally cannot, an honest list of what stays easier hand-written, and how to reach checkpointing, `interrupt()`, streaming and the step budget from a compiled workflow. Plus how to report a defect this repository can act on | [Export and portability](export-and-portability.md) |
+| **wire it into an app I already own** | [Wiring a workflow into your app](wiring-it-in.md) — the two integration shapes and how to tell which you are in, a runnable `.astream_events()` → SSE loop for the embedded one, the four `configurable` identity keys in one table for both, and the consumer's half of the memory model | [The HTTP API](api.md) |
+| **have a coding agent build it for me** | [The OpenStateGraph skill](the-openstategraph-skill.md) — say *"use OpenStateGraph"* and describe the workflow: what your agent reads first, the one-question-per-turn interview and its eight dimensions, how the work becomes cards, the test-first loop each card goes through, the files `init` installs, and the four things it will not do | [The patrol board](the-patrol-board.md) |
+| **look up a command** | [The `openstategraph` command](cli.md) — every command and subcommand, its flags, its exit codes, what it does and when you would reach for it, held against the real parser by a test | [Using it in your project](adoption.md) |
+| **find out what my own runs are telling me** | [The patrol board](the-patrol-board.md) — the radar in the top bar: what a patrol reads and the four ways to start one, the four columns and what each allows, what a card copies onto your clipboard, the evidence `Resolved` demands, the stale flag and Release, and why fan-out is filed differently from repetition | [The `openstategraph` command](cli.md) |
+| **look up a node type** | [The module index](modules.md) — every built-in node type this install ships, grouped, with one line and a link each. Generated from `port_specs.json`, so it cannot fall behind the vocabulary | [On the canvas](on-the-canvas.md) |
+| **know what I can build, and how to arrange it** | [Patterns](patterns.md) — the seven arrangements mapped to our node vocabulary, with the criteria for choosing between them | [Ports and edges](ports-and-edges.md) |
+| **measure whether my workflow is any good** | [Evaluation](evaluation.md) — `openstategraph eval`, execution accuracy (the metric Spider and BIRD report) and why it is not string comparison, how to add a case to a golden dataset, and how to read a regression | [Testing a second brain](second-brain.md) |
+| **check that my workflow's knowledge is right** | [Testing a second brain](second-brain.md) — what a project-level second brain is, what to build and read, how to tell a *stale* doc from a *wrong* one, the ablation that says whether the store earns its place, and the three checks worth pinning in a test | [`decisions/knowledge-architecture.md`](decisions/knowledge-architecture.md) |
+| **stop a right-looking number being wrong** | [Declaring a table](declaring-a-table.md) — the two fields a data source states about itself (`row_key`, `coverage`), why a `COUNT(*)` published under an entity noun is a claim, and why *"0 invoices"* over a table that stops in 2013 is not a measurement | [Ports and edges](ports-and-edges.md) |
+| **stop my server's refusals going in circles** | [Declaring a next step](declaring-a-next-step.md) — the one field an MCP server puts on a refusal so a model has a destination and not just a prohibition, why *"change your approach"* alone leaves the same wrong moves available, and where to put it in an envelope that already forbids extra fields | [Declaring a table](declaring-a-table.md) |
+| **know what a tool card will actually do** | [The prebuilt tools](prebuilt-tools.md) — the counterpart of *building an atom*, for the reader wiring a tool rather than writing one: per card, the fields you fill in, the sentences it refuses with, and what it costs — side effects, network, and anything it needs that you have not set up. Includes the Guardrail and the demo package's Chinook tools | [The module index](modules.md) |
+| **add a capability that does not exist yet** | [Building an atom](building-an-atom.md) — a node definition, its Python half, the palette tiers, registration (including publishing your own distribution), and a worked example in ~60 lines | [Ports and edges](ports-and-edges.md) |
+| **build my own UI on the run stream** | [The HTTP API](api.md) — the committed OpenAPI document, the three SSE streams OpenAPI cannot express (with their event vocabulary and the terminal-frame guarantee), the calls a custom chat needs with real captured examples, a working client in one file, and the CORS rules | [`openapi.json`](openapi.json) |
+| **have my own LLM compose the graph** | [The MCP layer](mcp.md) — client config, a worked transcript, the `compile_workflow` response shape, and the trust boundary | [`decisions/mcp-layer.md`](decisions/mcp-layer.md) |
+| **know how far a workflow travels without us** | [Export and portability](export-and-portability.md) — whether a zero-dependency pure-LangGraph export exists, the MCP layer's tool list and open roadmap items, and why a Node/TypeScript export isn't planned | [Using it in your project](adoption.md) |
+| **run it for other people** | [Deploying](deploying.md) — the threat model of an unauthenticated deployment, the committed Caddy and nginx configs (including what the SSE routes need), the optional shared token, and why a second worker is refused rather than discouraged | [`decisions/memory-architecture.md`](decisions/memory-architecture.md) |
+| **know what can be taken away from me** | [The stability contract](stability.md) — the three tiers, the signature snapshot, the `workflow.json` version policy, the CLI's fixed exit codes, and the deprecation rules | [`../CHANGELOG.md`](../CHANGELOG.md) |
+| **cut a release, or fix one that went wrong** | [Releasing](releasing.md) — the train from pull request to PyPI, the one human gate and what to check before clicking it, the branch protection and environment settings to configure by hand, and the rollback commands for a burned version number | [`decisions/sdk-practice.md`](decisions/sdk-practice.md) |
+| **take this repository public, or change a GitHub setting** | [Public repository settings](maintainers/public-repository-settings.md) — the checklist a maintainer ticks in order: issues, the issue templates, Actions workflow permissions (including the one box two workflows need ticked and hardening wants unticked), branch protection and CODEOWNERS, Pages, the `pypi` environment, and a census of every secret and variable the workflows read — derived from `.github/workflows/`, so it cannot go short | [Releasing](releasing.md) |
+| **tell the maintainers what my install refused to do** | [Reporting a platform gap](reporting-a-platform-gap.md) — the automated report: the fields it carries, why the document, your question, table names, field values and paths are structurally unrepresentable rather than merely omitted, the text you read before anything moves, and the two doors that will carry it (neither built yet) | [OpenStateGraph in a LangGraph codebase](openstategraph-in-a-langgraph-codebase.md) |
+| **understand why it is shaped this way** | [`decisions/`](decisions/) — the arguments that were actually had | [`../CLAUDE.md`](../CLAUDE.md) |
+
+Each page has exactly one job, and — with one deliberate exception — nothing
+here restates another page. The exception is [On the canvas](on-the-canvas.md),
+which is a **synthesis for a different reader**: someone drawing, who needs the
+mount semantics, the loop rule and the class/instance model in one place before
+they have any reason to open the pages those facts otherwise live in. It is
+allowed to repeat; the pages below are not allowed to repeat each other:
+[Ports and edges](ports-and-edges.md) is the only reference for the type
+system; [the `openstategraph` command](cli.md) is the only place the CLI's commands,
+flags and exit codes are enumerated; [evaluation](evaluation.md) is the only
+place the scoring metric is defined; [testing a second brain](second-brain.md)
+is the only place the knowledge store's verification procedure is written down;
+[stability](stability.md) is the only
+place a promise is made about them; [the HTTP API](api.md) is the only place
+the SSE event vocabulary is written down; [deploying](deploying.md) is the only
+place authentication, the worker ceiling and the reverse proxy are explained;
+[wiring it in](wiring-it-in.md) is the only place the identity keys are
+collected for both integration shapes at once;
+[OpenStateGraph in a LangGraph codebase](openstategraph-in-a-langgraph-codebase.md)
+is the only place composition is described in both directions at once, and the
+only place a **hand-written** defect report's shape and destination are written
+down — the automated gap report's fixed schema is
+[reporting a platform gap](reporting-a-platform-gap.md)'s, and only its.
+
+## The one idea underneath all of it
+
+**Workflows have predetermined code paths; agents define their own process and
+tool usage.** That single line orders everything on this canvas. It is a
+spectrum, not a dichotomy, and every node type is a point on it:
+
+```
+predetermined ──────────────────────────────────────────────────► dynamic
+
+route.classifier   function.format_report   orchestrate.supervisor   agent.llm
+route.grader       workflow.subgraph        orchestrate.worker       (fat tool bus)
+human.approval
+```
+
+On the left, *you* decide what happens next and the model only fills in the
+blanks. On the right, the model decides — which tool to call, how many times,
+when it is finished. Choosing where a step belongs on that line is the design
+decision this documentation exists to help you make; everything else is
+wiring.
+
+The substrate for the whole line is the **augmented LLM**: a model with tool
+calling, structured output and short-term memory. That is exactly one node —
+`agent.llm`, with its `tools` bus, its `skill` input and its `prompt`. An
+agent is a configured model; the patterns are how you arrange several of them.
+
+## Where the rest lives
+
+- [`../CLAUDE.md`](../CLAUDE.md) — the architecture contract. Non-negotiables,
+  the layering rule, the LangGraph vocabulary, the portability guardrails.
+- [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — setup and the PR gate.
+- [`../README.md`](../README.md) — running the app, extension points, providers.
+
+LangGraph and LangChain facts in these pages come from the `docs-langchain`
+MCP server, never from memory.

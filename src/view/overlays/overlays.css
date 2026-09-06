@@ -1,0 +1,487 @@
+/* ================================================================== *
+ * Floating shell surfaces: the shortcuts drawer, the credentials dialog,
+ * the accessibility report and toasts.
+ * ================================================================== */
+
+/* ---------- Shortcuts drawer ---------- */
+
+.shortcuts {
+  position: absolute;
+  left: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--z-floating);
+  max-width: 340px;
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  overflow: hidden;
+}
+
+.shortcuts__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font: var(--type-body-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  transition: var(--transition-colors);
+}
+
+.shortcuts__trigger:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.shortcuts__panel {
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: var(--space-1) var(--space-3) var(--space-3);
+  border-top: var(--border-width-hairline) solid var(--color-border);
+}
+
+.shortcuts__group + .shortcuts__group {
+  margin-top: var(--space-3);
+}
+
+.shortcuts__group-title {
+  padding: var(--space-2) 0 var(--space-1);
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.shortcuts__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+/* ---------- Edge legend ----------
+ *
+ * A 44px rule drawn with a repeating-linear-gradient rather than a border, so
+ * the dash signature can be stated exactly and mirror the SVG `stroke-dasharray`
+ * the canvas applies to the same port type. Colour and pattern together: the
+ * legend is the one place the two channels must visibly be two channels. */
+.legend__swatch {
+  flex: none;
+  width: 44px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--accent-solid);
+}
+
+.legend__swatch[data-port-type='tool'] {
+  background: repeating-linear-gradient(to right, var(--accent-solid) 0 2px, transparent 2px 5px);
+}
+
+.legend__swatch[data-port-type='skill'] {
+  background: repeating-linear-gradient(to right, var(--accent-solid) 0 9px, transparent 9px 13px);
+}
+
+.legend__swatch[data-port-type='feedback'] {
+  background: repeating-linear-gradient(to right, var(--accent-solid) 0 4px, transparent 4px 8px);
+}
+
+.legend__swatch[data-port-type='worker'] {
+  background: repeating-linear-gradient(
+    to right,
+    var(--accent-solid) 0 11px,
+    transparent 11px 15px,
+    var(--accent-solid) 15px 18px,
+    transparent 18px 22px
+  );
+}
+
+/* ---------- Dialog ---------- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--color-scrim);
+  animation: fade-in var(--duration-fast) var(--ease-out);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(640px, 100%);
+  border-radius: var(--radius-2xl);
+  background: var(--color-bg-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  animation: dialog-in var(--duration-normal) var(--ease-out);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+/* The large size — `kanban-patrol/06`. 90% of the viewport in both
+   dimensions, which is the board's requirement: four columns cannot be read
+   at 520px.
+
+   A rule of its own rather than an edit to `.dialog` above, and that is the
+   whole design of the variant. Five modals already render `.dialog` and none
+   of them passes a size, so none of them enters this block and none of them
+   moved. `aDialogSizeIsOptInOnly.test.ts` fails if the default width or the
+   opt-in census ever changes.
+
+   `height` as well as `max-height`: `.dialog` sizes to its content under a
+   cap, which is right for a form and wrong for a board — a column needs a
+   fixed height to scroll inside. `min(…, 100%)` keeps both bounded by the
+   backdrop's padded content box on a small viewport, the way the default
+   width already is. */
+.dialog--large {
+  width: min(90vw, 100%);
+  height: min(90vh, 100%);
+  max-height: min(90vh, 100%);
+}
+
+.dialog__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+
+.dialog__heading {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.dialog__title {
+  font: var(--type-heading-lg);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+}
+
+.dialog__subtitle {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  line-height: var(--line-height-relaxed);
+}
+
+.dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: var(--border-width-hairline) solid var(--color-border);
+}
+
+/* ---------- Provider rows ---------- */
+
+.provider {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--box-inset);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface-sunken);
+  border: var(--border-width-hairline) solid var(--color-border);
+}
+
+.provider__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.provider__name {
+  flex: 1 1 auto;
+  font: var(--type-body-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.provider__hint {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.provider__models {
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+}
+
+/* A security note the user should actually read, not a decorative aside. */
+.dialog__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2-5);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-status-warning) 10%, transparent);
+  color: color-mix(in srgb, var(--color-status-warning) 90%, var(--color-text-primary));
+  font: var(--type-caption);
+  line-height: var(--line-height-relaxed);
+}
+
+/* ---------- Accessibility report ---------- */
+
+.a11y-trigger {
+  position: absolute;
+  left: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--z-floating);
+}
+
+.a11y-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.a11y-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2-5);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  border: var(--border-width-hairline) solid var(--color-border);
+  font: var(--type-caption);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-secondary);
+}
+
+.a11y-item--fail {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
+.a11y-item--pass {
+  background: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.a11y-item__detail {
+  display: block;
+  margin-top: var(--space-0-5);
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* ---------- Toasts ---------- */
+
+.toaster {
+  position: fixed;
+  bottom: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 420px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-inverse);
+  color: var(--color-text-inverse);
+  font: var(--type-body-sm);
+  pointer-events: auto;
+  animation: toast-in var(--duration-normal) var(--ease-spring);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+
+/* ---------- First-run hint ---------- */
+
+.onboarding-hint {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 260px;
+  padding: var(--box-inset);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  animation: toast-in var(--duration-normal) var(--ease-spring);
+}
+
+/* Anchored to a control on the *left* of the toolbar (ticket 23's examples
+   pointer, which hangs off the Workflows button) rather than the right. Same
+   bubble, mirrored, so the two first-run hints cannot both drift toward the
+   same corner. */
+.onboarding-hint--start {
+  right: auto;
+  left: 0;
+}
+
+/* The pointer at the button above it: a hint that floats free reads as a
+   toast, not as a label for a specific control. */
+.onboarding-hint::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 14px;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  border-top: var(--border-width-hairline) solid var(--color-border);
+  border-left: var(--border-width-hairline) solid var(--color-border);
+  background: var(--color-bg-surface);
+}
+
+.onboarding-hint--start::before {
+  right: auto;
+  left: 14px;
+}
+
+.onboarding-hint__text {
+  margin: 0;
+  padding-right: var(--space-4);
+  color: var(--color-text-secondary);
+  font: var(--type-body-sm);
+}
+
+.onboarding-hint__close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  padding: var(--space-0-5);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.onboarding-hint__close:hover {
+  color: var(--color-text-primary);
+}
+
+/* ---------- MCP servers ---------- */
+
+/* One row's verbs, on their own line: Validate, Edit and Delete are three
+   different weights of action and reading them as a sentence beside the URL
+   made Delete look like part of the address. */
+.mcp-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* The arrival offer — `install-experience` 28. The container is `.dialog`
+   above; what is added here is a list. */
+
+.arrival__error,
+.arrival__empty {
+  margin: 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-tertiary);
+}
+
+.arrival__hint {
+  margin-right: auto;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.arrival__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--box-inset-dense);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.arrival__row:hover,
+.arrival__row:focus-visible {
+  background: var(--color-bg-subtle);
+}
+
+.arrival__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--type-body-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.arrival__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.arrival__where {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* osg-agent-experience/68 — the two sentences under the reload's choice. The
+   arrival hint's tokens exactly: this is the same weight of aside, and a
+   second set of values for one role is how a design system stops being one. */
+.restored-draft__hint {
+  margin: 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}

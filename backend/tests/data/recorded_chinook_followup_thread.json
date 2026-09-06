@@ -1,0 +1,160 @@
+{
+ "recordedAt": "2026-08-11",
+ "workflow": "chinook-assistant",
+ "model": "ollama:gpt-oss:120b-cloud",
+ "note": "Two recordings of the SAME four-turn conversation against the live stack (ticket 11). `withThread` sends one thread_id on every turn — what /chat does. `withoutThread` omits it — what the editor's Ask panel does — so the server mints a fresh thread per request and `messages` is empty at every turn. Nothing here is invented; both runs are verbatim SSE frames, trimmed to the router's input and the terminal frame.",
+ "threadId": "probe-b034142f",
+ "withThread": [
+  {
+   "turn": 1,
+   "question": "Which genre earns the most revenue?",
+   "terminalEvent": "done",
+   "terminalKeys": [
+    "answer",
+    "attempts",
+    "decisions",
+    "mermaid",
+    "outputs",
+    "warnings"
+   ],
+   "decisions": {
+    "router1": "b-data",
+    "grader-sql": "pass"
+   },
+   "answer": "**SQL used**\n\n```sql\nSELECT g.Name AS Genre, SUM(il.UnitPrice * il.Quantity) AS Revenue\nFROM InvoiceLine il\nJOIN Track t      ON il.TrackId = t.TrackId\nJOIN Genre g      ON t.GenreId = g.GenreId\nGROUP BY g.GenreId, g.Name\nORDER BY Revenue DESC\nLIMIT 1;\n```\n\n**Answer**\n\nThe genre that generates the most revenue is **Rock**, with total sales of **$826.65**.",
+   "updates": 27,
+   "routerInput": "Which genre earns the most revenue?"
+  },
+  {
+   "turn": 2,
+   "question": "How did you get that?",
+   "terminalEvent": "done",
+   "terminalKeys": [
+    "answer",
+    "attempts",
+    "decisions",
+    "mermaid",
+    "outputs",
+    "warnings"
+   ],
+   "decisions": {
+    "router1": "b-data",
+    "grader-sql": "pass"
+   },
+   "answer": "I arrived at the answer by following the required workflow for a Chinook‑database question:\n\n1. **Identify the tables needed**\n   - **InvoiceLine** – stores each line‑item on an invoice, including `UnitPrice` and `Quantity`.\n   - **Track** – links a track to its genre (`GenreId`).\n   - **Genre** – provides the human‑readable name of each genre.\n\n2. **Inspect the schemas** (using `chinook_get_table_schema`) to see the foreign‑key relationships:\n   - `InvoiceLine.TrackId → Track.TrackId`\n   - `Track.GenreId   → Genre.GenreId`\n\n   These keys tell me that I can join the three tables in the order  \n   `InvoiceLine → Track → Genre`.\n\n3. **Write a single SELECT statement** that:\n   - Joins the three tables on those foreign keys.\n   - Calculates the revenue for each line‑item as `UnitPrice * Quantity`.\n   - Sums that revenue per genre (`GROUP BY` the genre).\n   - Orders the result descending so the highest‑earning genre appears first.\n   - Limits the output to the top row (`LIMIT 1`).\n\n   ```sql\n   SELECT g.Name AS Genre,\n          SUM(il.UnitPrice * il.Quantity) AS Revenue\n   FROM InvoiceLine il\n   JOIN Track t      ON il.TrackId = t.TrackId\n   JOIN Genre g      ON t.GenreId = g.GenreId\n   GROUP BY g.GenreId, g.Name\n   ORDER BY Revenue DESC\n   LIMIT 1;\n   ```\n\n4. **Execute the query** with `chinook_execute_sql`. The query returned a single row:\n\n   | Genre | Revenue |\n   |-------|---------|\n   | Rock  | 826.65  |\n\n   This tells me that the **Rock** genre contributed the most total sales revenue in the database, amounting to **$826.65**.",
+   "updates": 9,
+   "routerInput": "Conversation so far:\nUser: Which genre earns the most revenue?\nAssistant: **SQL used**\n\n```sql\nSELECT g.Name AS Genre, SUM(il.UnitPrice * il.Quantity) AS Revenue\nFROM InvoiceLine il\nJOIN Track t      ON il.TrackId = t.TrackId\nJOIN Genre g      ON t.GenreId = g.GenreId\nGROUP BY g.GenreId, g.Name\nORDER BY Revenue DESC\nLIMIT 1;\n```\n\n**Answer**\n\nThe genre that generates the most revenue is **Rock**, with total sales of **$826.65**.\n\nThe user's new message — this is the task; the conversation above is context only, never the task: How did you get that?"
+  },
+  {
+   "turn": 3,
+   "question": "What is the weather in Berlin?",
+   "terminalEvent": "done",
+   "terminalKeys": [
+    "answer",
+    "attempts",
+    "decisions",
+    "mermaid",
+    "outputs",
+    "warnings"
+   ],
+   "decisions": {
+    "router1": "b-web"
+   },
+   "answer": "Berlin’s current weather is ☀️ +22 °C.",
+   "updates": 17,
+   "routerInput": "Conversation so far:\nUser: Which genre earns the most revenue?\nAssistant: **SQL used**\n\n```sql\nSELECT g.Name AS Genre, SUM(il.UnitPrice * il.Quantity) AS Revenue\nFROM InvoiceLine il\nJOIN Track t      ON il.TrackId = t.TrackId\nJOIN Genre g      ON t.GenreId = g.GenreId\nGROUP BY g.GenreId, g.Name\nORDER BY Revenue DESC\nLIMIT 1;\n```\n\n**Answer**\n\nThe genre that generates the most revenue is **Rock**, with total sales of **$826.65**.\nUser: How did you get that?\nAssistant: I arrived at the answer by following the required workflow for a Chinook‑database question:\n\n1. **Identify the tables needed**\n   - **InvoiceLine** – stores each line‑item on an invoice, including `UnitPrice` and `Quantity`.\n   - **Track** – links a track to its genre (`GenreId`).\n   - **Genre** – provides the human‑readable name of each genre.\n\n2. **Inspect the schemas** (using `chinook_get_table_schema`) to see the foreign‑key relationships:\n   - `InvoiceLine.TrackId → Track.TrackId`\n   - `Track.GenreId   → Genre.GenreId`\n\n   These keys tell me that I can join the three tables in the order  \n   `InvoiceLine → Track → Genre`.\n\n3. **Write a single SELECT statement** that:\n   - Joins the three tables on those foreign keys.\n   - Calculates the revenue for each line‑item as `UnitPrice * Quantity`.\n   - Sums that revenue per genre (`GROUP BY` the genre).\n   - Orders the result descending so the highest‑earning genre appears first.\n   - Limits the output to the top row (`LIMIT 1`).\n\n   ```sql\n   SELECT g.Name AS Genre,\n          SUM(il.UnitPrice * il.Quantity) AS Revenue\n   FROM InvoiceLine il\n   JOIN Track t      ON il.TrackId = t.TrackId\n   JOIN Genre g      ON t.GenreId = g.GenreId\n   GROUP BY g.GenreId, g.Name\n   ORDER BY Revenue DESC\n   LIMIT 1;\n   ```\n\n4. **Execute the query** with `chinook_execute_sql`. The query returned a single row:\n\n   | Genre | Revenue |\n   |-------|---------|\n   | Rock  | 826.65  |\n\n   This tells me that the **Rock** genre contributed the most total sales revenue in the database, amounting to **$826.65**.\n\nThe user's new message — this is the task; the conversation above is context only, never the task: What is the weather in Berlin?"
+  },
+  {
+   "turn": 4,
+   "question": "Remind me what the top genre was and the figure.",
+   "terminalEvent": "done",
+   "terminalKeys": [
+    "answer",
+    "attempts",
+    "decisions",
+    "mermaid",
+    "outputs",
+    "warnings"
+   ],
+   "decisions": {
+    "router1": "b-data",
+    "grader-sql": "pass"
+   },
+   "answer": "**SQL query used**\n\n```sql\nSELECT g.Name AS Genre,\n       SUM(il.UnitPrice * il.Quantity) AS Revenue\nFROM InvoiceLine il\nJOIN Track t   ON il.TrackId = t.TrackId\nJOIN Genre g   ON t.GenreId = g.GenreId\nGROUP BY g.GenreId, g.Name\nORDER BY Revenue DESC\nLIMIT 1;\n```\n\n**Result**\n\n| Genre | Revenue |\n|-------|---------|\n| Rock  | 826.65 |\n\n**Reminder**\n\nThe top‑earning genre in the Chinook database is **Rock**, with total revenue of **$826.65** (as calculated by the query above).",
+   "updates": 14,
+   "routerInput": "Conversation so far:\nUser: Which genre earns the most revenue?\nAssistant: **SQL used**\n\n```sql\nSELECT g.Name AS Genre, SUM(il.UnitPrice * il.Quantity) AS Revenue\nFROM InvoiceLine il\nJOIN Track t      ON il.TrackId = t.TrackId\nJOIN Genre g      ON t.GenreId = g.GenreId\nGROUP BY g.GenreId, g.Name\nORDER BY Revenue DESC\nLIMIT 1;\n```\n\n**Answer**\n\nThe genre that generates the most revenue is **Rock**, with total sales of **$826.65**.\nUser: How did you get that?\nAssistant: I arrived at the answer by following the required workflow for a Chinook‑database question:\n\n1. **Identify the tables needed**\n   - **InvoiceLine** – stores each line‑item on an invoice, including `UnitPrice` and `Quantity`.\n   - **Track** – links a track to its genre (`GenreId`).\n   - **Genre** – provides the human‑readable name of each genre.\n\n2. **Inspect the schemas** (using `chinook_get_table_schema`) to see the foreign‑key relationships:\n   - `InvoiceLine.TrackId → Track.TrackId`\n   - `Track.GenreId   → Genre.GenreId`\n\n   These keys tell me that I can join the three tables in the order  \n   `InvoiceLine → Track → Genre`.\n\n3. **Write a single SELECT statement** that:\n   - Joins the three tables on those foreign keys.\n   - Calculates the revenue for each line‑item as `UnitPrice * Quantity`.\n   - Sums that revenue per genre (`GROUP BY` the genre).\n   - Orders the result descending so the highest‑earning genre appears first.\n   - Limits the output to the top row (`LIMIT 1`).\n\n   ```sql\n   SELECT g.Name AS Genre,\n          SUM(il.UnitPrice * il.Quantity) AS Revenue\n   FROM InvoiceLine il\n   JOIN Track t      ON il.TrackId = t.TrackId\n   JOIN Genre g      ON t.GenreId = g.GenreId\n   GROUP BY g.GenreId, g.Name\n   ORDER BY Revenue DESC\n   LIMIT 1;\n   ```\n\n4. **Execute the query** with `chinook_execute_sql`. The query returned a single row:\n\n   | Genre | Revenue |\n   |-------|---------|\n   | Rock  | 826.65  |\n\n   This tells me that the **Rock** genre contributed the most total sales revenue in the database, amounting to **$826.65**.\nUser: What is the weather in Berlin?\nAssistant: Berlin’s current weather is ☀️ +22 °C.\n\nThe user's new message — this is the task; the conversation above is context only, never the task: Remind me what the top genre was and the figure."
+  }
+ ],
+ "withoutThread": [
+  {
+   "turn": 1,
+   "question": "Which genre earns the most revenue?",
+   "terminalEvent": "done",
+   "terminalKeys": [
+    "answer",
+    "attempts",
+    "decisions",
+    "mermaid",
+    "outputs",
+    "warnings"
+   ],
+   "decisions": {
+    "router1": "b-data",
+    "grader-sql": "pass"
+   },
+   "answer": "**SQL used**\n\n```sql\nSELECT g.Name AS Genre,\n       SUM(il.UnitPrice * il.Quantity) AS Revenue\nFROM InvoiceLine il\nJOIN Track t   ON il.TrackId = t.TrackId\nJOIN Genre g   ON t.GenreId = g.GenreId\nGROUP BY g.Name\nORDER BY Revenue DESC;\n```\n\n**Answer**\n\nThe genre that generates the highest revenue in the Chinook music store is **Rock**, with total sales of **$826.65**.",
+   "updates": 32,
+   "routerInput": "Which genre earns the most revenue?"
+  },
+  {
+   "turn": 2,
+   "question": "How did you get that?",
+   "terminalEvent": "done",
+   "terminalKeys": [
+    "answer",
+    "attempts",
+    "decisions",
+    "mermaid",
+    "outputs",
+    "warnings"
+   ],
+   "decisions": {
+    "router1": "b-data",
+    "grader-sql": "pass"
+   },
+   "answer": "I’m set up to answer questions about the Chinook music‑store database—things like customers, invoices, tracks, artists, albums, genres, and playlists. If you have a specific question about any of those, just let me know and I’ll run the appropriate query for you.",
+   "updates": 9,
+   "routerInput": "How did you get that?"
+  },
+  {
+   "turn": 3,
+   "question": "What is the weather in Berlin?",
+   "terminalEvent": "done",
+   "terminalKeys": [
+    "answer",
+    "attempts",
+    "decisions",
+    "mermaid",
+    "outputs",
+    "warnings"
+   ],
+   "decisions": {
+    "router1": "b-web"
+   },
+   "answer": "Berlin is currently sunny with a temperature of 22 °C【https://wttr.in/Berlin?format=3】.",
+   "updates": 13,
+   "routerInput": "What is the weather in Berlin?"
+  },
+  {
+   "turn": 4,
+   "question": "Remind me what the top genre was and the figure.",
+   "terminalEvent": "",
+   "terminalKeys": [],
+   "decisions": null,
+   "answer": "",
+   "updates": 25,
+   "routerInput": "Remind me what the top genre was and the figure.",
+   "note": "No terminal frame. With no antecedent for 'the top genre', the analyst re-read the schema seven times and then called a tool that does not exist ('chin_user_??'); the probe's connection ended while it was still flailing. A follow-up without history does not merely answer generically — it burns supersteps."
+  }
+ ]
+}

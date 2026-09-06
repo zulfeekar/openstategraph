@@ -1,0 +1,27 @@
+# Code owners — who GitHub requests a review from, automatically.
+#
+# The handle below is the repository owner, read from the remote this checkout
+# actually has (`gh repo view --json owner --jq .owner.login`, 2026-09-06) —
+# never typed from memory, because GitHub silently ignores an owner it cannot
+# resolve and "Require review from Code Owners" then blocks every pull request
+# with a rule that requests nobody (stable-beta-public/33).
+#
+# Last line wins in this file, so the specific rules come after the general one.
+
+* @zulfeekar
+
+# The architecture contract, the release train, and anything that can publish
+# or grant permissions. These change rarely and are expensive to get wrong, so
+# they get a named owner even when the catch-all already covers them.
+/CLAUDE.md                  @zulfeekar
+/AGENTS.md                  @zulfeekar
+/CHANGELOG.md               @zulfeekar
+/CONTRIBUTING.md            @zulfeekar
+/SECURITY.md                @zulfeekar
+/LICENSE                    @zulfeekar
+/THIRD_PARTY_NOTICES.md     @zulfeekar
+/.github/                   @zulfeekar
+/scripts/                   @zulfeekar
+/backend/pyproject.toml     @zulfeekar
+/docs/decisions/            @zulfeekar
+/docs/stability.md          @zulfeekar

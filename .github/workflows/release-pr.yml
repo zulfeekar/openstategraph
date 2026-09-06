@@ -1,0 +1,88 @@
+# Release PR — the first half of the release train.
+#
+#   Actions -> "Release PR" -> Run workflow -> version: 0.3.0
+#
+# Opens (or updates) a pull request titled `chore: release v0.3.0` containing
+# exactly two edits: the version in `backend/pyproject.toml`, and the date on
+# that version's `CHANGELOG.md` heading. Nothing is published, nothing is
+# tagged, no secret is touched. Merging that PR is what starts `release.yml`.
+#
+# WHY THIS AND NOT release-please — the full argument is in docs/releasing.md.
+# The short version: release-please's value is generating CHANGELOG.md from
+# conventional-commit subjects, and this repository's changelog is a written
+# document (~17k characters of prose explaining *why* each change happened,
+# with measurements). Replacing it with a bulleted list of commit subjects
+# would be a downgrade in the one artefact users read most. So we keep the
+# release-please *shape* — a bot-authored release PR whose merge is the
+# human decision — and hand-write the notes it would have generated.
+name: Release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.3.0 (or 0.3.0rc1 for a rehearsal-only pre-release)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the release branch
+      pull-requests: write # open/update the release PR
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: prepare_release.py refuses a version that already has
+          # a tag, and a shallow clone has no tags to check against.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: Bump the version and date the changelog
+        run: python scripts/prepare_release.py "${{ inputs.version }}"
+
+      - name: Read the release notes back
+        id: notes
+        run: |
+          set -euo pipefail
+          {
+            echo 'body<<CHANGELOG_EOF'
+            python scripts/changelog_section.py "${{ inputs.version }}"
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: release/v${{ inputs.version }}
+          title: "chore: release v${{ inputs.version }}"
+          commit-message: "chore: release v${{ inputs.version }}"
+          labels: release
+          body: |
+            Merging this pull request starts the release train for
+            **v${{ inputs.version }}**. It does not publish anything by itself.
+
+            What happens on merge (`.github/workflows/release.yml`):
+
+            1. the tag `v${{ inputs.version }}` is created from the merge commit;
+            2. the wheel and sdist are built and `twine check`ed;
+            3. they are uploaded to **TestPyPI**;
+            4. a **rehearsal** installs `openstategraph==${{ inputs.version }}`
+               *from TestPyPI* into an empty venv outside any checkout and drives
+               the real CLI and `load_workflow`;
+            5. only if that passes does the PyPI publish job start — and it waits
+               on the `pypi` environment for a **human approval**.
+
+            Before merging, check that the two edits below are the only ones, and
+            that the notes read the way you want them to on the PyPI page.
+
+            <details><summary>Release notes for v${{ inputs.version }}</summary>
+
+            ${{ steps.notes.outputs.body }}
+
+            </details>

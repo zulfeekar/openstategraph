@@ -1,0 +1,3871 @@
+{
+  "schema_version": 7,
+  "generated_by": "npm run generate:ports",
+  "source": "src/nodes/portSpecs.ts",
+  "warning": "GENERATED FILE — DO NOT EDIT. The TypeScript node catalogue is authoritative; run `npm run generate:ports` after changing a node type or a port.",
+  "legacy_data_keys": [
+    "criteriaMode",
+    "instructions"
+  ],
+  "port_types": [
+    {
+      "id": "feedback",
+      "label": "Feedback",
+      "accepts": [
+        "feedback"
+      ]
+    },
+    {
+      "id": "result",
+      "label": "Result",
+      "accepts": [
+        "result",
+        "text"
+      ]
+    },
+    {
+      "id": "skill",
+      "label": "Skill",
+      "accepts": [
+        "skill"
+      ]
+    },
+    {
+      "id": "text",
+      "label": "Text",
+      "accepts": [
+        "text"
+      ]
+    },
+    {
+      "id": "tool",
+      "label": "Tool",
+      "accepts": [
+        "tool"
+      ]
+    },
+    {
+      "id": "worker",
+      "label": "Worker",
+      "accepts": [
+        "worker"
+      ]
+    }
+  ],
+  "node_types": [
+    {
+      "type": "agent.llm",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "AI Agent",
+      "description": "Runs an LLM with tool calling.",
+      "ports": [
+        {
+          "id": "prompt",
+          "direction": "in",
+          "type": "text",
+          "label": "prompt",
+          "required": true,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "skill",
+          "direction": "in",
+          "type": "skill",
+          "label": "skill",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "skill"
+          ]
+        },
+        {
+          "id": "tools",
+          "direction": "in",
+          "type": "tool",
+          "label": "agent tools",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        },
+        {
+          "id": "feedback",
+          "direction": "in",
+          "type": "feedback",
+          "label": "feedback",
+          "required": false,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "feedback"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": true,
+      "accepts_skill": true,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "model",
+        "reasoningEffort",
+        "rubric",
+        "rulesMode",
+        "subagents",
+        "summarize",
+        "systemPrompt",
+        "tier",
+        "timeoutSeconds",
+        "tokenBudget"
+      ],
+      "fields": [
+        {
+          "key": "model",
+          "kind": "select",
+          "label": "Model",
+          "hint": "Leave on the workflow default unless this step needs a different model.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "reasoningEffort",
+          "kind": "select",
+          "label": "Reasoning",
+          "hint": "Sent only to models that support it; the run reports it if it could not be.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "tokenBudget",
+          "kind": "slider",
+          "label": "Token budget",
+          "hint": "",
+          "required": false,
+          "defaultValue": 500
+        },
+        {
+          "key": "rubric",
+          "kind": "textarea",
+          "label": "Rubric (self-grading)",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "summarize",
+          "kind": "toggle",
+          "label": "Summarize long context",
+          "hint": "",
+          "required": false,
+          "defaultValue": true
+        },
+        {
+          "key": "tier",
+          "kind": "select",
+          "label": "Runtime",
+          "hint": "",
+          "required": false,
+          "defaultValue": "react",
+          "options": [
+            {
+              "value": "react",
+              "label": "Agent · create_agent"
+            },
+            {
+              "value": "deep",
+              "label": "Deep agent · create_deep_agent"
+            },
+            {
+              "value": "custom",
+              "label": "Custom · hand-written node"
+            }
+          ]
+        },
+        {
+          "key": "systemPrompt",
+          "kind": "textarea",
+          "label": "System prompt",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rulesMode",
+          "kind": "select",
+          "label": "Rules mode",
+          "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
+          "required": false,
+          "defaultValue": "extend",
+          "options": [
+            {
+              "value": "extend",
+              "label": "Add to the built-in rules"
+            },
+            {
+              "value": "replace",
+              "label": "Replace the built-in rules"
+            }
+          ]
+        },
+        {
+          "key": "subagentsNote",
+          "kind": "readonly",
+          "label": "Delegation",
+          "hint": "",
+          "required": false,
+          "defaultValue": "On the deep agent runtime this agent can hand work to a named worker and get one answer back. It already carries one, \"general-purpose\", with this agent's own tools; declare a subagent of that name to replace it. A worker is given a task and reports a result — it never sees this agent's conversation or the workflow's state, though the run's context does reach its tools."
+        },
+        {
+          "key": "subagents",
+          "kind": "repeatable-group",
+          "label": "Subagents",
+          "hint": "Deep agent runtime only. Each subagent is a separate worker: it is given a task and reports a result, and never sees this agent's conversation.",
+          "required": false,
+          "defaultValue": []
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "annotate.group",
+      "kind": "container",
+      "category": "annotate",
+      "scope": "app",
+      "label": "Group",
+      "description": "Frames related nodes together.",
+      "ports": [],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "notes",
+        "title"
+      ],
+      "fields": [
+        {
+          "key": "title",
+          "kind": "text",
+          "label": "Title",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "notes",
+          "kind": "textarea",
+          "label": "Notes",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "annotate.note",
+      "kind": "annotation",
+      "category": "annotate",
+      "scope": "app",
+      "label": "Note",
+      "description": "A Markdown note on the canvas.",
+      "ports": [],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "body"
+      ],
+      "fields": [
+        {
+          "key": "body",
+          "kind": "textarea",
+          "label": "Note",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "function.format_report",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Format Report",
+      "description": "Joins worker results into one Markdown report.",
+      "ports": [
+        {
+          "id": "candidate",
+          "direction": "in",
+          "type": "result",
+          "label": "candidate",
+          "required": true,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "report",
+          "direction": "out",
+          "type": "result",
+          "label": "report",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "reportTitle",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "reportTitle",
+          "kind": "text",
+          "label": "Report title",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "guard.check",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Guard",
+      "description": "Runs a package function against the candidate and routes pass/revise. No model.",
+      "ports": [
+        {
+          "id": "candidate",
+          "direction": "in",
+          "type": "result",
+          "label": "candidate",
+          "required": false,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "pass",
+          "direction": "out",
+          "type": "result",
+          "label": "pass",
+          "required": false,
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "revise",
+          "direction": "out",
+          "type": "feedback",
+          "label": "revise",
+          "required": false,
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "feedback"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "check",
+        "maxAttempts",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "check",
+          "kind": "text",
+          "label": "Check",
+          "hint": "The package function to run, named the way `function.<name>` names it — this node calls that same function, not a model. It is called as `fn(text)`, or as `fn(text, summary)` when you write a second parameter. It returns \"\" for pass or a non-empty string for the feedback sent back on `revise`. Three checks need no function behind them: `numbers_in_prose` (every figure in the answer came from something this run retrieved), `row_counts_in_prose` (a figure that came from a bare COUNT(*) is published as rows, not as things) and `zero_outside_coverage` (an answer reporting none of something asked about a period the table says it does not hold — so the zero is not a measurement). A package function of the same name still wins. Write it with a second parameter — `fn(text, summary)` — and it also receives this run’s record of its own tool calls: how many were made, how many came back, and the last failure’s tool and message, so a check can say “no evidence arrived” instead of arguing with the prose. That record also carries `summary.retrieved` — every statement this run sent and what came back, each with `node`, `tool`, `statement`, `result` and `truncated` — and `summary.contains(value)`, so a check can refuse a figure or a name that appears in no row the run actually fetched. One parameter still works and is still the contract.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxAttempts",
+          "kind": "slider",
+          "label": "Max attempts",
+          "hint": "Candidates this guard will check before it passes one through regardless — checks, not send-backs, so it is one more than the number of times you want the answer sent back: 2 = one revision, 1 = never sends it back. Its own budget, like a grader’s.",
+          "required": false,
+          "defaultValue": 3
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "guard.policy",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Guardrail",
+      "description": "Applies a PII policy to whatever passes through, and refuses what it must.",
+      "ports": [
+        {
+          "id": "content",
+          "direction": "in",
+          "type": "result",
+          "label": "content",
+          "required": false,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "allowed",
+          "direction": "out",
+          "type": "result",
+          "label": "allowed",
+          "required": false,
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "blocked",
+          "direction": "out",
+          "type": "result",
+          "label": "blocked",
+          "required": false,
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "blockedMessage",
+        "cacheTtlSeconds",
+        "maxRetries",
+        "policy",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "policy",
+          "kind": "repeatable-group",
+          "label": "Policy",
+          "hint": "",
+          "required": false,
+          "defaultValue": [
+            {
+              "id": "g1",
+              "entity": "email",
+              "strategy": "redact",
+              "detector": ""
+            },
+            {
+              "id": "g2",
+              "entity": "credit_card",
+              "strategy": "block",
+              "detector": ""
+            }
+          ]
+        },
+        {
+          "key": "policyNote",
+          "kind": "readonly",
+          "label": "What the machinery already does",
+          "hint": "",
+          "required": false,
+          "defaultValue": "Detection is LangChain’s: credit cards are Luhn-checked, and this node never runs a pattern of ours. Direction is where you place this node — after Input, or before Output — not a setting. A blocked message leaves by the blocked port; the default refusal names the category and never the value. These shapes are not prompt-injection screening."
+        },
+        {
+          "key": "blockedMessage",
+          "kind": "textarea",
+          "label": "Your refusal message",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "human.approval",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Human approval",
+      "description": "Pauses the run and waits for a person to approve or reject the candidate.",
+      "ports": [
+        {
+          "id": "candidate",
+          "direction": "in",
+          "type": "result",
+          "label": "candidate",
+          "required": false,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "approved",
+          "direction": "out",
+          "type": "result",
+          "label": "approved",
+          "required": false,
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "rejected",
+          "direction": "out",
+          "type": "feedback",
+          "label": "rejected",
+          "required": false,
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "feedback"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "message",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "message",
+          "kind": "textarea",
+          "label": "Prompt shown to the reviewer",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "input.markdown",
+      "kind": "standard",
+      "category": "inputs",
+      "scope": "app",
+      "label": "Markdown File",
+      "description": "A Markdown instruction file for the agent.",
+      "ports": [
+        {
+          "id": "skill",
+          "direction": "out",
+          "type": "skill",
+          "label": "skill",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "skill"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "content",
+        "filename",
+        "instruction",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "filename",
+          "kind": "file",
+          "label": "Markdown file",
+          "hint": "",
+          "required": false,
+          "defaultValue": "agent-skill.md"
+        },
+        {
+          "key": "instruction",
+          "kind": "textarea",
+          "label": "Instruction",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "input.skill",
+      "kind": "standard",
+      "category": "inputs",
+      "scope": "app",
+      "label": "Skill",
+      "description": "A named rules layer, written from a standard template.",
+      "ports": [
+        {
+          "id": "skill",
+          "direction": "out",
+          "type": "skill",
+          "label": "skill",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "skill"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "instruction",
+        "maxRetries",
+        "skillDescription",
+        "skillName",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "skillName",
+          "kind": "text",
+          "label": "Name",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "skillDescription",
+          "kind": "textarea",
+          "label": "Description",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "instruction",
+          "kind": "textarea",
+          "label": "Instructions",
+          "hint": "",
+          "required": false,
+          "defaultValue": "## Purpose\n\n{{what this skill makes the agent good at}}\n\n## Rules\n\n- {{the first rule the agent must follow}}\n\n## Conventions\n\n{{formats, names, units the agent must always use — delete this section if there are none}}\n"
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "input.text",
+      "kind": "standard",
+      "category": "inputs",
+      "scope": "app",
+      "label": "Text Input",
+      "description": "The starting prompt for the flow.",
+      "ports": [
+        {
+          "id": "text",
+          "direction": "out",
+          "type": "text",
+          "label": "text",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "prompt",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "prompt",
+          "kind": "textarea",
+          "label": "Prompt",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "memory.segment",
+      "kind": "standard",
+      "category": "memory",
+      "scope": "app",
+      "label": "Memory segment",
+      "description": "Records what crosses it, and hands the segment’s earlier entries to whatever comes next.",
+      "ports": [
+        {
+          "id": "crossing",
+          "direction": "in",
+          "type": "result",
+          "label": "crossing",
+          "required": false,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "onward",
+          "direction": "out",
+          "type": "result",
+          "label": "onward",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "retention",
+        "segment",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "segment",
+          "kind": "text",
+          "label": "Segment",
+          "hint": "The same name at several positions is one ledger, shared across every run of this workflow.",
+          "required": false,
+          "defaultValue": "notes"
+        },
+        {
+          "key": "retention",
+          "kind": "text",
+          "label": "Keep the last",
+          "hint": "Entries. Leave empty to keep everything — there is no number here that means unbounded.",
+          "required": false,
+          "defaultValue": "20"
+        },
+        {
+          "key": "segmentNote",
+          "kind": "readonly",
+          "label": "What the machinery already does",
+          "hint": "",
+          "required": false,
+          "defaultValue": "Every crossing does three things, in this order: it furnishes what the segment already holds into what flows onward, appends what arrived, and passes it all on. The heading and the numbering of the injected block are the machinery’s. Nothing here calls a model, so a crossing costs no tokens. The ledger is keyed by the segment name and this workflow, so the same name at several positions is one ledger, and it survives a restart. A Guardrail placed after this node scrubs what flows onward, not what was already recorded."
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "orchestrate.supervisor",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Orchestrator",
+      "description": "Splits an instruction into subtasks and fans them out to workers.",
+      "ports": [
+        {
+          "id": "instruction",
+          "direction": "in",
+          "type": "text",
+          "label": "instruction",
+          "required": true,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "feedback",
+          "direction": "in",
+          "type": "feedback",
+          "label": "feedback",
+          "required": false,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "feedback"
+          ]
+        },
+        {
+          "id": "skill",
+          "direction": "in",
+          "type": "skill",
+          "label": "skill",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "skill"
+          ]
+        },
+        {
+          "id": "workers",
+          "direction": "out",
+          "type": "worker",
+          "label": "workers",
+          "required": true,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "worker"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": true,
+      "accepts_skill": true,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "maxSubtasks",
+        "model",
+        "reasoningEffort",
+        "rules",
+        "rulesMode",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "model",
+          "kind": "select",
+          "label": "Model",
+          "hint": "Leave on the workflow default unless this step needs a different model.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "reasoningEffort",
+          "kind": "select",
+          "label": "Reasoning",
+          "hint": "Sent only to models that support it; the run reports it if it could not be.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxSubtasks",
+          "kind": "slider",
+          "label": "Max subtasks",
+          "hint": "",
+          "required": false,
+          "defaultValue": 8
+        },
+        {
+          "key": "rules",
+          "kind": "textarea",
+          "label": "Planning rules",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rulesMode",
+          "kind": "select",
+          "label": "Rules mode",
+          "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
+          "required": false,
+          "defaultValue": "extend",
+          "options": [
+            {
+              "value": "extend",
+              "label": "Add to the built-in rules"
+            },
+            {
+              "value": "replace",
+              "label": "Replace the built-in rules"
+            }
+          ]
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "orchestrate.worker",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Worker",
+      "description": "Runs one subtask dispatched by an orchestrator.",
+      "ports": [
+        {
+          "id": "dispatch",
+          "direction": "in",
+          "type": "worker",
+          "label": "dispatch",
+          "required": true,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "worker"
+          ]
+        },
+        {
+          "id": "skill",
+          "direction": "in",
+          "type": "skill",
+          "label": "skill",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "skill"
+          ]
+        },
+        {
+          "id": "tools",
+          "direction": "in",
+          "type": "tool",
+          "label": "worker tools",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": true,
+      "accepts_skill": true,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "default",
+        "maxRetries",
+        "model",
+        "reasoningEffort",
+        "role",
+        "rulesMode",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "model",
+          "kind": "select",
+          "label": "Model",
+          "hint": "Leave on the workflow default unless this step needs a different model.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "reasoningEffort",
+          "kind": "select",
+          "label": "Reasoning",
+          "hint": "Sent only to models that support it; the run reports it if it could not be.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "role",
+          "kind": "textarea",
+          "label": "Role",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "default",
+          "kind": "toggle",
+          "label": "Default worker",
+          "hint": "",
+          "required": false,
+          "defaultValue": false
+        },
+        {
+          "key": "rulesMode",
+          "kind": "select",
+          "label": "Rules mode",
+          "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
+          "required": false,
+          "defaultValue": "extend",
+          "options": [
+            {
+              "value": "extend",
+              "label": "Add to the built-in rules"
+            },
+            {
+              "value": "replace",
+              "label": "Replace the built-in rules"
+            }
+          ]
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "output.formatted",
+      "kind": "standard",
+      "category": "output",
+      "scope": "app",
+      "label": "Formatted Output",
+      "description": "Renders the result as Markdown.",
+      "ports": [
+        {
+          "id": "result",
+          "direction": "in",
+          "type": "result",
+          "label": "result",
+          "required": true,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "format",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "format",
+          "kind": "select",
+          "label": "Format",
+          "hint": "",
+          "required": false,
+          "defaultValue": "markdown",
+          "options": [
+            {
+              "value": "markdown",
+              "label": "Markdown"
+            },
+            {
+              "value": "plain",
+              "label": "Plain text"
+            },
+            {
+              "value": "json",
+              "label": "JSON"
+            }
+          ]
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "output.static",
+      "kind": "standard",
+      "category": "output",
+      "scope": "app",
+      "label": "Static Output",
+      "description": "Prints a sentence you write — for a branch that must say something.",
+      "ports": [
+        {
+          "id": "when",
+          "direction": "in",
+          "type": "result",
+          "label": "when",
+          "required": true,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "text",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "text",
+          "kind": "textarea",
+          "label": "Text",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "resolve.source",
+      "kind": "standard",
+      "category": "resolve",
+      "scope": "app",
+      "label": "Resolve source",
+      "description": "Names which of the stores that could answer this question is answering it, before the model picks, and lists the alternatives it did not take. No model call.",
+      "ports": [
+        {
+          "id": "question",
+          "direction": "in",
+          "type": "result",
+          "label": "question",
+          "required": true,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "catalogue",
+        "maxRetries",
+        "quantity",
+        "timeoutSeconds",
+        "whenUndecided"
+      ],
+      "fields": [
+        {
+          "key": "catalogue",
+          "kind": "text",
+          "label": "Catalogue",
+          "hint": "The package function this node asks, named the way `function.<name>` names it. It is called as `fn(question)`, once, and returns the systems of record that could answer it — a name is enough, and a row that marks itself the default settles which one is used.",
+          "required": true,
+          "defaultValue": ""
+        },
+        {
+          "key": "quantity",
+          "kind": "text",
+          "label": "Figures",
+          "hint": "What the figures are, in your words. “Which source?” is only answerable about something — the same warehouse answers supply from one system of record and outages from another — and this is the phrase the disclosure names.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "whenUndecided",
+          "kind": "textarea",
+          "label": "When nothing settles it",
+          "hint": "Carried downstream when several systems of record are live and none is named or default. The coverage report itself is not optional: a figure with no stated source reads exactly like a figure from the wrong one, which is the defect this node exists to close.",
+          "required": false,
+          "defaultValue": "More than one system of record can answer this and none is declared the default. Say which ones are live and ask which is meant, rather than choosing one and presenting its figures as the figures."
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "resolve.vocabulary",
+      "kind": "standard",
+      "category": "resolve",
+      "scope": "app",
+      "label": "Resolve vocabulary",
+      "description": "Looks up what the question’s words mean in this domain before the model runs, and reports what it covered as well as what it found. No model call.",
+      "ports": [
+        {
+          "id": "question",
+          "direction": "in",
+          "type": "result",
+          "label": "question",
+          "required": true,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxEntries",
+        "maxRetries",
+        "source",
+        "timeoutSeconds",
+        "whenUncovered"
+      ],
+      "fields": [
+        {
+          "key": "source",
+          "kind": "text",
+          "label": "Source",
+          "hint": "The package function this node searches, named the way `function.<name>` names it. It is called as `fn(phrase)`, once per derived phrase, concurrently, and returns the entries it holds for that phrase. Give it a `coverage` attribute and this node can say a term is genuinely uncovered instead of merely unmatched.",
+          "required": true,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxEntries",
+          "kind": "slider",
+          "label": "Entries kept",
+          "hint": "How many entries survive to the model after ranking. The ranking always runs first — the cap never decides which axis the model sees.",
+          "required": false,
+          "defaultValue": 12
+        },
+        {
+          "key": "whenUncovered",
+          "kind": "textarea",
+          "label": "When nothing is covered",
+          "hint": "Carried downstream when the lookup covered nothing. The coverage report itself is not optional: silence would read exactly like a term that is not ambiguous, which is the defect this node exists to close.",
+          "required": false,
+          "defaultValue": "Nothing in this vocabulary names the term. Say which axis you chose and that nothing declared it, rather than treating the term as unambiguous."
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "route.check",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Check router",
+      "description": "Runs a package function against the candidate and takes the branch it names. No model.",
+      "ports": [
+        {
+          "id": "candidate",
+          "direction": "in",
+          "type": "result",
+          "label": "candidate",
+          "required": false,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "fallback",
+          "direction": "out",
+          "type": "result",
+          "label": "fallback",
+          "required": false,
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [
+        {
+          "prefix": "branch:",
+          "direction": "out",
+          "type": "result",
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "branches",
+        "cacheTtlSeconds",
+        "check",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "check",
+          "kind": "text",
+          "label": "Check",
+          "hint": "The package function to run, named the way `function.<name>` names it — this node calls that same function, not a model. It is called as `fn(text)`. It returns the name of one of the branches below; anything else, including nothing at all, leaves by the `fallback` port. That is a port and not a field — you wire it like any other edge, unlike the classifier’s `fallback`, which is a field naming a branch. Left unwired, a verdict this node does not recognise has nowhere to go: the run takes whichever destination happens to be first and records the loss. A branch’s own id is accepted as well as its name, and case and surrounding space are forgiven.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "branches",
+          "kind": "repeatable-group",
+          "label": "Branches",
+          "hint": "",
+          "required": false,
+          "defaultValue": [
+            {
+              "id": "b1",
+              "name": "ask_back"
+            },
+            {
+              "id": "b2",
+              "name": "answer"
+            }
+          ]
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "route.classifier",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Router",
+      "description": "Classifies the input and sends it down one branch — or, in parallel, down every branch that matches.",
+      "ports": [
+        {
+          "id": "question",
+          "direction": "in",
+          "type": "text",
+          "label": "question",
+          "required": false,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "skill",
+          "direction": "in",
+          "type": "skill",
+          "label": "skill",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "skill"
+          ]
+        },
+        {
+          "id": "feedback",
+          "direction": "in",
+          "type": "feedback",
+          "label": "feedback",
+          "required": false,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "feedback"
+          ]
+        }
+      ],
+      "dynamic_ports": [
+        {
+          "prefix": "branch:",
+          "direction": "out",
+          "type": "text",
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "text"
+          ]
+        }
+      ],
+      "drives_model": true,
+      "accepts_skill": true,
+      "editor_only": false,
+      "field_keys": [
+        "branches",
+        "cacheTtlSeconds",
+        "fallback",
+        "matchMode",
+        "maxRetries",
+        "model",
+        "reasoningEffort",
+        "rules",
+        "rulesMode",
+        "tier",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "model",
+          "kind": "select",
+          "label": "Model",
+          "hint": "Leave on the workflow default unless this step needs a different model.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "reasoningEffort",
+          "kind": "select",
+          "label": "Reasoning",
+          "hint": "Sent only to models that support it; the run reports it if it could not be.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rules",
+          "kind": "textarea",
+          "label": "Routing rules",
+          "hint": "",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rulesMode",
+          "kind": "select",
+          "label": "Rules mode",
+          "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
+          "required": false,
+          "defaultValue": "extend",
+          "options": [
+            {
+              "value": "extend",
+              "label": "Add to the built-in rules"
+            },
+            {
+              "value": "replace",
+              "label": "Replace the built-in rules"
+            }
+          ]
+        },
+        {
+          "key": "branches",
+          "kind": "repeatable-group",
+          "label": "Branches",
+          "hint": "",
+          "required": false,
+          "defaultValue": [
+            {
+              "id": "b1",
+              "name": "dataquery"
+            },
+            {
+              "id": "b2",
+              "name": "info"
+            },
+            {
+              "id": "b3",
+              "name": "help"
+            },
+            {
+              "id": "b4",
+              "name": "greeting"
+            },
+            {
+              "id": "b5",
+              "name": "off_topic"
+            }
+          ]
+        },
+        {
+          "key": "fallback",
+          "kind": "text",
+          "label": "Fallback branch",
+          "hint": "",
+          "required": false,
+          "defaultValue": "off_topic"
+        },
+        {
+          "key": "matchMode",
+          "kind": "select",
+          "label": "When several branches match",
+          "hint": "Either way the destinations are the ones drawn on this node: “Run the best one” takes a single branch, “Run every match” takes each branch that matched and they run in parallel. Neither invents a destination. When how many pieces of work there are is only known during the run — one worker repeated as many times as the input needs — that is an Orchestrator, which plans the subtasks and dispatches one per task.",
+          "required": false,
+          "defaultValue": "best",
+          "options": [
+            {
+              "value": "best",
+              "label": "Run the best one"
+            },
+            {
+              "value": "all",
+              "label": "Run every match, in parallel"
+            }
+          ]
+        },
+        {
+          "key": "tier",
+          "kind": "select",
+          "label": "Runtime",
+          "hint": "",
+          "required": false,
+          "defaultValue": "react",
+          "options": [
+            {
+              "value": "react",
+              "label": "Agent · create_agent"
+            },
+            {
+              "value": "deep",
+              "label": "Deep agent · create_deep_agent"
+            },
+            {
+              "value": "custom",
+              "label": "Custom · hand-written node"
+            }
+          ]
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "route.grader",
+      "kind": "standard",
+      "category": "agent",
+      "scope": "app",
+      "label": "Grader",
+      "description": "Checks an answer, and sends it back with feedback if it falls short.",
+      "ports": [
+        {
+          "id": "candidate",
+          "direction": "in",
+          "type": "result",
+          "label": "candidate",
+          "required": false,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "skill",
+          "direction": "in",
+          "type": "skill",
+          "label": "skill",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "skill"
+          ]
+        },
+        {
+          "id": "pass",
+          "direction": "out",
+          "type": "result",
+          "label": "pass",
+          "required": false,
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "revise",
+          "direction": "out",
+          "type": "feedback",
+          "label": "revise",
+          "required": false,
+          "max_connections": 1,
+          "branch": true,
+          "accepts": [
+            "feedback"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": true,
+      "accepts_skill": true,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "criteria",
+        "maxAttempts",
+        "maxRetries",
+        "model",
+        "reasoningEffort",
+        "rubric",
+        "rulesMode",
+        "tier",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "model",
+          "kind": "select",
+          "label": "Model",
+          "hint": "Leave on the workflow default unless this step needs a different model.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "reasoningEffort",
+          "kind": "select",
+          "label": "Reasoning",
+          "hint": "Sent only to models that support it; the run reports it if it could not be.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rubric",
+          "kind": "repeatable-group",
+          "label": "Rubric",
+          "hint": "",
+          "required": false,
+          "defaultValue": null
+        },
+        {
+          "key": "criteria",
+          "kind": "textarea",
+          "label": "Your criteria",
+          "hint": "Judged against the answer text only — the grader cannot see which tools ran, so ask for what the text shows (a citation is present) rather than what only the run knows (the citation was fetched and verified).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "rulesMode",
+          "kind": "select",
+          "label": "Rules mode",
+          "hint": "Applies to the rules typed here and to any wired skill file. The node’s preamble and output format are never affected.",
+          "required": false,
+          "defaultValue": "extend",
+          "options": [
+            {
+              "value": "extend",
+              "label": "Add to the built-in rules"
+            },
+            {
+              "value": "replace",
+              "label": "Replace the built-in rules"
+            }
+          ]
+        },
+        {
+          "key": "maxAttempts",
+          "kind": "slider",
+          "label": "Max attempts",
+          "hint": "Candidates this grader will judge — not revisions, so it is one more than the number of times you want the answer sent back: 2 = one revision, 1 = never sends it back. Its own budget; another grader in the same workflow gets its own.",
+          "required": false,
+          "defaultValue": 3
+        },
+        {
+          "key": "tier",
+          "kind": "select",
+          "label": "Runtime",
+          "hint": "",
+          "required": false,
+          "defaultValue": "react",
+          "options": [
+            {
+              "value": "react",
+              "label": "Agent · create_agent"
+            },
+            {
+              "value": "deep",
+              "label": "Deep agent · create_deep_agent"
+            },
+            {
+              "value": "custom",
+              "label": "Custom · hand-written node"
+            }
+          ]
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.chinook-execute-sql",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Execute SQL Query",
+      "description": "Executes a SQL SELECT query against the Chinook database and returns results.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "maxRows",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRows",
+          "kind": "slider",
+          "label": "Max rows",
+          "hint": "",
+          "required": false,
+          "defaultValue": 100
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.chinook-get-all-tables",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "List All Tables",
+      "description": "Returns every table in the Chinook database, with row counts.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.chinook-get-schema",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "workflow",
+      "label": "Get Table Schema",
+      "description": "Retrieves the schema (columns, types and foreign keys) of whichever Chinook table the agent asks about.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.databricks-query",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Run Databricks Query",
+      "description": "Runs one read-only SELECT against a Databricks SQL warehouse and returns the rows as a table. Only tables the allowlist pinned may be named.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "allowlist",
+        "cacheTtlSeconds",
+        "httpPath",
+        "maxRetries",
+        "maxRows",
+        "pins",
+        "serverHostname",
+        "timeoutSeconds",
+        "token"
+      ],
+      "fields": [
+        {
+          "key": "serverHostname",
+          "kind": "text",
+          "label": "Hostname variable",
+          "hint": "The name of an environment variable holding the workspace hostname (dbc-1234.cloud.databricks.com) — never the hostname itself. Unset at run time, the tool refuses by name and sends nothing.",
+          "required": true,
+          "defaultValue": "DATABRICKS_SERVER_HOSTNAME"
+        },
+        {
+          "key": "httpPath",
+          "kind": "text",
+          "label": "HTTP path variable",
+          "hint": "The name of an environment variable holding the warehouse HTTP path (/sql/1.0/warehouses/…). A name, not the path, so all three connection fields read the same way.",
+          "required": true,
+          "defaultValue": "DATABRICKS_HTTP_PATH"
+        },
+        {
+          "key": "token",
+          "kind": "text",
+          "label": "Token variable",
+          "hint": "The name of an environment variable holding a personal access token — never the token, because a workflow document is committed. A pasted token is refused as a value and is not echoed back, even though it is also a legal variable name.",
+          "required": true,
+          "defaultValue": "DATABRICKS_TOKEN"
+        },
+        {
+          "key": "allowlist",
+          "kind": "text",
+          "label": "Allowlist YAML",
+          "hint": "A YAML file whose resolvers carry “pin:” maps, given relative to the workflows root. The pinned values are the only tables a query may name; anything else is refused with the list. The path is resolved under the workflows root and one that lands outside the workflows root is refused — this is not a convention, it is where the file has to be. Without this the tool refuses every query.",
+          "required": true,
+          "defaultValue": "",
+          "path_root": "workflows"
+        },
+        {
+          "key": "pins",
+          "kind": "text",
+          "label": "Table scope",
+          "hint": "Resolver keys from the allowlist, comma-separated — the only ones this binding may read. Leave blank for every resolver in the file. A mounted specialist sharing one allowlist with its siblings names its own here; the refusal, and the schema the model is offered, then list only these tables.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRows",
+          "kind": "text",
+          "label": "Max rows",
+          "hint": "Ceiling on rows returned. Leave blank for the tool’s own default.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.email-send",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Email Send",
+      "description": "Sends a report to the address configured here — the model writes subject and body, never the recipient. Dry-run (.eml to the outbox in the state directory, named in the result) unless SMTP is configured.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds",
+        "to"
+      ],
+      "fields": [
+        {
+          "key": "to",
+          "kind": "text",
+          "label": "Recipient",
+          "hint": "The fixed destination. Agents cannot re-address the mail.",
+          "required": true,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.knowledge-lookup",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Knowledge",
+      "description": "The workflow’s second brain: agents look up per-topic procedural knowledge (table meanings, column semantics, JOIN rules) on demand — never stuffed into the prompt. “Build second brain” on the card writes the docs at build time; a run only ever reads them. The lookup binds to every agent in the package automatically whenever knowledge/ is non-empty — this card is where you see and build the docs, not what connects them.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.mcp",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "MCP server",
+      "description": "Binds every tool a Model Context Protocol server offers onto an agent — the LangChain docs, an internal service, anything that speaks MCP over HTTP.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "servers",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "servers",
+          "kind": "repeatable-group",
+          "label": "Servers",
+          "hint": "Each row is one server. All of their tools reach whatever this node is wired to.",
+          "required": false,
+          "defaultValue": [
+            {
+              "id": "mcp1",
+              "server": "",
+              "url": "",
+              "transport": "streamable_http",
+              "authKind": "none",
+              "authHeaderName": "",
+              "authTokenEnv": "",
+              "tools": ""
+            }
+          ]
+        },
+        {
+          "key": "mcpGuide",
+          "kind": "readonly",
+          "label": "One node, one consumer",
+          "hint": "",
+          "required": false,
+          "defaultValue": "One node per group of servers that share a consumer. Every row’s tools land on the same bus, so an agent wired here can call all of them and choose per task; two agents that need different servers want two of these nodes. Narrow a thirty-tool server with that row’s own filter rather than by splitting it out."
+        },
+        {
+          "key": "mcpNote",
+          "kind": "readonly",
+          "label": "What the machinery already does",
+          "hint": "",
+          "required": false,
+          "defaultValue": "The tools this server offers are discovered fresh every time the workflow compiles, so a server that grows a tool needs no edit here. Leave the tool filter empty to bind all of them, now and later; naming even one freezes this node to that list. The credential is read at bind time from the environment variable you name — the name is saved in this workflow, the value never is. A server that is unreachable, that rejects the credential, or that does not speak MCP costs this agent its tools and says so in the run’s warnings; it never fails the compile. The connection is opened once and held open, so a call costs what the server takes and no handshake. Custom-header authentication carries exactly one header. A row set to it with the header name empty binds no tools; the Check button and the run’s warnings both say so, but nothing does while you type. One header is also all that mcp_servers: in the project config can express, so a server that wants two — a key and a tenant id, or a key beside a workspace header — cannot be named from here at all. Put an endpoint of your own in front of it that adds the rest, and point this row at that."
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.mssql-query",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Run T-SQL Query",
+      "description": "Runs one read-only T-SQL SELECT against an MSSQL database and returns the rows as a table. Only tables the allowlist pinned may be named.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "allowlist",
+        "cacheTtlSeconds",
+        "connection",
+        "maxRetries",
+        "maxRows",
+        "pins",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "connection",
+          "kind": "text",
+          "label": "Connection variable",
+          "hint": "The name of an environment variable holding the ODBC connection string — never the string itself, because a workflow document is committed. Unset at run time, the tool refuses by name and sends nothing.",
+          "required": true,
+          "defaultValue": "OPENSTATEGRAPH_MSSQL_URL"
+        },
+        {
+          "key": "allowlist",
+          "kind": "text",
+          "label": "Allowlist YAML",
+          "hint": "A YAML file whose resolvers carry “pin:” maps, given relative to the workflows root. The pinned values are the only tables a query may name; anything else is refused with the list. The path is resolved under the workflows root and one that lands outside the workflows root is refused — this is not a convention, it is where the file has to be. Without this the tool refuses every query.",
+          "required": true,
+          "defaultValue": "",
+          "path_root": "workflows"
+        },
+        {
+          "key": "pins",
+          "kind": "text",
+          "label": "Table scope",
+          "hint": "Resolver keys from the allowlist, comma-separated — the only ones this binding may read. Leave blank for every resolver in the file. A mounted specialist sharing one allowlist with its siblings names its own here; the refusal, and the schema the model is offered, then list only these tables.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRows",
+          "kind": "text",
+          "label": "Max rows",
+          "hint": "Ceiling on rows returned. Leave blank for the tool’s own default.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.platform-describe-workflow",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Describe Workflow",
+      "description": "One workflow’s docs and structure (read-only).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.platform-grep",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Repo Grep",
+      "description": "Searches repository text (read-only, jailed, capped).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.platform-list-workflows",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "List Workflows",
+      "description": "Lists every workflow on this platform (read-only).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.platform-ls",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Repo ls",
+      "description": "Lists a repository directory (read-only, jailed).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.platform-read-file",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Repo Read File",
+      "description": "Reads one repository text file (read-only, jailed, capped).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.reddit-search",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Search Reddit",
+      "description": "Finds trending posts in a subreddit.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": true,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "subreddit",
+        "timeoutSeconds",
+        "topicLimit"
+      ],
+      "fields": [
+        {
+          "key": "subreddit",
+          "kind": "text",
+          "label": "Subreddit",
+          "hint": "",
+          "required": false,
+          "defaultValue": "reactjs"
+        },
+        {
+          "key": "topicLimit",
+          "kind": "slider",
+          "label": "Topic limit",
+          "hint": "",
+          "required": false,
+          "defaultValue": 10
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.session-identity",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Session Identity",
+      "description": "Who the run belongs to — the user, the session and the thread id. Read-only, and taken from the run rather than from anything said in it.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.sql-get-schema",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Get Schema",
+      "description": "Columns, types and foreign keys for one table in the configured SQL database.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "database",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "database",
+          "kind": "text",
+          "label": "Database file",
+          "hint": "A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.",
+          "required": true,
+          "defaultValue": "",
+          "path_root": "workflows"
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.sql-list-tables",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "List Tables",
+      "description": "Every table in the configured SQL database, with row counts. Orientation first — an agent calls this before it knows what exists.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "database",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "database",
+          "kind": "text",
+          "label": "Database file",
+          "hint": "A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.",
+          "required": true,
+          "defaultValue": "",
+          "path_root": "workflows"
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.sql-query",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Run Query",
+      "description": "Runs one read-only SELECT against the configured SQL database and returns the rows as a table.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "database",
+        "maxRetries",
+        "maxRows",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "database",
+          "kind": "text",
+          "label": "Database file",
+          "hint": "A .sqlite file inside workflows/, relative to the workflows root. Read-only — the driver enforces it, not a regex.",
+          "required": true,
+          "defaultValue": "",
+          "path_root": "workflows"
+        },
+        {
+          "key": "maxRows",
+          "kind": "text",
+          "label": "Max rows",
+          "hint": "Ceiling on rows returned. Leave blank for the tool’s own default; a query asking for more is capped at this.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.validate-workflow",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Validate Workflow",
+      "description": "Compile-checks a workflow document an agent has composed: entry points, routes, tool bindings, warnings and unknown node types. Plans a graph in memory and throws it away — nothing is saved or run.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.web-fetch",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Web Fetch",
+      "description": "Reads one public web page as text (SSRF-guarded).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.web-search",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "Web Search",
+      "description": "Keyless web search (DuckDuckGo); pair with Web Fetch.",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "tool.youtube-transcript",
+      "kind": "standard",
+      "category": "tools",
+      "scope": "app",
+      "label": "YouTube Transcript",
+      "description": "Reads one YouTube video’s captions as plain text (keyless, no timestamps).",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "allowAutoCaptions",
+        "cacheTtlSeconds",
+        "language",
+        "maxChars",
+        "maxRetries",
+        "timeoutSeconds"
+      ],
+      "fields": [
+        {
+          "key": "language",
+          "kind": "text",
+          "label": "Language",
+          "hint": "Preferred caption language. Falls back to the same language family, then to whatever exists.",
+          "required": false,
+          "defaultValue": "en"
+        },
+        {
+          "key": "allowAutoCaptions",
+          "kind": "toggle",
+          "label": "Auto captions",
+          "hint": "",
+          "required": false,
+          "defaultValue": true
+        },
+        {
+          "key": "maxChars",
+          "kind": "slider",
+          "label": "Max characters",
+          "hint": "",
+          "required": false,
+          "defaultValue": 8000
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    },
+    {
+      "type": "workflow.subgraph",
+      "kind": "standard",
+      "category": "compose",
+      "scope": "app",
+      "label": "Workflow",
+      "description": "Another workflow, run as one isolated step — task in, answer out. It brings its own state, tools and knowledge, and by reference: change the original and every mount of it changes.",
+      "ports": [
+        {
+          "id": "input",
+          "direction": "in",
+          "type": "result",
+          "label": "input",
+          "required": true,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ],
+      "dynamic_ports": [],
+      "drives_model": false,
+      "accepts_skill": false,
+      "editor_only": false,
+      "field_keys": [
+        "cacheTtlSeconds",
+        "maxRetries",
+        "outcome",
+        "overrides",
+        "persistence",
+        "timeoutSeconds",
+        "workflow"
+      ],
+      "fields": [
+        {
+          "key": "workflow",
+          "kind": "combobox",
+          "label": "Workflow",
+          "hint": "The package to run here, named by its slug — the folder name the backend minted when it was first saved (workflows/<slug>/), which is also what ?w= carries in the address bar. Pick from the list, or type the slug of a package you have not built yet.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "outcome",
+          "kind": "textarea",
+          "label": "Expected outcome (documentation)",
+          "hint": "Shown on the card so a reader knows what this mount is for. It does not constrain the run — enforcement lives in the mounted workflow’s own grader criteria, and the card says so when that grader is missing or never revises.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "persistence",
+          "kind": "select",
+          "label": "What the child remembers",
+          "hint": "By default this mount is one isolated step: it is handed the task and this conversation so far, and keeps nothing of its own between turns. “Its own conversation” gives the mounted workflow a memory of its own on this thread — it stops being handed this conversation and keeps its own instead, so it can pick up where it left off. Use it for a mounted workflow that is genuinely a running dialogue, and not otherwise: two of these running at the same time write to the same place and conflict. “Nothing at all” keeps no record of the mounted workflow’s run. It can still pause for an approval — but because nothing was kept, answering it runs that workflow again from its first step, so every step before the approval happens a second time.",
+          "required": false,
+          "defaultValue": "per-invocation",
+          "options": [
+            {
+              "value": "per-invocation",
+              "label": "Nothing · a fresh run every time (default)"
+            },
+            {
+              "value": "per-thread",
+              "label": "Its own conversation · across turns on this thread"
+            },
+            {
+              "value": "stateless",
+              "label": "Nothing at all · an approval inside is answered twice over"
+            }
+          ]
+        },
+        {
+          "key": "overrides",
+          "kind": "textarea",
+          "label": "Overrides (this mount only)",
+          "hint": "JSON keyed by child node id. Other mounts keep the package defaults.",
+          "required": false,
+          "defaultValue": "",
+          "json_value": true
+        },
+        {
+          "key": "maxRetries",
+          "kind": "text",
+          "label": "Max retries (override)",
+          "hint": "Blank uses the workflow default (3 attempts).",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "cacheTtlSeconds",
+          "kind": "text",
+          "label": "Cache result for, seconds",
+          "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        }
+      ]
+    }
+  ],
+  "dynamic_type_prefixes": [
+    {
+      "prefix": "tool.",
+      "probe_type": "tool.example",
+      "hint": "a tool node; the suffix names a tool discovered in the workflow package's tools/ folder",
+      "ports": [
+        {
+          "id": "tool",
+          "direction": "out",
+          "type": "tool",
+          "label": "tool",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "tool"
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": "function.",
+      "probe_type": "function.example",
+      "hint": "a function node; the suffix names a callable in the workflow package's functions/ folder",
+      "ports": [
+        {
+          "id": "text",
+          "direction": "in",
+          "type": "result",
+          "label": "text",
+          "required": true,
+          "max_connections": 1,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        },
+        {
+          "id": "result",
+          "direction": "out",
+          "type": "result",
+          "label": "result",
+          "required": false,
+          "max_connections": null,
+          "branch": false,
+          "accepts": [
+            "result",
+            "text"
+          ]
+        }
+      ]
+    }
+  ]
+}

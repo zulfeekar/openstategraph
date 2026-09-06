@@ -1,0 +1,100 @@
+name: Bug report
+description: Something in the editor, compiler or runtime behaves incorrectly.
+title: '[bug]: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please do not paste API keys, `.env` contents,
+        or any workflow data you would not publish.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the stack is misbehaving?
+      options:
+        - Editor / canvas (src/)
+        - Compiler (workflow.json → StateGraph)
+        - Backend runtime / API (backend/)
+        - Chat, concierge or Workflow Architect
+        - A shipped workflow (workflows/)
+        - Docs, build or CI
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you observed, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >
+        Numbered steps. If a graph is involved, attach the exported
+        `workflow.json` (File → Export) rather than a screenshot of it.
+      placeholder: |
+        1. Start the backend with `scripts/dev.sh`
+        2. Open the seeded demo
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or errors
+      description: >
+        Browser console and/or backend output. Set `OPENSTATEGRAPH_LOG_LEVEL=DEBUG`
+        for a verbose backend log. This is rendered as a code block — no backticks needed.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Release tag, or `git rev-parse --short HEAD`.
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Node version, Python version, browser.
+      placeholder: 'macOS 15.5, Node 22.11, Python 3.13, Chrome 140'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model provider in use
+      options:
+        - Mock (offline)
+        - Ollama cloud (default — OLLAMA_API_KEY)
+        - Ollama, my own daemon (OLLAMA_HOST)
+        - Anthropic
+        - OpenAI
+        - Not applicable
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for a duplicate.
+          required: true
+        - label: >
+            If this is a model-quality problem, I reproduced it on a cloud model —
+            not a small local one (see the "Ollama means Ollama cloud" rule in `CLAUDE.md`).
+          required: false

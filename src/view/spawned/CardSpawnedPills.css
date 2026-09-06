@@ -1,0 +1,42 @@
+/* ---------- Spawned-child rail ----------
+ *
+ * `canvas-feels-right/07`. Everything about this block is the ticket's
+ * layout boundary, so it is worth stating rather than reading off:
+ *
+ *   `position: absolute` — the rail is outside the card's border box, so
+ *   `NodeCard`'s own `getBoundingClientRect()` does not see it. That is what
+ *   lets a chip hang off a card while the card's measured height, its port
+ *   coordinates, and the height `applyMeasuredSize` writes into the document
+ *   all stay exactly where the user left them.
+ *
+ *   `bottom: 100%` — above the top edge. The bottom edge is taken by the
+ *   ports footer and by `.node__pill`, which straddles it and is measured as
+ *   a port anchor.
+ *
+ *   `flex-wrap: wrap` with `align-content: end` — forty children are forty
+ *   chips, growing upward away from the card. A horizontal scroller would
+ *   hide the tail at exactly the moment the count is the point.
+ *
+ *   `pointer-events` — the rail itself is transparent to the pointer so a
+ *   marquee selection or a pan that crosses the empty space beside a chip
+ *   still reaches the paper; only the chips themselves take a click.
+ */
+
+.node__spawned {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  /* Bounded by the card so a long row grows upward rather than sideways into
+   * a neighbour the user placed. */
+  width: 100%;
+  padding-bottom: var(--space-1-5);
+  display: flex;
+  flex-wrap: wrap;
+  align-content: end;
+  gap: var(--space-1);
+  pointer-events: none;
+}
+
+.node__spawned > * {
+  pointer-events: auto;
+}

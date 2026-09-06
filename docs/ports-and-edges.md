@@ -1,0 +1,392 @@
+# Ports and edges
+
+Reference for the type system that decides what you are allowed to draw.
+
+A port *type* is a first-class registered concept, not a string on a node,
+because three separate concerns must agree about it: whether a connection is
+valid, what glyph and colour appear beside the port, and how the engine
+coerces the value flowing across the link.
+
+**A port id is not a data key.** They are separate namespaces on the same node:
+a port id names a socket a wire lands in, a data key names a field somebody
+types into. `orchestrate.supervisor` had both spellings collide — its factory
+read `data["instruction"]` while `instruction` was only ever its input port —
+so its rules were read from something no card could write, silently, for as
+long as the node existed. Reusing one name for both is now a test failure
+(`backend/tests/test_data_key_contract.py`), not a style note.
+
+---
+
+## Port types
+
+Declared in [`src/nodes/vocabulary.ts`](../src/nodes/vocabulary.ts); a plugin
+can register more without touching the editor.
+
+| Type | Accent | Carries | Produced by | Consumed by |
+| --- | --- | --- | --- | --- |
+| `text` | amber | a prompt or question | `input.text`, each `route.classifier` branch | `agent.llm.prompt`, `orchestrate.supervisor.instruction`, `route.classifier.question` |
+| `skill` | orange | a system instruction that shapes behaviour | `input.skill`, `input.markdown` | the `skill` port of all five model-driven types: `agent.llm`, `route.classifier`, `route.grader`, `orchestrate.supervisor`, `orchestrate.worker` |
+| `tool` | violet | a callable handle | every tool node's `tool` port | `agent.llm.tools`, `orchestrate.worker.tools` |
+| `result` | green | a finished answer | `agent.llm.result`, `orchestrate.worker.result`, `route.grader.pass`, `guard.check.pass`, `route.check.fallback` (and its `branch:<id>` outputs), `function.format_report.report`, `human.approval.approved`, `guard.policy.allowed`, `guard.policy.blocked`, `memory.segment.onward`, `resolve.source.result`, `resolve.vocabulary.result`, `workflow.subgraph.result` | `route.grader.candidate`, `guard.check.candidate`, `route.check.candidate`, `function.format_report.candidate`, `human.approval.candidate`, `guard.policy.content`, `memory.segment.crossing`, `output.formatted.result`, `output.static.when`, `resolve.source.question`, `resolve.vocabulary.question`, `workflow.subgraph.input` |
+| `feedback` | red | a rejection, travelling **upstream** | `route.grader.revise`, `guard.check.revise`, `human.approval.rejected` | `agent.llm.feedback`, `orchestrate.supervisor.feedback`, `route.classifier.feedback` |
+| `worker` | blue | a fan-out *declaration* | `orchestrate.supervisor.workers` | `orchestrate.worker.dispatch` |
+
+### Two node types produce `skill`, and the difference is not cosmetic
+
+- **`input.skill`** ("Skill") is a *named* rules layer. It carries a name, a
+  description and a body written from a three-section template, and it lands on
+  the canvas already filled in. Use it when the rules are the point — the thing
+  you would otherwise paste into five agents' prompt fields.
+- **`input.markdown`** stays exactly what its name says: an arbitrary Markdown
+  file. Use it when you happen to have a document and want an agent to read it.
+
+Both compile through one backend builder, and what travels down the wire is the
+body in both cases. They are two node types rather than one node with a mode
+because a skill has an identity a picker and an exporter can use, and a
+Markdown file does not — argued in
+[`decisions/skill-layer.md`](decisions/skill-layer.md), which also covers where
+a skill lands in the composed prompt (it extends or replaces the **rules**,
+never the preamble and never the output contract) and the five model-driven
+node types that carry a `skill` port at all.
+
+### Compatibility, at two granularities
+
+A connection is legal if **either** holds:
+
+1. **The type accepts the type.** `IPortTypeDefinition.accepts` defaults to
+   "only itself". `result` declares `accepts: [PORT.result, PORT.text]`, so a
+   plain text input can be wired straight to an output node while a graph is
+   being sketched.
+2. **The individual port opts in.** `IPortDescriptor.accepts` widens *one*
+   port without widening its type for everyone. `agent.llm.prompt`,
+   `route.classifier.question` and `orchestrate.supervisor.instruction` each
+   declare `accepts: [PORT.text, PORT.result]` — which is what makes prompt
+   chaining drawable without every `text` input in the catalogue silently
+   gaining the same affordance.
+
+Both are **consumer-declared and additive**: a port may open itself up beyond
+what its type allows.
+
+There is a third mechanism, and it goes the other way. `IPortDescriptor`'s
+**`sourceMustDeclare`** *narrows* one port — it refuses any source that does
+not itself declare an input of a named type. `function.format_report.candidate`
+uses it to take edges only from a node that declares a `worker` input, because
+a worker's `result` and an agent's `result` are the same type and the type
+system therefore could not refuse this on its own. The refusal sentence belongs
+to the node, and `sourceCapabilityRule` enforces it.
+
+`'*'` accepts anything, and is meant for pass-through and debug nodes.
+
+---
+
+## Cardinality belongs to the port
+
+There is no node-level "allows multiple edges" flag, because a single node has
+ports of different cardinality at once: an agent's `prompt` takes exactly one
+link, its `tools` bus takes many, its `result` fans out to many.
+
+```
+maxConnections omitted  →  in: 1,  out: unlimited (but a branch output: 1)
+maxConnections: null    →  unlimited, explicitly
+maxConnections: 3       →  three
+```
+
+**A conditional branch output takes one edge**, and it is derived from
+`branch` rather than written out beside each descriptor that declares it
+(`osg-agent-experience/38`). A grader's `revise` drawn to fifteen agents.
+`feedback` saved, validated, compiled and ran — with fourteen of the fifteen
+gone, because `plan.conditional[node][branch]` is a dict and the last edge
+planned wins. The canvas refuses the second wire now, and a document naming
+both is a `branch-fan-out` finding that names the port and every destination.
+Fanning a branch out to several nodes at once is `Send`, which is a decision
+somebody makes rather than a side effect of a dict.
+
+**And a branch with *no* edge is the same mark read the other way**
+(`osg-agent-experience/76`). At the time, `_router_for` fell through to the
+first *wired* destination when a decision named a branch nothing was drawn
+from — a stall there would be a hang rather than an error — so the run did
+not fail, it quietly did another branch's work. `validate` printed VALID for a
+classifier with four such branches and listed all sixteen names under
+`Routes:`, while the editor, opening the same file, showed four diagnostics.
+Any out-port carrying `branch: true` with no edge is an `unwired-branch`
+finding now, naming the node and the branch its author named. **Since
+`osg-agent-experience/80`, the ending depends on the family**: a
+`route.classifier` or `route.check` no longer falls through — the verdict
+takes the declared fallback, or the run stops at the node when none is
+declared — while every other conditional family (a guard, an approval) still
+falls through the way this paragraph originally described, and the finding's
+sentence says whichever is true for the node it names
+(`osg-agent-experience/84`). Two further exceptions, both decided elsewhere:
+`route.check`'s `fallback` keeps its own `unwired-fallback` sentence, because
+that port is where a check's own failure goes; and a grader's `revise` stays
+`unwired_revise`, a report rather than a problem, because a grader-as-recorder
+is a document somebody may mean.
+
+The absent edge is reported at the **branch**, once. The editor names the same
+absence from the other end — *"<node> needs a … input"* — and a door printing
+both would hand a reader two problems to fix and one edge to draw.
+
+`null`, never `Infinity`: a port descriptor is data that reaches
+`workflow.json`, and `JSON.stringify(Infinity)` is `"null"` — the value would
+not survive its own round trip and nothing would report the loss. The resolver
+checks `=== undefined` rather than `!= null`, so an explicit `null` (unlimited)
+and an explicit `0` both mean what they say.
+
+**A bus is an input that declares `maxConnections: null`.** An *output* is
+unlimited without declaring anything, so `orchestrate.supervisor.workers` and
+every tool node's `tool` port fan out freely and are not buses.
+
+Nine inputs are buses today: `agent.llm.tools` and `orchestrate.worker.tools`;
+`function.format_report.candidate`; `output.static.when`; and the `skill` input
+of all five model-driven types — `agent.llm.skill`, `route.classifier.skill`,
+`route.grader.skill`, `orchestrate.supervisor.skill` and
+`orchestrate.worker.skill`. A `skill` input takes many deliberately: layering
+two rules documents onto one agent is the point of the family.
+
+`output.static.when` is the odd one, and it is a bus for a reason none of the
+others share: **it takes many because it reads none of them**. The port is how
+a branch *reaches* that exit, not what the exit prints — so two branches that
+both end in the same fixed reply are one node, and capping it at one link would
+force a second copy of the sentence onto the canvas to say so
+(`osg-agent-experience/55`).
+
+**Prefer varying the number of ports over toggling one port's cardinality.**
+`ports` is a function of node data, so a node whose port *count* depends on
+config just returns a different list — that is how `route.classifier` turns its
+branch field into branch ports. If one port sometimes carried a scalar and
+sometimes a list, its type would change at runtime and every executor would
+have to branch, which is exactly what typed ports exist to prevent.
+
+### The cap counts producers, not links
+
+A cap exists because a slot holds one value, and two producers writing it in
+the same superstep is an ambiguity nothing can resolve. So the number it
+compares against is **how many of a port's incoming links can carry a value in
+one run** — which is not the number of links drawn.
+
+A router takes exactly one of its branches. Three branches converging on one
+agent's `prompt` are three links and one value, and `maxConnections: 1` has no
+objection to them. Two unrelated agents into that same prompt are two links and
+two values, and that is the case the cap is for.
+
+The distinction is structural, never a flag anyone sets on an edge:
+`IPortDescriptor.branch` already declares an output as "one of several mutually
+exclusive ways out", and `concurrentProducers.ts` reads exclusivity back off
+the graph — including through the nodes a branch feeds, which is how three
+different agents behind one router converge on one grader's `candidate`. Two
+producers count as one only when some node's branches decide between them, and
+only when that node genuinely decides whether each of them runs at all.
+
+**The document door asks the same question, and answers smaller.**
+`openstategraph validate` runs `port-overfull` (`osg-agent-experience/43`),
+which counts producers the same way — a document written through the MCP door
+never passes a canvas, and the try project drew fifteen producers into a
+one-slot input with every checker green. Where the two differ is the direction
+they guess in: the canvas over-counts, because refusing a drawable link is
+cheaper than letting two values race; the checker under-counts, because
+accusing a valid document is the one thing it may never do. So a Router in *run
+every match, in parallel* is treated as exclusive there and its branches
+converging on one slot go unreported — `backend/openstategraph/concurrent_producers.py`
+names that gap at the top.
+
+**A node whose branches are not exclusive says so.** A Router set to *run every
+match, in parallel* dispatches to every branch that matched, in one superstep —
+so its branches really can race, and `INodeModel.branchesAreExclusive` is how
+it tells the cap. Absent means exclusive, because that is what `branch` already
+promises; a family that broadcasts opts out.
+
+### Full inputs swap rather than reject
+
+Dropping a link on an occupied **single-slot** input replaces the incumbent —
+re-wiring is the gesture users reach for, and making them delete first is
+friction with no safety benefit. A genuinely full **multi-slot** input rejects,
+because there is no obvious incumbent to displace.
+
+The replacement is still **silent**, and that is a known gap rather than a
+decision: the validator names the link it is about to displace and nothing
+shows the user. It bit hardest when the cap was counting links, because then it
+fired on fan-in that was never ambiguous — `workflow-gallery/77` carries what
+is left.
+
+---
+
+## The rules
+
+Registered in order by `ConnectionValidator`, each independently testable; an
+embedding app can drop one or insert its own.
+
+Seven of them, in this order:
+
+| Order | Rule | Rejects |
+| --- | --- | --- |
+| 10 | `direction` | in→in and out→out; links run output → input |
+| 20 | `self-loop` | a node feeding itself |
+| 30 | `duplicate` | the same pair of ports linked twice |
+| 40 | `type-compatibility` | *"Text output can't feed a Tool input"* |
+| 45 | `source-capability` | a source that does not declare the input `sourceMustDeclare` names — *"only a node that dispatches workers may feed this"* |
+| 50 | `capacity` | more *concurrent producers* than the port allows (a full single-slot input *replaces*) |
+| 60 | `acyclic` | any cycle that does not close on a `feedback` edge |
+
+---
+
+## The two node types no catalogue can list
+
+`tool.<name>` and `function.<name>` are minted per workflow package: the suffix
+is a tool found in that package's `tools/` folder, or a callable found in its
+`functions/` folder. So the *types* are not enumerable — but the **ports** are,
+because one factory mints every member of each namespace.
+
+| Type | Port | Direction | Type | Edges |
+| --- | --- | --- | --- | --- |
+| `tool.<name>` | `tool` | out | `tool` | unlimited |
+| `function.<name>` | `text` | in | `result` | 1 |
+| `function.<name>` | `result` | out | `result` | unlimited |
+
+`function.<name>`'s input takes **one** link, and that is the contract rather
+than a default: the compiled step reads one upstream node's output, so a second
+edge would be a coin toss rather than a fan-in. It is required — a function
+node with nothing wired in reads the run's original question. The node takes no
+config at all; every input is the upstream text.
+
+**The compiler is more tolerant than this table, and that is not permission.**
+A `function.*` type is not in the generated catalogue by name, so the compiler
+resolves its ports by fallback: any in-port id is accepted and `result` alone
+is read as the way out. A document naming `in` therefore compiles — and then
+draws an edge the editor cannot render, because the port it names does not
+exist on the card. Wire `text` and `result`.
+
+Both rows are published rather than left to be discovered:
+`get_node_vocabulary` carries them under `dynamic_type_prefixes`, and
+`openstategraph nodes function.summarise` prints them for a name nothing has
+heard of (`osg-agent-experience/46`).
+
+---
+
+## Edge categories
+
+Four kinds of edge, distinguished by what the target port *means* — not by any
+flag on the edge itself.
+
+**Control** — `text` and `result` links. Ordinary dataflow, and the only
+category that becomes a plain `workflow.json` graph edge and then a static
+LangGraph edge. Router branches are control edges too, but compile to
+`add_conditional_edges`.
+
+**Binding** — `tool` and `skill` links. These do not sequence anything; they
+attach a capability or an instruction to a node. A tool link means "this
+callable is in that agent's toolbox", which is why the tool bus hangs below the
+card rather than sitting in the flow.
+
+**Worker** — `worker` links. A **fan-out declaration, not control flow**. An
+edge landing on `orchestrate.worker.dispatch` becomes a LangGraph `Send`
+dispatch target and is *never* a `workflow.json` graph edge. Each wire from the
+supervisor declares one worker archetype; the supervisor labels every subtask
+with the archetype it should reach.
+
+**Feedback** — `feedback` links. The only edge that legally travels backwards.
+
+---
+
+## Why `feedback` is the only cycle-closer
+
+`acyclicRule` permits a cycle **only** when the closing edge's source port is
+`feedback`. The `feedback` sources are `route.grader.revise`,
+`guard.check.revise` and `human.approval.rejected`; the sinks are
+`agent.llm.feedback`, `orchestrate.supervisor.feedback` and
+`route.classifier.feedback`. Three ways out of a loop and three ways back in,
+and nothing else in the catalogue touches the type — so the type system *is*
+the gate:
+
+- An **accidental** loop stays impossible to draw. Nothing else accepts
+  `feedback`, so there is no wire you can drag by mistake that closes a cycle.
+- A **deliberate** evaluator-optimizer loop is two clicks.
+
+That is stricter than a permission flag and needs no escape hatch. It also
+lands on the same constraint LangGraph reaches from the runtime side: a cycle
+must contain at least one conditional edge, or it can never terminate — and a
+grader is exactly that conditional edge.
+
+The rejection message points at the supported route rather than just saying no:
+*"That would create a loop. Route it through a Grader's 'revise' output
+instead."*
+
+**That gate is the editor's, and the editor is one door of several.** A
+hand-written document, an `openstategraph new` scaffold, an exported package,
+an MCP `compile_workflow` call and the workflow-architect agent all reach the
+compiler without drawing anything, and until `launch-readiness` 177 an
+all-static cycle arriving that way compiled: `openstategraph validate` printed
+`VALID` beside `Routes: none` — its own summary saying the graph has no
+conditional edge — and the run then spent the whole step budget and raised.
+The compiler checks it now, in `always_taken_cycles`, so every door inherits
+it: a loop whose every edge is on `plan.edges` or `plan.fan_out` is a
+`PROBLEMS FOUND` line, a non-zero `validate` exit and a warning at load.
+
+The two are deliberately not one rule mirrored twice. `acyclicRule` is
+stricter — it refuses *every* non-feedback cycle at the moment of drawing,
+including one a router could leave, because a gesture can be repeated
+differently. The compiler refuses only what is provably non-terminating, so
+its flagged set is a subset of the editor's and neither restates the other's
+sentence. A `Send` is not an escape either way: an orchestrator chooses how
+many tasks to dispatch, never whether to stop.
+
+---
+
+## Reading the canvas
+
+A link is tinted by the type of the port it **lands on**. The adapter stamps
+the target port descriptor's accent and type onto the link, and that resolves
+the same CSS variable the port dots use — which is why a link and its two
+endpoints always agree.
+
+Colour is never the only channel. Each type also carries a dash signature, so
+the graph stays readable in greyscale and for colour-blind users:
+
+| Type | Colour | Line |
+| --- | --- | --- |
+| `text` | amber | solid |
+| `result` | green | solid |
+| `skill` | orange | long dash (`7 3`) |
+| `tool` | violet | fine dots (`1.5 3.5`) |
+| `feedback` | red | short urgent dash (`3 3`) |
+| `worker` | blue | dash-dot (`9 3 2 3`) |
+
+During a run, an active link animates its dashes in the direction of flow.
+Hovering deepens a typed link rather than washing it back to grey — losing the
+type on hover would hide the one thing the colour is carrying.
+
+Two appearances for the port itself: `row` (a labelled row in the card footer
+with its dot on the card edge) and `pill` (a detached capsule below the card,
+used for the tool bus where several links converge on one point).
+
+### While you are drawing a link
+
+The moment a link leaves a port, the canvas answers the only question you can
+have: *where may this land?*
+
+- the port you left **ripples** in the hover blue,
+- every port the link may legally land on **ripples** in the valid green and
+  grows its dot,
+- **every other port recedes** to 30% and takes a `not-allowed` cursor.
+
+The legal set is `IEdgeEditor.canConnect` — the same predicate the drop itself
+asks — so the canvas can never invite you onto a target it is about to refuse.
+`ConnectionFeature` marks the ports and `canvas.css` paints them, through
+`is-connecting` on the paper, `is-available` on a legal target's `.joint-port`
+group and `is-dragging` on the origin. Under `prefers-reduced-motion` the
+ripple stops and the colours stay, so the affordance survives without motion.
+
+**This is deliberately a drag-time affordance, not a drop-time one.** Placing a
+node does not light anything up: at that moment you have not said *which* of
+its ports you want to wire, so a drop-time hint would have to light every
+compatible port on the canvas, on every drop — and a canvas that pulses at you
+unprompted teaches people to ignore pulses. The invitation is worth something
+precisely because you asked for it by grabbing a port.
+
+### Flow direction
+
+Ports carry a `side`, defaulting to `left` for inputs and `right` for outputs.
+Switching the canvas to vertical flow rotates every effective side 90°
+clockwise — one rule, no per-port annotations. Flow ports move from the
+left/right edges to top/bottom, and the tool and worker buses swing from
+top/bottom onto the card's flanks, with every existing `side` declaration still
+meaning what it meant, relative to the reading direction.

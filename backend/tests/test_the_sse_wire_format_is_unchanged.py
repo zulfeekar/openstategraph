@@ -1,0 +1,338 @@
+"""The bytes on the wire did not move when the fold went async.
+
+`async-first/02` turns `_run_frames` and `_stream_run` into async generators
+driving `graph.astream()`. Nothing about that is supposed to be visible to a
+client — and "supposed to be" is the part this file replaces with a fact.
+
+**Byte-identical, not shape-identical.** The golden beside this file
+(`data/sse_wire_format_golden.json`) was captured from the *synchronous* fold
+before the migration and committed unchanged, so a green run here is the
+before-and-after comparison the ticket asks for rather than a fresh snapshot
+of whatever the code now does. It is compared as whole frame strings: the
+`event:` line, the `data:` line, the blank line, the key order `json.dumps`
+produced, every escape. A field renamed, reordered or dropped fails here.
+
+That matters more than usual right now. `launch-readiness/110` is open about
+narration frames not reaching the screen, and a second suspect on the same
+seam would cost that investigation a session.
+
+Both audiences are pinned, because the audience split decides what the
+terminal frame carries and a customer's stream is the one nobody is watching
+in a browser while they work.
+
+Regenerating the golden is **not** the fix for a failure here. It records a
+published contract (`docs/api.md`, `FRAME_FIELDS`); if a change genuinely
+means to move it, that is a deliberate edit with its own ticket.
+
+**One field has since been added on purpose, and the golden was still not
+regenerated** (`async-first/07`, 2026-08-27). `interruptible` says whether a
+stop right now cancels the node a frame names. Rewriting the golden would have
+thrown away the thing this file is *for* — a capture taken from the
+synchronous fold, before any of this — and replaced it with a snapshot of
+whatever the code does today, which proves nothing about either migration. So
+the golden stays byte-for-byte as captured, the comparison strips the one
+known addition, and `test_the_only_addition_since_the_golden_is_named` pins
+that it is the *only* one. A second field added without a line here fails
+there rather than passing quietly, which is the whole point.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from conftest import ScriptedGraph, drive_fold  # noqa: E402
+
+from openstategraph.api.audience import Audience  # noqa: E402
+from openstategraph.api.streaming import (  # noqa: E402
+    RUN_EVENTS,
+    TERMINAL_EVENTS,
+    _stream_run,
+)
+from openstategraph.compile.diagnostics import CompileDiagnostics  # noqa: E402
+
+GOLDEN = Path(__file__).parent / "data" / "sse_wire_format_golden.json"
+
+#: The canvas this scripted run belongs to. Four nodes, because the frames
+#: worth pinning are the ones that carry a *resolved* canvas id.
+KNOWN = {
+    "in1": "in1",
+    "router1": "node:router.1",
+    "agent_sql": "agent-sql",
+    "out1": "out1",
+}
+
+
+def _ai(content: str, **extra: Any) -> Any:
+    return SimpleNamespace(type="AIMessageChunk", content=content, **extra)
+
+
+def _tool(content: str, **extra: Any) -> Any:
+    return SimpleNamespace(type="tool", content=content, **extra)
+
+
+def _chunks() -> list[dict[str, Any]]:
+    """One run touching every channel the fold reads.
+
+    `updates`, `messages` (a model's tokens *and* a tool's result, which take
+    different branches), and `custom` (a progress report) — the three modes
+    `_run_frames` asks LangGraph for. In `version="v2"`'s `StreamPart` shape,
+    which is the one we actually send.
+    """
+    from openstategraph.progress import PROGRESS_KEY, Progress
+
+    return [
+        {"type": "updates", "ns": (), "data": {"in1": {"answer": "", "outputs": {"in1": "hello"}}}},
+        {"type": "updates", "ns": (), "data": {"router1": {"decisions": {"router1": "music"}}}},
+        {
+            "type": "custom",
+            "ns": (),
+            "data": {
+                PROGRESS_KEY: Progress(message="Read 40 of 100", node="agent_sql").model_dump()
+            },
+        },
+        {
+            "type": "messages",
+            "ns": ("agent_sql:task-1",),
+            "data": (_ai("Let me "), {"langgraph_node": "agent_sql"}),
+        },
+        {
+            "type": "messages",
+            "ns": ("agent_sql:task-1",),
+            "data": (_ai("check.\n"), {"langgraph_node": "agent_sql"}),
+        },
+        {
+            "type": "messages",
+            "ns": ("agent_sql:task-1",),
+            "data": (
+                _tool(
+                    "| Table | Rows |\n| Album | 347 |",
+                    name="list_tables",
+                    tool_call_id="call_1",
+                ),
+                {"langgraph_node": "agent_sql"},
+            ),
+        },
+        {
+            "type": "updates",
+            "ns": (),
+            "data": {"agent_sql": {"outputs": {"agent_sql": "347 albums"}}},
+        },
+        {"type": "updates", "ns": (), "data": {"out1": {"answer": "There are 347 albums."}}},
+    ]
+
+
+class _Graph:
+    def stream(self, *_args: Any, **_kwargs: Any) -> Any:
+        return iter(_chunks())
+
+    def get_state(self, _config: Any) -> Any:
+        return SimpleNamespace(next=(), tasks=())
+
+    def get_graph(self, **_kwargs: Any) -> Any:
+        return SimpleNamespace(draw_mermaid=lambda: "graph TD;")
+
+
+def _frames(audience: Audience) -> list[str]:
+    runtime = SimpleNamespace(diagnostics=CompileDiagnostics())
+    return drive_fold(
+        _stream_run(
+            ScriptedGraph(_Graph()),
+            {},
+            {},
+            SimpleNamespace(warnings=[]),
+            KNOWN,
+            runtime,
+            "t1",
+            audience,
+        )
+    )
+
+
+def _golden() -> dict[str, list[str]]:
+    return json.loads(GOLDEN.read_text(encoding="utf-8"))
+
+
+#: Fields added to the wire since the golden was captured — `field -> (frame,
+#: ticket)`. Named here rather than baked into the golden; see the module
+#: docstring.
+#:
+#: **Scoped to a frame**, because a bare name is ambiguous the moment two
+#: frames use the same word. `error` has carried a `detail` since long before
+#: any of this, and stripping by name alone would quietly delete it from a
+#: future golden while claiming to be removing `launch-readiness/163`'s
+#: addition to `progress`.
+ADDED_SINCE_THE_GOLDEN = {
+    "interruptible": ("update", "token", "progress"),
+    # `memory-and-replay` 46: when the frame was built and where it falls in
+    # the recorded order. On **every** kind, because `_sse` mints them — which
+    # is the property that ticket exists to establish, so listing the kinds by
+    # hand here would be a second place to keep in step.
+    "seq": RUN_EVENTS,
+    "elapsedMs": RUN_EVENTS,
+    # `launch-readiness/163`: the tool's own error text, developer-only, so a
+    # developer watching a failing MCP call can read what the customer
+    # sentence is written never to say.
+    "detail": ("progress",),
+    # `launch-readiness/175`: every branch a parallel router matched. On the
+    # terminal frame alone, beside `decisions`, which could only ever carry
+    # the one label the graph dispatched on.
+    "routes": ("done",),
+    # `memory-and-replay` 56: what the whole run cost, per model. Scoped to the
+    # three terminal frames and not named bare, because `token` has carried a
+    # `usage` of its own — one message's cost — since before the golden, and
+    # this table exists precisely so one word on two frames cannot be stripped
+    # from both by accident.
+    "usage": TERMINAL_EVENTS,
+}
+
+#: Whole frame *kinds* added since the golden was captured — a different claim
+#: from the field table above, and it needs its own one.
+#:
+#: A field arrives on a frame the golden already holds, so stripping it leaves
+#: a frame to compare. A new kind arrives as a frame the golden has no row for
+#: at all, and nothing in `ADDED_SINCE_THE_GOLDEN` could express that: the
+#: golden would simply be short by one, with no way to say which one or why.
+#:
+#: `memory-and-replay` 53 is the first. `started` opens every stream and
+#: carries the thread id at the beginning of a run rather than at the end,
+#: which is a frame no capture taken before it could contain.
+#:
+#: `invoked` (`memory-and-replay` 55) is deliberately **absent**: this run
+#: scripts no tool call, so it emits none, and listing a kind that never
+#: appears would make this table a wish list rather than a record. A future
+#: edit that scripts one fails here, which is the correct place to decide it.
+ADDED_FRAMES_SINCE_THE_GOLDEN = ("started",)
+
+#: The same table, one level down — keys added to the `done` frame's
+#: **`developer` object** since the golden was captured.
+#:
+#: A second table rather than a wildcard in the first, because the two are
+#: different claims: a top-level field is on the wire for every reader of that
+#: frame, and one of these is on it only for a developer. `_without_additions`
+#: strips both, and `test_the_only_addition_since_the_golden_is_named` now
+#: walks both — until `one-chinook-honest/30` it walked only the top level, so
+#: a field could join the developer channel without anything noticing, which is
+#: the exact hole this module exists to close one level up.
+ADDED_TO_THE_DEVELOPER_CHANNEL = {
+    # `one-chinook-honest/30`: the statements the run actually executed, so a
+    # correctness question is answered from the record rather than from the
+    # model's prose about what it did.
+    "statements",
+}
+
+
+def _without_additions(frames: list[str]) -> list[str]:
+    """`frames`, with the named additions removed and everything else intact.
+
+    Key order is preserved by rebuilding through the real serialiser, so this
+    still compares the `event:` line, the `data:` line, the blank line, the
+    order `json.dumps` produced and every escape — for every field the golden
+    knows.
+
+    `_frame_bytes` rather than `_sse`: since `memory-and-replay` 46, *building*
+    a frame mints a clock stamp and advances a counter, so rebuilding a payload
+    through the builder would date it a second time and renumber it. The
+    formatter is the half this needs, and it is the same code the server's
+    frames go through.
+    """
+    from openstategraph.api.streaming import _frame_bytes
+
+    trimmed = []
+    for frame in frames:
+        head, _, body = frame.partition("\ndata: ")
+        if head[len("event: ") :] in ADDED_FRAMES_SINCE_THE_GOLDEN:
+            continue
+        if not body:
+            trimmed.append(frame)
+            continue
+        payload = json.loads(body.rstrip("\n"))
+        name = head[len("event: ") :]
+        for field, frames_it_joined in ADDED_SINCE_THE_GOLDEN.items():
+            if name in frames_it_joined:
+                payload.pop(field, None)
+        channel = payload.get("developer")
+        if isinstance(channel, dict):
+            for field in ADDED_TO_THE_DEVELOPER_CHANNEL:
+                channel.pop(field, None)
+        trimmed.append(_frame_bytes(name, payload))
+    return trimmed
+
+
+def test_a_developers_stream_is_byte_for_byte_what_it_was() -> None:
+    assert _without_additions(_frames(Audience.DEVELOPER)) == _golden()["developer"]
+
+
+def test_a_customers_stream_is_byte_for_byte_what_it_was() -> None:
+    assert _without_additions(_frames(Audience.CUSTOMER)) == _golden()["customer"]
+
+
+def _fields_by_frame(frames: list[str]) -> set[tuple[str, str]]:
+    """Every `(frame kind, field)` pair across `frames`.
+
+    **Pairs, not bare names**, and `memory-and-replay` 56 is why. The stripper
+    above has been frame-scoped since `launch-readiness/163` for exactly this
+    reason — *"a bare name is ambiguous the moment two frames use the same
+    word"* — and this guard was not, so it could only see a field that was new
+    to the *whole wire*. `usage` is the counter-example that found it: it has
+    ridden `token` since before the golden, so its arrival on the terminal
+    frames subtracted to nothing and would have passed unnamed, which is the
+    single thing this test exists to prevent.
+    """
+    found: set[tuple[str, str]] = set()
+    for frame in frames:
+        head, _, body = frame.partition("\ndata: ")
+        kind = head[len("event: ") :]
+        for field in json.loads(body.rstrip("\n")):
+            found.add((kind, field))
+    return found
+
+
+def test_the_only_addition_since_the_golden_is_named() -> None:
+    """Nothing may join the wire without a line in `ADDED_SINCE_THE_GOLDEN`."""
+    golden = _fields_by_frame(_golden()["developer"] + _golden()["customer"])
+    live = {
+        pair
+        for pair in _fields_by_frame(_frames(Audience.DEVELOPER) + _frames(Audience.CUSTOMER))
+        if pair[0] not in ADDED_FRAMES_SINCE_THE_GOLDEN
+    }
+    # The table, read as pairs and narrowed to the kinds this scripted run
+    # actually emits: a field declared for `interrupt` says nothing here,
+    # because this run finishes.
+    kinds_seen = {kind for kind, _ in live}
+    named = {
+        (kind, field)
+        for field, kinds in ADDED_SINCE_THE_GOLDEN.items()
+        for kind in kinds
+        if kind in kinds_seen
+    }
+
+    assert live - golden == named
+
+    golden_channel = _channel_fields(_golden()["developer"] + _golden()["customer"])
+    live_channel = _channel_fields(_frames(Audience.DEVELOPER) + _frames(Audience.CUSTOMER))
+
+    assert live_channel - golden_channel == ADDED_TO_THE_DEVELOPER_CHANNEL
+
+
+def _channel_fields(frames: list[str]) -> set[str]:
+    """Every key of a `done` frame's `developer` object, across `frames`."""
+    fields: set[str] = set()
+    for frame in frames:
+        payload = json.loads(frame.partition("\ndata: ")[2].rstrip("\n"))
+        channel = payload.get("developer")
+        if isinstance(channel, dict):
+            fields |= set(channel)
+    return fields
+
+
+def test_the_golden_covers_more_than_one_kind_of_frame() -> None:
+    """A golden that only ever saw `done` would pass while proving nothing."""
+    names = {frame.split("\n")[0][len("event: ") :] for frame in _golden()["developer"]}
+
+    assert names >= {"update", "token", "progress", "done"}

@@ -1,0 +1,335 @@
+import { useCallback, useEffect, useState } from 'react';
+import { History, RotateCcw } from 'lucide-react';
+import { Button, Icon, PanelEmpty } from '@design/primitives';
+import { RuntimeClient, type PastRun, type PastRunHistory } from '@core/runtime/RuntimeClient';
+import { browserSessionId } from '@core/runtime/browserSession';
+import {
+  describeRun,
+  laneTitle,
+  lanes,
+  pauseLines,
+  stepCost,
+  stepLines,
+  stepTitle,
+  toolCallLine,
+  truncationLine,
+} from '@core/runtime/pastRunView';
+import './PastRuns.css';
+
+/**
+ * Past runs of the open workflow — what the backend actually checkpointed.
+ *
+ * "Past runs", never "replay". Everything on this surface was written while
+ * the run happened and is read back out of the checkpointer: opening one calls
+ * no model, spends no token, and re-executes nothing. That is why it can be a
+ * plain list rather than a mode — there is nothing here to be careful with.
+ *
+ * The one thing that *does* re-execute lives elsewhere on purpose: a run whose
+ * status is `waiting for you` is resumable through the ordinary approval path
+ * in the chat thread, and this list says so rather than growing a second
+ * button that resumes runs from a history view. One way to continue a run.
+ *
+ * Scoped to the workflow on the canvas. A deployment's whole history is a
+ * different question with different privacy weight; the editor asks the
+ * narrow one, and the backend's filters (`workflow_slug`, `user_email`,
+ * `session_id`) are what a wider surface would use.
+ *
+ * **`view/run/StoredRuns` is not this panel moved, and the difference is the
+ * store** (`memory-and-replay` 73). This reads `GET /api/threads` — the
+ * checkpointer — and answers *what supersteps ran*. That reads
+ * `GET /api/runs/recorded` — `runs.sqlite` — and answers *how the output
+ * arrived*, which is the only one of the two that carries the offsets a
+ * playhead can honestly move between. They read different files and can
+ * legitimately disagree: a run whose checkpoints were swept still has a row
+ * there, and a run recorded before `47` has a row with no cadence.
+ */
+type Listing =
+  | { status: 'loading' }
+  | { status: 'ready'; runs: readonly PastRun[]; at: number }
+  | { status: 'failed'; message: string };
+
+export function PastRuns({
+  slug,
+  names,
+  onClose,
+}: {
+  slug: string | undefined;
+  /**
+   * Graph node name -> what the open document calls that node
+   * (`displayNamesByGraphName`). Optional, and an absent map is not a
+   * degraded mode: every lane then reads exactly what the run stored, which
+   * is what this panel did before `memory-and-replay` 39.
+   */
+  names?: ReadonlyMap<string, string>;
+  onClose: () => void;
+}) {
+  const [state, setState] = useState<Listing>({ status: 'loading' });
+  const [open, setOpen] = useState<string | null>(null);
+  /**
+   * Bumped by Refresh. The effect below owns the fetch and writes state only
+   * from its callback — a `setState` in an effect's own body is the pattern
+   * that makes a render depend on a render, so the "start loading" half lives
+   * in the click handler, where it is an event, not a render.
+   */
+  const [nonce, setNonce] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    void new RuntimeClient().pastRuns({ workflowSlug: slug }).then((outcome) => {
+      if (!live) return;
+      setState(
+        outcome.ok
+          ? // One instant for the whole list, captured with the answer: every
+            // row's "20 min ago" is then measured from the same clock reading
+            // rather than from whenever that row happened to re-render.
+            { status: 'ready', runs: outcome.value, at: Date.now() }
+          : { status: 'failed', message: outcome.error },
+      );
+    });
+    return () => {
+      live = false;
+    };
+  }, [slug, nonce]);
+
+  const refresh = useCallback(() => {
+    setState({ status: 'loading' });
+    setNonce((value) => value + 1);
+  }, []);
+
+  return (
+    <div className="past-runs">
+      <div className="past-runs__bar">
+        {/* Says which question it answered. Without a known slug the backend
+            has no filter to apply and returns everything this deployment
+            stored — true, and worth saying, because a list mixing workflows
+            would otherwise read as history of the one on screen. */}
+        <span className="past-runs__title">
+          <Icon glyph={History} size="sm" />
+          {slug ? `Past runs · ${slug}` : 'Past runs · all workflows'}
+        </span>
+        <span className="past-runs__bar-actions">
+          <Button variant="ghost" size="sm" onClick={refresh} aria-label="Refresh past runs">
+            <Icon glyph={RotateCcw} size="xs" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Close
+          </Button>
+        </span>
+      </div>
+
+      {state.status === 'loading' ? <p className="ask__meta">Reading the checkpoints…</p> : null}
+      {state.status === 'failed' ? (
+        <p className="ask__meta" role="alert">
+          {state.message}
+        </p>
+      ) : null}
+      {state.status === 'ready' && state.runs.length === 0 ? (
+        <PanelEmpty
+          glyph={History}
+          title="No stored runs yet"
+          body="Runs appear here once this workflow has been asked something and the backend has a checkpointer."
+        />
+      ) : null}
+      {state.status === 'ready'
+        ? state.runs.map((run) => (
+            <RunRow
+              key={run.threadId}
+              run={run}
+              at={state.at}
+              names={names}
+              showWorkflow={!slug}
+              expanded={open === run.threadId}
+              onToggle={() =>
+                setOpen((current) => (current === run.threadId ? null : run.threadId))
+              }
+            />
+          ))
+        : null}
+    </div>
+  );
+}
+
+function RunRow({
+  run,
+  at,
+  names,
+  showWorkflow,
+  expanded,
+  onToggle,
+}: {
+  run: PastRun;
+  /** When the list was fetched — the reference instant for "20 min ago". */
+  at: number;
+  /** Passed straight through to the lane headers; see `PastRuns`. */
+  names?: ReadonlyMap<string, string>;
+  /** Only when the list is unfiltered, where the row would otherwise not say
+   * which workflow it belongs to. */
+  showWorkflow: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  // This tab's own sitting, so a row from it does not announce one
+  // (`memory-and-replay/45`). Read here rather than threaded down from the
+  // panel: it is a constant for the tab, and `browserSessionId` is a cheap
+  // `sessionStorage` read that mints nothing new.
+  const described = describeRun(run, at, browserSessionId());
+  // Shown whenever there is something to say beyond "it finished cleanly" —
+  // paused, failed, or both — never a bare "finished" tacked onto every row.
+  const showStatus = run.status === 'paused' || run.failed;
+  return (
+    <div className="past-runs__run" data-status={run.status} data-failed={run.failed}>
+      <button
+        type="button"
+        className="past-runs__run-head"
+        aria-expanded={expanded}
+        onClick={onToggle}
+      >
+        <span className="past-runs__run-title">{described.title}</span>
+        <span className="ask__meta">
+          {showWorkflow && run.workflowSlug ? `${run.workflowSlug} · ` : ''}
+          {described.meta}
+          {described.identity ? ` · ${described.identity}` : ''}
+          {showStatus ? ` · ${described.statusLabel}` : ''}
+        </span>
+      </button>
+      {expanded ? <RunHistory run={run} names={names} /> : null}
+    </div>
+  );
+}
+
+/**
+ * One run, checkpoint by checkpoint — fetched only when a row is opened, so a
+ * list of fifty runs costs one request rather than fifty-one.
+ */
+function RunHistory({ run, names }: { run: PastRun; names?: ReadonlyMap<string, string> }) {
+  const [state, setState] = useState<
+    | { status: 'loading' }
+    | { status: 'ready'; history: PastRunHistory }
+    | { status: 'failed'; message: string }
+  >({ status: 'loading' });
+
+  useEffect(() => {
+    let live = true;
+    void new RuntimeClient()
+      .pastRun(run.threadId, run.workflowSlug || undefined)
+      .then((outcome) => {
+        if (!live) return;
+        setState(
+          outcome.ok
+            ? { status: 'ready', history: outcome.value }
+            : { status: 'failed', message: outcome.error },
+        );
+      });
+    return () => {
+      live = false;
+    };
+  }, [run.threadId, run.workflowSlug]);
+
+  if (state.status === 'loading') return <p className="ask__meta">Reading this thread…</p>;
+  if (state.status === 'failed')
+    return (
+      <p className="ask__meta" role="alert">
+        {state.message}
+      </p>
+    );
+
+  return (
+    <div className="past-runs__steps">
+      {run.status === 'paused' ? (
+        <>
+          <p className="past-runs__note">
+            This run is parked at an approval. Ask again in the chat above to continue it — history
+            only reads.
+          </p>
+          {/*
+            What it is parked *on* (`the-cost-of-one-more/17`). The sentence
+            above has always known the run is waiting; the payload the gate
+            passed to `interrupt()` was published on `GET /api/threads` and
+            read by nothing, so a reviewer had to go back to the terminal that
+            started the run, or resume blind.
+
+            **Under the sentence, not inside it.** `candidate` is upstream text
+            and upstream text in this product can be an entire workflow
+            document — `workflow-architect` answers with one — so the value is
+            unbounded and the row's meta line is already carrying five facts.
+            `52`'s rule: an open-ended lane is drawn as a different shape.
+
+            Rendered as key/value rows and never as prose, because the payload
+            is `dict[str, str]` and the keys are the pausing node's own. This
+            reads; it offers nothing. Answering the gate is the composer above,
+            which costs a model call — showing a question and offering to
+            answer it are two features and only one of them is here.
+          */}
+          {pauseLines(run.pause).map((line) => (
+            <div className="past-runs__line past-runs__ask" key={line.key}>
+              <span className="past-runs__line-key">{line.key}</span>
+              <span className="past-runs__line-value">{line.value}</span>
+            </div>
+          ))}
+        </>
+      ) : null}
+      {/*
+        Where the missing supersteps would have been (`the-cost-of-one-more/13`).
+        The lanes below are oldest first, and the end this read dropped is the
+        oldest one, so the disclosure sits above them rather than under the
+        rows — a banner after the list would be true and in the wrong place.
+      */}
+      {state.history.truncation ? (
+        <p className="past-runs__note">{truncationLine(state.history.truncation)}</p>
+      ) : null}
+      {/*
+        One lane per graph, never one flat list. A run of this workflow
+        checkpoints the workflow itself and every agent subgraph under the same
+        thread, each numbering its own supersteps from -1 — so flat, a
+        `morning-brief` run printed `Step 0 · loop` five times with nothing to
+        say they were five different graphs (`memory-and-replay` 37).
+      */}
+      {lanes(state.history.steps).map((lane) => (
+        <div className="past-runs__lane" key={`${lane.namespace.join('|')}#${lane.occurrence}`}>
+          <div className="past-runs__lane-head">
+            <span className="past-runs__lane-title">{laneTitle(lane, names)}</span>
+            <span className="ask__meta">
+              {lane.steps.length} {lane.steps.length === 1 ? 'step' : 'steps'}
+            </span>
+          </div>
+          {lane.steps.map((step) => (
+            <div className="past-runs__step" key={step.checkpointId}>
+              <div className="past-runs__step-head">
+                {stepTitle(step)}
+                {/*
+                  How long, and what it cost. Empty when neither is known —
+                  a step with nothing to measure against prints nothing rather
+                  than `0 ms`, which would be a claim
+                  (`memory-and-replay` 37, part 2).
+                */}
+                {stepCost(step) ? <span className="past-runs__cost">{stepCost(step)}</span> : null}
+                {step.wrote.length > 0 ? (
+                  <span className="past-runs__wrote">wrote {step.wrote.join(', ')}</span>
+                ) : null}
+              </div>
+              {/*
+                Above the state, because it is the cause and the state is the
+                effect — and because a run that answered wrongly usually asked
+                for the wrong thing, or was refused.
+              */}
+              {step.toolCalls.map((call, index) => (
+                <div className="past-runs__tool" key={`${call.name}-${index}`}>
+                  {toolCallLine(call)}
+                </div>
+              ))}
+              {stepLines(step).map((line) => (
+                <div className="past-runs__line" key={line.key}>
+                  <span className="past-runs__line-key">{line.key}</span>
+                  <span className="past-runs__line-value">{line.value}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+      {state.history.steps.length === 0 ? (
+        <p className="ask__meta">This thread has no readable checkpoints.</p>
+      ) : null}
+    </div>
+  );
+}

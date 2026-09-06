@@ -1,0 +1,327 @@
+.palette {
+  flex: none;
+}
+
+/* ---------- Search ---------- *
+ * The panel's top strip, not a box inside one (`stable-beta-public/25`).
+ * The four-sided border is reduced to the bottom hairline — the panel's own
+ * top edge is the boundary above, and the left and right edges are the
+ * panel's — and the inset moves inside the box, where it pads text rather
+ * than floating the control. `flex: 1 1 auto` is the half that makes it
+ * edge to edge: `.input` is a flex *container*, and as a flex *item* in the
+ * header it shrank to its content and left 39px of surface on the right.
+ * `:focus-within` in `Field.css` sets `border-color`, which with no other
+ * side declared paints exactly this hairline. */
+.palette__search {
+  flex: 1 1 auto;
+  border: 0;
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
+  border-radius: 0;
+  padding: var(--space-2) var(--space-3);
+}
+
+/* The row and its Open control, side by side — `stable-beta-public/29`.
+   The row is a `<button>` and so is the control, so they cannot nest; the
+   shell is what makes them siblings while the control still sits on the row's
+   right edge. */
+.palette-item-shell {
+  position: relative;
+  display: flex;
+}
+
+.palette-item-shell .palette-item {
+  /* Room the text can never run under, whether the control is showing or
+     not — a reserved gutter rather than a reflow on hover. */
+  padding-right: calc(var(--space-2-5) + var(--control-height-sm));
+}
+
+/* Quiet by default: a list of your own packages should read as a list. The
+   control is still in the tab order at zero opacity, and focusing it is one of
+   the two things that reveals it — `:focus-within` on the shell, so a keyboard
+   reader sees what a mouse reader sees. */
+.palette-item__open {
+  position: absolute;
+  top: var(--space-1-5);
+  right: var(--space-1-5);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.palette-item-shell:hover .palette-item__open,
+.palette-item-shell:focus-within .palette-item__open {
+  opacity: 1;
+}
+
+/* Never hidden from a reader who asked for it: a forced-colours or
+   reduced-motion setting must not leave the only Open control invisible. */
+@media (prefers-reduced-motion: reduce) {
+  .palette-item__open {
+    transition: none;
+  }
+}
+
+.palette-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2-5);
+  width: 100%;
+  padding: var(--space-2) var(--space-2-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  text-align: left;
+  cursor: grab;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-instant) var(--ease-out);
+}
+
+.palette-item:hover:not(.palette-item--disabled) {
+  background: var(--color-bg-surface);
+  border-color: var(--color-border-emphasis);
+}
+
+.palette-item:active:not(.palette-item--disabled) {
+  transform: scale(0.99);
+  cursor: grabbing;
+}
+
+.palette-item--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.palette-item__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-px);
+  min-width: 0;
+}
+
+.palette-item__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  font: var(--type-body-md);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+}
+
+/* ---------- Workflow-scoped provenance ---------- *
+ * A node registered by the open workflow's own package looks structurally
+ * identical to an app-wide prebuilt, so the difference has to be carried
+ * entirely by chrome: a left rail on the card and a small package mark
+ * beside the title.
+ */
+.palette-item__scope {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+.palette-item--scoped {
+  border-left: var(--border-width-marker) solid var(--color-border);
+  border-top-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.palette-section--scoped {
+  background: var(--color-bg-subtle);
+}
+
+/* ---------- Packages ---------- *
+ * The user's own saved workflows, not node types, so the section is marked
+ * the way the scoped one is — a reader scrolling past should be able to tell
+ * that this list changes with what they have saved. */
+.palette-section--packages {
+  background: var(--color-bg-subtle);
+}
+
+/* "Hidden" beside a package's name: no customer surface advertises it. Sized
+   down from the title it sits beside, and `flex: none` so a long workflow name
+   shrinks before the mark does — the mark is the part a reader is scanning
+   for, and a truncated one says nothing. */
+.palette-item__mark {
+  flex: none;
+  font: var(--type-caption);
+  text-transform: none;
+}
+
+/* The slug is an identifier, and the card that mounts it shows it in mono
+   too — a reader matching this row to `workflows/<slug>/` is comparing
+   characters, which proportional type makes harder than it needs to be. */
+.palette-item__slug {
+  font: var(--type-mono-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* A one-line explanation, and the empty state for a workflow with no tools
+   of its own — a full `PanelEmpty` block would out-weigh the section. */
+.palette-note {
+  font: var(--type-caption);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-tertiary);
+  margin: 0 0 var(--space-0-5);
+}
+
+.palette-note code {
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+}
+
+/* The counterweight to "This workflow": without it, the generic sections
+   read as a continuation of the scoped one rather than a different kind
+   of thing. */
+.palette-group-label {
+  /* Block, not a flex row: the panel is ~280px wide and "in every workflow"
+     beside an uppercase label wraps into an unreadable two-column stack. */
+  display: block;
+  padding: var(--space-3) var(--space-3) 0;
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  user-select: none;
+}
+
+.palette-group-label__hint {
+  display: block;
+  margin-top: var(--space-0-5);
+  font: var(--type-caption);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--color-text-quaternary);
+}
+
+.palette-footnote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-4);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.palette-item__description {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  line-height: var(--line-height-snug);
+  /* Two lines maximum: the palette is a scan target, not documentation. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Badge and Refresh share the scoped section's heading slot. */
+.palette-scoped-aside {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.palette-refresh--spinning {
+  animation: palette-refresh-spin 900ms linear infinite;
+}
+
+@keyframes palette-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette-refresh--spinning {
+    animation: none;
+  }
+}
+
+/* Capability warnings (register PK-06): a Python tool the runtime can bind
+   but the editor cannot draw, a plugin that failed to load, a plugin that
+   replaced a built-in. In the panel rather than in a toast because every one
+   of them is a standing condition — still true after a toast fades — and the
+   palette is where a developer is when they notice the card is missing. */
+.palette-warnings {
+  margin: var(--space-2) var(--space-3) 0;
+  padding: var(--space-2);
+  border: var(--border-width-hairline) solid var(--color-status-warning);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+
+.palette-warnings__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-1);
+  font: var(--type-label);
+  color: var(--color-status-warning);
+}
+
+.palette-warnings__list {
+  margin: 0;
+  padding-left: var(--space-3);
+  font: var(--type-caption);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-secondary);
+}
+
+.palette-warnings__list li + li {
+  margin-top: var(--space-1);
+}
+
+/* How a component gets onto the canvas, said once at the top of the palette
+ * (`say-it-on-the-surface` 04). Sized and toned like the section notes below
+ * it — it is the same kind of sentence, about every row rather than one
+ * section.
+ *
+ * `max-width: 100%` and `min-width: 0` are not decoration: this paragraph
+ * spent one commit inside `PanelHeader`, which is a flex row, and collapsed to
+ * 56px wide and 227px tall — one word per line, over the canvas. It lives in
+ * the body now, and these two lines mean the same mistake costs nothing if
+ * anybody moves it back. */
+.palette-howto {
+  max-width: 100%;
+  min-width: 0;
+  /* Horizontal inset matches every other direct child of the body — the
+     group label, the footnote, the warnings block — all of which carry
+     `var(--space-3)` themselves because `.panel__body` carries none
+     (`the-look-has-an-author-now/14`). This paragraph was the one row that
+     didn't, so it ran wider than the search field above it and the section
+     blocks below it. */
+  margin: var(--space-2) var(--space-3) var(--space-1);
+  color: var(--color-text-secondary);
+  font: var(--type-body-sm);
+  line-height: var(--line-height-snug);
+}
+
+/* A refused package row's diagnosis, under the slug rather than in place of
+   it (`workflow-gallery` 74). Deliberately *not* `.palette-item__description`:
+   that one clamps to two lines, which is right for a description and fatal
+   for a refusal whose last clause is the path a reader has to act on. This
+   wraps instead — a greyed row is allowed to be taller than a droppable one,
+   and there is never more than one of them in view. */
+.palette-item__refusal {
+  display: block;
+  margin-top: var(--space-0-5);
+  font: var(--type-caption);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-tertiary);
+  text-wrap: pretty;
+}
+
+/* The cycle itself, on its own line and in the type the slug wears, because
+   it is made of slugs. `anywhere` rather than a clamp: a three-rung chain in
+   a 200px column has to break somewhere, and breaking is readable where
+   truncating is not. */
+.palette-item__refusal-path {
+  display: block;
+  margin-top: var(--space-0-5);
+  font: var(--type-mono-sm);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}

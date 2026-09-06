@@ -1,0 +1,202 @@
+/* ------------------------------------------------------------------ *
+ * Form field shell + text inputs.
+ *
+ * Every control in a node body shares one shell so labels, heights and
+ * focus rings line up regardless of what sits inside.
+ * ------------------------------------------------------------------ */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+/* `Field` renders as a <label> when it wraps its control implicitly, so the
+ * caption is a span in that case — both need the same treatment. */
+.field__label,
+label.field > .field__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+  user-select: none;
+}
+
+/* A trailing value readout on the same line as the label — "TOKEN
+ * BUDGET · 500". Kept in the label so the control below stays flush. */
+.field__label-value {
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.field__hint {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.field__error {
+  font: var(--type-caption);
+  color: var(--color-danger);
+}
+
+/* ---------- Input shell ----------
+ * Height comes from the shared control scale, not a number of its own, so
+ * an input and the button beside it always share a baseline. Vertical
+ * padding is tight enough that the 13px/1.5 line fits inside that height
+ * rather than pushing past it. */
+.input {
+  --input-min-height: var(--control-height-md);
+  --input-padding-y: var(--space-1);
+  --input-padding-x: var(--space-2-5);
+  --input-radius: var(--radius-md);
+
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: var(--input-min-height);
+  padding: var(--input-padding-y) var(--input-padding-x);
+  border-radius: var(--input-radius);
+  background: var(--color-bg-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  transition: var(--transition-colors);
+  cursor: text;
+}
+
+/* ---------- Sizes ----------
+ * The same three steps buttons have, so a control can be told to match
+ * the one it sits next to. Radius steps down with height, as it does on
+ * the small button. */
+.input--sm {
+  --input-min-height: var(--control-height-sm);
+  --input-padding-y: var(--space-0-5);
+  --input-padding-x: var(--space-2);
+  --input-radius: var(--radius-sm);
+}
+
+.input--sm .input__control,
+.input--sm .input__prefix,
+.input--sm .input__suffix {
+  font: var(--type-body-sm);
+}
+
+.input--lg {
+  --input-min-height: var(--control-height-lg);
+  --input-padding-y: var(--space-1-5);
+  --input-padding-x: var(--space-3);
+}
+
+.input:hover {
+  border-color: var(--color-border-emphasis);
+}
+
+.input:focus-within {
+  background: var(--color-bg-surface);
+  border-color: var(--color-border-focus);
+  /* The focus ring itself stays a `box-shadow` — one of the two mechanisms
+     `tokens.css` names for the single ring, and a ring is not a shadow
+     (`stable-beta-public/02`). */
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring-soft);
+}
+
+/* One ring per focus, and this wrapper owns it (`stable-beta-public/30`).
+   `reset.css` outlines anything `:focus-visible`, which is the only focus a
+   bare control gets and must stay; inside a painted box it is the *second*
+   ring, drawn a hairline inside the halo above. The wrapper is the box a
+   reader sees, so the control's own outline is cleared here — in the
+   stylesheet that replaces it, never in the reset, which knows about no
+   class. */
+.input .input__control:focus-visible {
+  outline: none;
+}
+
+.input[data-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+/* Focusing a wrong field must not paint "focused" over "wrong". */
+.input[data-invalid='true']:focus-within {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--invalid-ring-soft);
+}
+
+.input[data-disabled='true'] {
+  background: var(--color-bg-subtle);
+  cursor: not-allowed;
+  opacity: var(--disabled-opacity);
+}
+
+/* A static prefix such as the "r/" on a subreddit field. */
+.input__prefix,
+.input__suffix {
+  flex: none;
+  font: var(--type-body-md);
+  color: var(--color-text-quaternary);
+  user-select: none;
+}
+
+.input__control {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: var(--type-body-md);
+  color: var(--color-text-primary);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.input__control::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.input__control:disabled {
+  cursor: not-allowed;
+}
+
+.input--mono .input__control {
+  font: var(--type-mono-sm);
+}
+
+/* ---------- Multi-line ----------
+ * A textarea's height is its content, so it opts out of the shared
+ * control scale and keeps a roomier vertical padding of its own. */
+.input--textarea {
+  --input-padding-y: var(--space-2);
+  align-items: stretch;
+  min-height: 0;
+  cursor: text;
+}
+
+.input--textarea .input__control {
+  /* Auto-grown by the component up to the ceiling its *field* declares
+   * (`TextAreaFieldSchema.maxRows`, published as `--textarea-max-rows`), then
+   * scrolling. It was a flat 180px until ticket 26 — a number in a stylesheet
+   * deciding how much room a system prompt and a two-word note each deserve,
+   * which is a question only the field can answer. The fallback keeps a
+   * `TextArea` used outside the schema behaving as it always did. */
+  max-height: calc(var(--textarea-max-rows, 9) * 1lh);
+  overflow-y: auto;
+  line-height: var(--line-height-normal);
+  /* Vertical only: a horizontal drag would break out of the card's column
+   * and cannot survive a reload anyway, since a dragged size is not saved. */
+  resize: vertical;
+}
+
+/* ---------- Read-only display row ----------
+ * Used for the "agent-skill.md  [Replace]" style row: looks like an
+ * input, but the value is a token rather than editable text. */
+.input--display {
+  cursor: default;
+  gap: var(--space-2);
+}
+
+.input--display .input__control {
+  cursor: default;
+  user-select: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

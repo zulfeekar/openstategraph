@@ -1,0 +1,409 @@
+{
+  "version": 1,
+  "name": "Ops Desk",
+  "savedAt": "2026-08-19T18:30:19.918771+00:00",
+  "document": {
+    "version": 3,
+    "name": "Ops Desk",
+    "settings": {
+      "purpose": "One desk for the whole team: routes a question to the music database, the handbook, or a drafted reply that a person approves before it is sent."
+    },
+    "nodes": [
+      {
+        "id": "a-policy",
+        "type": "agent.llm",
+        "position": {
+          "x": 940,
+          "y": 1308
+        },
+        "size": {
+          "width": 252,
+          "height": 469
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rubric": "",
+          "rulesMode": "extend",
+          "summarize": true,
+          "systemPrompt": "You answer questions about how this team works. Use the memory tools to recall anything the user told you earlier, and save any new durable fact they state about themselves or the team.",
+          "tier": "react",
+          "timeoutSeconds": "",
+          "tokenBudget": 500
+        },
+        "title": "Policy Desk"
+      },
+      {
+        "id": "a-reply",
+        "type": "agent.llm",
+        "position": {
+          "x": 940,
+          "y": 72
+        },
+        "size": {
+          "width": 252,
+          "height": 469
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rubric": "",
+          "rulesMode": "extend",
+          "summarize": true,
+          "systemPrompt": "You draft short messages for a person to send. Three sentences at most, plain and warm, no placeholders like [Name] unless the user gave one.",
+          "tier": "react",
+          "timeoutSeconds": "",
+          "tokenBudget": 500
+        },
+        "title": "Reply Drafter"
+      },
+      {
+        "id": "gate1",
+        "type": "human.approval",
+        "position": {
+          "x": 1890,
+          "y": 197
+        },
+        "size": {
+          "width": 268,
+          "height": 219
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "message": "This message goes out under your name. Approve to send it, or reject with a note saying what to change.",
+          "timeoutSeconds": ""
+        },
+        "title": "Send Gate"
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "position": {
+          "x": 1407,
+          "y": 42
+        },
+        "size": {
+          "width": 268,
+          "height": 528
+        },
+        "parentId": null,
+        "data": {
+          "criteria": "- At most three sentences.\n- No square-bracket placeholders unless the user supplied the value.\n- Says what will happen next.",
+          "maxAttempts": 3,
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rubric": [],
+          "rulesMode": "extend",
+          "tier": "react",
+          "timeoutSeconds": ""
+        },
+        "title": "Reply Check"
+      },
+      {
+        "id": "in1",
+        "type": "input.text",
+        "position": {
+          "x": 42,
+          "y": 778
+        },
+        "size": {
+          "width": 252,
+          "height": 293
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "prompt": "ask the ops desk anything",
+          "timeoutSeconds": ""
+        },
+        "title": "Question"
+      },
+      {
+        "id": "mount-music",
+        "type": "workflow.subgraph",
+        "position": {
+          "x": 940,
+          "y": 636
+        },
+        "size": {
+          "width": 252,
+          "height": 577
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "outcome": "",
+          "overrides": "",
+          "timeoutSeconds": "",
+          "workflow": "chinook-assistant"
+        },
+        "title": "Music Data"
+      },
+      {
+        "id": "out-held",
+        "type": "output.formatted",
+        "position": {
+          "x": 2347,
+          "y": 354
+        },
+        "size": {
+          "width": 320,
+          "height": 159
+        },
+        "parentId": null,
+        "data": {
+          "format": "markdown",
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Held"
+      },
+      {
+        "id": "out-sent",
+        "type": "output.formatted",
+        "position": {
+          "x": 2347,
+          "y": 100
+        },
+        "size": {
+          "width": 320,
+          "height": 159
+        },
+        "parentId": null,
+        "data": {
+          "format": "markdown",
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Approved"
+      },
+      {
+        "id": "router1",
+        "type": "route.classifier",
+        "position": {
+          "x": 483,
+          "y": 491
+        },
+        "size": {
+          "width": 268,
+          "height": 867
+        },
+        "parentId": null,
+        "data": {
+          "branches": [
+            {
+              "id": "b-data",
+              "name": "data"
+            },
+            {
+              "id": "b-policy",
+              "name": "policy"
+            },
+            {
+              "id": "b-reply",
+              "name": "reply"
+            }
+          ],
+          "fallback": "b-policy",
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "rules": "A question about sales, revenue, customers, tracks or albums is data. A question about our own rules, process or handbook is policy. A request to write a message to somebody is reply.",
+          "rulesMode": "extend",
+          "tier": "react",
+          "timeoutSeconds": "",
+          "matchMode": "all"
+        },
+        "title": "Desk Router"
+      },
+      {
+        "id": "t-ident",
+        "type": "tool.session-identity",
+        "position": {
+          "x": 940,
+          "y": 1861
+        },
+        "size": {
+          "width": 252,
+          "height": 90
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Who"
+      },
+      {
+        "id": "join1",
+        "type": "function.format_report",
+        "data": {
+          "reportTitle": "What I found"
+        },
+        "title": "Gather",
+        "position": {
+          "x": 1000,
+          "y": 120
+        }
+      },
+      {
+        "id": "out-answer",
+        "type": "output.formatted",
+        "data": {},
+        "title": "Answer",
+        "position": {
+          "x": 1240,
+          "y": 120
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "a-reply",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "grader1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "gate1",
+          "portId": "approved"
+        },
+        "target": {
+          "nodeId": "out-sent",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "gate1",
+          "portId": "rejected"
+        },
+        "target": {
+          "nodeId": "out-held",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader1",
+          "portId": "pass"
+        },
+        "target": {
+          "nodeId": "gate1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "grader1",
+          "portId": "revise"
+        },
+        "target": {
+          "nodeId": "a-reply",
+          "portId": "feedback"
+        },
+        "vertices": [
+          {
+            "x": 1723,
+            "y": 2046
+          },
+          {
+            "x": 893,
+            "y": 2046
+          }
+        ]
+      },
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "router1",
+          "portId": "question"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-data"
+        },
+        "target": {
+          "nodeId": "mount-music",
+          "portId": "input"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-policy"
+        },
+        "target": {
+          "nodeId": "a-policy",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-reply"
+        },
+        "target": {
+          "nodeId": "a-reply",
+          "portId": "prompt"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-ident",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "a-policy",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "mount-music",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "join1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "a-policy",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "join1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "join1",
+          "portId": "report"
+        },
+        "target": {
+          "nodeId": "out-answer",
+          "portId": "result"
+        }
+      }
+    ]
+  }
+}

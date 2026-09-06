@@ -1,0 +1,121 @@
+/* Height, radius, focus halo and disabled treatment are the input's — a
+ * select is an input that opens a list, and looking like a different
+ * species of control is the fastest way to make a form look assembled
+ * from parts. */
+.select {
+  --select-height: var(--control-height-md);
+  --select-padding-y: var(--space-1);
+  --select-padding-x: var(--space-2-5);
+  --select-radius: var(--radius-md);
+
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--select-height);
+  border-radius: var(--select-radius);
+  background: var(--color-bg-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  transition: var(--transition-colors);
+}
+
+.select--sm {
+  --select-height: var(--control-height-sm);
+  --select-padding-y: var(--space-0-5);
+  --select-padding-x: var(--space-2);
+  --select-radius: var(--radius-sm);
+}
+
+.select--sm .select__control {
+  font: var(--type-body-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.select--lg {
+  --select-height: var(--control-height-lg);
+  --select-padding-y: var(--space-1-5);
+  --select-padding-x: var(--space-3);
+}
+
+.select:hover {
+  border-color: var(--color-border-emphasis);
+}
+
+.select:focus-within {
+  border-color: var(--color-border-focus);
+  /* The ring, not a shadow — see `Field.css`. */
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring-soft);
+}
+
+/* The wrapper owns the ring here too — see `Field.css` for the argument.
+   A native <select> is the interactive element, so the reset reaches it
+   exactly as it reaches a bare button; the skin around it is what a reader
+   sees light up. */
+.select .select__control:focus-visible {
+  outline: none;
+}
+
+.select[data-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.select[data-invalid='true']:focus-within {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--invalid-ring-soft);
+}
+
+.select[data-disabled='true'] {
+  background: var(--color-bg-subtle);
+  cursor: not-allowed;
+  opacity: var(--disabled-opacity);
+}
+
+.select svg {
+  flex: none;
+  pointer-events: none;
+}
+
+/* The native <select> stays the interactive element — free keyboard
+ * support, free platform popup, free mobile behaviour. Only its skin is
+ * ours. Padding-right leaves room for the chevron. */
+.select__control {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: var(--select-padding-y) var(--space-7) var(--select-padding-y) var(--select-padding-x);
+  font: var(--type-body-md);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.select__control:disabled {
+  cursor: not-allowed;
+}
+
+.select__control option {
+  /* Popup rows are drawn by the OS; only colour is reliably ours. */
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-regular);
+}
+
+.select__chevron {
+  position: absolute;
+  right: var(--space-2);
+  display: flex;
+  color: var(--color-text-quaternary);
+  pointer-events: none;
+}
+
+.select__leading {
+  display: flex;
+  flex: none;
+  padding-left: var(--select-padding-x);
+  color: var(--accent-on-tint);
+}
+
+.select__leading + .select__control {
+  padding-left: var(--space-1-5);
+}

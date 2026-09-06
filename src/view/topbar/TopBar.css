@@ -1,0 +1,250 @@
+/* Full width, to the right edge (ticket 06). It used to be `flex: none`
+   inside a row that carried two more buttons beside it, so the toolbar's
+   surface — its background and its bottom border — stopped short of the
+   window and those two controls sat on the canvas colour, reading as
+   floating chrome rather than as part of the toolbar. They are inside it now,
+   and the row is gone, so the width is simply the shell's cross-axis stretch.
+
+   Ticket 06 spelled that stretch `flex: 1 1 auto`, and ticket 24 is the bill
+   for it: `.app-shell` is a **column**, so `flex-grow` there asks for height.
+   Above 1100px the body's content basis left no free space and nothing
+   showed; below it `AppShell.css` takes both side panels out of flow, the
+   body's basis collapses to the canvas's own content, and the toolbar
+   collected the surplus — 424px tall at a 768px window. `flex: none` is the
+   whole fix for that half; the wrapping below is the other half. */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  /* Rows stack from the top and are sized by their own contents, rather than
+     sharing the bar's height between them. */
+  align-content: flex-start;
+  column-gap: var(--space-2);
+  row-gap: 0;
+  flex: none;
+  min-width: 0;
+  /* `min-height`, not `height`: one row is the resting state, and a wrapped
+     line is allowed to add exactly one more. */
+  min-height: var(--layout-topbar-height);
+  padding-inline: var(--space-3);
+  background: var(--color-bg-surface);
+  /* The rule, not a hairline (`the-look-has-an-author-now/07`): this is the
+     seam between the toolbar and everything under it, and it is one of the
+     four in the product. */
+  /* The rule width, and the normal ink — `16`. The toolbar is a fixed-height
+     row of controls; this seam ends a region but nothing drags it. */
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
+  z-index: var(--z-topbar);
+}
+
+/* Deliberate degradation (ticket 24). Below about 1024px the controls no
+   longer fit on one line; before this they overflowed the right edge of a
+   header that has no scroller, which put **Run** — the one button a user
+   comes here to press — off-screen at phone widths with no way to reach it.
+   Wrapping keeps everything reachable and costs one row unit at a time, so
+   the bar's height is always a whole number of rows rather than whatever the
+   tallest control in the wrapped line happens to be. */
+.topbar__brand,
+.topbar__group {
+  min-height: var(--layout-topbar-height);
+}
+
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-right: var(--space-1);
+}
+
+/* The mark draws itself in ink on the bar's own ground. It used to be a
+   filled tile with an inverted glyph inside it — the shape a placeholder
+   takes when there is no logo to put there. The authored mark is a line
+   drawing with a hollow initial node, and a tile behind it would close the
+   hollow and put a rounded corner on a system whose first sentence about
+   itself is "flat, 0 radius". */
+.topbar__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--color-text-primary);
+}
+
+.topbar__product {
+  font: var(--type-wordmark);
+  letter-spacing: var(--letter-spacing-tighter);
+  color: var(--color-text-primary);
+}
+
+.topbar__doc {
+  font: var(--type-body-md);
+  color: var(--color-text-secondary);
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* An unnamed document, marked in the slot that carries the name rather than
+   beside it (`say-it-on-the-surface/09`). Dimmed and italic: both are ways of
+   saying "this is not a word anybody typed" that spend no new colour, and
+   `--color-text-tertiary` is the token every other secondary surface in
+   `design/` already uses for exactly that claim. */
+.topbar__doc[data-unnamed='true'] {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+.topbar__group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+}
+
+/* Hairline separator between control clusters. */
+.topbar__divider {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin-inline: var(--space-1-5);
+  background: var(--color-border);
+}
+
+.topbar__spacer {
+  flex: 1 1 auto;
+}
+
+/* Below this width the document name is the first thing to go — the controls
+ * all still need to be reachable, and the name is on screen twice anyway
+ * (the Inspector's DOCUMENT ▸ NAME field is where it is edited).
+ *
+ * 1100px, not the 900px this said before ticket 24, and the number is not
+ * arbitrary: it is the breakpoint `AppShell.css` already uses to float the
+ * side panels over the canvas, and dropping ~28ch here is what keeps 1024 —
+ * a desktop width — a single toolbar row instead of two. One number, one
+ * meaning: below it, the window is too narrow to show everything at once. */
+@media (max-width: 1100px) {
+  .topbar__doc,
+  .topbar__brand .topbar__divider {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar__product {
+    display: none;
+  }
+}
+
+/* Runtime health dot (ticket 58): green = up, red = down, grey = probing. */
+.topbar__health {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  /* Probing, and it is the state you see first. `--color-text-muted` is not a
+     name this product declares, so the dot was drawn in nothing at all until
+     the first probe answered. `--color-status-idle` is the role that already
+     means exactly this — the authored `--osg-node-idle` grey. */
+  background: var(--color-status-idle);
+}
+.topbar__health[data-state='up'] {
+  background: var(--color-status-success);
+}
+.topbar__health[data-state='down'] {
+  background: var(--color-status-error);
+}
+
+/* The stale-editor chip — `the-cost-of-one-more/16`.
+ *
+ * Ink on `--color-bg-subtle`, and it takes **no colour of its own**, for the
+ * reason `14`'s package badge takes none: `--color-danger` and
+ * `--color-status-warning` are both declared in both themes and both are tuned
+ * as *fills*, and reusing a fill as ink is the exact swap
+ * `primaryContrast.test.ts` exists to catch. The glyph and the word carry the
+ * severity. Which colour a warning of this weight earns is
+ * `the-look-has-an-author-now/06`'s open question about this identity's accent
+ * voice, and it belongs to the owner.
+ *
+ * It is only ever in the document when the bundle is stale, so it costs a
+ * glance nothing on the ordinary day and is unmissable on the one day it
+ * matters. */
+.topbar__stale {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+  padding: 0 var(--space-2);
+  height: 20px;
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  font: var(--type-caption);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+/* Positioning context for the first-run credentials hint. */
+.topbar__hint-anchor {
+  position: relative;
+  display: flex;
+}
+
+/* The Run button's tooltip anchor. A disabled button fires no pointer events,
+   so the tooltip has to hang off a wrapper — and the wrapper must not change
+   the button's layout. */
+.topbar__run {
+  display: inline-flex;
+}
+
+/* The "not on disk" mark on Save (`say-it-on-the-surface` 01).
+ *
+ * A dot rather than a word: the button already carries a word, and the state
+ * it marks — this document has no folder on the backend yet — is a *warning*
+ * about durability rather than an instruction. `aria-hidden`, because the
+ * sentence a screen reader needs is the tooltip's, not a decoration's.
+ *
+ * Warning rather than danger: nothing is wrong, the work simply is not on disk
+ * yet, and colouring an ordinary first save as an error would teach people to
+ * ignore the colour that does mean danger.
+ *
+ * It said "accent" and spent `--color-accent`, which nothing declares — so the
+ * fallback was `currentColor` and the dot has always been the topbar's own ink.
+ * The rename is not cosmetic: in this identity the accent **is** the danger
+ * colour (`--color-status-error` is `--osg-accent`), so the name it asked for
+ * would have painted the exact hue the paragraph above rules out, and the
+ * unreachable state below — which is genuinely an error — would have become
+ * the same colour in a different shape. Amber keeps the two states two
+ * colours, which is what that state's own comment claims. */
+.topbar__unsaved {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-start: var(--space-1, 4px);
+  border-radius: 50%;
+  background: var(--color-status-warning);
+  vertical-align: middle;
+}
+
+/* "Nothing has answered for three checks" (`say-it-on-the-surface/07`). A
+   different colour and a ring rather than a second dot: the mark is one
+   element with a state, so a reader never has to tell two dots apart, and the
+   ring reads as a warning at 6px where a hue change alone would not. */
+.topbar__unsaved[data-state='unreachable'] {
+  background: transparent;
+  /* 2px as a literal — the same number this rule carried as an inset shadow,
+     and neither the draggable weight nor a marker bar (`stable-beta-public/02`).
+     On a 6px dot with `border-box`, the whole mark is ring. */
+  border: 2px solid var(--color-status-error);
+}
+
+/* The lifecycle cluster — `ship-it` 39. The badge and its verb read as one
+   thing because they are one fact, and the gap is the row token's half so the
+   pair does not look like two unrelated controls that happen to be adjacent. */
+.topbar__lifecycle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}

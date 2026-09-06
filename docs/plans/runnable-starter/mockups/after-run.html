@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mockup: after Run</title>
+<style>
+:root{--ink:#1f2328;--muted:#6b7280;--ground:#f7f8fa;--surface:#fff;--line:#d9dde3;--accent:#2f6fed;font-family:-apple-system,Inter,system-ui,sans-serif;font-size:13px;color:var(--ink)}
+body{margin:0;background:var(--ground)}
+.canvas{position:relative;height:420px;background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:20px 20px;border-bottom:1px solid var(--line)}
+.note{position:absolute;left:60px;top:30px;width:400px;background:#fffbe6;border:1px solid #e6d98a;border-radius:6px;padding:12px 14px;line-height:1.45}
+.note h3{margin:0 0 6px;font-size:14px}
+.node{position:absolute;top:250px;width:210px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.node b{display:block;margin-bottom:6px}.node .f{border:1px solid var(--line);border-radius:4px;padding:6px;background:#fff;min-height:34px}
+.hint{color:var(--muted)}
+.dock{height:70px;background:var(--surface);border-top:1px solid var(--line);padding:8px 12px;font-size:12px;color:var(--muted)}
+h4{margin:14px 12px 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.alt{position:relative;height:200px;background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:20px 20px}
+.alt .note{background:#fff4f2;border-color:#f0b9b0;top:20px}
+code{background:#eef0f3;padding:1px 4px;border-radius:3px}
+</style></head><body>
+<div class="canvas">
+  <div class="note"><h3>That was one run</h3>
+    The Agent read the Input, called <b>gpt-oss:120b-cloud</b> once, and wrote 214 tokens into the Output. The run dock below shows each step.<br><br>
+    Change the question in the Input and press Run again. Or open the Agent and edit its rules. Save when you want to keep it — you will be asked for a name.<br><br>
+    <span class="hint">Delete this note whenever you like.</span></div>
+  <div class="node" style="left:60px"><b>Input</b><div class="f">In one paragraph, what is a state graph and why would I draw one…</div></div>
+  <div class="node" style="left:330px"><b>Agent</b><div class="f hint">1 call · 214 tokens</div></div>
+  <div class="node" style="left:600px"><b>Output</b><div class="f">A state graph is a drawing of the steps a program takes and the rules for moving between them. You draw one instead of writing a script when the path is not a straight line: when a step can loop back, branch, or wait for a person…</div></div>
+</div>
+<div class="dock">Run dock — Input → Agent (gpt-oss:120b-cloud, 1.8 s, 214 tokens) → Output · finished</div>
+
+<h4>Variant: no model configured</h4>
+<div class="alt">
+  <div class="note"><h3>Nothing to run with yet</h3>
+    No model is configured, so Run cannot start. Set <code>OLLAMA_API_KEY</code> for the default cloud model, or open <b>Credentials</b> in the top bar to add another provider. Then press Run again — the question is still typed in.</div>
+</div>
+</body></html>

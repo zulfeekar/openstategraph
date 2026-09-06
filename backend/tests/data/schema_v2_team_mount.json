@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "name": "A v2 document that mounts a Team",
+  "_comment": [
+    "The fixture the schema policy requires: a document at the OLD version,",
+    "loaded and compiled by the suite so the v2 -> v3 migration is exercised",
+    "rather than merely written (production-ready ticket 16).",
+    "",
+    "Deliberately carries the three things a Team could hold and a Workflow",
+    "mount must not lose: the slug it mounts, its per-mount overrides, and the",
+    "authored `outcome` prose. Do not 'fix' the team.workflow type below — it",
+    "being stale is the entire point of the file."
+  ],
+  "nodes": [
+    { "id": "in1", "type": "input.text", "position": { "x": 40, "y": 200 }, "data": {} },
+    {
+      "id": "team1",
+      "type": "team.workflow",
+      "title": "Sourcing",
+      "position": { "x": 380, "y": 200 },
+      "data": {
+        "workflow": "sourcing-team",
+        "outcome": "Every claim carries a source.",
+        "overrides": { "grader1": { "maxAttempts": 4 } }
+      }
+    },
+    { "id": "out1", "type": "output.formatted", "position": { "x": 740, "y": 200 }, "data": {} }
+  ],
+  "edges": [
+    {
+      "source": { "nodeId": "in1", "portId": "text" },
+      "target": { "nodeId": "team1", "portId": "input" }
+    },
+    {
+      "source": { "nodeId": "team1", "portId": "result" },
+      "target": { "nodeId": "out1", "portId": "result" }
+    }
+  ]
+}

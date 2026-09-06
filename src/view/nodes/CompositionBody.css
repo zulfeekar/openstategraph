@@ -1,0 +1,224 @@
+/* The composition annotation: one muted line above a mount's own fields.
+ * Subordinate to the card's title and to the outcome the user wrote — it is
+ * derived information, and derived information must never out-shout the
+ * authored kind. */
+.node__composition {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  line-height: var(--line-height-snug);
+}
+
+.node__composition--missing {
+  max-width: 100%;
+  color: var(--color-text-quaternary);
+  font-style: italic;
+  text-align: right;
+  overflow-wrap: break-word;
+}
+
+/* The census line and its two affordances share one row: disclosure on the
+ * left (it labels what it opens), Edit pinned right. */
+.node__composition-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1-5);
+}
+
+.node__composition-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.node__composition-toggle:hover {
+  color: var(--color-text-secondary);
+}
+
+/* What stands where the census would be when the child could not be counted —
+ * unsaved package, empty document, runtime unreachable.
+ *
+ * It takes the toggle's place in the row rather than replacing the whole row,
+ * so **Open this mount** keeps its position: the verb is what a reader reaches
+ * for when the card cannot describe itself, and it must not move about
+ * depending on whether a fetch happened to succeed. Not a button, because
+ * there is nothing to disclose. */
+.node__composition-note {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-quaternary);
+  font-style: italic;
+  overflow-wrap: break-word;
+}
+
+.node__composition-caret {
+  flex: none;
+  font-size: 0.9em;
+  line-height: 1;
+}
+
+/* The button plus the one sentence that makes it safe to press
+ * (`say-it-on-the-surface/08`) — stacked so the fact sits under the verb
+ * rather than crowding the row it shares with the disclosure toggle.
+ *
+ * `flex: none` means this group never shrinks on its own — its width is
+ * whatever its widest child asks for. `.node__composition-scope` already
+ * carried its own cap; the refusal sentence
+ * (`.node__composition--missing`, shown after a refused press) did not, so
+ * a long sentence took its natural single-line width and the group grew
+ * past the card (`the-look-has-an-author-now`, reported from a live
+ * screenshot: the group at x=700–880 against a card ending at x=290). The
+ * `max-width` here is the actual fix — every child's own wrap constraint
+ * only matters once the box they wrap inside has a ceiling. Sized to the
+ * button's own natural width (measured ~115px) with headroom, so ordinary
+ * content never wraps and only a runaway sentence does. */
+.node__composition-open-group {
+  flex: none;
+  max-width: 8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-0-5);
+}
+
+/* Visible, not a tooltip: a title does not exist for a keyboard user
+ * tabbing to the button above, or on a touch device. Kept to the phrase
+ * that must survive when only one fits — this mount only, others
+ * unaffected — the full picture stays in the button's title for a mouse. */
+.node__composition-scope {
+  max-width: 7.5em;
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+  text-align: right;
+  line-height: var(--line-height-snug);
+}
+
+/* A real secondary action, not a hint.
+ *
+ * The earlier treatment — inherited caption type, a hairline border, no fill —
+ * read as part of the muted census line beside it and was repeatedly missed.
+ * At rest it now carries its own surface, a visible border and medium weight,
+ * which is the minimum a control needs to look pressable. It stays compact
+ * (11px type, 2px/6px padding) because it lives on a 252px card next to the
+ * disclosure toggle, and it must not out-shout the card's title. */
+.node__composition-open {
+  flex: none;
+  /* The pencil and its label read as one control, hence inline-flex with a
+   * hair of gap rather than two baseline-aligned siblings. */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+  font: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-subtle);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-0-5) var(--space-1-5);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+/* Cannot be opened yet — the parent has never been saved, so there is nowhere
+ * to write the change. Greyed, but **not** `disabled`: a disabled button fires
+ * no mouse events and would swallow the hover text that says why, which is the
+ * same reasoning `PackageItem` records for a refused package row. */
+.node__composition-open[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.node__composition-open:hover:not(:disabled):not([aria-disabled='true']) {
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface-raised);
+  border-color: var(--color-border-emphasis);
+}
+
+.node__composition-open:active:not(:disabled) {
+  background: var(--color-bg-active);
+}
+
+.node__composition-open:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.node__composition-open:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+/* The peek itself.
+ *
+ * Inert by construction: `pointer-events: none` on the diagram means no click,
+ * hover or drag inside it can reach the child's document, so the card stays a
+ * card and the mount stays a box. It is also why the peek does not swallow the
+ * drag that moves the parent node.
+ *
+ * The card's height is measured and reported to the canvas by `NodeCard`, so
+ * growing downward here is supported — the node grows to fit rather than
+ * clipping. The width is not elastic, hence the capped height and the
+ * card-sized Mermaid layout in `peekMermaid`. */
+.node__peek {
+  margin-top: var(--space-1-5);
+  padding: var(--space-1-5);
+  /* No height cap. A cap here silently *truncates a graph*, which is worse
+   * than a tall card: a peek that shows the first four nodes of a loop and
+   * hides the edge that closes it tells the reader the opposite of the truth.
+   * `NodeCard` measures and reports the card's height, so growing is
+   * supported; the width is what is fixed, and `peekMermaid` lays the diagram
+   * out top-down to suit it. */
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  /* The real token is `--color-bg-surface-sunken`; the earlier spelling had no
+     such custom property, so the fallback (transparent) always won. */
+  background: var(--color-bg-surface-sunken);
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.node__peek svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.node__peek--note {
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+  font-style: italic;
+  padding: var(--space-1) var(--space-1-5);
+  border-style: dashed;
+}
+
+/* The package's own one-line purpose, above the census.
+ *
+ * Slightly stronger than the counts beneath it: what a mount achieves is the
+ * headline and what it contains is the detail, so the type ramp has to agree
+ * with that order rather than leave two identical-looking lines. */
+.node__composition-purpose {
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-snug);
+  margin-bottom: var(--space-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: break-word;
+}

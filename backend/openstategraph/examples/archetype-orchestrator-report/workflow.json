@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "name": "Archetype Orchestrator Report",
+  "published": false,
+  "savedAt": "2026-08-14T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Archetype Orchestrator Report",
+    "settings": {
+      "purpose": "Two worker archetypes, one plan: the supervisor labels each subtask and Send dispatches it to the matching worker."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Brief",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 320
+        }
+      },
+      {
+        "id": "lead1",
+        "type": "orchestrate.supervisor",
+        "title": "Planner",
+        "data": {
+          "maxSubtasks": 3,
+          "rules": "Split the brief into independent subtasks and label each one with the archetype best suited to it. Subtasks that need facts, options or comparisons go to the analyst; subtasks that need finished prose \u2014 an agenda, a summary, a message \u2014 go to the writer. Give every subtask a short, descriptive id."
+        },
+        "position": {
+          "x": 380,
+          "y": 320
+        }
+      },
+      {
+        "id": "worker-research",
+        "type": "orchestrate.worker",
+        "title": "Analyst",
+        "data": {
+          "default": true,
+          "role": "States the facts, options or trade-offs one subtask needs, from what it already knows \u2014 this worker holds no tools and looks nothing up. Answers in short bullet points, no prose padding. Also the fallback for any subtask the planner left unlabelled."
+        },
+        "position": {
+          "x": 760,
+          "y": 180
+        }
+      },
+      {
+        "id": "worker-write",
+        "type": "orchestrate.worker",
+        "title": "Writer",
+        "data": {
+          "role": "Turns one subtask into finished, readable prose \u2014 an agenda, a summary, a message. No bullet points, no meta-commentary about the task."
+        },
+        "position": {
+          "x": 760,
+          "y": 460
+        }
+      },
+      {
+        "id": "join1",
+        "type": "function.format_report",
+        "title": "Join",
+        "data": {
+          "reportTitle": "Onboarding plan"
+        },
+        "position": {
+          "x": 1120,
+          "y": 320
+        }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Report",
+        "data": {},
+        "position": {
+          "x": 1460,
+          "y": 320
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "lead1",
+          "portId": "instruction"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lead1",
+          "portId": "workers"
+        },
+        "target": {
+          "nodeId": "worker-research",
+          "portId": "dispatch"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lead1",
+          "portId": "workers"
+        },
+        "target": {
+          "nodeId": "worker-write",
+          "portId": "dispatch"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "worker-research",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "join1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "worker-write",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "join1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "join1",
+          "portId": "report"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      }
+    ]
+  }
+}

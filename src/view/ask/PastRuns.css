@@ -1,0 +1,197 @@
+/* Past runs — a read-only history inside the chat panel.
+ *
+ * Deliberately quieter than a turn: history is reference material, not the
+ * conversation. Same token scale as `AskPanel.css` (`--space-2` inside a
+ * block, `--space-3` between blocks) so the two read as one surface. */
+
+.past-runs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: var(--space-1);
+}
+
+.past-runs__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.past-runs__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--type-label);
+  color: var(--color-text-secondary);
+}
+
+.past-runs__bar-actions {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.past-runs__run {
+  /* Never shrink. The list is a flex column in a bounded panel, so the
+     default `flex-shrink: 1` squeezed every row to a uniform height once
+     there were more runs than fit — clipping each row's meta line under the
+     next row's border. The container scrolls; the rows keep their size. */
+  flex: 0 0 auto;
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  overflow: hidden;
+}
+
+/* A run still waiting on a human is the one row worth finding at a glance. */
+.past-runs__run[data-status='paused'] {
+  border-color: var(--color-status-warning);
+}
+
+.past-runs__run-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.past-runs__run-head:hover {
+  background: var(--color-bg-hover);
+}
+
+.past-runs__run-title {
+  font: var(--type-body-sm);
+  color: var(--color-text-primary);
+}
+
+.past-runs__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3);
+  border-top: var(--border-width-hairline) solid var(--color-border);
+}
+
+.past-runs__note {
+  margin: var(--space-2) 0 0;
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+}
+
+.past-runs__step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+}
+
+.past-runs__step-head {
+  font: var(--type-label);
+  color: var(--color-text-secondary);
+}
+
+.past-runs__line {
+  display: grid;
+  grid-template-columns: minmax(4rem, 6rem) 1fr;
+  gap: var(--space-2);
+  font: var(--type-caption);
+}
+
+.past-runs__line-key {
+  color: var(--color-text-secondary);
+}
+
+.past-runs__line-value {
+  color: var(--color-text-primary);
+  /* Checkpoint values are capped by the backend but can still be a paragraph;
+     wrapping beats a horizontal scrollbar inside a side panel. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* One lane per graph. A run checkpoints the workflow and every agent subgraph
+   under one thread, and each numbers its own supersteps from -1 — flat, that
+   reads as one graph repeating itself (`memory-and-replay` 37). The rule on
+   the left is what says "these steps belong together". */
+.past-runs__lane {
+  display: flex;
+  flex-direction: column;
+  border-left: var(--border-width-marker) solid var(--color-border);
+  padding-left: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.past-runs__lane-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.past-runs__lane-title {
+  font: var(--type-label);
+  color: var(--color-text-primary);
+}
+
+.past-runs__step-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* What this superstep wrote — the question a reader asks of a row before they
+   read its values. Secondary, because `values` is still the substance. */
+/* How long, and what it cost. Sits beside the step title rather than at the
+   far right: it is a property of *this* step, where `wrote` is a list that
+   reads as a right-hand column. `margin-right: auto` keeps it against the
+   title whether or not a `wrote` follows it. */
+.past-runs__cost {
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+  margin-right: auto;
+  white-space: nowrap;
+}
+
+.past-runs__wrote {
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* One tool call, one line: `web_fetch({...}) → Error: …`. Monospaced because
+   half of it is JSON, and a reader is scanning for a name and an argument. */
+.past-runs__tool {
+  font: var(--type-mono-sm);
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface-sunken);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* What a parked run is asking, under the sentence that says it is parked
+   (`the-cost-of-one-more/17`). The same grid as a checkpoint's `__line`,
+   because it is the same kind of thing — a key nobody here chose against a
+   value nobody here bounded — and a reader who has opened a step already
+   knows how to read it.
+
+   The one thing it adds is a ceiling. `candidate` is upstream text, which in
+   this product can be a whole workflow document, and a gate that pushed the
+   lanes off the bottom of the panel would answer "what is it waiting for" by
+   hiding everything else. Ten lines, then it scrolls in place. */
+.past-runs__ask {
+  max-height: 10lh;
+  overflow-y: auto;
+}

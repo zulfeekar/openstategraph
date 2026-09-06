@@ -1,0 +1,91 @@
+/* The Knowledge card's curation surface: the topic index under the build
+ * button, and the editor dialog's textarea. Derived information stays
+ * subordinate to authored content — same rule as the composition line.
+ * Existing tokens only (theme.css / tokens.css); nothing new is minted. */
+
+/* Invariant 3 of the knowledge architecture, stated where the affordance
+ * lives: the button is a build-time action hosted on a run-time node, and
+ * nothing in the compiled graph can reach it. */
+.knowledge__build-time-note {
+  font: var(--type-label);
+  color: var(--color-text-quaternary);
+  margin: 0;
+}
+
+.knowledge__topics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.knowledge__topic {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.knowledge__topic:hover {
+  color: var(--color-text-secondary);
+}
+
+.knowledge__topic-name {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.knowledge__topic-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge__badge {
+  flex-shrink: 0;
+  font: var(--type-label);
+  color: var(--color-text-quaternary);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+}
+
+.knowledge__badge--stale {
+  color: var(--color-danger);
+  border-color: currentColor;
+}
+
+/* The editor: one textarea, explicit save — no autosave into an authority
+ * store. Monospace type, because the docs are Markdown edited as source. */
+.knowledge__editor {
+  width: 100%;
+  min-height: 320px;
+  resize: vertical;
+  font: var(--type-mono-sm);
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface-sunken);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+}
+
+.knowledge__editor:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.knowledge__claim-note {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  margin: var(--space-2) 0 0;
+}

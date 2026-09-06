@@ -1,0 +1,185 @@
+/* Stored runs — the run store's own listing, in a top-bar popover.
+ *
+ * Same token scale as the panels it sits beside (`--space-2` inside a block,
+ * `--space-3` between blocks) so the popover reads as one surface with the
+ * Workflows popover it was asked to match. Quieter than a conversation on
+ * purpose: this is a picker, and the thing worth looking at is the timeline it
+ * puts on the dock.
+ *
+ * **Every edge of this panel belongs to the popover**
+ * (`the-look-has-an-author-now/20`). Nothing here declares a padding, a width
+ * or a height: `.popover` carries `--box-inset` for every box that is not a
+ * set of regions, its width is `--layout-drawer-width`, and `Popover.tsx`
+ * measures the room left below the trigger against the stage and applies it.
+ * All three were owned by the container already and this panel used none of
+ * them — so it ran to the box's edges, and the `min-width: 22rem` it declared
+ * against a 320px container put 32px of every row, the turn count and the
+ * Close button included, behind the popover's `overflow: hidden`.
+ *
+ * What this file owns instead is **which part of it moves**. The bar, the way
+ * back and the note are `flex: none`, so they stay where they were put; the
+ * list takes the rest and scrolls, because a deployment's whole run history
+ * is unbounded by nature and a bound that clips it would hide runs rather
+ * than page them. A picker whose title scrolls away is a picker you can get
+ * lost in. */
+
+.stored-runs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  /* Shrink to the popover's measured maximum rather than to this content:
+     without it a flex item's floor is its content height and the list would
+     push the box past the bound instead of scrolling inside it. */
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Everything above the list stays put. */
+.stored-runs__bar,
+.stored-runs__back,
+.stored-runs__note,
+.stored-runs > .ask__meta {
+  flex: none;
+}
+
+/* The one thing that moves. */
+.stored-runs__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.stored-runs__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.stored-runs__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--type-label);
+  color: var(--color-text-secondary);
+}
+
+.stored-runs__bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.stored-runs__back {
+  align-self: flex-start;
+  gap: var(--space-2);
+}
+
+.stored-runs__note {
+  margin: 0;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.stored-runs__sitting {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.stored-runs__sitting-title {
+  margin: 0;
+  font: var(--type-label);
+  color: var(--color-text-tertiary);
+  text-transform: none;
+}
+
+.stored-runs__thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border-left: var(--border-width-hairline) solid var(--color-border);
+  padding-left: var(--space-2);
+}
+
+.stored-runs__thread-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: var(--type-body-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.stored-runs__thread-head:hover {
+  background: var(--color-bg-hover);
+}
+
+.stored-runs__thread-slug {
+  font-weight: 600;
+}
+
+.stored-runs__thread-id,
+.stored-runs__count {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.stored-runs__count {
+  margin-left: auto;
+}
+
+.stored-runs__turn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-2);
+  margin-left: var(--space-3);
+  border: var(--border-width-hairline) solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: var(--type-body-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.stored-runs__turn:hover {
+  background: var(--color-bg-hover);
+}
+
+/* The recording currently on the dock. The dock's own header says the same
+ * thing in words — this is the echo in the list somebody picked it from.
+ * Fill and not a darker edge: `--color-border-emphasis` is interaction state
+ * at recorded sites only, and a resting selected row is not one. */
+.stored-runs__turn[data-showing] {
+  background: var(--color-bg-selected);
+}
+
+.stored-runs__turn-question {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stored-runs__turn-facts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.stored-runs__failed {
+  color: var(--color-danger);
+}

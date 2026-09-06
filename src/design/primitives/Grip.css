@@ -1,0 +1,107 @@
+/* The draggable edge, drawn once — `stable-beta-public/21`.
+ *
+ * `16` gave the right-hand column a handle, `19` gave both handles a
+ * resting mark, and each was written where its surface lived: seven
+ * declarations in `AppShell.css` and seven more in `RunDock.css`, agreeing
+ * on a length token and a colour and on nothing else. Measured on the
+ * running app they read as two different lines, because a grip's weight is
+ * whatever it paints *plus* the border it sits on — the dock's edge came to
+ * 4px and the column's to 2px. One control cannot be two stylesheets.
+ *
+ * Two states, both drawn, neither pickable by a surface — `stable-beta-public/23`
+ * corrected the resting one, which shipped invisible: `21` drew it at
+ * `--color-border`, the hairline every non-draggable edge uses, and it read
+ * as absent. (The number this sentence used to give for that — "under 2:1
+ * against a near-white surface" — was wrong when it was written: the token
+ * measured 4.41:1 there at the time. What made the bar disappear was 1px of
+ * it against 2px of full ink, which is `23`'s actual finding. It happens to
+ * be under 2:1 today, since `stable-beta-public/26` halved the token's ink,
+ * and that is a coincidence rather than a vindication.) The owner's own rule (`21`'s
+ * story, restated in `23`) was full ink at rest, quiet only in *width*:
+ *
+ *   at rest   a `--grip-length` bar, centred on the edge, `--color-rule`
+ *             at rule weight (`--border-width-rule`, 2px) — findable
+ *             without a pointer, plainly visible against the panel ground
+ *   on hover  the same bar, same ink, at `--grip-weight` (4px) — the
+ *   or focus  heavy stroke the owner drew, plus the resize cursor
+ *
+ * The bar is drawn with a real border property rather than a background,
+ * so the app-wide draggable-weight census in
+ * `styles/aBorderIsDraggableOrItIsNot.test.ts` can still see and count it;
+ * a filled div would be invisible to a scan limited to border properties.
+ *
+ * The hit area stays 7px on both axes and the full length of the edge — a
+ * 2px line is a target nobody hits — while the visible bar is the
+ * invitation. So the strip straddles the edge (`-3px`) and the bar sits at
+ * `3px` inside it, on the edge itself.
+ *
+ * And all seven of them have to answer a pointer, which is `22`: the four
+ * inside the column belonged to `.panel` until `--z-grip` existed, because
+ * the panel is a flex item carrying `--z-panel` and a flex item paints by
+ * its `z-index` even at `position: static`. The strip stayed 7px — the
+ * size was never what was wrong, and widening it would only have taken the
+ * same three pixels back out of the panel's own content. */
+.grip {
+  position: absolute;
+  touch-action: none;
+  z-index: var(--z-grip);
+}
+
+.grip::before {
+  content: '';
+  position: absolute;
+}
+
+.grip:focus-visible {
+  outline: none;
+}
+
+/* ---- vertical: an edge a pointer moves left and right ---- */
+
+.grip--vertical {
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.grip--vertical::before {
+  top: 50%;
+  left: 3px;
+  width: 0;
+  height: var(--grip-length);
+  transform: translateY(-50%);
+  border-left: var(--border-width-rule) solid var(--color-rule);
+}
+
+.grip--vertical:hover::before,
+.grip--vertical:focus-visible::before {
+  height: var(--grip-length);
+  border-left: var(--grip-weight) solid var(--color-rule);
+}
+
+/* ---- horizontal: an edge a pointer moves up and down ---- */
+
+.grip--horizontal {
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+.grip--horizontal::before {
+  left: 50%;
+  bottom: 3px;
+  height: 0;
+  width: var(--grip-length);
+  transform: translateX(-50%);
+  border-top: var(--border-width-rule) solid var(--color-rule);
+}
+
+.grip--horizontal:hover::before,
+.grip--horizontal:focus-visible::before {
+  width: var(--grip-length);
+  border-top: var(--grip-weight) solid var(--color-rule);
+}

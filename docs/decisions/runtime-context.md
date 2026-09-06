@@ -1,0 +1,840 @@
+# A workflow declares what its runs carry
+
+**Status: all seven steps built (2026-08-22). The chain is closed.** `organisms-first-class/41`,
+adopted from ticket 19's owner decision (2026-08-15). The build is split into
+seven tickets, listed at the end, in the order they must land.
+
+**Ticket 67 has landed** (2026-08-22). The *declaration* is real: a document
+can say what its runs carry, an ill-formed declaration is refused by
+`openstategraph validate` with a non-zero exit, and a declaration naming one of
+the four run-identity keys is refused in any casing. Nothing consumes it — no
+schema is minted, no value is supplied and nothing reads one — so a workflow
+declaring run context today behaves exactly as it did yesterday. The sections
+below are marked accordingly: **[BUILT]** for what 67 shipped. *(That was true
+of 67's own day; every other step has since landed too — see "What this record
+now claims, end to end" below.)*
+
+**Ticket 68 has landed** (2026-08-22) and changed no behaviour at all. The four
+run-identity keys are now spelled in one module,
+`backend/openstategraph/run_identity.py`, and every reader of them goes through
+its `run_identity()` accessor;
+`backend/tests/test_one_accessor_reads_run_identity.py` is the census that
+fails when a fifth reader hand-rolls `configurable`, the sibling of `ac870f6`'s
+census of writers.
+
+The code it shipped with is `backend/tests/test_runtime_context_facts.py`,
+which pins the library facts it rests on, plus
+`backend/openstategraph/compile/run_context.py`,
+`backend/tests/test_run_context_declaration.py`,
+`src/core/model/contracts/workflow.ts` and
+`src/core/serialization/runContextDeclaration.test.ts`.
+
+## Problem
+
+A run carries three kinds of data and this platform has a home for two of them.
+**Graph state** flows between nodes and is drawn on the canvas. **Environment**
+is machine-level and identical for every run on the process. Between them sits
+a third: values that are *per-run* and *static for the whole run* — which
+tenant this is for, which case id, a caller-supplied locale, a support handle,
+a feature flag. Today a workflow author has nowhere to put them. They end up as
+part of the question, which puts them inside the model's context window where
+they can be argued with, or as an environment variable, which makes them the
+same for every run.
+
+LangGraph has the channel: `StateGraph(state_schema, context_schema=…)`, a
+value supplied as `invoke(..., context=…)` and read as `Runtime[Ctx].context`.
+This platform passed it nowhere until ticket 69, which mints the class and
+hands it to `StateGraph`. The census that used to assert *nobody* declares one
+now asserts *exactly one place does*
+(`TestOnlyTheCompilerDeclaresAContextSchema`), because the fact worth holding
+was always **where** rather than how many. *(As of 69's own day nothing
+supplied a value and nothing read one; 70 to 73 have since closed both sides.)*
+`generated_module_contract.py`'s `run-seams` clause names the read side's
+seams — corrected away from `ToolRuntime` by `251b5a6` on 2026-08-20, and
+extended with `run_context()` by 73.
+
+## What already exists, measured first
+
+| channel | who supplies it | who reads it | scope |
+| --- | --- | --- | --- |
+| `configurable.thread_id` / `session_id` / `user_email` / `workflow_slug` | the **server** (`principal.py`), or the library caller, never the client | `run_identity.run_identity()` — the one accessor since ticket 68; `memory.py`, `prebuilt_session.py` and `api/streaming.py` call it, and `api/threads.py` reads a *stored* checkpoint rather than the run | every run, every door |
+| `document.settings.*` — `model`, `recursionLimit`, `checkpointer`, `memory`, `injectionScreening`, `knowledgeCodeRoot`, `purpose` | the **author**, saved in `workflow.json` | the compiler, at build | the package |
+| `RunRequest` — `question`, `model`, `recursion_limit`, `thread_id`, `session_id`, `workflow_slug` | the caller | `api/routes/runs.py` | one run |
+| `ask(question, *, thread_id, user_email, session_id, recursion_limit)` | the library caller | `loader.py:238` | one run |
+
+So: **nothing today passes a per-run value that is neither state nor
+environment**, and `context=` collides with nothing — not an `ask()` parameter,
+not a `RunRequest` field (which is `extra: "forbid"`, so adding one is purely
+additive), not a `settings` key.
+
+## What the library actually does — docs, then measurement
+
+The docs (`docs-langchain`, `/oss/python/concepts/context`,
+`/oss/python/langchain/runtime`, `/oss/python/deepagents/context-engineering`,
+`/oss/python/deepagents/subagents`) say: define the shape with `context_schema`
+— "a `dataclasses.dataclass` or `typing.TypedDict` class"; pass values as
+`context=` to `invoke`; read them in a node as `Runtime[Ctx]`, in middleware as
+`request.runtime.context`, in a tool as `ToolRuntime[Ctx]`; and runtime context
+"**propagates to all subagents**".
+
+Run against langgraph 1.2.10 / langchain 1.3.14 / deepagents 0.7.5, every one
+of those is true. Three of them are true with a caveat the docs do not carry,
+and the caveats are what shaped the design:
+
+1. **"The shape of that data" is not validation, and how much of it is enforced
+   depends on which kind of class you pick.** A **dataclass** schema is
+   *constructed* from whatever mapping the caller passed, so an undeclared key
+   and a missing required key are both refused — as
+   `TypeError: Ctx.__init__() got an unexpected keyword argument 'zzz'`, naming
+   a class the workflow author never wrote and cannot see. A **TypedDict**
+   schema is not constructed at all and checks nothing: `{"tenant": …,
+   "undeclared": 1}` rides straight through. **Neither checks a value's type** —
+   `{"tenant": 123}` against `tenant: str` is accepted and delivered as an
+   `int`.
+2. **A run that supplies no context at all is not refused.** `runtime.context`
+   is `None`, and the failure is an `AttributeError` at whichever node touched
+   it first, naming neither the key nor the run.
+3. **A dict is accepted where a dataclass was declared** — and coerced into it.
+   So callers never need to import a Python type, which is the whole reason the
+   three supply routes below can be JSON.
+
+The deepagents claim is true and it is the one worth stating carefully. A
+parent agent invoked with `context=Ctx(...)` and a subagent whose only tool
+records what it can see: the subagent's tool saw the parent's context,
+unchanged.
+
+## Decision
+
+### The declaration is data, in `settings` — **[BUILT, ticket 67]**
+
+A workflow declares its context in `document.settings.context`, an **ordered
+list** of field descriptors:
+
+```json
+"settings": {
+  "context": [
+    {
+      "key": "tenant",
+      "type": "string",
+      "label": "Tenant",
+      "description": "Which customer this run is for.",
+      "required": true
+    },
+    { "key": "caseId", "type": "string", "label": "Case id", "required": false },
+    { "key": "maxRefunds", "type": "number", "label": "Refund ceiling", "default": 3 }
+  ]
+}
+```
+
+- **A list, not an object map.** Order is the substance: this is the order the
+  generated prompt section renders in and the order the inspector lists, and
+  JSON object key order is not a contract. Port descriptors are a list for the
+  same reason.
+- **`type` is a named enum** — `"string" | "number" | "boolean"`. Not
+  `"object"` or `"array"` in v1: a nested value cannot be rendered into a
+  prompt section honestly, cannot be typed on a CLI flag without inventing a
+  parser, and every one of those is a portability guardrail asking to be
+  broken. A workflow needing structure passes a string and parses it in a tool
+  it owns.
+- **`default` absent means unset**, and `required` defaults to `false`. There
+  is no sentinel and no non-finite number anywhere in this block — the same
+  rule `maxConnections` is the worked example of.
+- **No expressions.** A default is a JSON scalar. A default that could be
+  computed would be host-language code in a serialised field, which is
+  portability guardrail 1.
+- **Declared once, derived everywhere.** This descriptor list is the field
+  schema; the inspector row, the CLI flag list, the `RunRequest` validation and
+  the generated prompt section all read it. That is the DRY rule as stated, and
+  `13fa2d7` already made `document.setSetting(key, value)` generic in the key
+  precisely so a sibling of `recursionLimit` lands without a second place
+  settings get written.
+
+### A run supplies values by three routes, all JSON — **[BUILT, ticket 70]**
+
+| route | shape |
+| --- | --- |
+| HTTP | `RunRequest.context: dict[str, str \| int \| float \| bool] \| None` |
+| CLI | `openstategraph run --context tenant=acme --context caseId=C-1` (repeatable; typed by the declaration, never guessed from the literal) |
+| library | `wf.ask(question, context={"tenant": "acme"})` |
+
+All three land in one validator, and the validator is **ours**, because
+measurement 1 above says the library's is unusable and measurement 2 says there
+isn't one at the door. **Ticket 70 has landed** (2026-08-22):
+`validate_run_context` in `compile/run_context.py` is that validator, called by
+`CompiledWorkflow.ask`, by `POST /api/runs` and `POST /api/runs/stream`, and by
+`openstategraph run` — before the graph is invoked at any of them, so the raw
+`TypeError` is unreachable from all three. It refuses an undeclared key, a missing required key
+with no default, and a value of the wrong declared type — each naming the key
+and the workflow, not a synthesised Python class. `RunRequest` keeps
+`extra: "forbid"` at the top level; `context` is validated against the posted
+document's own declaration, which is the only place the truth lives.
+
+**Four decisions 70 had to make.**
+
+**A flag carries strings, so the type comes from the document.** `--context
+key=value` is typed by the declaration and never guessed from the literal —
+guessing would make `caseId=00123` a number for one workflow and a string for
+the next, and `dryRun=false` a non-empty and therefore true string for
+everybody. A `boolean` field accepts `true` and `false` in any casing and
+**nothing else**: `1`, `0`, `yes`, `no`, `on` and `off` are refused by name in
+the message. That narrowness is the safety, and it is `CLAUDE.md`'s law about
+not promising what is not possible — a flag that quietly makes `false` mean
+true breaks it in the direction nobody checks. A `number` field takes what
+`float()` takes and then refuses what is not finite, because `inf` and `nan`
+are literals `float()` accepts and values JSON cannot carry. A key the document
+does **not** declare has no type to be read as, so it is left the string it
+arrived as and refused by the validator with the undeclared-key sentence: one
+refusal per fact, whichever door the value came in by.
+
+**The two CLI failures are two exit codes, deliberately.** A pair with no `=`
+is a mistyped command line and gets `EXIT_USAGE` (2), the code argparse itself
+gives for every other flag; a value the *declaration* refuses is a run that
+cannot start and gets `EXIT_FAILURE` (1). Exit codes are this CLI's API, and a
+script must be able to tell "you typed it wrong" from "the workflow refused
+it". Both are exercised as a real `cli.main` return and the second as a real
+process.
+
+**A refusal names the slug, or the document's name, or *this workflow*.** The
+slug is the identity and is what a package is addressed by — but `POST
+/api/runs` posts a canvas that may have none, and a refusal naming an empty
+string is worse than one naming nothing. `workflow_label` is the one place that
+falls back.
+
+**Defaults are not copied into the mapping.** The minted dataclass carries them
+(69) and that is the one place they live; filling them in here would be a
+second spelling of the author's intent, and the two would drift. `required`
+still yields to a default at the door, exactly as it does at the mint.
+
+### The compiler mints a dataclass — **[BUILT, ticket 69]**
+
+`WorkflowCompiler` turns the descriptor list into a `dataclass` at build time
+and passes it as `StateGraph(..., context_schema=…)`. A dataclass rather than a
+TypedDict for the reason measured: it enforces key names and required keys as a
+second line of defence behind our own validator, where a TypedDict enforces
+nothing. Nothing reads the minted class back into the model — the compile seam
+stays one-directional, and the class is an artefact of the build, exactly like
+the compiled graph.
+
+**Ticket 69 has landed** (2026-08-22) and made three decisions this document
+had left open.
+
+**Keyword-only fields, and that is what makes order survivable.** A dataclass
+whose fields carry defaults cannot be followed by one that does not —
+`make_dataclass` raises *non-default argument follows default argument*. So a
+document that declares an optional field before a required one would have
+turned the author's chosen order into a build failure, in a list whose order is
+the substance (it is the render order of the prompt section 72 builds).
+`kw_only=True` removes the ordering rule entirely, and `dataclasses.fields()`
+then reports the document's order verbatim. Values arrive as a mapping anyway,
+so nothing is given up.
+
+**`required` yields to a default.** A field flagged `required` that also
+carries a default is *not* required of the caller — the caller may omit it and
+get what the author wrote down. The alternative, a field the caller must always
+name even though an answer already exists, makes the default unreachable.
+
+**The class is called `RunContext`, and the name is all we control.** Measured
+here: an undeclared key fails as
+`TypeError: RunContext.__init__() got an unexpected keyword argument 'zzz'`.
+The `.__init__()` half is generated by `dataclasses` and cannot be replaced —
+assigning `__qualname__` afterwards does not touch it, because the generated
+`__init__` baked its name in at class-creation time. A non-identifier class
+name (`"the run context this workflow declared"`) *does* render in that
+message, was tried, and was rejected: the class is a real Python type that a
+`repr`, a traceback and `Runtime[...]` all print, and a type named with a
+sentence lies about what it is everywhere except the one message. So the first
+half is the lexicon word instead, and **the message is not the fix** — ticket
+70's validator at the door is, which is why that ticket is next.
+
+**And a key that cannot be a field name is a `plan.warnings` problem.** 67
+accepts any non-empty string key; `case-id` and `2x` are legal JSON keys and
+illegal field names, and `make_dataclass` would have raised out of the
+compiler, blaming the compiler for a document defect. The compiler reports it,
+withholds the *whole* schema rather than half of it, and builds. Whether 67's
+declaration validator should refuse it earlier — in both mirrors, so the editor
+says so while you type — is `organisms-first-class/74`.
+
+### The read side is three doors — all three built (71, 72, 73)
+
+- **A node** reads it through **`run_context()`**, the sibling of
+  `run_identity()` — **[BUILT, ticket 71]**, and *not* through a second
+  parameter, which is the one thing this section had wrong. See below.
+- **A prompt** receives it as the **Context** section — generated, placed
+  before the Rules, never editable, following `bc58fc1`'s `held_tools_context`
+  as the precedent for a generated block that declares itself authoritative.
+  It is composed by a middleware reading `request.runtime.context`, which is
+  the single place context becomes prompt text, exactly as `resolveMiddleware`
+  is for middleware. **Only declared keys marked for the prompt are rendered**:
+  a context field is a place to put an API handle, and a handle must be able to
+  reach a tool without reaching the model. **[BUILT, ticket 72]**, and by a
+  composed section rather than a middleware — see below.
+- **A tool** reads it through **`openstategraph.run_context()`** — the same
+  accessor a node uses, promoted to Tier 1 so a package's own `tools/` can
+  import it. **[BUILT, ticket 73]**, and *not* as a member on `BaseTool`,
+  which is the third thing this section had wrong. See below.
+
+**Ticket 71 has landed** (2026-08-22) and corrected the sentence above.
+
+**A second parameter is not available to this compiler.** `Runtime[Ctx]` as a
+node's second argument is how the library documents the read, and it is what
+`test_runtime_context_facts.py::TestTheThreeReadDoors` pins — but LangGraph's
+injection reads the *signature it is handed*, and this runtime hands it wrapped
+closures (`recording_attempts` wraps a node factory's callable in
+`(*args, **kwargs)`). 69 had already met this and used `get_runtime()` in its
+own test harness for exactly that reason. So the read is
+**`langgraph.runtime.get_runtime()`**, which was measured to work from an
+ordinary `(state)` node, and the consequence is the good one: **no node family
+grows a parameter, so reading context never becomes a family capability some
+families carry and others do not.** It is graph assembly on the write side and
+an ambient accessor on the read side, which is the cross-family boundary rule
+satisfied rather than argued around.
+
+**`run_context()` returns values, never the class.** A plain
+`dict[str, Any]`, built from `dataclasses.fields()` — so the minted class stays
+an artefact of the build, nothing reads a runtime type back into the model, and
+a reader holds JSON rather than a LangGraph-shaped object. `{}` is the answer
+to all three of *no runnable context*, *the workflow declares nothing* and
+*the caller supplied nothing*, because a node can do nothing different about
+any of them; that is the reader's half of measurement 2 above, which 70 closed
+only at the supply doors.
+
+**An author names the field they want by writing `{{key}}` in their own text.**
+The naming lives in the field schema the node already has — `input.text`'s
+`prompt`, `input.markdown` / `input.skill`'s `content`/`instruction` — so no
+new node configuration was declared, which is the DRY rule as stated. A
+placeholder is a **name reference and not an expression** (no operators, no
+calls, no paths): guardrail 1 obeyed rather than skirted.
+
+**Only the three text families render, and the choice is the point.** Those
+are the families whose entire output *is* author-written text and which have
+nowhere else to put a per-run value. The prompted families — `agent.llm`,
+`route.classifier`, `route.grader`, `orchestrate.supervisor`,
+`orchestrate.worker` — deliberately do **not**: their context arrives as 72's
+generated **Context** section with its per-field opt-in, and a second mechanism
+writing the same prompt would both duplicate the knowledge and defeat the
+opt-in that keeps an API handle away from a model.
+`TestThePromptedFamiliesAreNotRenderedHere` is what says so out loud. `function.*`
+does not, because its contract is `fn(text: str) -> str` and ticket 35 withheld
+run state from referenced code on purpose. Tools are 73.
+
+**Unresolved is left byte-identical, never blanked.** An undeclared key, a
+declared key this run has no value for, and a `{{` that was never a
+placeholder are all passed through exactly as written. Substituting an empty
+string would silently delete an author's text on surfaces — Markdown, skills,
+prompts — that legitimately contain braces.
+
+**One value, one spelling, whichever door it came by.** `true`/`false` rather
+than Python's `True`/`False`, because that is what `--context dryRun=false`
+accepts and what JSON carries; and an integral `number` renders `3` rather than
+`3.0`, because the CLI's `float()` must not be visible in an answer that the
+same value supplied over HTTP would spell differently.
+
+**Found on the way, and fixed the next session:
+`organisms-first-class/76`.** A mount is a closure over the child's
+`invoke()`, and LangGraph carried the parent's runtime down it — so a mounted
+child saw the **parent's** context object even when it declared its own, and
+its own defaults never materialised. Invisible until something read a value.
+The section below is what was decided.
+
+### The Context section, and where the opt-in lives — **[BUILT, ticket 72]**
+
+**The opt-in is `"prompt": true` on the field descriptor, and it defaults to
+off.** One more property on the list 67 already declared, so the descriptor
+stays the single field schema every surface derives from — the inspector row,
+the CLI flag, the validator and now the prompt section. Default-off is the
+whole ticket: a run-context field is exactly where an API handle, a tenant id
+or a caller's address ends up, and a tool has to be able to read one without a
+model ever seeing it. Opting in costs a word in the document; a value already
+sent to a provider cannot be un-sent, so the asymmetry decides the default.
+
+**What was rejected, and why.** *Per node* — a `tenant` a router may see is not
+a handle an agent may see, and that is a real distinction — but it would be a
+new per-node config field on five families, duplicating in each card a decision
+that is a property of the **value**, not of the reader; a document with four
+context fields and six prompted nodes would carry twenty-four checkboxes, and
+one forgotten checkbox is the leak. *Per mount, in `data.overrides`* — an
+override is per-instance and a slug-keyed JSON string, so the same handle would
+be showable in one mount and not another with nothing able to audit which; it
+also puts a security decision on the *caller* of a package rather than on the
+author who declared the field. Both remain reachable later: narrowing an opt-in
+per node is additive, widening one is not, so shipping the coarse **safe** shape
+first is the direction that keeps the promise.
+
+**A composed section, not a middleware.** The plan above said middleware, and
+that was written before 71 measured the read door. Middleware is an *agent*
+concern — `create_agent`'s wrapped model call — and four of the five prompted
+families are not agents: a router, a grader and a supervisor each make a bare
+`model.invoke([SystemMessage, HumanMessage])` with no middleware stack to hang
+anything on. A middleware would therefore have served `agent.llm` and
+`orchestrate.worker` and silently skipped the other three, which is exactly the
+one-factory-and-not-the-other defect `advisor_context` already cost this
+repository. So the section is built by `run_context_prompt_section` and arrives
+through `SystemPrompt.with_context` — the one place every family already
+composes generated context, which keeps `resolve_prompt()`'s promise that
+configuration becomes a prompt in one place. `context=` is now a keyword on
+`Router`, `Grader` and `BaseOrchestrator`, beside the one `ReactAgentNode`
+already had.
+
+**Composed per run, and the cache key is where this could have leaked.**
+`_agent` memoises its built agent per wired skill, and that cache outlives a
+run; keying it on `skill` alone would have handed the second caller the first
+caller's tenant. The key is `(skill, section)`. The router's compile-time
+`prebuilt` is likewise used only when neither a skill nor a section varies.
+
+**The section declares itself authoritative**, copying `held_tools_context`:
+context renders *before* rules, so "later instructions win ties" runs the wrong
+way, and a developer's months-old prose naming a different tenant would beat
+this run's actual one. Precedence is stated rather than positioned, and the
+developer's text is overruled rather than rewritten. It **never names a field
+it withheld** — telling a model something exists that it has not been given
+invites it to ask for what nothing can supply, and leaks the one fact the
+opt-in exists to keep quiet. A field with no value this run is omitted rather
+than rendered empty, which is `render_run_context`'s rule on this surface.
+
+**What is pinned**, in `backend/tests/test_context_reaches_a_prompt.py` (17
+tests): every claim is made against the system message a **real compiled
+graph's model actually received**, because a test of the composer's return
+value passes against a section no node ever sends. The demonstration runs once
+per prompted family; the inverses are that a withheld field's value, key and
+label appear nowhere in the whole message, that a document declaring nothing
+and a document whose fields all declined compose **byte-identical** prompts,
+that the output contract still renders last, that two runs of one compiled
+graph never see each other's values, and that `prompt` defaults to `False` on
+the descriptor itself. Five mutations were checked red: ignoring the opt-in
+filter, flipping the default to on, keying the agent cache on skill alone,
+rendering the context after the contract, and dropping the worker factory's
+call.
+
+**One of those five is no longer a mutation, and the correction is the section
+below.** "Keying the agent cache on skill alone" was checked red because, at
+the time, the rendered block was baked into the agent at construction — so the
+key was the only thing keeping two callers apart. It is not baked in any more,
+and the test that caught the mutation still passes, because it asks the
+question that actually matters: *did this run's model see this run's values and
+nobody else's?*
+
+**Not surfaced read-only, and that is a gap rather than a decision.**
+`/api/node-contracts` publishes `preamble`, `contract` and `default_rules` off
+the ladder *classes*, so it cannot publish anything generated from a document —
+`branch_context`, `held_tools_context` and the grader's rubric are equally
+invisible there today. `organisms-first-class/80` is that gap, filed rather
+than left as a footnote.
+
+### A per-run value is supported, including a case id — **[BUILT, `launch-readiness/182`]**
+
+The section above says a value reaches the model. This one says what it costs
+to send a **different** value every run, because for a while the answer was
+"one fully-assembled agent, kept until the process exits", and this document
+was where a reader would have gone looking.
+
+Ticket 72 put the rendered Context block into the compiler's agent memo key so
+that the second caller could not be handed the first caller's tenant. The memo
+outlives every run — its own comment says so — and a `caseId` is one value per
+run, so a workflow declaring one built and retained an agent per run and
+evicted none. Measured on a fake model, with no tools, rubric or summarization
+wired: 100 runs of one compiled graph built 99 agents, retained ~6 MiB and
+~1,050 live objects, and paid ~15 ms of rebuild per run. Correct answers the
+whole way; the symptom is an overnight OOM.
+
+**Where it was felt.** Not `POST /api/runs`, `/api/runs/stream`, the MCP
+`run_workflow` tool or `openstategraph run` — each compiles a graph per call
+and throws the memo away with it. `CompiledWorkflow.ask` holds `graph` as a
+frozen field and re-invokes it forever, and so does any mount under a
+long-lived parent. That is the library door this project advertises as the
+point of being a compiler rather than a runtime, which is what made it worth
+fixing rather than documenting as a footgun.
+
+**The fix is the lifetime of the value, not the key and not the cache.** The
+three candidates were priced. Capping the cache would have restored the tenant
+case and left the per-run case rebuilding at ~15 ms, and it raised a
+correctness question of its own — the memo also holds the narration middleware
+a *retry* looks up, so an eviction between an attempt and its retry would hand
+the retry an empty findings inventory. Making the memo per-run would have made
+the two shapes that already worked pay that rebuild too. So the block was taken
+out of the thing that is kept:
+
+- the compiler renders a fixed marker into the agent's context layer, once, at
+  the position the section has always occupied;
+- the node body renders **this run's** section, exactly where it always did,
+  and puts it on the invocation;
+- `RunContextMiddleware` substitutes one for the other when the model is
+  called — the shape deepagents' own `RubricMiddleware` already uses for the
+  other generated block that varies per run.
+
+Rendering it in place rather than appending it is the load-bearing half:
+appending would have put generated context *after* the locked output contract,
+which nothing may countermand.
+
+**It strengthens 72 rather than trading against it.** A cache key is a promise
+that two values land in two entries; there is now no per-caller entry at all.
+A workflow that declares no prompt-visible field carries no marker, no slot and
+no middleware, and composes the prompt it always did.
+
+Measured after, same probe, same machine: **0 agents built, ~305 KiB retained
+and ~7 objects per run — flat, and identical for a constant value, ten
+recurring tenants and a distinct value per run.** The three shapes that used to
+differ by twentyfold now cost the same.
+
+**So the module docstring's "a case id" stays true**, and this is the sentence a
+reader is owed: run context is for the values a run is started with, at
+whatever cardinality the caller has. A high-cardinality field costs the length
+of its rendered line and nothing else.
+
+**The other three prompted families were re-checked and have no such cache.**
+`router_for`, `grader_for` and `planner_for` construct per call — a router
+keeps one compile-time `prebuilt` for the case where nothing varies, and falls
+through to a fresh construction the moment a skill or a run-context block is in
+play. Nothing is retained, so there was nothing to fix; the measurement that
+said so (3.4 and 3.2 KiB/run against 2.8 and 2.4 with none declared, flat
+within noise) was measuring per-call construction, not accumulation. Each of
+the three now says so at its own factory, so the next sweep does not re-derive
+it.
+
+### At a mount: inherit, then narrow — **[BUILT, ticket 76]**
+
+> **A run-context key crosses a mount only when both documents declare it.**
+> The run supplies; the child's own document decides. Everything the child
+> declared and the run did not carry comes from the child's own defaults,
+> minted from its own declaration exactly as for a direct run.
+
+That is `582e098`'s rule for the step budget, pointed at a different channel:
+the caller's run is the ceiling, the child's own drawing is the aperture. It
+holds at every level, so a middle document that declares nothing passes nothing
+on — a package cannot hand down a key it never asked its own caller for — which
+is what makes a package's behaviour a function of its own document and its
+immediate caller's, at any depth.
+
+Two consequences worth stating plainly, because they are the two failures the
+whole chain exists to remove:
+
+- **A child cannot read a field it never declared**, at any depth. Its
+  `{{tenant}}` stays byte-identical inside a run that has a live `tenant`,
+  exactly as an unresolved placeholder does anywhere else (71).
+- **A field a child declared is never silently `None`.** What the run cannot
+  honour — a required key with no default that the parent's declaration does
+  not name, or a value the parent typed differently — is refused before
+  `invoke`, by 70's own validator, in our words naming the key and the child.
+  It reaches a developer as a failure marker rather than as a raised exception,
+  because that is what every node failure does here (`_error_handler_for`), and
+  the child's nodes do not run at all.
+
+**The library fact the mechanism rests on**, measured against langgraph 1.2.10:
+a graph compiled with **no** `context_schema` is not isolated from its caller's
+context — it inherits it, and `context=None`, `context={}` and passing nothing
+are all the same to it. So `mint_context_schema` takes `sealed=`, and a mounted
+child that declares nothing is given an **empty** schema rather than none.
+`context_schema=` still has exactly one call site; a workflow run **directly**
+is never sealed, so 69's promise that a document declaring nothing builds
+exactly the graph it built before is kept where it was made.
+
+**What was rejected.** *Inherit whole*, today's behaviour made deliberate: a
+package would read a caller's field it never asked for, and would answer
+differently depending on which parent happened to declare a key of the same
+name — `3f688e5` refused exactly that. *Isolate completely*, the child seeing
+only what its parent explicitly hands it: the honest end state, and it costs a
+**new serialised field on the mount**, which is an owner's decision rather than
+a thing to add while fixing a read path. It is `organisms-first-class/78`,
+filed with the two questions its design must answer; until it lands, a package
+whose declaration asks for a key its parent does not also declare is not
+mountable, and says so.
+
+### And it says so at compile time — **[BUILT, ticket 79]**
+
+> **A mount that can never supply its child's required key is refused by
+> `openstategraph validate`, not by the run.**
+
+Narrowing made *"not mountable"* true; 76 left it said only at the moment the
+run reached the mount and died. It is a fact about **two documents**, both on
+disk while the graph is being built, and no value of `--context` can change it
+— the parent does not declare the key, so nothing can carry one across.
+`unsuppliable_context_keys` is the check, `_subgraph` records it, and it lands
+on `Finding.UNSUPPLIABLE_CONTEXT`:
+
+    The workflow node mounting "child" can never run: that workflow requires
+    the run context key "caseId", and this document does not declare it — so no
+    run of this document can supply a value, and the mount fails before it
+    starts. Declare that key on this workflow, or give it a default in that one.
+
+**A `Finding` rather than `plan.warnings`**, on `6a812bf`'s line: that channel
+names a *malformed document*, and neither document here is malformed — each is
+valid and each runs on its own. What is lost is the mount, which produces
+nothing on every run, which is `UNRESOLVED_SUBGRAPH`'s class one reason over.
+`plan.warnings` could not carry it in any case: it is the in-memory plan, which
+has no root to load a sibling package from and has never seen the child.
+
+**A failure rather than a report**, by `afc57f6`'s test — *can the composition
+answer?* It cannot. Keyed by slug rather than by mount node id, so a package
+mounted three times says it once; **`organisms-first-class/78` is what could
+make that untrue**, since a per-mount supply differs per instance, and
+`unsuppliable_context_keys` takes a `mount_supplies` parameter today precisely
+so 78 cannot forget to consult it. All 36 packages shipped in this repository —
+23 examples, 4 templates, 9 under `workflows/` — validate green before and
+after.
+
+**And the mount sentence beside the subagent one below**: a *subagent* is not
+isolated from run context and cannot be, because there is no boundary there to
+hold a value at. A *mount* is exactly such a boundary — a second document, with
+its own declaration — so it is the one place in this platform where run context
+narrows.
+
+### How this relates to the four identity keys — the rule that keeps them apart — **[BUILT, tickets 67 and 68]**
+
+They do not merge, and a declaration may not name one.
+
+> **`configurable` is who the run is *for*. `context` is what the workflow
+> *asked its caller for*.**
+
+`thread_id`, `session_id`, `user_email` and `workflow_slug` are
+**server-determined and unforgeable** — `RunRequest` deliberately has no
+`user_email` field, because that value keys a per-person memory namespace and a
+client that could name the person could read that person's memories (memory
+ticket 01). `settings.context` is the opposite by construction: the *author*
+declares it and the *caller* fills it. Moving identity into a channel any
+caller may write would hand back exactly what ticket 01 took away.
+
+So: **a `settings.context` entry whose `key` is `threadId`, `sessionId`,
+`userEmail` or `workflowSlug` (in any casing) is a compile-time refusal**, and
+the reserved list is read from the same one place `memory.py` and
+`prebuilt_session.py` read, never restated. That is also how the
+`memory.py:135` / `memory.py:187` drift this ticket was asked to settle gets
+settled: **one `run_identity` accessor**, public, with the four keys named in
+it, read by `memory.py` (both sites), `prebuilt_session.py` and
+`api/streaming.py`. Three hand-rolled `get_config().get("configurable")` reads
+are three chances for one of them to learn a normalisation the others do not —
+which is the argument `_workflow_scope` already makes in its own docstring
+about itself, applied one level up. `ac870f6`'s census of *writers* gained its
+sibling census of *readers* in
+`backend/tests/test_one_accessor_reads_run_identity.py`: every module naming
+one of the four keys is classified as accessor, writer, transport or checkpoint
+lookup, and no module but the accessor may take one out of a `configurable`
+mapping — whether it called `get_config()` or was handed the config, which is
+the half a `get_config()`-only check misses.
+
+### The subagent sentence, in full
+
+> **Subagents are isolated from the parent's messages and graph state. They are
+> not isolated from runtime context.** Measured in deepagents 0.7.5: a parent
+> invoked with `context=` had those exact values reach a tool running inside a
+> subagent, unchanged. So a declared context field is visible to every
+> subagent of every agent in the workflow, and must be treated as
+> workflow-wide. It is the right channel for a tenant id, which every part of
+> the run legitimately needs; it is the wrong place for a value one node should
+> hold and another should not, because there is no boundary here to hold it
+> at.
+
+`CLAUDE.md`'s "state flows down; subagents do not receive it" stays true and
+unamended — this is a third channel it did not mention, and this paragraph is
+the amendment.
+
+### The lexicon row — the fourth collision
+
+*Context* is now this repository's fourth word meaning several things at once,
+after *loop*, *template* and *eval*. Settled the same way:
+
+| User-facing word | Means | Must never mean |
+| --- | --- | --- |
+| **Run context** | the values a workflow **declares** in `settings.context` and a caller supplies per run — static for the whole run, read by nodes and tools | the **Context** section of a prompt, the context window, or graph state |
+| **Context** (prompt part) | the generated, non-editable section of a system prompt — branch list, table schema, held tools, and now the rendered run-context fields | the run context itself; the section is one *consumer* of it |
+| *(internal only)* `Runtime.context` | LangGraph's channel | anything in UI copy, and nothing in `workflow.json` |
+
+## The hardest guardrail, and how this satisfies it
+
+Guardrail 4 — **our own runtime vocabulary; do not leak LangGraph type names
+into `workflow.json` or into `core/`**. A `context_schema` *is* a Python type,
+and this feature's entire purpose is to let a document declare one. That is the
+tension, and it is resolved by never storing the type:
+
+- `workflow.json` stores a **list of JSON field descriptors** — key, a named
+  type from a three-value enum, a label, a scalar default. No Python, no import
+  path, no class name, nothing to resolve at load time. A document declaring
+  run context is readable by a runtime that has never heard of LangGraph.
+- The dataclass is **minted by the compiler and discarded with it**. It exists
+  only inside the build, on the far side of the one-directional seam.
+- `core/` sees field descriptors and nothing else. `Runtime`, `ToolRuntime` and
+  `context_schema` appear in `compile/` and in the pinning test, and nowhere a
+  document or the editor can reach.
+
+Guardrail 1 is the one that constrains the *shape*: because expressions are
+data and never code, a default cannot be computed and a type cannot be a
+predicate — which is why the enum has three values rather than a validator
+grammar. Guardrail 3 is satisfied by construction and guardrail 2 is not
+engaged, since nothing here reduces.
+
+## What is pinned, and what is prose
+
+`backend/tests/test_runtime_context_facts.py` — 11 tests, executable, all
+against the installed libraries:
+
+- a node, a middleware and a tool each read the value (the three read doors);
+- a dataclass schema coerces a plain dict, refuses an undeclared key and a
+  missing required key, and says so as a Python `TypeError`;
+- no schema checks a value's type;
+- a TypedDict schema enforces nothing;
+- a run supplying no context fails at the reader, not at the door;
+- `context` and `configurable` coexist on one run, neither shadowing the other;
+- **a parent's context reaches a tool inside a deepagents subagent**;
+- **exactly one** module of `openstategraph/` declares a `context_schema` —
+  `compile/workflow_compiler.py`, the graph-assembly seam — and no file in
+  `src/core/` names one at all. This was `TestNothingHereUsesItYet`, asserting
+  zero, until 69 landed; it was updated rather than deleted because the fact
+  worth pinning was never *zero* but **where**, and a second declaration
+  anywhere is either a node family growing a graph-assembly concern or a
+  LangGraph type name walking towards `workflow.json`.
+
+`backend/tests/test_run_context_declaration.py` (47 tests) and
+`src/core/serialization/runContextDeclaration.test.ts` (23) pin what 67 built:
+the descriptor shape and its three-value enum; that a bad `type`, a duplicate
+key, a non-finite default, a default of the wrong declared type, an unknown
+property and a mapping-instead-of-a-list are each refused with the key named;
+that every reserved key is refused in **every** casing while `threading`,
+`slug` and `user_email_address` are left alone; that the refusal reaches
+`plan.warnings` and `openstategraph validate` exits 1 on it; and the inverses —
+a document without the key round-trips byte-identically through the store and
+through the editor, an empty list is preserved and means what absence means,
+and order is the rendering contract.
+
+**Two decisions 67 made that this document had left open.** An **empty list is
+preserved rather than dropped**, and means exactly what absence means: both say
+*this workflow asks its caller for nothing*, and a serializer that helpfully
+rewrites a file nobody edited is a loss this repository has already paid for
+twice. And a bad declaration is a **`plan.warnings` problem, not a
+`Finding`** — a `Finding` names a capability a compiled graph lost, where this
+is a malformed document, the same class of thing as `plan`'s own "dropped an
+edge with an unknown endpoint". That puts it on the channel `validate` turns
+into PROBLEMS FOUND and a non-zero exit, which is the honest answer to that
+command's one question.
+
+The reserved list is read from `run_identity.RUN_IDENTITY_KEYS` — 67 promoted
+the tuple from `prebuilt_session._FIELDS` to a public name, and 68 moved it to
+the accessor's own module, which is now the one place the four keys are
+spelled. The TypeScript half is a hand-mirror (`core/` cannot
+import Python) and is pinned against the Python one by a drift test in
+`test_run_context_declaration.py::TestTheTypeScriptMirrorDoesNotDrift`, the
+same instrument `RuntimeClient.ts` is held to.
+
+`backend/tests/test_compiler_mints_context_schema.py` (14 tests) pins what 69
+built: a compiled graph carries a dataclass whose fields are the document's, in
+the document's order even when an optional field is declared first; a supplied
+value reaches a node that actually ran; a declared default is what an omitting
+caller gets; a missing required key and an undeclared key are each refused, the
+second with its message asserted verbatim; a document declaring nothing, an
+empty list, a malformed declaration or an unmintable key mints nothing and — for
+the first of those — **passes no `context_schema` argument at all**, asserted on
+the `StateGraph` call rather than on its result, because `None` and absent are
+not guaranteed to be the same thing to a library we do not own; and the
+one-directional seam holds — building writes no type into the document, the plan
+holds no Python type, and two builds of one document mint two classes.
+
+`backend/tests/test_a_run_supplies_context.py` (61 tests) pins what 70 built:
+the raw `TypeError` still being what `graph.invoke` says, and being unreachable
+from all three doors; each of the four refusals driven once per door and
+asserted **verbatim**; the flag's typing and everything it refuses; every exit
+code as a real return and one as a real process; and the inverses — a workflow
+declaring nothing runs at all three doors exactly as before and is passed **no
+`context` argument at all**, a correct context reaches `invoke` unchanged,
+`configurable` still carries its four keys and only those, and `RunRequest` is
+still `extra: "forbid"` with a nested value refused by the model itself.
+
+`backend/tests/test_a_node_reads_the_run_context.py` (21 tests) pins what 71
+built: a supplied value reaching a real compiled graph's answer, two callers
+getting two answers from one workflow, a declared default reaching a node, and
+a skill node rendering through the *other* builder; and the inverses — a
+workflow declaring nothing gets its text back byte-identical and its accessor
+returns `{}`, the caller's question is never rendered, an undeclared key and a
+valueless declared key are left exactly as written, an unmintable key stays
+prose, an agent's instruction is untouched, and the two channels stay separate
+inside one run.
+
+**Ticket 73 has landed** (2026-08-22) and corrected the sentence above twice
+over — which makes three designs in this chain overturned by measurement, all
+three in the same direction: a mechanism assumed from a library's shape rather
+than measured in this installation.
+
+**`get_runtime()` already worked from inside a tool.** Measured before anything
+was built: the runtime is a contextvar set for the whole agent node, and
+`BaseTool.as_langchain_tool`'s wrapper calls `_execute` inside it, so
+`run_context()` returned the run's values from a tool the day 71 landed. The
+missing thing was never a mechanism — it was a **promised name**.
+`openstategraph.compile` is Tier 2, and a seam that code *we do not write* must
+build on cannot live in a tier we may change in a minor release.
+
+**So the accessor is module-level, and `BaseTool` did not grow.** The brief
+asked for a member "mirroring `prebuilt_session._configurable()`" — and that
+method does not exist: ticket 68 deleted it in favour of the module-level
+`run_identity()`, so the cited precedent argues the opposite way. Three further
+reasons: `5549a1b` priced a `BaseTool` member for one caller and rejected it as
+a Tier 1 surface every future tool author must answer; `ITool` is a `Protocol`
+on purpose, so a tool need not subclass the base; and the three seams a tool
+already reaches (`configure(data)`, `get_config()`, `get_store()`) are all
+module-level. The `_execute(args)` signature is untouched, the substitutability
+census and the public-surface ceiling stayed green unaltered, and no recorded
+exception's member count moved.
+
+**The prompt opt-in does not govern a tool, and that is the feature.** 72's
+default-off rests on *a value sent to a provider cannot be un-sent*, which is a
+statement about the provider; a tool runs in this process and sends nothing.
+Gating the tool on the same flag would make a declared API handle unreadable by
+the one component with a legitimate use for it. So the opt-in is a gate on the
+model door only, and `test_a_tool_reads_the_run_context.py` asserts both halves
+in one run: the handle in the tool's output, and absent from the first message
+list the model was handed.
+
+`backend/tests/test_a_tool_reads_the_run_context.py` (14 tests) pins it against
+a real package with a real `tools/` folder loaded by the real `load_workflow`
+— a supplied value in the tool's output and in the answer, two callers getting
+two answers, a declared default, the handle that never reaches the prompt, and
+`a86b4d8`'s subagent measurement repeated for one of our own `BaseTool`s. The
+inverses: a workflow declaring nothing runs unchanged and its tool reads `{}`,
+a call outside any run is `{}` rather than an exception, and the clause's every
+seam resolves in this installation.
+
+## What this record now claims, end to end
+
+The chain is closed. As of `52ff8e0` + ticket 73, all of this is built and
+pinned by tests rather than by this page:
+
+1. A document **declares** what its runs carry (`settings.context`), and an
+   ill-formed or reserved-key declaration is refused by `openstategraph
+   validate` with a non-zero exit (67).
+2. The four run-identity keys are read through **one** accessor, and a fifth
+   hand-rolled reader fails a census (68).
+3. The compiler **mints** a context schema and hands it to `StateGraph`, in
+   exactly one place (69).
+4. A run **supplies** context by three doors — `ask(context=)`, the HTTP
+   `context` object, `run --context KEY=VALUE` — through one validator of ours
+   (70).
+5. A **node** reads it: `run_context()`, `{{key}}` in the text field the node
+   already had, unresolved left byte-identical (71).
+6. A **prompt** receives only the fields whose author wrote `"prompt": true`,
+   as a generated non-editable **Context** section above the rules, in all five
+   prompted families (72).
+7. A **tool** reads it through the Tier 1 `openstategraph.run_context()`,
+   including inside a subagent, and the generated-module contract tells authors
+   so with a seam that resolves (73).
+
+**What remains filed, and is not claimed here:**
+
+- **74** — a context key that cannot be a field name; a small judgement, no
+  longer gating anything since 72 renders only opted-in keys.
+- **75** — a resumed run loses the context the first half had. Live since 71.
+- **78** — a mount cannot supply a value it does not itself declare; needs the
+  owner, since it is a new serialised field on the mount.
+- **80** — the read-only inspector panel cannot show generated context; the
+  surface half of the prompt law.
+
+## The build, in the order it must land
+
+| # | ticket | why here |
+| --- | --- | --- |
+| ~~67~~ | ~~`settings.context` is a declared field schema~~ | **Landed 2026-08-22.** TS `core/` contract + Pydantic mirror + both serializer round trips + the reserved-key refusal. Builds no runtime, as designed. |
+| ~~68~~ | ~~One `run_identity` accessor for the four keys~~ | **Landed 2026-08-22.** `openstategraph/run_identity.py`, four readers repointed, the reserved list moved onto it, and a census of readers beside `ac870f6`'s census of writers. Pure refactor, as designed. |
+| ~~69~~ | ~~The compiler mints a `context_schema`~~ | **Landed 2026-08-22.** `mint_context_schema` in `compile/run_context.py`, one `StateGraph(..., context_schema=…)` in the compiler, and the sentinel updated into a census of one. Supplies and reads nothing, as designed. |
+| ~~70~~ | ~~One validator, three supply routes~~ | **Landed 2026-08-22.** `validate_run_context` and `coerce_context_flags` in `compile/run_context.py`, `RunContextError` (Tier 1), `ask(context=)`, `RunRequest.context`, `run --context KEY=VALUE`. Reads nothing, as designed. |
+| ~~71~~ | ~~Nodes read it~~ | **Landed 2026-08-22.** `run_context()` and `render_run_context()` in `compile/run_context.py`, read by `_input` and `_static_text`. `get_runtime()` rather than a second parameter; the prompted families deliberately untouched. |
+| ~~72~~ | ~~The generated prompt **Context** section, and per-field opt-in~~ | **Landed 2026-08-22.** `"prompt": true` on the descriptor (default off), `prompt_context_fields` and `run_context_prompt_section` in `compile/run_context.py`, `context=` on Router / Grader / BaseOrchestrator, composed in all five prompted factories. A composed section rather than a middleware, for the reason recorded above. |
+| ~~73~~ | ~~The tool accessor, and the generated-module contract clause~~ | **Landed 2026-08-22.** `openstategraph.run_context` promoted to Tier 1 (`__init__`, `public_api.txt`, `docs/stability.md`), the `run-seams` clause and the build door's brief extended with it, and the subagent sentence put in `docs/building-an-atom.md`. **Not** a member on `BaseTool`, for the reason recorded above; the `ToolRuntime` clause it was filed to correct had already been corrected by `251b5a6` two days earlier. |
+
+The editor's inspector surface is deliberately not in this list: it derives
+from 67's field schema and can land beside any of 69–72, but it cannot land
+before 67 and it is not on the critical path for a workflow that supplies
+context over HTTP.

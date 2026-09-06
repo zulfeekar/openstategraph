@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "name": "Same Package Twice",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Same Package Twice",
+    "settings": {
+      "purpose": "One definition, two instances. Both mounts run Chained Summarizer; each carries its own data.overrides, and the package on disk is never written."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Question",
+        "data": {},
+        "position": { "x": 40, "y": 240 }
+      },
+      {
+        "id": "mount-terse",
+        "type": "workflow.subgraph",
+        "title": "Instance A — terse",
+        "data": {
+          "workflow": "chained-summarizer",
+          "overrides": {
+            "shorten1": {
+              "systemPrompt": "You are given a short passage. Compress it into ONE sentence of at most twelve words. Output that sentence alone — no preamble, no label, no quotation marks, no trailing commentary."
+            }
+          }
+        },
+        "position": { "x": 400, "y": 240 }
+      },
+      {
+        "id": "mount-analogy",
+        "type": "workflow.subgraph",
+        "title": "Instance B — analogy",
+        "data": {
+          "workflow": "chained-summarizer",
+          "overrides": {
+            "shorten1": {
+              "systemPrompt": "You are given a short passage. Rewrite it as ONE sentence of at least twenty-five words that explains the same idea through a concrete everyday analogy — something physical a reader could point at. Output that sentence alone — no preamble, no label, no quotation marks, no trailing commentary."
+            }
+          }
+        },
+        "position": { "x": 760, "y": 240 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Answer",
+        "data": {},
+        "position": { "x": 1120, "y": 240 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "mount-terse", "portId": "input" }
+      },
+      {
+        "source": { "nodeId": "mount-terse", "portId": "result" },
+        "target": { "nodeId": "mount-analogy", "portId": "input" }
+      },
+      {
+        "source": { "nodeId": "mount-analogy", "portId": "result" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      }
+    ]
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "name": "Skill-driven Rubric",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Skill-driven Rubric",
+    "settings": {
+      "purpose": "One rules layer, two readers. The writer's rules and the grader's criteria are the same skill, wired to both — so the rules and the check they are graded against cannot drift."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Request",
+        "data": {},
+        "position": { "x": 40, "y": 260 }
+      },
+      {
+        "id": "skill1",
+        "type": "input.skill",
+        "title": "Commit message house style",
+        "data": {
+          "skillName": "commit-message",
+          "skillDescription": "This project's house style for a commit message: the subject line, the body, and what may never appear in either.",
+          "instruction": "Write one commit message and nothing else. No preamble, no explanation of your choices, no code fences.\n\n**Subject line**\n\n- Imperative mood, as if completing the sentence \"This commit will …\": `Fix`, `Add`, `Remove` — never `Fixed`, `Fixes`, `Adding`.\n- At most 60 characters.\n- Lower case after the first word, and no full stop at the end.\n- No ticket id, no issue number, no `type(scope):` prefix.\n\n**Body**\n\n- Exactly one blank line after the subject.\n- Two or three sentences of prose, wrapped by meaning rather than by column.\n- Sentence one says what was wrong and how it showed. Sentence two says what the change does instead. A third sentence is allowed only to name a consequence a reader would otherwise be surprised by.\n- Describe behaviour, never the diff: never name a file, a function or a line number.\n\n**Never**\n\n- Bullet points anywhere in the message.\n- The words \"simply\", \"just\", \"obviously\", or any exclamation mark.\n- A co-author trailer, a sign-off, or any footer at all."
+        },
+        "position": { "x": 40, "y": 560 }
+      },
+      {
+        "id": "write1",
+        "type": "agent.llm",
+        "title": "Write the message",
+        "data": {
+          "systemPrompt": "",
+          "rulesMode": "replace"
+        },
+        "position": { "x": 420, "y": 260 }
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "title": "Check it against the same skill",
+        "data": {
+          "criteria": "",
+          "rulesMode": "replace",
+          "maxAttempts": 3
+        },
+        "position": { "x": 800, "y": 260 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Commit message",
+        "data": {},
+        "position": { "x": 1160, "y": 260 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "write1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "skill1", "portId": "skill" },
+        "target": { "nodeId": "write1", "portId": "skill" }
+      },
+      {
+        "source": { "nodeId": "skill1", "portId": "skill" },
+        "target": { "nodeId": "grader1", "portId": "skill" }
+      },
+      {
+        "source": { "nodeId": "write1", "portId": "result" },
+        "target": { "nodeId": "grader1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "pass" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "revise" },
+        "target": { "nodeId": "write1", "portId": "feedback" }
+      }
+    ]
+  }
+}

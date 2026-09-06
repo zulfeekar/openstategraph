@@ -1,0 +1,103 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg-canvas);
+}
+
+/* The stage — the room the run dock leaves: the palette, the canvas, the
+ * inspector, and the Workflows popover that is bounded by all three.
+ *
+ * It exists so the run dock (`memory-and-replay` 51) can be its **sibling**
+ * rather than another thing floating over the canvas. Push, not overlay: a
+ * time axis is read *while* watching the thing it measures, so covering the
+ * canvas with it would be covering the answer with the question. Every other
+ * panel in this app overlays when the room runs out; this one shortens the
+ * stage instead, which is why it is here and not in `app-shell__body`.
+ *
+ * `63` moved the dock from under the stage to above it and took the top bar
+ * out with it — the dock sits under the top bar, so the top bar cannot be
+ * inside the thing the dock pushes. The stage keeps its one job under the
+ * name it earns: what the dock pushes down.
+ *
+ * `min-height: 0` is load-bearing, not tidiness: without it a flex item
+ * refuses to shrink below its content and the dock would push the canvas off
+ * the bottom of the window instead of taking room from it. */
+.app-shell__stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.app-shell__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The canvas column is the flexible one; both panels are fixed width. It
+ * also establishes the positioning context for the minimap, the shortcuts
+ * drawer and the accessibility button, all of which float over the paper. */
+.app-shell__canvas {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The shortcuts drawer and the accessibility button share the bottom-left
+ * corner; the drawer sits above the button. */
+.app-shell__canvas .shortcuts {
+  bottom: calc(var(--space-4) + 36px);
+}
+
+/* The Ask panel and the Inspector can both be open at once (chat plus
+ * document diagnostics); grouping them lets the narrow-window rule below lay
+ * them out side by side instead of each independently claiming `right: 0`. */
+.app-shell__right-panels {
+  display: flex;
+  flex: none;
+  height: 100%;
+  /* The width is inline, from the shell (`stable-beta-public/16`): it is a
+   * number a user drags, clamped between what the open panels are worth and
+   * half the window. `position: relative` is what the grip on the left edge
+   * is positioned against. */
+  position: relative;
+}
+
+/* Both panels share whatever the column is, instead of each insisting on
+   `--layout-inspector-width`: `flex-basis: 0` is what a flex item is sized
+   by, so their own inline widths stop deciding and stay the fallback for a
+   column that is not sized at all. */
+.app-shell__right-panels > .panel {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* When the panels would leave no canvas, they overlay it instead of squeezing
+ * it down to nothing. `data-overlay` is set by the shell from `panelFit`, not
+ * by a media query: the answer depends on which panels are open, and a
+ * breakpoint can only see the window (production-ready 55.4). It replaced
+ * `@media (max-width: 1100px)`, which let four panels share a 1280px row and
+ * leave the canvas 128px wide. */
+.app-shell__body[data-overlay] {
+  position: relative;
+}
+
+.app-shell__body[data-overlay] > .panel--left,
+.app-shell__body[data-overlay] > .app-shell__right-panels {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.app-shell__body[data-overlay] > .panel--left {
+  left: 0;
+}
+
+.app-shell__body[data-overlay] > .app-shell__right-panels {
+  right: 0;
+}

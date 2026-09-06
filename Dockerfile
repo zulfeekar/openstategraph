@@ -1,0 +1,140 @@
+# OpenStateGraph — one image, two build stages, a thin runtime.
+#
+# The image mirrors the *repo layout* under /app rather than pip-installing the
+# backend package. That is deliberate, not laziness: two runtime lookups are
+# relative to the repo root and would break inside site-packages —
+#   * workflow_store.py:  _REPO_ROOT = Path(__file__).resolve().parents[3]
+#                         -> DEFAULT_WORKFLOWS_ROOT = <root>/workflows
+#   * main.py /chat/mermaid.js: <root>/node_modules/mermaid/dist/mermaid.min.js
+# so the container sets PYTHONPATH=/app/backend exactly as scripts/dev.sh does
+# on the host, and /app is the "repo root" the code expects.
+#
+# Everything here is host-path free (no absolute host paths, no bind-mount
+# assumptions) so the build behaves identically on macOS, Windows and Linux.
+
+# ---------------------------------------------------------------------------
+# Stage 1 — frontend build. Produces /app/dist (the editor SPA).
+# ---------------------------------------------------------------------------
+FROM node:22-slim AS frontend
+WORKDIR /app
+
+# package*.json first so the dependency layer caches across source edits.
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts index.html ./
+COPY src ./src
+# Not decoration: `npm run build` runs `tsc -b`, which typechecks the test files
+# too, and src/nodes/tools/PlatformToolsNode.test.ts imports
+# ../../../workflows/concierge/workflow.json. Without this the build fails with
+# TS2307. Small (~2.4MB) and this stage is discarded anyway.
+COPY workflows ./workflows
+
+# `npm run build` is `tsc -b && vite build` — a type error fails the image
+# build, which is the behaviour we want.
+RUN npm run build
+
+# ---------------------------------------------------------------------------
+# Stage 2 — python dependency build. Produces a self-contained /install prefix.
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS pydeps
+WORKDIR /build
+
+# Compilers live only in this stage and are thrown away with it. Present so a
+# dependency without a prebuilt wheel for the target arch still installs
+# instead of failing the build on arm64 Macs.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY backend/pyproject.toml ./pyproject.toml
+COPY scripts/docker_requirements.py ./docker_requirements.py
+
+# Install the backend's *dependencies* but not the backend package itself.
+# pyproject.toml stays the single source of truth, and `[all]` is the single
+# source of truth for WHICH extras a full image carries — the script expands
+# its self-references recursively (an `openstategraph[sqlite]` inside
+# `[server]` must never reach pip verbatim: we are not on the index it would
+# look at) and takes no exclusion list of its own, so whatever `[all]`
+# excludes (e.g. `bastion`, on licence grounds) stays excluded here by the
+# same recorded decision. Pinned by backend/tests/test_docker_requirements.py.
+RUN python docker_requirements.py pyproject.toml requirements.txt \
+ && pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ---------------------------------------------------------------------------
+# Stage 3 — the runtime image. Python slim + runtime deps + dist + backend +
+# workflows. No node, no npm, no node_modules (bar one file), no compilers.
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    # The same two roots scripts/dev.sh exports on the host. The chinook entry
+    # is the path shim pytest.ini documents for that workflow's tools package.
+    PYTHONPATH=/app/backend:/app/workflows/chinook-assistant \
+    # Read by api/editor_assets.py: mounts the built SPA at / so the editor is
+    # served by the backend itself. Off by default, so a host-run backend is
+    # completely unaffected by its presence. STATIC_DIR is explicit here and
+    # wins over the copy inside the wheel — this image runs from the repo
+    # layout, not from an installed distribution.
+    OPENSTATEGRAPH_SERVE_STATIC=1 \
+    OPENSTATEGRAPH_STATIC_DIR=/app/dist
+
+WORKDIR /app
+
+COPY --from=pydeps /install /usr/local
+
+COPY backend ./backend
+COPY workflows ./workflows
+COPY --from=frontend /app/dist ./dist
+# The /chat page serves mermaid from the repo's own node_modules so it stays
+# CDN-free (main.py: chat_mermaid_asset). One file, ~3MB — not the 183MB tree.
+COPY --from=frontend /app/node_modules/mermaid/dist/mermaid.min.js \
+     ./node_modules/mermaid/dist/mermaid.min.js
+
+# Non-root. `workflows/` must be writable at runtime (the editor creates and
+# saves workflows through WorkflowStore), so it is chowned explicitly. When
+# docker-compose bind-mounts ./workflows over this, Docker Desktop on macOS and
+# Windows presents the mount world-writable, so the uid does not matter there;
+# on native Linux the host directory must be writable by uid 10001 (or run the
+# container with `user: root` if that is inconvenient).
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin appuser \
+ && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=4).status==200 else 1)"
+
+# ONE worker, on purpose — not a placeholder to be tuned up later.
+#
+# Ticket 05 fixed the durability half: the human-in-the-loop checkpointer is no
+# longer a module-level InMemorySaver. It is a SqliteSaver on
+# <workflows root>/.openstategraph/checkpoints.sqlite (WorkflowServices owns
+# it; OPENSTATEGRAPH_CHECKPOINT_PATH moves it), so a paused approval survives a
+# container restart PROVIDED the workflows directory is a volume — the same
+# bind mount docker-compose already needs for the editor to save workflows.
+# The container logs which one it got at startup: "approvals persist at X", or
+# "approvals are in-memory and will NOT survive a restart".
+#
+# It did NOT fix the concurrency half, and the ceiling is one worker — enforced
+# since scale-and-adopt ticket 06, not merely written here. Two causes:
+# langgraph-checkpoint-sqlite's SqliteSaver documents itself as "meant for
+# lightweight, synchronous use cases (demos and small projects) and does not
+# scale to multiple threads" (its only serialisation is a threading.Lock held
+# per instance, which two OS processes do not share; same for SqliteStore), and
+# the live catalogue-event fan-out behind GET /api/events is an in-process
+# queue. Two workers would race sqlite writes silently AND drop catalogue
+# updates for half the users.
+#
+# So `--workers 1` below is no longer the only thing standing between a
+# deployer and that outcome: raising it fails at startup. openstategraph.
+# deployment reads --workers/WEB_CONCURRENCY/UVICORN_WORKERS/GUNICORN_WORKERS
+# and refuses, and the app takes an exclusive lock on <state dir>/serve.lock so
+# `--workers N` here — which leaves no environment trace in a child — is
+# refused too. `pip install 'openstategraph[postgres]'` plus
+# OPENSTATEGRAPH_POSTGRES_URL moves checkpoints and memories into a real
+# database; it does NOT lift the ceiling, because the event fan-out has no
+# cross-process transport (docs/deploying.md).
+CMD ["uvicorn", "openstategraph.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

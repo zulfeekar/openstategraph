@@ -1,0 +1,1049 @@
+/* The chat panel.
+ *
+ * Kept close to the inspector's visual language so the two right-hand panels
+ * read as the same surface rather than two apps.
+ *
+ * Every colour, radius, space and type ramp here comes from the design
+ * tokens. That is a correction, not a style preference: this file previously
+ * referred to `--surface-sunken`, `--text-primary`, `--border-subtle`,
+ * `--accent-violet-soft` and friends, none of which exist — the token names
+ * are `--color-bg-surface-sunken`, `--color-text-primary`,
+ * `--color-border-subtle`, `--violet-50`. An undefined custom property is not
+ * a fallback, it is an invalid value, so those declarations were being
+ * dropped: the answer card had no background, the question bubble no fill,
+ * the approval box no tint. Nothing in this pass invents a colour; it spells
+ * the existing ones correctly.
+ *
+ * The rhythm is one scale: `--space-2` inside a block, `--space-3` between
+ * blocks, `--space-5` between turns. */
+
+.ask .panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  /* `.panel__body` scrolls by default; overridden here because only the
+     thread should scroll — the composer stays anchored at the bottom. */
+  overflow: hidden;
+  /* The canonical left/right inset for every row in this column — the
+     notice, the thread (bubbles, boxes, plain status lines alike) and the
+     composer all sit the same distance from the panel edge because none of
+     them supplies its own (`the-look-has-an-author-now/14`). Before this,
+     the column had no inset at all: a boxed row (the answer card, an
+     approval) looked correctly indented only because its OWN padding drew
+     it, a plain status line (`.ask__error`, `.ask__meta`) sat flush against
+     the raw panel edge, and the question bubble touched the right edge
+     outright. Same token the palette's own rows use
+     (`src/view/palette/Palette.css`), so the two side panels read as one
+     spacing system rather than two.
+
+     The top inset is the same token, not `--space-5` (`stable-beta-public/09`):
+     measured live, the header-to-first-row inset the inspector panel draws
+     with `.panel-section`'s own padding (`src/design/primitives/Panel.css`)
+     is 12px — `--space-3` — while the gap this thread draws *between* two
+     turns is 20px, `--space-5`. Those are different questions: one is "how
+     far from the chrome does this column's content start" (every panel
+     answers it the same way), the other is "how far apart are two turns of
+     one conversation" (a bigger gap, because a turn is a bigger unit than a
+     row). Before this the top was 0 — the first bubble touched the header's
+     border — which is neither number and is why the room above the first
+     turn read as an accident rather than a rule. */
+  padding: var(--space-3) var(--space-3) 0;
+}
+
+.ask__thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  /* On top of the column's own canonical inset (`.ask .panel__body`), a
+     little more room on the right so the scrollbar never sits under text. */
+  padding-right: var(--space-1);
+
+  /* ---------- The conversation grammar (`stable-beta-public/10`) ----------
+   *
+   * Four decisions, named once, so a message reads as a message rather than as
+   * a form field. Before this the two sides of the thread were told apart only
+   * by colour: the question was a small tinted box hugging the right edge and
+   * the answer a full-width bordered rectangle — the same shape as an input.
+   *
+   * The same four names are declared in the customer page
+   * (`backend/openstategraph/api/static/chat.html`, on `#log`), which restates
+   * the token *values* in its own `:root` because it is a standalone asset with
+   * no build step. `chatBubblesAgree.test.ts` reads both files and fails if the
+   * names or the token expressions drift apart — the values are allowed to
+   * differ, since that divergence is the standalone file's whole reason to
+   * exist, and the grammar is not.
+   *
+   * `--chat-bubble-radius` resolved to **0** here until `stable-beta-public/11`
+   * — the design system's honest answer at the time, not an oversight: every
+   * `--radius-*` in this product is `--osg-radius`, which the authored system
+   * sets to zero and describes as *"Flat, 0 radius, one accent"*
+   * (`src/design/styles/tokens.css`). `11` gave chat bubbles the one
+   * deliberate exception to that flatness — `--radius-bubble`, a speech
+   * shape rather than a card — while every other `--radius-*` name stays the
+   * authored zero; `radiusBubbleIsTheOneException.test.ts` pins both halves
+   * of that claim. The squared corner (`--radius-xs` below) is still the
+   * flat zero: only the three rounded corners of each bubble moved. */
+  --chat-bubble-radius: var(--radius-bubble);
+  --chat-bubble-padding: var(--space-2) var(--space-3);
+  /* Consecutive blocks from the same side — the sender label, the steps box,
+     the answer — read as one run of speech. */
+  --chat-gap-group: var(--space-1);
+  /* The turn of the column, question to reply. Bigger than a group gap and
+     smaller than the thread's own turn-to-turn `--space-5` (`09`). */
+  --chat-gap-side: var(--space-3);
+  /* Not the full column: a bubble that reaches both edges is a rectangle
+     again. Roughly the messaging convention, and short enough that the side
+     a message came from is legible before a word is read. */
+  --chat-bubble-max-width: 78%;
+  /* `stable-beta-public/13` — a list inside a bubble was reading like a
+     printed page: `RichText.css`'s own block rhythm (`--space-2` between
+     every paragraph, list and table) is right for the inspector and docs
+     surfaces that file is shared with, and too loose for a ~200px bubble. */
+  --chat-block-gap: var(--space-1);
+  /* Tighter still than the block gap: two bullets are one list, not two
+     blocks. */
+  --chat-list-item-gap: var(--space-0-5);
+}
+
+/* ---------- Empty state ---------- */
+
+.ask__empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-6) 0;
+}
+
+.ask__empty-title {
+  margin: 0;
+  font: var(--type-heading-sm);
+  color: var(--color-text-primary);
+}
+
+/* ---------- A turn ---------- */
+
+.ask__turn {
+  display: flex;
+  flex-direction: column;
+  /* A turn holds exactly one side change — the question, then everything the
+     workflow said back — so the turn's own row gap *is* the side-change gap. */
+  gap: var(--chat-gap-side);
+}
+
+/* No rule between turns: the question bubble's own alignment already reads as
+   a boundary, and a divider every few lines makes a short thread look like a
+   table.
+
+   The one exception is a *conversation* break, which is not a boundary between
+   two questions but between two contexts — the turn below it cannot see
+   anything above it. Rare by construction (a New press, or opening a different
+   workflow), so it costs the thread nothing to be emphatic where it appears. */
+
+.ask__break {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  font: var(--type-label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ask__break::before,
+.ask__break::after {
+  content: '';
+  flex: 1;
+  border-top: var(--border-width-hairline) solid var(--color-border);
+}
+
+.ask__question {
+  align-self: flex-end;
+  max-width: var(--chat-bubble-max-width);
+  padding: var(--chat-bubble-padding);
+  background: var(--color-bg-selected);
+  /* Square at the bottom right — the corner that faces this side's own edge,
+     the messaging convention's tail without a new shape. */
+  border-radius: var(--chat-bubble-radius) var(--chat-bubble-radius) var(--radius-xs)
+    var(--chat-bubble-radius);
+  color: var(--color-text-primary);
+  font: var(--type-body-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- The workflow's side ----------
+ *
+ * Everything the run said back, in one column on the left: the sender's name,
+ * the live line and hand-off pills, tool results, an approval gate, warnings,
+ * suggestions and the answer. They keep their own components — the ticket's
+ * instruction was *do not invent anything new* — and what changes is only
+ * that they now sit inside one side of a conversation instead of stacking
+ * down the middle of the column at the same width as the composer.
+ *
+ * `align-items: stretch` on purpose: a bubble caps its own width, while the
+ * boxes (steps, approval, suggestion) are panels and would look broken shrunk
+ * to their text. */
+
+.ask__reply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--chat-gap-group);
+  align-items: stretch;
+}
+
+/* Who is speaking, once per run rather than once per bubble. No avatar: the
+   product has no face for a workflow and inventing one is what the ticket
+   forbids, so the name does the whole job. */
+.ask__sender {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--type-label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ---------- Composer ---------- */
+
+/* The panel's footer, not a card floating inside its padded body
+   (`stable-beta-public/12`). It used to be a child of `.ask .panel__body`,
+   which carries the column's own inset for the bubbles (`09`) — so that
+   inset also pushed the composer in from the edges, on top of a border,
+   radius and shadow of its own. Measured live before the fix: 13px in from
+   the panel's left edge, 12px from the right, 0 below (the body only ever
+   padded the top and sides, never the bottom).
+   `PanelFooter` (`src/design/primitives/Panel.tsx`) is a sibling of the
+   padded body, so it draws flush with the panel's own left, right and
+   bottom edges and supplies the top hairline rule
+   (`.panel__footer`, `Panel.css`) for free. Its own padding
+   (`--space-2-5 --space-3`) does not fit this ticket's ask
+   (`--space-2 --space-3`) exactly, so `.ask__composer` restates padding at
+   higher specificity (`.panel__footer.ask__composer`) below, rather than
+   leaving two rules to disagree by source order. */
+.ask__composer {
+  flex-shrink: 0;
+  display: flex;
+  /* End, not centre: the composer grows upward with a multi-line message
+     (`every-workflow-green` 40), and Send should stay on the last line rather
+     than float in the middle of a twelve-line brief. At one row — every
+     ordinary message — the two are identical. */
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.panel__footer.ask__composer {
+  padding: var(--space-2) var(--space-3);
+}
+
+/* The affordance the panel was missing: typing visibly focuses one control,
+   rather than a field and a button lighting up separately. No border to
+   re-colour any more (the composer draws none of its own), so the tint
+   itself carries the focus. */
+.ask__composer:focus-within {
+  background: var(--color-bg-surface-sunken);
+}
+
+.ask__composer-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  /* `TextArea` carries its own roomier vertical padding, which is right for a
+     node card and wrong inside a pill that already pads itself — without this
+     the one-row composer is visibly taller than it was. */
+  --input-padding-y: 0;
+}
+
+/* The grabber belongs to a node's prompt field, not to a chat box: the
+   composer already sizes itself to the message, and a handle here would drag
+   against the transcript it shares a column with. */
+.ask__composer-input .input__control {
+  resize: none;
+}
+
+.ask__composer-input:focus-within,
+.ask__composer-input:focus,
+.ask__composer-input .input__control:focus {
+  outline: none;
+  /* `none` draws nothing — this cancels `Field`'s focus-ring halo inside a
+     composer that states focus with a ground tint instead (`12`). */
+  box-shadow: none;
+}
+
+.ask__composer-send {
+  flex: none;
+  border-radius: var(--radius-lg);
+}
+
+/* ---------- Steps: trace / timeline ---------- */
+
+.ask__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--box-inset-dense);
+  background: var(--color-bg-surface-sunken);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+/* The one live line: what the working step is saying about itself.
+   `launch-readiness/140` moved the presentation into the `ThinkingLine`
+   primitive, so what is left here is only what is local to this panel — the
+   italic that marks it as a status about the run rather than a result of it.
+   The pulsing mark in front of it is the primitive's, and is the same mark
+   the card's stack and the customer page use; that is the point of it being
+   a primitive rather than three implementations.
+
+   The `::before '⋯ '` and its `ask-live-pulse` keyframes that used to live
+   here are gone rather than kept: they would have drawn a second marker
+   beside the primitive's dot. */
+.ask__live {
+  font-style: italic;
+}
+
+.ask__views {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: var(--space-px);
+  padding: var(--space-0-5);
+  background: var(--color-bg-muted);
+  border-radius: var(--radius-md);
+}
+
+.ask__view-tab {
+  padding: var(--space-0-5) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-tertiary);
+  font: var(--type-caption);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.ask__view-tab:hover {
+  color: var(--color-text-primary);
+}
+
+.ask__view-tab[aria-selected='true'] {
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+.ask__activity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+/* ---------- Streamed reasoning ---------- */
+
+.ask__thinking {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-surface-sunken);
+  border: var(--border-width-hairline) dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-tertiary);
+  font: var(--type-mono-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* Capped so one verbose turn's raw token stream can't push the whole
+     thread out of view — a developer wants a peek at the reasoning, not a
+     full transcript competing with the answer for space. */
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.ask__thinking--settled {
+  white-space: normal;
+}
+
+/* ---------- A reply the grader has still to judge ---------- */
+
+/* `every-workflow-green` 45. Deliberately built out of the same pieces as
+   `.ask__thinking` above — sunken, hairline-dashed, tertiary, monospaced — and
+   introducing no new colour. The point is not to shout: the block already
+   reads as machinery rather than as an answer, and what was missing was a
+   sentence saying which. */
+.ask__draft {
+  border: var(--border-width-hairline) dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  padding: var(--space-2) var(--space-3);
+  /* The whole region, notice included. A figure lifted out of an unsettled
+     answer and pasted elsewhere arrives with nothing attached saying it was
+     unsettled — which is how three wrong numbers were reported as results on
+     one day. Selection is the copy path, so selection is what closes. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ask__draft-notice {
+  margin: 0 0 var(--space-1);
+  color: var(--color-text-tertiary);
+  font: var(--type-label);
+}
+
+.ask__draft-text {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font: var(--type-mono-sm);
+  font-style: italic;
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* Same cap and the same reason as the block above it. */
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+/* ---------- Tool results ---------- */
+
+/* One result, one bounded region — see `toolResults.tsx` for why every tool
+   shares this renderer rather than each getting its own. */
+.ask__tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ask__tool {
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  overflow: hidden;
+}
+
+.ask__tool-name {
+  padding: var(--space-1-5) var(--space-3);
+  color: var(--color-text-secondary);
+  font: var(--type-mono-sm);
+  cursor: pointer;
+  list-style: none;
+}
+
+.ask__tool-name::-webkit-details-marker {
+  display: none;
+}
+
+.ask__tool-name::before {
+  content: '▾ ';
+  color: var(--color-text-quaternary);
+}
+
+.ask__tool:not([open]) .ask__tool-name::before {
+  content: '▸ ';
+}
+
+/* The whole point of the ticket: however much a tool returns, it is bounded
+   and scrollable rather than clipped or unbounded — and `pre` keeps the line
+   breaks, because a schema listing or a Markdown table IS its line breaks. */
+.ask__tool-body {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--color-text-tertiary);
+  font: var(--type-mono-sm);
+  white-space: pre;
+  max-height: 220px;
+  overflow: auto;
+}
+
+/* ---------- The answer ---------- */
+
+.ask__answer-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The workflow's bubble (`stable-beta-public/10`).
+ *
+ * This was a full-width raised card with a hairline border, and the border
+ * plus the full width is exactly what made it read as a form field rather
+ * than as something somebody said. It is still the block in a turn with real
+ * presence — the sunken ground carries it against the panel's own surface,
+ * the way the question's tinted ground carries the other side — but it is now
+ * a bubble: capped width, on the left, squared off against its own edge. */
+.ask__answer {
+  margin: 0;
+  align-self: flex-start;
+  max-width: var(--chat-bubble-max-width);
+  padding: var(--chat-bubble-padding);
+  background: var(--color-bg-surface-sunken);
+  border-radius: var(--chat-bubble-radius) var(--chat-bubble-radius) var(--chat-bubble-radius)
+    var(--radius-xs);
+  color: var(--color-text-primary);
+  font: var(--type-body-md);
+  /* An answer is prose, not code, so it wraps rather than scrolling sideways
+     — `word-break` alone does that; `white-space` stays `normal`
+     (`stable-beta-public/13`, below explains why it must not be `pre-wrap`
+     here). */
+  word-break: break-word;
+}
+
+/* ---------- Lists inside a bubble (`stable-beta-public/13`) ----------
+ *
+ * `Ask what can you do?`: the reply was a short intro and six bullets, and
+ * inside the bubble every bullet sat a blank line's worth of space from its
+ * neighbour, and the intro sat a paragraph away from the first bullet — a
+ * 300px bubble laid out like a printed page. Measured live: a `<li>` itself
+ * carries `margin: 0` (`RichText.css` sets none), and so does the `<p>`
+ * before the list once `--chat-block-gap` (below) is applied — so the gap
+ * was never a margin either. It was `white-space: pre-wrap` on `.ask__answer`
+ * itself: react-markdown's own HTML serialiser joins sibling block tags with
+ * a literal `\n` for readability (`<p>…</p>\n<ul>\n<li>…</li>\n<li>`), which
+ * `white-space: normal` (the default) discards as ordinary inter-tag
+ * whitespace — but `pre-wrap` preserves as a forced, visible line break, one
+ * per boundary. react-markdown parses the model's actual line breaks itself
+ * (a lone `\n` inside one paragraph is CommonMark's own soft break, already
+ * collapsed to a space by the time this container sees it) — so `pre-wrap`
+ * was never preserving anything the model wrote; it was only exposing the
+ * renderer's own formatting whitespace as unwanted vertical gaps. Removed
+ * above rather than patched around.
+ *
+ * Scoped to `.ask__answer` — the same element `RichText` renders as
+ * `.rich-text`, not a descendant of it, so the selector is a compound
+ * (`.ask__answer.rich-text`), never a bare `.rich-text` rule: `RichText.css`
+ * is shared with the inspector and docs surfaces, and its own `--space-2`
+ * block rhythm is right for those, just too loose for a bubble. */
+.ask__answer.rich-text p,
+.ask__answer.rich-text ul,
+.ask__answer.rich-text ol,
+.ask__answer.rich-text table,
+.ask__answer.rich-text pre,
+.ask__answer.rich-text blockquote {
+  margin: 0 0 var(--chat-block-gap);
+}
+
+/* One owner for "how far apart are two bullets": tighter than the
+   block-to-block rhythm above, because two bullets are one list, not two
+   things. */
+.ask__answer.rich-text li + li {
+  margin-top: var(--chat-list-item-gap);
+}
+
+.ask__decisions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-px);
+}
+
+.ask__decision {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.ask__decision-node {
+  color: var(--color-text-tertiary);
+  font: var(--type-mono-sm);
+}
+
+.ask__decision-branch {
+  padding: 0 var(--space-2);
+  background: var(--violet-50);
+  border-radius: var(--radius-full);
+  color: var(--violet-600);
+  font: var(--type-mono-sm);
+}
+
+[data-theme='dark'] .ask__decision-branch {
+  background: rgba(139, 92, 246, 0.16);
+  color: #a78bfa;
+}
+
+/* ---------- Status lines ---------- */
+
+.ask__warning {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--amber-50);
+  border: var(--border-width-hairline) solid var(--amber-100);
+  border-radius: var(--radius-md);
+  color: var(--amber-600);
+  font: var(--type-body-sm);
+}
+
+[data-theme='dark'] .ask__warning {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--color-status-warning);
+}
+
+.ask__error {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0;
+  color: var(--color-danger);
+  font: var(--type-body-sm);
+}
+
+.ask__meta {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font: var(--type-body-sm);
+}
+
+/* A stop the developer asked for is a fact about the turn, not a failure —
+ * so it reads like `ask__meta`, deliberately NOT like `ask__error`. */
+.ask__stopped {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font: var(--type-body-sm);
+  font-style: italic;
+}
+
+/* ---------- Human approval ---------- */
+
+.ask__approval {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--box-inset);
+  background: var(--amber-50);
+  border: var(--border-width-hairline) solid var(--amber-100);
+  border-radius: var(--radius-lg);
+}
+
+[data-theme='dark'] .ask__approval {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.ask__approval-message {
+  margin: 0;
+  font: var(--type-body-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+/* The grader's opinion of the draft (`workflow-gallery` 32). Secondary to the
+   candidate deliberately: it informs the decision, it does not make it. */
+.ask__approval-verdict {
+  margin: 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.ask__approval-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ---------- Capability-gap suggestion ---------- */
+
+/* Indigo, not amber: an approval BLOCKS a run and must read as "you are
+   holding this up"; a suggestion is an offer the developer may ignore, and
+   colouring the two alike would train people to dismiss both. */
+.ask__suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--box-inset);
+  background: var(--indigo-50);
+  border: var(--border-width-hairline) solid var(--indigo-100);
+  border-radius: var(--radius-lg);
+}
+
+[data-theme='dark'] .ask__suggestion {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.28);
+}
+
+.ask__suggestion-headline {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font: var(--type-body-md);
+  color: var(--color-text-primary);
+}
+
+/* Said before the press, not in the notice after it (ticket 74): a card whose
+   button cannot re-run has to say why while there is still a choice. */
+.ask__suggestion-note {
+  margin: 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.ask__suggestion-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Collapsed, never removed: the offer is part of what happened in this turn. */
+.ask__suggestion-settled {
+  margin: 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* What the editor changed on the developer's behalf. */
+.ask__did {
+  margin: 0;
+  font: var(--type-body-sm);
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
+/* ---------- Trace tree (ticket 63) ---------- */
+
+.ask__activity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-0-5) 0;
+  /* Newest row last: it reads top-to-bottom the same order the run happened. */
+  animation: ask-activity-in 120ms ease-out;
+}
+
+.ask__activity-node {
+  color: var(--color-text-primary);
+  font: var(--type-mono-sm);
+}
+
+.ask__activity-task {
+  padding: 0 var(--space-2);
+  background: var(--blue-50);
+  border-radius: var(--radius-full);
+  color: var(--blue-600);
+  font: var(--type-mono-sm);
+}
+
+[data-theme='dark'] .ask__activity-task {
+  background: rgba(59, 130, 246, 0.16);
+  color: var(--color-text-link);
+}
+
+@keyframes ask-activity-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ask__trace-step summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.ask__trace-step summary::-webkit-details-marker {
+  display: none;
+}
+
+.ask__activity-row--child {
+  margin-left: var(--space-4);
+  opacity: 0.75;
+  border-left: var(--border-width-hairline) solid var(--color-border);
+  padding-left: var(--space-2);
+}
+
+/* A spawn is an event in the run, not a step of it: indented under the node
+ * that spawned, and given the instruction it handed over so the row says
+ * *what* the child was asked to do rather than only that one appeared. */
+.ask__activity-row--spawn {
+  margin-left: var(--space-4);
+  padding-left: var(--space-2);
+  border-left: var(--border-width-hairline) solid var(--color-border);
+  justify-content: flex-start;
+}
+
+.ask__activity-row--spawn .ask__activity-node {
+  color: var(--color-text-link);
+  white-space: nowrap;
+}
+
+.ask__activity-spawn-task {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font: var(--type-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ask__activity-ms {
+  margin-left: auto;
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ask__activity-count {
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+}
+
+/* Why a grader row was instant (`production-ready` 92) — see
+   `graderCheckLine`. Warning-toned rather than quaternary: the row it sits on
+   looks like a success and is reporting that no model was consulted, which is
+   the one thing a reader scanning durations cannot infer. Allowed to shrink
+   and ellipsize, because the reason is model prose of unbounded length and
+   the marker's presence is most of its value. */
+.ask__activity-check {
+  font: var(--type-caption);
+  color: var(--color-status-warning);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ask__trace-output {
+  margin: var(--space-1) 0 var(--space-2) var(--space-4);
+  padding: var(--space-1-5) var(--space-2);
+  font: var(--type-body-sm);
+  border-left: var(--border-width-marker) solid var(--color-border);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.ask__export {
+  align-self: flex-start;
+  padding: var(--space-0-5) var(--space-2);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  background: none;
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.ask__export:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-emphasis);
+}
+
+/* ---------- Notice ---------- */
+
+/* Why the panel opened, when something other than the user opened it —
+   today, Run handing a looping graph to the backend runtime. Informational
+   tone, never the amber of `.ask__warning`: nothing went wrong. */
+.ask__notice {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-surface-sunken);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font: var(--type-body-sm);
+}
+
+/* ================================================================== *
+ * Run timeline
+ *
+ * Thin bars on a shared track. Monochrome by default so the *shape* of the
+ * run carries the information; the single accent is spent on the step that is
+ * live and on the extra laps of a loop, which are the two things worth
+ * looking for.
+ * ================================================================== */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.timeline__head {
+  display: flex;
+  justify-content: space-between;
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.timeline__total {
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline__lanes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline__lane {
+  display: grid;
+  /* order · label · track · duration — the track takes whatever is left, so
+     the bars share one baseline no matter how long a node's name is. */
+  grid-template-columns: 1.1em minmax(0, 1fr) minmax(48px, 1.5fr) auto;
+  align-items: center;
+  gap: var(--space-1-5);
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+}
+
+.timeline__order {
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.timeline__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+
+/* The name is its own element so the ellipsis lands on the *text* and the
+   badges beside it stay whole — truncating a "×2" would be worse than useless. */
+.timeline__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.timeline__badge {
+  flex: none;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-muted);
+  color: var(--color-text-tertiary);
+  font: var(--type-label);
+  letter-spacing: 0;
+}
+
+.timeline__track {
+  display: flex;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-muted);
+  overflow: hidden;
+}
+
+.timeline__bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-text-quaternary);
+  transition: width var(--duration-normal) var(--ease-out);
+}
+
+/* A lap of a revise loop. Same hue as the panel's other "this happened more
+   than once" signal, so a second bar is recognisable without a legend. */
+.timeline__lane[data-repeat='true'] .timeline__bar {
+  background: var(--violet-500);
+}
+
+.timeline__lane[data-repeat='true'] .timeline__badge {
+  background: var(--violet-50);
+  color: var(--violet-600);
+}
+
+[data-theme='dark'] .timeline__lane[data-repeat='true'] .timeline__badge {
+  background: rgba(139, 92, 246, 0.18);
+  color: #a78bfa;
+}
+
+/* The step still in flight. */
+.timeline__lane[data-live='true'] .timeline__bar {
+  background: var(--color-status-running);
+  animation: timeline-live 1.2s var(--ease-in-out) infinite;
+}
+
+.timeline__ms {
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.timeline__caveat {
+  margin: var(--space-1) 0 0;
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+}
+
+@keyframes timeline-live {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline__lane[data-live='true'] .timeline__bar,
+  .ask__activity-row {
+    animation: none;
+  }
+}
+
+/* ---------- Hidden while history is showing ---------- */
+
+/* `hidden` is an attribute the browser honours only until a `display` rule
+   overrides it — and both of these declare `display: flex`. Restating it is
+   what makes the History toggle able to hide the live thread without
+   unmounting it (see the comment on the toggle). */
+.ask__thread[hidden],
+.ask__composer[hidden] {
+  display: none;
+}
+
+/* The rejection note (`every-workflow-green` 11). Sits between the draft and
+   the two buttons because it belongs to Reject and must be seen before either
+   is pressed — placing it after the actions would put the field below the
+   button it qualifies. */
+.ask__approval-note {
+  width: 100%;
+  margin: var(--space-3) 0;
+  padding: var(--space-2);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  resize: vertical;
+}
+
+/* The build door (`every-workflow-green` 34). Same shape as a suggestion so a
+   reader recognises it as an offer, and a different left edge because the two
+   do different things: one wires a tool that exists, one opens an interview. */
+.ask__suggestion--build {
+  border-left: var(--border-width-marker) solid var(--color-border);
+}
+
+/* What this run spawned (`canvas-feels-right/07`). A row of chips between the
+   step record and the live line — wrapping rather than scrolling, because a
+   fan-out of forty is a fact a reader should be able to see all of, and a
+   horizontal scroller hides the tail exactly when the count is the point. */
+.ask__spawned {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-top: var(--space-2);
+}
+
+.ask__spawned-label {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  margin-right: var(--space-1);
+}

@@ -1,0 +1,163 @@
+/* ------------------------------------------------------------------ *
+ * Panel — the chrome shell shared by the palette and the inspector.
+ * ------------------------------------------------------------------ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--color-bg-surface);
+  z-index: var(--z-panel);
+}
+
+/* A panel's outer edge is where a region ends, so it draws the rule
+   *width* (`the-look-has-an-author-now/07`). Its header, footer and section
+   dividers below stay hairlines: the panel's own edge has already drawn
+   the boundary, and a second one 40px inside it doubles the line rather
+   than saying anything new.
+
+   The *ink* is the normal weight, not full ink — `16`. A panel's width
+   comes from `--layout-palette-width` / `--layout-inspector-width` and
+   there is no handle on this edge, so nothing here is draggable, and full
+   ink is what says draggable. 2px of dark grey still ends a region; that
+   is the half of `07` this keeps. */
+.panel--left {
+  border-right: var(--border-width-hairline) solid var(--color-border);
+}
+
+.panel--right {
+  border-left: var(--border-width-hairline) solid var(--color-border);
+}
+
+.panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+}
+
+/* A header that IS its control (`stable-beta-public/25`).
+   The palette's header holds one search field and nothing else, so the
+   inset above put a box inside a strip: 8px of surface above the input and
+   12px to its left, and two horizontal lines forty-five pixels apart —
+   the input's own top edge and the panel's — saying the same thing. The
+   flush modifier drops the inset and the 40px minimum, and the control
+   takes the header's own size; the field moves the inset inside its box,
+   where it pads text. Opt in per header, never per panel: the inspector's
+   headers carry a title and actions and still want the strip. */
+.panel__header--flush {
+  padding: 0;
+  min-height: 0;
+}
+
+.panel__header--bordered {
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
+}
+
+.panel__title {
+  flex: 1 1 auto;
+  font: var(--type-heading-sm);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.panel__footer {
+  flex: none;
+  padding: var(--space-2-5) var(--space-3);
+  border-top: var(--border-width-hairline) solid var(--color-border);
+}
+
+/* ---------- Grouped section inside a panel body ---------- */
+.panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.panel-section + .panel-section {
+  border-top: var(--border-width-hairline) solid var(--color-border);
+}
+
+.panel-section__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+  user-select: none;
+}
+
+.panel-section__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+/* ---------- Empty state ---------- */
+.panel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--color-text-tertiary);
+}
+
+.panel-empty__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-quaternary);
+}
+
+.panel-empty__title {
+  font: var(--type-body-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.panel-empty__body {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  max-width: 28ch;
+  line-height: var(--line-height-snug);
+}
+
+/* One line to copy, never wrapped into the prose above it. `break-all` rather
+   than a scrollbar: a command that is cut off is one nobody can paste, and
+   `user-select: all` makes the whole of it one click. */
+.panel-empty__detail {
+  font: var(--type-mono-sm);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  max-width: 44ch;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  text-align: left;
+  user-select: all;
+}

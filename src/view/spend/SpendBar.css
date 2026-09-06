@@ -1,0 +1,62 @@
+/* The status bar: a rule and a row of numbers, and nothing else.
+ *
+ * `stable-beta-public/03`. Flat on purpose — a hairline along the top and the
+ * shell's own surface colour, no shadow and no raised ground. It is a
+ * permanent edge of the window rather than an object floating over the
+ * canvas, and a shadow would say the opposite. `--color-border` is the
+ * token every other panel edge in this app already uses, so the bar's rule is
+ * the same weight as the dock's and the palette's rather than a second idea
+ * about what an edge looks like.
+ *
+ * A `<button>` rather than a `<div>` with a click on it: the whole strip opens
+ * the breakdown, so it is one control and gets a control's keyboard and focus
+ * behaviour for free. The reset below undoes the parts of a button that would
+ * make it look like one. */
+.spend-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex: 0 0 auto;
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--space-3);
+  margin: 0;
+  border: 0;
+  border-top: var(--border-width-hairline) solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font: var(--type-caption);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.spend-bar:hover {
+  background: var(--color-bg-surface-sunken);
+}
+
+.spend-bar:focus-visible {
+  outline: var(--border-width-hairline) solid var(--color-border-focus);
+  outline-offset: calc(-1 * var(--border-width-hairline));
+}
+
+.spend-bar__cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spend-bar__label {
+  color: var(--color-text-secondary);
+}
+
+/* The number is the thing being read; the label beside it is the caption. */
+.spend-bar__value {
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}

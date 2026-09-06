@@ -1,0 +1,534 @@
+/* ------------------------------------------------------------------ *
+ * Tier 2 — Semantic roles.
+ *
+ * Components only ever reference the names in this file. Each theme
+ * re-points the same role set at a different slice of the primitive
+ * ramps, so a component is themed for free and can't leak a raw hex.
+ *
+ * The tiering did not change when the owner's design system landed
+ * (2026-08-29); only the right-hand sides did. Where a role has an
+ * authored counterpart it now aliases `--osg-*` directly, and where it
+ * does not it reads the derived ramp in `tokens.css`, which is the same
+ * ink family one interpolation away.
+ *
+ * **The dark block aliases ramp names and literals, never a theme-varying
+ * `--osg-*` name.** `tokens.css` carries the authored `[data-theme]`
+ * block and says why nothing here may point at it: a primitive that moves
+ * with the theme would resolve, inside this block, to its *light* value.
+ * ------------------------------------------------------------------ */
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* ---------- Surfaces ---------- */
+  --color-bg-canvas: #f9f8f8;
+  --color-bg-surface: var(--neutral-0);
+  --color-bg-surface-raised: var(--neutral-0);
+  --color-bg-surface-sunken: var(--neutral-50);
+  --color-bg-subtle: var(--neutral-75);
+  --color-bg-muted: var(--neutral-100);
+  --color-bg-inverse: var(--neutral-900);
+
+  /* Interaction states, expressed as overlays so they stack on any bg. */
+  --color-bg-hover: rgba(32, 30, 29, 0.04);
+  --color-bg-active: rgba(32, 30, 29, 0.07);
+  --color-bg-selected: var(--osg-accent-100);
+
+  /* ---------- Text ---------- */
+  --color-text-primary: var(--osg-text);
+  --color-text-secondary: var(--neutral-600);
+  /* Each one step down the ramp from where it was, and the reason is the
+     same for all three: they were chosen as *shades of quiet* and never
+     measured. On white they were 4.09 and 2.60; on `--color-bg-subtle`,
+     which is where much of this text actually sits, 3.75 and 2.38. WCAG AA
+     asks 4.5 (reviews-2026-08-14 ticket 11).
+
+     Four tiers of grey is one more than a light surface can carry legibly,
+     so quaternary and placeholder now share `--neutral-550` — the lightest
+     step that clears the bar. The hierarchy is still there, it is just
+     narrower than it was, which is the honest trade: a tier nobody can read
+     is not a tier. */
+  --color-text-tertiary: var(--neutral-600);
+  --color-text-quaternary: var(--neutral-550);
+  --color-text-placeholder: var(--neutral-550);
+  --color-text-inverse: var(--neutral-0);
+  /* The authored ramp names this one: `--osg-accent-700` is documented in
+     the design system as *"accent text at body size"*, and it is 6.35:1 on
+     white. A link was `--blue-600`; a system with one accent voice does not
+     get to spend a second hue on the least-used control in the product. */
+  --color-text-link: var(--osg-accent-700);
+  /* Green as *ink*, which is not the same role as green as a fill, and the
+     reason it is minted rather than aliased is that the two ends of this
+     palette are at opposite luminances. `.workflow-manager__badge--published`
+     asked for `--color-text-success`, a name nothing declared, so the badge
+     had been rendering in ordinary body ink and "published" was carrying no
+     colour at all.
+     `--color-primary` is the nearest existing role and is 4.78:1 here — but
+     it is tuned as a *fill* under white text, and in the dark theme that same
+     token is 2.53:1 as text on `--color-bg-subtle`, which is where this badge
+     sits. So the role flips: the dark block takes the bright end instead. */
+  --color-text-success: var(--green-600);
+
+  /* ---------- Borders ---------- */
+  /* `the-look-has-an-author-now/15`, corrected by `16` and again by `17`.
+     The owner, pointing at the palette panel's right edge after `16`:
+     *"This is a normal border — I asked opacity less, or light grey shade.
+     Only the draggable border is correct."*
+
+     That is their first sentence again (*"a lighter variant or opacity of
+     the dark colour — 60%, a greyish"*). `16` read their middle sentence
+     — *"normal borders are dark grey so that the draggable borders stand
+     out"* — as a specification and raised this 60% → 70%; it was a report
+     of what they were looking at. Two of the three agree, so 60% was the
+     owner's own number and `17` was the third pass to write it.
+
+     **`stable-beta-public/26` halves it again, to 30%, on the owner's
+     direct instruction of 2026-09-04.** `02` had since retired every
+     shadow, so this hairline became the only thing separating most
+     surfaces — a change `17` could not have priced, and one that makes the
+     line's ink the whole feel of the editor rather than one cue among
+     several.
+
+     There is a floor as well as a ceiling: `15`'s first attempt put a
+     weight at 1.25:1 and it read as absent. 30% of the ink is `#bcbcbb` on
+     white at 1.90:1 — still a line anybody can see, and 27% above the
+     floor `noShadowButTheGrip.test.ts` argues at 1.5:1. It is close to the
+     lightest this can go and stay a line: 20% measures 1.51:1 on the light
+     canvas, which is the floor itself rather than a margin above it.
+
+     Three strengths of one ink, at equal 20-point steps, so the ladder is
+     arithmetic a reader can check rather than three picked swatches. It
+     flips with the theme through `--osg-divider` — the same reason
+     `--color-rule` below needs no per-theme redeclaration.
+
+     Composited over the two grounds these actually sit on:
+
+       weight               light surface / canvas   dark surface / canvas
+       --color-border  30%   1.90:1 / 1.89:1          2.55:1 / 2.48:1
+       ...-emphasis    80%   8.67:1 / 8.34:1         10.40:1 / 11.08:1
+       --color-rule   100%  16.60:1 / 15.66:1        15.71:1 / 17.25:1
+
+     (Re-measured 2026-09-05 at 30%. Only the first row moved; it read
+     4.41:1 / 4.32:1 and 6.33:1 / 6.62:1 at 60%. The full eight-ground
+     table is asserted in `noShadowButTheGrip.test.ts`, which is where to
+     read it — these three rows are the ladder, not the record.)
+
+     And the number the rule is about — normal against draggable, side by
+     side: 8.74:1 light, 6.16:1 dark, against 3.77:1 / 2.48:1 at 60% and
+     2.73:1 / 1.91:1 under `16`. The three strengths are no longer equal
+     20-point steps, and that is the deliberate cost: the ladder stopped
+     being arithmetic when the owner chose the ink, and what it buys is
+     that the weight a pointer can drag is now impossible to mistake for
+     the weight it cannot.
+
+     **Alpha is no longer carrying this alone, and that is `17`'s real
+     change.** A width goes with each weight: this one is always
+     `--border-width-hairline` (1px) and `--color-rule` is always
+     `--border-width-rule` (2px). `16` left the panel edges 2px and moved
+     only their ink, so the two weights differed by 30% of alpha at the
+     same width — which is a difference you measure rather than see, and is
+     why a third complaint arrived about a token that was already the
+     right one. */
+  --color-border: color-mix(in srgb, var(--osg-divider) 30%, transparent);
+  /* Interaction *state*, not a third structural weight — the one thing a
+     flat two-weight system cannot say on its own. A `:hover` on an input,
+     a button, a palette row steps up one rung with no other cue; collapsing
+     it into `--color-border` would make hovering an input silent. Narrowed
+     to `:hover`/`:focus`/`:active`/pressed rules only — never a resting
+     border — and held to an exact site list by the pin.
+
+     `16` raised the resting weight to 70% and recorded the cost to this
+     step: 1.97:1 light / 1.64:1 dark became 1.70:1 / 1.40:1. `17` returned
+     the resting weight to 60%, so the step came back with it, and `26`'s
+     30% widens it again to 4.56:1 light / 4.08:1 dark. A hover is the one
+     state this system says with ink alone, and it has never said it more
+     clearly. A cost that was recorded rather than hidden is a cost that
+     can be refunded in the open. */
+  --color-border-emphasis: color-mix(in srgb, var(--osg-divider) 80%, transparent);
+  /* Full ink, and **only a border a pointer can drag** — `16`, completed by
+     `17`. Two of them in the product: the node card's resize grip and the
+     run dock's lower edge, which `.run-dock__grip` straddles and which
+     draws no line of its own. Both draw it at `--border-width-rule`, and
+     nothing else in the product draws that width — the pair is the
+     draggable weight, and `aBorderIsDraggableOrItIsNot.test.ts` asserts
+     the two halves land on the same declarations.
+
+     The toolbar's bottom edge and the two panel edges wore this ink until
+     `16` and its width until `17`. `16` kept them at 2px on the argument
+     that width says "a region ends here" while ink says "take hold of
+     this"; the owner then reported the palette edge as a dark border
+     anyway, which is what a 2px seam is regardless of its alpha. A region
+     is already told by its ground — a panel is `--color-bg-surface`
+     against the canvas's `--color-bg-canvas` — so the seam does not have
+     to shout it. `--osg-divider` is the authored token, commented
+     in the authored file as *"2px rules, full ink"*, and it is theme-aware
+     itself — `#201e1d` on the light ground, `#f3f2f2` on the dark one.
+
+     `--color-border-subtle`, `-default` and `-strong` stood here until
+     `16`, kept declared only because `view/run/` still spent them. It does
+     not, so they are gone: a declared token nothing spends is the shape
+     `09` filed twenty-eight of. */
+  --color-rule: var(--osg-divider);
+  --color-border-focus: var(--osg-accent);
+  --color-focus-ring: var(--osg-accent);
+
+  /* ---------- Brand / primary action ---------- */
+  /* One step down the scale from the obvious choice, and the reason is the
+     text on top of it. `--green-500` is the brand green and reads beautifully
+     as a *line* on the canvas — which is still where it is used — but white
+     13px text on it is 3.30:1, where WCAG AA asks 4.5:1. The Run button is the
+     most important control in the product (reviews-2026-08-14 ticket 11).
+
+     The same token is the pill *text* colour on `--color-primary-subtle`, and
+     that failed at 3.12:1 for the same reason: a green tuned as a fill, then
+     reused anywhere green was wanted. Both wanted darker, so one move fixes
+     both — 5.02:1 as a fill, 4.76:1 as pill text.
+
+     **The green moved on 2026-08-29 and the argument moved with it.** The
+     design system has no green — it ships one accent voice, `#ec3013` — so
+     green survives here as a *function* rather than as brand: go, flow,
+     passed. `--green-600` is now `#357a4a`, picked at the same luminance
+     band as the authored `--osg-accent-600` (5.21:1 against 5.22 on white)
+     precisely so the sentences above stay true: white 13px on it is 5.21:1,
+     and as pill text on `--color-primary-subtle` it is 4.93:1. Only the
+     chroma dropped, so it stops shouting over the brand red.
+  */
+  --color-primary: var(--green-600);
+  --color-primary-hover: var(--green-700);
+  --color-primary-active: var(--green-800);
+  --color-primary-subtle: var(--green-50);
+  --color-primary-text: var(--neutral-0);
+
+  /* ---------- Status ---------- */
+  --color-status-idle: var(--osg-node-idle);
+  --color-status-ready: var(--teal-500);
+  --color-status-running: var(--blue-500);
+  --color-status-success: var(--green-500);
+  --color-status-warning: var(--amber-500);
+  --color-status-error: var(--osg-accent);
+
+  /* The active-node border glow is a two-hue gradient stroke, so it needs a
+   * pair: it starts on the running-status accent and blends into violet. */
+  --color-run-glow-from: var(--blue-500);
+  --color-run-glow-to: var(--violet-500);
+
+  /* `--osg-node-error: var(--osg-accent-700)` — the authored node-state
+     token, used where the authored system actually speaks about error. */
+  --color-danger: var(--osg-node-error);
+  --color-danger-subtle: var(--osg-accent-100);
+
+  /* The veil a modal drops over the app.
+   *
+   * It had never been a role, so the two overlays that need one disagreed:
+   * `.dialog-backdrop` carried `rgba(9, 12, 17, 0.45)` and `.graph-preview`
+   * carried `color-mix(in srgb, var(--color-bg, #000) 55%, transparent)` —
+   * where `--color-bg` is a name this product has never declared, so the
+   * literal `#000` was the value in force in both themes. One of them was a
+   * chosen colour and the other was a fallback nobody meant to ship; the
+   * chosen one wins and the name is what makes it choosable next time.
+   *
+   * **It does not flip with the theme**, and that is the one thing worth
+   * saying about it: a scrim darkens whatever is behind it, and a light
+   * scrim on a dark app would raise the ground rather than lower it. The
+   * dark block below therefore restates it at the same value on purpose,
+   * so a reader diffing the two blocks sees a decision rather than an
+   * omission. */
+  --color-scrim: rgba(9, 12, 17, 0.45);
+
+  /* ---------- Canvas chrome ---------- */
+  --color-canvas-grid-dot: #dbd9d8;
+  --color-canvas-link: #b9b6b4;
+  --color-canvas-link-hover: var(--neutral-500);
+  --color-canvas-link-active: var(--osg-accent);
+  --color-canvas-link-flow: var(--green-500);
+  --color-port: #454241;
+  --color-port-ring: var(--neutral-0);
+  --color-port-hover: var(--osg-accent-600);
+  --color-port-valid: var(--green-500);
+  --color-port-invalid: var(--osg-accent);
+  --color-snapline: var(--osg-accent);
+  --color-selection-band: rgba(236, 48, 19, 0.08);
+  --color-selection-band-border: var(--osg-accent);
+  --color-group-fill: #e8f1fd;
+  --color-group-border: #c6ddf8;
+  --color-group-text: #16324f;
+  --color-note-fill: var(--amber-50);
+  --color-note-border: var(--amber-100);
+
+  /* ---------- Elevation, retired — `stable-beta-public/02` ----------
+   *
+   * There was a scale here: `--shadow-xs/sm/md/lg/xl` plus three node
+   * rings, spent at 74 `box-shadow` declarations across 24 files. Two
+   * earlier passes had already taken the *blur* out of it — the authored
+   * `--osg-shadow-*` are `0 Npx 0`, an offset with no blur, because a soft
+   * shadow under a square corner reads as a mistake — which left an
+   * offset lift nobody had chosen and a ring that was doing the actual
+   * work.
+   *
+   * The owner's instruction, 2026-09-04, with Miro as the reference feel:
+   * remove the shadow and give a border, everywhere. So the ring became a
+   * real `border` at the one hairline weight, and a floating layer now
+   * says "above" the way a flat system says it — an **opaque ground**
+   * (`--color-bg-surface-raised`, or `--color-bg-inverse` for a tooltip or
+   * a toast) behind that same hairline.
+   *
+   * **No stronger border token was minted, and the reason is two standing
+   * pins rather than taste.** `--color-rule` at `--border-width-rule` is
+   * the draggable weight and is spent at exactly three declarations
+   * (`aBorderIsDraggableOrItIsNot.test.ts`); `--color-border-emphasis` is
+   * interaction *state* and never a resting border, asserted there as an
+   * exact site list. A third resting weight would have contradicted both,
+   * so the hairline carries every layer and the ground carries the
+   * difference between them. `--color-border` measures 1.89:1 against the
+   * canvas at its worst — the thinnest case — which still clears the
+   * ~1.5:1 a hairline needs to read at all, by 27% rather than by the
+   * factor of three it had before `stable-beta-public/26` halved the ink;
+   * the whole table is in `noShadowButTheGrip.test.ts`, measured rather
+   * than stated, which is why halving the token moved a number here
+   * instead of quietly moving the product.
+   *
+   * The one thing kept is the one the owner named: the **draggable grip**,
+   * which stands out on purpose and never used a shadow to do it — it is
+   * 2px of full ink (`--color-rule`), and that is untouched. */
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* The two surfaces a person actually looks at are the authored dark
+     ground and the authored dark surface, `#1a1918` and `#201e1d`, and
+     they land here for free: the greys they replace were `#171b22` and
+     `#1c2129`, whose relative luminances are 0.0108 and 0.0149 against the
+     authored 0.0098 and 0.0132. The design system's dark end and this
+     product's dark end were already the same depth; only the temperature
+     differed. Everything around them is the derived ink ramp at the
+     luminance it already had. */
+  --color-bg-canvas: #0f0e0e;
+  --color-bg-surface: #1a1918;
+  --color-bg-surface-raised: #201e1d;
+  --color-bg-surface-sunken: #151413;
+  --color-bg-subtle: #262423;
+  --color-bg-muted: #2c2928;
+  --color-bg-inverse: var(--neutral-75);
+
+  --color-bg-hover: rgba(243, 242, 242, 0.05);
+  --color-bg-active: rgba(243, 242, 242, 0.09);
+  --color-bg-selected: rgba(244, 113, 92, 0.16);
+
+  /* `#f3f2f2` is the authored dark ink, written as a literal rather than
+     as `var(--osg-text)` for the reason at the top of this file. */
+  --color-text-primary: #eae9e9;
+  --color-text-secondary: #a19e9c;
+  /* Dark failed harder than light — 3.21 and 2.97 — because a dim grey on a
+     dim ground has nowhere to go. Measured against `--color-bg-subtle`
+     (now `#262423`), the *lightest* dark background and therefore the worst
+     case for pale text: 5.19, 4.70, 4.70 — the same three ratios, re-tinted
+     at constant luminance rather than re-picked. */
+  --color-text-tertiary: #989593;
+  --color-text-quaternary: #918d8b;
+  --color-text-placeholder: #918d8b;
+  --color-text-inverse: var(--neutral-950);
+  /* The authored `--osg-accent-300`, which the design system ships as the
+     accent for dark grounds. */
+  --color-text-link: #f9b3a6;
+  /* The bright end, and it is `--color-status-success`'s own dark value read
+     by name rather than restated — 8.04:1 on `--color-bg-subtle`, against
+     2.53 for `--color-primary`. Referencing a role declared a few lines above
+     in this same block is safe; the rule at the top of this file is about
+     `--osg-*` primitives, which flip underneath us. */
+  --color-text-success: var(--color-status-success);
+
+  /* No border weight is redeclared here. All three are `color-mix()` over
+     `--osg-divider`, which is itself theme-aware (`15`), so the single
+     light-block declaration already carries the dark value — the same
+     reasoning `--color-rule` has carried since `07`. The three fixed dark
+     hexes that stood here (`--color-border-subtle/-default/-strong`) went
+     with their light-block declarations in `16`. */
+  /* The authored dark accent, `--osg-accent-400`. */
+  --color-border-focus: #f4715c;
+  --color-focus-ring: #f4715c;
+
+  /* Dark was worse than light: 3.09:1. The scale keeps this theme's own
+     intent — hover *brightens*, active *deepens* — which took some care,
+     because brightening is what costs contrast against white text. These
+     three are 6.11, 4.63 and 7.84 after the chroma drop — the same three
+     numbers, since each state kept the luminance it was measured at. */
+  --color-primary: #306e42;
+  --color-primary-hover: #398350;
+  --color-primary-active: #285c38;
+  --color-primary-subtle: rgba(69, 159, 96, 0.14);
+  --color-primary-text: #ffffff;
+
+  /* `kanban-patrol/04`: was the authored dark `--osg-node-idle` literal,
+     `#4a4746` — 1.91:1 as a filled in-card status dot against this theme's
+     near-black card, against SC 1.4.11's 3:1 floor. Read through the
+     re-pointed `--osg-node-idle` (`tokens.css`) rather than restated here,
+     so the two files cannot drift back apart the way this literal already
+     had from its own primitive. */
+  --color-status-idle: var(--osg-node-idle);
+  --color-status-ready: #2dd4bf;
+  --color-status-running: #60a5fa;
+  --color-status-success: #34d399;
+  --color-status-warning: #fbbf24;
+  --color-status-error: #f4715c; /* authored dark accent */
+
+  /* Lifted on dark, where a mid-ramp accent reads as muddy against the
+   * canvas rather than as a light source. */
+  --color-run-glow-from: #60a5fa;
+  --color-run-glow-to: #a78bfa;
+
+  --color-danger: #f9b3a6; /* authored dark `--osg-node-error` */
+  --color-danger-subtle: rgba(244, 113, 92, 0.14);
+
+  /* Restated, not flipped — see the light block. A scrim lowers the ground
+     it covers, in either theme. */
+  --color-scrim: rgba(9, 12, 17, 0.45);
+
+  --color-canvas-grid-dot: #2c2928;
+  --color-canvas-link: #474443;
+  --color-canvas-link-hover: #676462;
+  --color-canvas-link-active: #f4715c;
+  --color-canvas-link-flow: #34d399;
+  --color-port: #969290;
+  --color-port-ring: #1a1918;
+  --color-port-hover: #f9b3a6;
+  --color-port-valid: #34d399;
+  --color-port-invalid: #f4715c;
+  --color-snapline: #f4715c;
+  --color-selection-band: rgba(244, 113, 92, 0.1);
+  --color-selection-band-border: #f4715c;
+  --color-group-fill: rgba(59, 130, 246, 0.09);
+  --color-group-border: rgba(96, 165, 250, 0.26);
+  --color-group-text: #c4d9f7;
+  --color-note-fill: rgba(245, 158, 11, 0.09);
+  --color-note-border: rgba(245, 158, 11, 0.22);
+
+  /* The dark block's own elevation scale is retired with the light one —
+   * see the light block above. Its argument was already that "a light
+   * hairline, not a shadow" gives a dark surface its definition, and the
+   * hairline is now the whole of it: `--color-border` reads at 2.55:1 on
+   * the dark surface and 2.48:1 on the dark canvas — a third of what it was
+   * before `stable-beta-public/26`, and still better than either light
+   * figure, which is the one thing about this ladder that has not changed:
+   * a light line on a dark ground carries further than a dark one on a
+   * light ground at the same alpha. */
+}
+
+/* ------------------------------------------------------------------ *
+ * Accent palettes.
+ *
+ * A node family declares `data-accent="blue"` once; every child reads
+ * the four resolved slots below. Adding a family means adding a block
+ * here — no component changes.
+ *
+ * **`:root` carries the untinted default — kanban-patrol/14.** Every one
+ * of these four slots used to exist only under `[data-accent]`, an
+ * attribute set per-element on node cards and palette rows, never on the
+ * root. So `Badge tone="accent"` (and the two call sites that already
+ * used it before the kanban board did — `TopBar.tsx`'s token counter,
+ * `Palette.tsx`'s scoped count) computed a transparent background and
+ * inherited text colour anywhere outside that subtree. The values below
+ * are identical to `[data-accent]`'s own neutral default, so nothing
+ * inside a `[data-accent]` subtree changes — that rule still wins on
+ * specificity where it applies, and a coloured family
+ * (`[data-accent='blue']` etc, below) still overrides both.
+ * ------------------------------------------------------------------ */
+
+:root {
+  --accent-solid: var(--neutral-500);
+  --accent-strong: var(--neutral-600);
+  --accent-tint: var(--neutral-100);
+  --accent-on-tint: var(--neutral-700);
+}
+
+[data-accent] {
+  --accent-solid: var(--neutral-500);
+  --accent-strong: var(--neutral-600);
+  --accent-tint: var(--neutral-100);
+  --accent-on-tint: var(--neutral-700);
+}
+
+[data-accent='blue'] {
+  --accent-solid: var(--blue-500);
+  --accent-strong: var(--blue-600);
+  --accent-tint: var(--blue-50);
+  --accent-on-tint: var(--blue-600);
+}
+[data-accent='indigo'] {
+  --accent-solid: var(--indigo-500);
+  --accent-strong: var(--indigo-600);
+  --accent-tint: var(--indigo-50);
+  --accent-on-tint: var(--indigo-600);
+}
+[data-accent='green'] {
+  --accent-solid: var(--green-500);
+  --accent-strong: var(--green-600);
+  --accent-tint: var(--green-50);
+  --accent-on-tint: var(--green-600);
+}
+[data-accent='amber'] {
+  --accent-solid: var(--amber-500);
+  --accent-strong: var(--amber-600);
+  --accent-tint: var(--amber-50);
+  --accent-on-tint: var(--amber-600);
+}
+[data-accent='orange'] {
+  --accent-solid: var(--orange-500);
+  --accent-strong: var(--orange-600);
+  --accent-tint: var(--orange-50);
+  --accent-on-tint: var(--orange-600);
+}
+[data-accent='red'] {
+  --accent-solid: var(--red-500);
+  --accent-strong: var(--red-700);
+  --accent-tint: var(--red-50);
+  --accent-on-tint: var(--red-700);
+}
+[data-accent='violet'] {
+  --accent-solid: var(--violet-500);
+  --accent-strong: var(--violet-600);
+  --accent-tint: var(--violet-50);
+  --accent-on-tint: var(--violet-600);
+}
+[data-accent='teal'] {
+  --accent-solid: var(--teal-500);
+  --accent-strong: var(--teal-600);
+  --accent-tint: var(--teal-50);
+  --accent-on-tint: var(--teal-600);
+}
+
+/* Dark mode needs the tints rebuilt from alpha rather than the 50-step,
+ * which would glow against a dark surface. */
+[data-theme='dark'] [data-accent='blue'] {
+  --accent-tint: rgba(59, 130, 246, 0.15);
+  --accent-on-tint: #7aa7f5;
+}
+[data-theme='dark'] [data-accent='indigo'] {
+  --accent-tint: rgba(99, 102, 241, 0.15);
+  --accent-on-tint: #9ca0f8;
+}
+[data-theme='dark'] [data-accent='green'] {
+  --accent-tint: rgba(22, 163, 74, 0.16);
+  --accent-on-tint: #4ade80;
+}
+[data-theme='dark'] [data-accent='amber'] {
+  --accent-tint: rgba(245, 158, 11, 0.16);
+  --accent-on-tint: #fbbf24;
+}
+[data-theme='dark'] [data-accent='orange'] {
+  --accent-tint: rgba(249, 115, 22, 0.16);
+  --accent-on-tint: #fb923c;
+}
+[data-theme='dark'] [data-accent='red'] {
+  --accent-tint: rgba(239, 68, 68, 0.16);
+  --accent-on-tint: #f87171;
+}
+[data-theme='dark'] [data-accent='violet'] {
+  --accent-tint: rgba(139, 92, 246, 0.16);
+  --accent-on-tint: #a78bfa;
+}
+[data-theme='dark'] [data-accent='teal'] {
+  --accent-tint: rgba(20, 184, 166, 0.16);
+  --accent-on-tint: #2dd4bf;
+}

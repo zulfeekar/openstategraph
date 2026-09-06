@@ -1,0 +1,55 @@
+# Label a pull request by the paths it touches. Read by
+# `.github/workflows/labeler.yml` (actions/labeler v5 syntax).
+#
+# These labels exist to make the review queue sortable — "show me the backend
+# PRs" — and to make `release` PRs obvious. They are not a taxonomy: if a label
+# would never change how anyone triages, it is not here.
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/**"
+          - "index.html"
+          - "vite.config.ts"
+          - "tsconfig*.json"
+          - "eslint.config.js"
+          - "package.json"
+          - "package-lock.json"
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "backend/**"
+          - "pytest.ini"
+
+# Not "backend" — a workflow package is user-authored content compiled by the
+# backend, and it changes for entirely different reasons.
+workflows:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "workflows/**"
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+          - "openwiki/**"
+          - "site/**"
+
+# Anything that can publish, grant a permission, or run on a schedule. The
+# label a maintainer should never skim past.
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "scripts/**"
+          - "Dockerfile"
+          - "docker-compose.yml"
+          - "start"
+
+e2e:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "e2e/**"
+          - "playwright.config.ts"

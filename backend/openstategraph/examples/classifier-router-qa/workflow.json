@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "name": "Classifier Router QA",
+  "published": false,
+  "savedAt": "2026-08-14T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Classifier Router QA",
+    "settings": {
+      "purpose": "Pure routing: one classifier, three exclusive terminal branches, no grader and no loop."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Question",
+        "data": {},
+        "position": { "x": 40, "y": 360 }
+      },
+      {
+        "id": "router1",
+        "type": "route.classifier",
+        "title": "Intent",
+        "data": {
+          "branches": [
+            { "id": "b-world", "name": "world_facts" },
+            { "id": "b-howto", "name": "how_to" },
+            { "id": "b-general", "name": "general" }
+          ],
+          "fallback": "general",
+          "rules": "world_facts: questions about places, times, dates, distances, populations or other facts about the world.\nhow_to: questions asking how to do or make something — a procedure, a recipe, a set of steps.\ngeneral: everything else — greetings, opinions, definitions, small talk."
+        },
+        "position": { "x": 380, "y": 360 }
+      },
+      {
+        "id": "agent-world",
+        "type": "agent.llm",
+        "title": "World Facts",
+        "data": {
+          "systemPrompt": "Answer the factual question in one or two sentences. If the answer depends on something you cannot know — the current time, today's date, a live figure — say exactly what it depends on instead of guessing a value."
+        },
+        "position": { "x": 760, "y": 120 }
+      },
+      {
+        "id": "agent-howto",
+        "type": "agent.llm",
+        "title": "How To",
+        "data": {
+          "systemPrompt": "Answer with a short numbered procedure — at most five steps, one line each, no preamble."
+        },
+        "position": { "x": 760, "y": 360 }
+      },
+      {
+        "id": "agent-general",
+        "type": "agent.llm",
+        "title": "General",
+        "data": {
+          "systemPrompt": "Answer briefly and plainly, in at most three sentences."
+        },
+        "position": { "x": 760, "y": 600 }
+      },
+      {
+        "id": "out-world",
+        "type": "output.formatted",
+        "title": "Fact",
+        "data": {},
+        "position": { "x": 1120, "y": 120 }
+      },
+      {
+        "id": "out-howto",
+        "type": "output.formatted",
+        "title": "Steps",
+        "data": {},
+        "position": { "x": 1120, "y": 360 }
+      },
+      {
+        "id": "out-general",
+        "type": "output.formatted",
+        "title": "Reply",
+        "data": {},
+        "position": { "x": 1120, "y": 600 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "router1", "portId": "question" }
+      },
+      {
+        "source": { "nodeId": "router1", "portId": "branch:b-world" },
+        "target": { "nodeId": "agent-world", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "router1", "portId": "branch:b-howto" },
+        "target": { "nodeId": "agent-howto", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "router1", "portId": "branch:b-general" },
+        "target": { "nodeId": "agent-general", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "agent-world", "portId": "result" },
+        "target": { "nodeId": "out-world", "portId": "result" }
+      },
+      {
+        "source": { "nodeId": "agent-howto", "portId": "result" },
+        "target": { "nodeId": "out-howto", "portId": "result" }
+      },
+      {
+        "source": { "nodeId": "agent-general", "portId": "result" },
+        "target": { "nodeId": "out-general", "portId": "result" }
+      }
+    ]
+  }
+}
