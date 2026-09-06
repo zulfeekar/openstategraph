@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- `ProviderDefault.command` — the one-line install command for the elected provider, printed unwrapped beneath the wrapped reason (`osg-agent-experience/83`).
 - **A report door for an install with no `gh`**
   (`team-board-and-gap-reports/09`). Ticket 07 made a gap report a closed type
   and gave it no transport; a user in a container or a company that does not
