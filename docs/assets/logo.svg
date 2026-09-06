@@ -3,7 +3,7 @@
   <!--
     The lockup the editor's top bar shows: the owner's authored circuit mark
     (`public/favicon.svg`, `src/design/brand/Mark.tsx`, LOCKED) beside the
-    wordmark set in `--type-wordmark` (700, IBM Plex Sans, tracking -0.03em).
+    wordmark set in the type-wordmark token (700, IBM Plex Sans, tracking 0.03em tighter).
     Same two literals as the favicon and for the same reason: an <img> has no
     cascade, so the ink flips under `prefers-color-scheme` here and the accent
     does not (stable-beta-public/33).
