@@ -490,7 +490,7 @@ prediction.
 run on a pull request. So the gates on this page describe observed behaviour,
 not intent.
 
-Four things have never once succeeded, and they are named rather than implied.
+Five things have never once succeeded, and they are named rather than implied.
 **No run count is given, and that is deliberate.** Every number this table
 once carried had drifted by the time somebody checked it — `openwiki-update`
 said zero when it had run, `pages.yml` said six and `CLAUDE.md` said four when
@@ -508,6 +508,7 @@ gh run list --repo <owner>/<repo> --workflow pages.yml
 | **`release-pr.yml`** (*Release PR*) | every run has failed, all at `peter-evans/create-pull-request` — see below. It has never opened a pull request |
 | `openwiki-update.yml` (*OpenWiki update*) | has fired on schedule and failed every time, for want of `secrets.OPENWIKI_API_KEY`, which is not set on the repository — see `CLAUDE.md`'s OpenWiki block for the dated account and a run id |
 | `pages.yml` (*Deploy landing page*) | every run has failed — `HttpError: Not Found` from `actions/configure-pages`. See production-ready ticket 28 |
+| `issues-to-board.yml` (*Issues to board*) | never run. It fires on `issues` and `issue_comment`, and it is the newest workflow here (`team-board-and-gap-reports/05`). It needs `secrets.OPENSTATEGRAPH_KANBAN_URL`, which is not set — so its first run will fail the way `openwiki-update.yml` does, except that it says which variable was empty. It installs the **released** `openstategraph[postgres]` from PyPI rather than checking this repository out, so it cannot work at all until a release carrying `openstategraph.github_issue_bridge` is on PyPI |
 
 `docs-freshness` used to carry `if: github.event_name == 'pull_request'`,
 which in a repository that pushes straight to `main` meant it had fired once

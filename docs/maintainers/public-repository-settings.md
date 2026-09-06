@@ -49,16 +49,21 @@ chooser.
   `.github/ISSUE_TEMPLATE` folder"* —
   [Configuring issue templates](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository).
 
-**A third template — the platform gap — is not written yet, and this page will
-not guess its fields.** It is the one an automated door would file into, so its
-fields have to be exactly the report allowlist and nothing else: version, kind,
-node/tool type ids involved, the door that refused, the refusal text, the check
-id, the first traceback line, OS, Python. That list has no schema behind it in
-this repository yet, and a template written before the schema is a second
-spelling of a contract that has no first one — which is the duplication rule
-this project applies to every hand-mirrored wire type. It is filed as
-`team-board-and-gap-reports/05` and `07`, and the template lands with the pin
-that holds it to the model.
+**The third template — `platform-gap.yml` — exists, and its fields are not a
+choice.** It is the one an automated door files into, so its fields are exactly
+the properties of `docs/gap-report.schema.json`, which is generated from the
+Pydantic model `openstategraph.gap_report.GapReport`
+(`team-board-and-gap-reports/07`). A field added to the model and missing from
+the template, or a tenth field invented in the template, is a red test in
+`backend/tests/test_an_issue_a_user_files_reaches_the_board.py` — including the
+two dropdowns, whose options are asserted to be the model's own enums, because
+an option a template invents is a value the model refuses. Do not edit that
+file to add a question; edit the model, regenerate the schema, and the pin will
+tell you what else has to move (`team-board-and-gap-reports/05`).
+
+An issue filed from it is copied onto the maintainers' board by
+`issues-to-board.yml` — §6's `OPENSTATEGRAPH_KANBAN_URL` is what that workflow
+reads, and the row below says what breaks when it is unset.
 
 ## 3. Actions — workflow permissions
 
@@ -66,7 +71,7 @@ that holds it to the model.
 | --- | --- |
 | **Where** | Settings ▸ Actions ▸ General ▸ *Workflow permissions* |
 | **Value** | **Read repository contents and packages permissions** (the restricted default) |
-| **Breaks if not** | every workflow's token starts with write access to the whole repository, so a compromised action in any job can push to `main`. All six workflows here already declare what they need — `ci.yml` and `triage.yml` top-level `contents: read`, write granted per job in `release.yml`, `release-pr.yml` and `openwiki-update.yml` — so the permissive default buys this repository nothing and costs it the blast radius |
+| **Breaks if not** | every workflow's token starts with write access to the whole repository, so a compromised action in any job can push to `main`. Every workflow here already declares what it needs — `ci.yml`, `triage.yml` and `issues-to-board.yml` top-level `contents: read`, write granted per job in `release.yml`, `release-pr.yml`, `openwiki-update.yml` and (`issues: write`, for the one step that comments a resolution back) `issues-to-board.yml` — so the permissive default buys this repository nothing and costs it the blast radius |
 | **Docs** | [Managing GitHub Actions settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository). *"The permissions for the `GITHUB_TOKEN` are initially set to the default setting for the enterprise, organization, or repository"* — [workflow syntax ▸ `permissions`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions) |
 
 ### 3a. "Allow GitHub Actions to create and approve pull requests" — the row with a conflict in it
@@ -151,7 +156,8 @@ and losing every time.
 | `OPENWIKI_API_KEY` | `openwiki-update.yml` | the scheduled wiki refresh fires and fails, every time, in about 40 seconds. It is the standing example |
 | `TEST_PYPI_API_TOKEN` | `release.yml` ▸ `testpypi` | the rehearsal cannot upload, so the human gate is never reached |
 | `PYPI_API_TOKEN` | `release.yml` ▸ `pypi` | the publish step fails after the human has already approved it |
-| `GITHUB_TOKEN` | `triage.yml` | nothing — **you do not set this one.** GitHub provides it per run; it is listed because it appears in a workflow and the census is derived, and because it is the one secret a fork's pull request *does* receive |
+| `OPENSTATEGRAPH_KANBAN_URL` | `issues-to-board.yml` | every issue a user files stays on GitHub only. The run fails naming this variable rather than dying obscurely, but nothing is copied to the board and no closed issue is told what shipped. It is the team board's Postgres URL — **not** `OPENSTATEGRAPH_POSTGRES_URL`, which is the checkpointer's |
+| `GITHUB_TOKEN` | `triage.yml`, `issues-to-board.yml` | nothing — **you do not set this one.** GitHub provides it per run; it is listed because it appears in a workflow and the census is derived, and because it is the one secret a fork's pull request *does* receive |
 
 | Variable | Read by | Breaks if unset |
 | --- | --- | --- |

@@ -90,14 +90,23 @@ about this is telemetry: there is no timer and no background sender, and the
 module that builds a report has no network client in it at all — so no code
 path can assemble one and dispatch it in the same breath.
 
-## Where it goes — the two doors, neither built yet
+## Where it goes — the two doors, neither walked yet
 
-The schema exists so that both doors send the same thing. **Today neither door
-is built, and nothing sends anything.**
+The schema exists so that both doors send the same thing. **Today nothing in
+this package sends anything** — no code path assembles a report and dispatches
+it. The first door's *landing place* now exists (the issue form below); what
+does not exist is anything that walks through it on your behalf.
 
 1. **An issue under your own GitHub login.** The primary door: your `gh`
    credentials, your account, the rendered text shown to you first, filed as an
-   issue on the project's tracker.
+   issue on the project's tracker. **The form it files into exists** —
+   `.github/ISSUE_TEMPLATE/platform-gap.yml`, whose boxes are exactly this
+   schema's fields, asserted against it rather than transcribed from it
+   (`team-board-and-gap-reports/05`) — so you can file the report by hand
+   today, box by box, and an issue filed that way is copied onto the
+   maintainers' board and told what shipped when it closes. What is not built
+   is the *automatic* door: nothing in this package fills that form in for you
+   or opens a browser.
 2. **A keyless door for an install with no `gh`.** A hosted function that
    accepts exactly this schema, drops unknown fields, and rate-limits by the
    hashed project id.

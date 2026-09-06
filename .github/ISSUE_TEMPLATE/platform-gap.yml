@@ -1,0 +1,138 @@
+# The platform-gap report — `team-board-and-gap-reports/05`.
+#
+# THE FIELDS HERE ARE NOT A CHOICE. They are exactly the properties of
+# `docs/gap-report.schema.json`, which is generated from the Pydantic model
+# `openstategraph.gap_report.GapReport` and is the single source of truth for
+# what a report may carry (`07`). A field added to the model and missing here —
+# or a tenth field invented here — is a red test, not a discovery made months
+# later by a maintainer wondering why half a report never arrives.
+#
+# The two dropdowns are the model's own enums, in the model's own order, for
+# the same reason: an option this file invents is a value the model refuses.
+#
+# Nothing here asks for your document, your prompts, your field values, your
+# table names, your question text, your file paths or anything out of your
+# environment. That is the allowlist, and it is a type rather than a promise.
+name: Platform gap
+description: This install refused to do something — a node type with no implementation, a provider that is not configured, a door that said no.
+title: '[gap]: '
+labels: ['platform-gap']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Every box below is a field of the published report schema**
+        (`docs/gap-report.schema.json`). If you ran `openstategraph` and it
+        printed a report, paste each line into the box with the same name —
+        the fields are the report, in order.
+
+        Please do not paste your workflow document, a prompt, a field value, a
+        table name, a question, an absolute path or anything from your `.env`.
+        None of those is on the report allowlist, and none of them is needed to
+        act on a gap.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: '`openstategraph --version`.'
+      placeholder: 0.3.0rc15
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      description: Which kind of gap this is, in the vocabulary the runtime already uses.
+      options:
+        - no-backend
+        - node-failure
+        - every-tool-call-failed
+        - provider-not-configured
+        - door-refused
+    validations:
+      required: true
+
+  - type: input
+    id: type_ids
+    attributes:
+      label: Node or tool type ids
+      description: >
+        The **type ids** involved — `tool.QueryTool`, `agent.ReactAgentNode`,
+        `my-package/tools.QueryTool`. Type ids, never values. Separate several
+        with spaces.
+      placeholder: tool.QueryTool
+
+  - type: dropdown
+    id: door
+    attributes:
+      label: Door
+      description: Which surface you were standing at when it refused.
+      options:
+        - api
+        - mcp
+        - cli
+        - library
+        - editor
+    validations:
+      required: true
+
+  - type: textarea
+    id: refusal
+    attributes:
+      label: What refused
+      description: The refusal sentence, exactly as this install printed it. One sentence, not a log.
+      placeholder: No implementation for tool "tool.QueryTool"
+    validations:
+      required: true
+
+  - type: input
+    id: check
+    attributes:
+      label: Check id
+      description: The id of the check that noticed, when a check is what noticed.
+
+  - type: input
+    id: traceback_line
+    attributes:
+      label: First traceback line
+      description: >
+        The **first** line only — `SomeError: message`. Not the whole traceback;
+        the rest carries paths.
+
+  - type: input
+    id: aad_code
+    attributes:
+      label: Azure AD error code
+      description: >
+        The `AADSTS…` code, when the refusal carried one. It is the one string
+        that ends an expired-credential investigation, so it is carried rather
+        than redacted.
+      placeholder: AADSTS7000222
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: System and release, nothing narrower.
+      placeholder: Darwin 25.6.0
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python
+      placeholder: 3.13.1
+    validations:
+      required: true
+
+  - type: input
+    id: project_hash
+    attributes:
+      label: Project hash
+      description: >
+        The hash of your project id, if the report printed one. It is a hash —
+        it names no repository, no path and no person, and it is what lets forty
+        runs of one refusal be one card rather than forty.

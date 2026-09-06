@@ -81,6 +81,8 @@ class IKanbanStore(Protocol):
         priority: str = "med",
         area: str = "backend",
         priority_reason: str = "",
+        story: str = "",
+        done_when: str = "",
     ) -> None: ...
 
     def file_idea_card(
@@ -191,6 +193,8 @@ class AbstractKanbanStore(ABC):
         priority: str = "med",
         area: str = "backend",
         priority_reason: str = "",
+        story: str = "",
+        done_when: str = "",
     ) -> None:
         """The patrol's write. `kanban-patrol/02`: once a card leaves
         `unattended`, a re-patrol must never touch it again — enforced by the
@@ -200,6 +204,16 @@ class AbstractKanbanStore(ABC):
         `priority`/`area` default rather than require an argument at every call
         site that does not yet have an opinion; a real patrol (`07`/`08`) is
         expected to always pass both explicitly.
+
+        `story`/`done_when` default the same way and for a related reason —
+        `team-board-and-gap-reports/05`. A patrol card justifies itself with
+        the run it was minted from, so it needs neither; a card copied from a
+        GitHub issue has a person's own account of the gap and the check that
+        settles it, and dropping those would put a title on the board with the
+        report thrown away. Not a reason to route that filing through
+        `file_idea_card`, which mints its own id from the title and forces
+        `board="workflows"` — an issue's identity is its number, on the
+        `github` board.
         """
         self._insert_card(
             Card(
@@ -222,6 +236,8 @@ class AbstractKanbanStore(ABC):
                 answer="",
                 answered_by="",
                 answered_at="",
+                story=story.strip(),
+                done_when=done_when.strip(),
             )
         )
 
