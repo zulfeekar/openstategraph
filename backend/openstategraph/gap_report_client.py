@@ -27,7 +27,7 @@ already keeps:
   send without having produced the block a user reads, and cannot show one
   report and send another.
 
-`urllib` rather than a client library, so the four-package core floor is
+`urllib` rather than a client library, so the runtime's dependency floor is
 untouched — the same reason `08`'s door shells out to `gh` instead of adding a
 dependency.
 """
