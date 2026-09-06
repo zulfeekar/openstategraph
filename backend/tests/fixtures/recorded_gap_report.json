@@ -1,0 +1,19 @@
+{
+  "version": "0.3.0rc15",
+  "kind": "no-backend",
+  "type_ids": [
+    "tool.acme-ping"
+  ],
+  "door": "cli",
+  "refusal": {
+    "source": "runtime",
+    "text": "No implementation for tool \"tool.acme-ping\" \u2014 the agent ran without it, so its answer may not be grounded in that data source."
+  },
+  "check": "no-backend",
+  "traceback_line": null,
+  "os": "Darwin 25.6.0",
+  "python": "3.12.7",
+  "project_hash": "cc132a93cd2a6bf84751aa2bdf76916e9886666493368b26fceec18eee26eda4",
+  "aad_code": null,
+  "finding_hash": "c154f2f1e8eb"
+}

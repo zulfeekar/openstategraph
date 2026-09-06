@@ -72,3 +72,9 @@ HANDOVER.md
 # on purpose: the sdist is built from `backend/`, so a table up here cannot
 # reach a distribution even if this rule were deleted.
 /.engagement-terms.json
+
+# The migration CLI's own scratch directory. It caches a version string and a
+# link state for whichever project a maintainer is pointed at — a working note
+# of one machine, not a fact about this repository, and the one file it holds
+# today is the CLI's latest version number (team-board-and-gap-reports/09).
+supabase/.temp/

@@ -1,0 +1,31 @@
+# The hosted project's own configuration — team-board-and-gap-reports/09.
+#
+# Deliberately small. This repository's schema lives in plain SQL files under
+# `backend/openstategraph/kanban_migrations/`, reached here by the
+# `migrations` symlink (03, and the argument is in
+# `test_the_shared_board_has_a_reviewable_schema.py`), so there is nothing for
+# this file to say about the database. What it does say is the one thing that
+# cannot be said anywhere else: which functions are public.
+
+# The local project name, which is what this key is — the container prefix a
+# local stack would use. The hosted project's ref is deliberately not written
+# here: it is a deploy argument the maintainer passes, not a fact this
+# repository has to carry.
+project_id = "openstategraph"
+
+[functions.gap-report]
+# **Public by declaration, not by accident.**
+#
+# The report door exists for an install that has no GitHub account and no
+# credential of ours — that is the whole reason it was built (09). There is
+# therefore no token it could present, and requiring one would be requiring
+# the thing whose absence defines the caller.
+#
+# The platform's warning about an unauthenticated endpoint that writes is the
+# right warning, and it is answered inside the handler rather than waved at: a
+# body cap checked before parsing, an allowlist that drops what it does not
+# know and refuses what it cannot accept, a rate limit keyed on the hashed
+# project id, dedup by finding hash so a flood is a count rather than a table,
+# and a kill switch (`GAP_REPORT_DISABLED`) that closes the door on the next
+# request without a deploy.
+verify_jwt = false

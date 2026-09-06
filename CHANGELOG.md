@@ -3,6 +3,24 @@
 ## Unreleased
 
 ### Added
+- **A report door for an install with no `gh`**
+  (`team-board-and-gap-reports/09`). Ticket 07 made a gap report a closed type
+  and gave it no transport; a user in a container or a company that does not
+  use GitHub still had no door but retyping it into a browser.
+  `openstategraph.gap_report_client` is the package's half — a plain HTTPS POST
+  of the published schema, with **no key**, and the endpoint named by
+  `OPENSTATEGRAPH_REPORT_ENDPOINT` alone: **unset means the door does not
+  exist**, there is no default URL in any build, and a census over every
+  shipped module fails on a new one. `send` refuses to post text that is not
+  exactly what the report renders, so nothing can show one report and send
+  another; the answer is a typed `Accepted(outcome, count)` or
+  `Refused(status, reason)`. The far side is a hosted function
+  (`supabase/functions/gap-report/`) that is public by declaration, caps the
+  body before parsing, drops fields it does not know and refuses ones it
+  cannot accept, rate-limits by hashed project id and deduplicates by finding
+  hash — one card with a count — and logs counts and reject reasons only. Its
+  vocabulary is generated from the model (`scripts/generate_gap_report_ts.py`,
+  with a `--check` drift gate), never typed twice.
 - **A `finished` card keeps what the closing checks said**
   (`osg-agent-experience/85`). `set_stage` took a `reason` at every stage and
   kept it at one: an agent that wrote its closing gate into

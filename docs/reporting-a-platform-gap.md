@@ -90,12 +90,12 @@ about this is telemetry: there is no timer and no background sender, and the
 module that builds a report has no network client in it at all — so no code
 path can assemble one and dispatch it in the same breath.
 
-## Where it goes — the two doors, neither walked yet
+## Where it goes — the two doors
 
 The schema exists so that both doors send the same thing. **Today nothing in
-this package sends anything** — no code path assembles a report and dispatches
-it. The first door's *landing place* now exists (the issue form below); what
-does not exist is anything that walks through it on your behalf.
+this package sends anything on its own** — no code path assembles a report and
+dispatches it, there is no timer and no background sender. What exists is the
+two landing places and, for the second, a client you can call.
 
 1. **An issue under your own GitHub login.** The primary door: your `gh`
    credentials, your account, the rendered text shown to you first, filed as an
@@ -107,10 +107,68 @@ does not exist is anything that walks through it on your behalf.
    maintainers' board and told what shipped when it closes. What is not built
    is the *automatic* door: nothing in this package fills that form in for you
    or opens a browser.
-2. **A keyless door for an install with no `gh`.** A hosted function that
-   accepts exactly this schema, drops unknown fields, and rate-limits by the
-   hashed project id.
+2. **A keyless door, for an install with no `gh`.** Described in full below.
 
-Until they land, the report object is still useful for the thing it was built
-for: it is the definition of what *would* be sent, checkable now, so that
-neither door can invent a payload of its own later.
+## The keyless door
+
+A container, a CI job, a company that does not use GitHub: no `gh`, no GitHub
+account, and the first door is unreachable. The second one needs neither — it
+is a plain HTTPS POST of the JSON above to a URL, with no credential of any
+kind, because there is nothing here for you to hold.
+
+**It does not exist on your install until you name it.** One environment
+variable:
+
+```
+OPENSTATEGRAPH_REPORT_ENDPOINT=https://<the maintainers' function>
+```
+
+Unset — which is how every install starts, and how most will stay — means the
+door is not there. There is no default URL in this package, in any build, in
+any release; grep the wheel and you will not find one, and a test
+(`team-board-and-gap-reports/09`) fails the day somebody adds one. That is the
+same rule this project applies to every vendor it reaches: never reach one
+without naming a variable you can set, see and revoke. It is also the whole
+opt-out. There is no setting to turn off, because with the variable unset there
+is nothing on.
+
+Sending is still per report and still after you have read it:
+
+```python
+from openstategraph.gap_report_client import endpoint, send
+
+shown = report.render()   # the block above — read it
+print(shown)
+answer = send(report, endpoint(), shown=shown)   # only if you say so
+```
+
+`send` refuses to post unless the text you pass is exactly what this report
+renders, so nothing can show you one report and send another. The answer is
+either `Accepted(outcome, count)` — `count` being how many times this same gap
+has now been reported from this install, because repeats are one card with a
+count rather than a hundred cards — or `Refused(status, reason)`, where the
+reason is one of the door's own fixed words (`rate-limited`, `too-large`,
+`not-json`, …) and never anything derived from what you sent.
+
+### What the far side does with it
+
+Worth knowing, because a door you cannot see is a door you have to trust:
+
+- It is **public by declaration** — no authentication, because a reporting
+  install holds no credential of ours and issuing one to every install would be
+  a worse problem than the one it solves.
+- It **refuses by length before it parses**, so an oversized body costs a
+  length check.
+- It is **tolerant in reading and strict in trusting**: a field it does not
+  know is dropped rather than refused, so an older or newer client still gets
+  through, and nothing outside the allowlist ever reaches the database.
+- It **rate-limits by your hashed project id**, and **deduplicates by the
+  finding hash** — one card, a count.
+- It **logs nothing from the body**. Counts, outcomes and reject reasons only,
+  not even on an error path.
+- It has a **kill switch** its maintainers can throw without a deploy, which is
+  the honest answer to "what if this ever misbehaves".
+
+Until something calls it for you, the report object is still useful for the
+thing it was built for: it is the definition of what *would* be sent, checkable
+now, so that neither door can invent a payload of its own later.
