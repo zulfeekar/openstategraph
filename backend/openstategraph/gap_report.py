@@ -71,6 +71,7 @@ __all__ = [
     "report_for_finding",
     "gap_report_schema",
     "hashed_project_id",
+    "GAP_CARD_CATEGORY",
 ]
 
 #: The committed publication of this model. Pydantic is the source of truth
@@ -80,6 +81,20 @@ __all__ = [
 GAP_REPORT_SCHEMA_PATH = (
     Path(__file__).resolve().parents[2] / "docs" / "gap-report.schema.json"
 )
+
+#: What a card filed by the keyless door *is* — the same word every other gap
+#: card on this board already carries (`patrol.py`'s own `category="gap"`),
+#: and not a fifth spelling minted for this door.
+#:
+#: `team-board-and-gap-reports/17`. The board picks the tab and the category
+#: says what the card is; the routine in `0006` writes both, and the pin in
+#: `test_the_keyless_door_files_onto_a_board_a_tab_reads.py` is what keeps
+#: this constant, the generated contract and that SQL one fact rather than
+#: three copies of a word. Declared here rather than in `kanban_store` because
+#: it is a property of a *report* — every kind `GapReport` accepts collapses
+#: to this one card category — while the board id it is filed onto belongs to
+#: the boards' own vocabulary.
+GAP_CARD_CATEGORY = "gap"
 
 #: How much of a digest a finding hash carries — imported rather than chosen,
 #: for the reason `patrol.refusal_task_id` gives: twelve characters is the

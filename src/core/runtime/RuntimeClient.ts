@@ -1217,6 +1217,11 @@ export interface KanbanCardRow {
   //: `finished` transition. Empty on every card that has not reached it, and on
   //: a finished one whose actor passed no reason.
   readonly finished_reason: string;
+  //: `team-board-and-gap-reports/17` — how many times this exact finding has
+  //: been reported from this install. `1` on every card no door has counted
+  //: on, never `0` or absent; turning a number true of every row into a
+  //: label is the board's decision, and `kanbanCardMapping` makes it.
+  readonly count: number;
   //: `kanban-patrol/19`'s explicit Release — whether this card's claim has
   //: gone past the hour-long lease with no heartbeat. Computed by the
   //: backend at read time, never stored.

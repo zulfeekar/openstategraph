@@ -34,6 +34,7 @@ function row(overrides: Partial<KanbanCardResponse> = {}): KanbanCardResponse {
     agent_model: '',
     agent_effort: '',
     finished_reason: '',
+    count: 1,
     stale: false,
     ...overrides,
   };

@@ -78,6 +78,12 @@ _COLUMN_DEFS: dict[str, str] = {
     # already holds intact. A card filed before it existed reads back with
     # `""`, which is exactly what it means — no finding behind this card.
     "gap_evidence": "TEXT NOT NULL DEFAULT ''",
+    # `team-board-and-gap-reports/17`. How many times this finding has been
+    # reported from this install — the shared board's `0003` column, mirrored
+    # here so one `Card` reads back the same from either store. `DEFAULT 1`
+    # and not `0`, the same word the migration uses and for its reason: a card
+    # exists because something was reported once.
+    "count": "INTEGER NOT NULL DEFAULT 1",
 }
 
 _CARD_COLUMNS = (
@@ -86,7 +92,7 @@ _CARD_COLUMNS = (
     "evidence_test_id, evidence_red_reason, evidence_green, evidence_commit, "
     "answer, answered_by, answered_at, "
     "story, done_when, blocked_by, agent_model, agent_effort, finished_reason, "
-    "gap_evidence"
+    "gap_evidence, count"
 )
 
 
@@ -134,6 +140,7 @@ def _row_to_card(row: tuple[Any, ...]) -> Card:
         agent_effort=row[23],
         finished_reason=row[24],
         gap_evidence=row[25],
+        count=row[26],
     )
 
 
@@ -275,7 +282,7 @@ class SqliteKanbanStore(AbstractKanbanStore):
                     card.answer, card.answered_by, card.answered_at,
                     card.story, card.done_when, json.dumps(list(card.blocked_by)),
                     card.agent_model, card.agent_effort, card.finished_reason,
-                    card.gap_evidence,
+                    card.gap_evidence, card.count,
                 ),
             )
             conn.commit()

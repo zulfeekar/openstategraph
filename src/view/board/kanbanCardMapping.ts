@@ -43,6 +43,11 @@ export interface KanbanCardResponse {
   //: `finished` transition. Empty on every card that has not reached it, and on
   //: a finished one whose actor passed no reason.
   readonly finished_reason: string;
+  //: `team-board-and-gap-reports/17` — how many times this exact finding has
+  //: been reported from this install. `1` on every card no door has counted
+  //: on, never `0` or absent; turning a number true of every row into a
+  //: label is the board's decision, and `kanbanCardMapping` makes it.
+  readonly count: number;
   //: `kanban-patrol/19`'s explicit Release — whether this card's claim has
   //: gone past the hour-long lease with no heartbeat. Absent-vs-`false`
   //: does not apply here — every row carries this field always, unlike
@@ -129,5 +134,17 @@ export function mapKanbanCardToBoardCard(row: KanbanCardResponse, now: number): 
     // so an empty string would draw a blank "finished:" line under every card
     // that never carried a gate.
     finishedReason: row.finished_reason || undefined,
+    // `team-board-and-gap-reports/17`. The keyless door files one card per
+    // finding per install and counts the repeats onto it; until this line
+    // existed that number stopped at the database and the board drew a card
+    // that could not tell one report from forty.
+    //
+    // Absent at one, the same absent-not-default rule every line above
+    // follows — and here the default is a *number*, not an empty string, so
+    // it is worth saying why it is not drawn: every card exists because
+    // something was reported once, so "1" is true of every row on the board
+    // and distinguishes none of them. A label true of everything makes the
+    // counted card harder to find, not easier.
+    count: (row.count ?? 1) > 1 ? row.count : undefined,
   };
 }

@@ -400,6 +400,11 @@
             "title": "Category",
             "type": "string"
           },
+          "count": {
+            "default": 1,
+            "title": "Count",
+            "type": "integer"
+          },
           "done_when": {
             "default": "",
             "title": "Done When",

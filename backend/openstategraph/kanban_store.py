@@ -246,6 +246,17 @@ class Card:
     #: through `GapReport` anyway, so a row edited by hand is refused at the
     #: door rather than trusted because it came out of our own store.
     gap_evidence: str = ""
+    #: `team-board-and-gap-reports/17`. How many times this exact finding has
+    #: been reported from this exact install — the keyless door's `on conflict
+    #: ... do update set count = card.count + 1`, which is why its own outcome
+    #: word for the second report is `counted`.
+    #:
+    #: **One, never zero**, on every card filed by every other route: a card
+    #: exists because something was reported once, so `1` is the honest
+    #: reading of a card nobody has counted on rather than a missing value.
+    #: The board is what turns that into an absent label — a number true of
+    #: every row says nothing about any of them.
+    count: int = 1
 
 
 #: `kanban-patrol/19`'s explicit Release lease, in seconds — one hour. Owned
@@ -368,6 +379,14 @@ def card_row(card: Card, *, stale: bool) -> dict[str, Any]:
         # different field sets is how a board and an agent come to read
         # different cards.
         "finished_reason": card.finished_reason,
+        # `team-board-and-gap-reports/17`. Published on every row rather than
+        # only a counted one, for the reason this function exists: two doors
+        # publishing different field sets is how a board and an agent come to
+        # read different cards. Unlike `gap_evidence` below, this one has a
+        # reader at both ends — a person reads "reported 12 times" off the
+        # card, and it is the only thing on it that tells one report from
+        # forty.
+        "count": card.count,
         # `gap_evidence` is deliberately **not** here
         # (`team-board-and-gap-reports/15`). This function is the row the two
         # *board* doors publish, and a finding hash is not something a reader

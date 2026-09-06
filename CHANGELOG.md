@@ -183,6 +183,21 @@
   wheel; the provenance moved into comments beside the strings.
 
 ### Fixed
+- **The keyless door filed onto a board no tab reads**
+  (`team-board-and-gap-reports/17`). `09` wrote every filed report onto
+  `board = 'gap-reports'` and `04`, in the same hour, fixed the boards a card
+  can be on — the tuple `GET /api/kanban/cards` refuses anything outside of by
+  name. Both were internally consistent; together they put the first live
+  report in a row no tab lists and no API call can return. A report now lands
+  on the team board as a card of category `gap`, the rows already filed are
+  moved by migration `0006`, and the board id is **one word in one place**: the
+  Python constant the boards already own, published to the door as
+  `contract.generated.ts` (it is a Deno function and cannot import a Python
+  module) and written by the column default, with a test that reads all three.
+  The count the door had been keeping since `09` — how many times this finding
+  has been reported from this install — reaches the card body too, drawn only
+  above one, because a number true of every card on the board distinguishes
+  none of them.
 - **A single choice published five answers** (`osg-agent-experience/80`). A
   classifier asked one question on rc15 finished at five Outputs, and two
   independent mechanisms made it, so fixing either alone would have left the

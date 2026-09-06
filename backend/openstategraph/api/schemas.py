@@ -187,6 +187,12 @@ class KanbanCardResponse(BaseModel):
     #: publishing different field sets is how a board and an agent come to read
     #: different cards.
     finished_reason: str = ""
+    #: `team-board-and-gap-reports/17` — how many times this exact finding
+    #: has been reported from this install. `1` on every card no door has
+    #: counted on, never `0` or absent: a card exists because something was
+    #: reported once, and turning a number true of every row into a label is
+    #: the board's decision, not the wire's.
+    count: int = 1
     #: `kanban-patrol/19`'s explicit Release — whether this card's claim has
     #: gone past the hour-long lease with no heartbeat. Computed by
     #: `flagged_stale` at read time, never stored: the same "flag, never

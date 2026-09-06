@@ -209,6 +209,17 @@ export interface BoardCard {
    * the workflow. Absent on every card that never carried one.
    */
   readonly finishedReason?: string;
+  /**
+   * How many times this finding has been reported from the install that filed
+   * it — `team-board-and-gap-reports/17`, and the only thing on a gap card
+   * that tells one report from forty.
+   *
+   * **Absent at one**, never the number itself: a card exists because
+   * something was reported once, so `1` is true of every row here and
+   * separates none of them. Same rule as `priorityReason` and `stale` above,
+   * applied to a numeric default rather than an empty string.
+   */
+  readonly count?: number;
 }
 
 /**

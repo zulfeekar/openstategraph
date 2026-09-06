@@ -45,11 +45,17 @@ PACKAGE_ROOT = REPO_ROOT / "backend" / "openstategraph"
 
 #: The columns the shared table has that a `Card` does not carry: the tenancy
 #: key (a hash of the project id, never the id), the database-maintained
-#: watermark the board's poll reads, and the keyless door's own two
-#: (`team-board-and-gap-reports/09`) — the identity of a filed report and how
-#: many times it has been sent, which live on the row rather than on a `Card`
-#: because only that door reads them.
-EXTRA_COLUMNS = ("project_hash", "updated_at", "finding_hash", "count")
+#: watermark the board's poll reads, and the identity of a filed report
+#: (`team-board-and-gap-reports/09`), which lives on the row rather than on a
+#: `Card` because only the keyless door reads it.
+#:
+#: `count` was the fourth until `team-board-and-gap-reports/17`, on the
+#: argument that only that door read it. It was wrong in exactly the way this
+#: census is written to catch: the number reached the database and stopped
+#: there, so the board drew a card that said a gap had been reported with no
+#: way to tell one report from forty. It is a `Card` field now, and a column
+#: no `Card` carries is once again a column nothing above the store can read.
+EXTRA_COLUMNS = ("project_hash", "updated_at", "finding_hash")
 
 
 def migration_text() -> str:

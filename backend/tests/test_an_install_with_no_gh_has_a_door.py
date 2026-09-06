@@ -410,9 +410,20 @@ def test_every_reject_reason_is_from_a_closed_set() -> None:
     assert used <= declared, used - declared
 
 
+#: What a log line may interpolate. Counts, the door's own reject reasons, a
+#: status — and, from `team-board-and-gap-reports/17`, one **generated
+#: constant**: the board a filed report lands on.
+#:
+#: The rule this set enforces is *nothing out of the request*, and a value
+#: emitted from `kanban_store.TEAM_BOARD` into `contract.generated.ts` at
+#: build time is the opposite of that — it is the same word on every line the
+#: door will ever write, whoever called it. Widened by naming the one member
+#: rather than by allowing `CONTRACT.*`: the contract also carries the field
+#: names and enum values a report is checked against, and a log line
+#: interpolating one of those would say which field a caller sent.
 _ALLOWED_IN_A_LOG = re.compile(
     r"^(bytes\.byteLength|checked\.dropped|reason|written\.outcome|written\.count"
-    r"|response\.status)$"
+    r"|response\.status|CONTRACT\.board)$"
 )
 
 

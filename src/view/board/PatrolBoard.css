@@ -213,6 +213,15 @@
   color: var(--color-text-tertiary);
 }
 
+/* `team-board-and-gap-reports/17`'s repeat count. The same caption tone as
+   the evidence line above it and no weight of its own: it is a fact about a
+   card, not a second badge competing with the priority one. Tokens only;
+   nothing minted here. */
+.patrol-card__count {
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+}
+
 .patrol-card__evidence-test {
   font-family: var(--font-mono);
   color: var(--color-text-secondary);

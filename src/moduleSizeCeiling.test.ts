@@ -216,7 +216,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       part of it this module knows. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 906,
+    lines: 907,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -400,7 +400,17 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       than inside the template for \`LiveEventStream.wantedUrl()\`'s reason —
       \`contractDrift.test.ts\` reads the paths this client calls out of the
       source, and a \`?\` in the literal ends the path it can see. No new
-      reason to change.`,
+      reason to change.
+
+      **906 -> 907** (\`team-board-and-gap-reports/17\`). One declared field on
+      \`KanbanCardRow\` — how many times a finding has been reported from the
+      install that filed it. The keyless door had counted repeats onto one
+      card since \`09\` and the number stopped at the database, so the team tab
+      drew a card that could not tell one report from forty. One line, the
+      same bill every entry above records: a field of the published contract,
+      documented at its declaration, pinned to \`docs/openapi.json\` by the
+      drift test. No behaviour — whether a count of one is worth drawing is
+      \`kanbanCardMapping\`'s decision, one layer up.`,
   },
 };
 

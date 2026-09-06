@@ -210,8 +210,15 @@ Worth knowing, because a door you cannot see is a door you have to trust:
   through, and nothing outside the allowlist ever reaches the database.
 - It **rate-limits by your hashed project id**, and **deduplicates by the
   finding hash** — one card, a count.
-- It **logs nothing from the body**. Counts, outcomes and reject reasons only,
-  not even on an error path.
+- It **logs nothing from the body**. Counts, outcomes, reject reasons and the
+  board a card landed on — all four are the door's own words or numbers, and
+  none of them is a value you sent, not even on an error path.
+- It files onto the **maintainers' team board**, as a card of category `gap`,
+  where a maintainer reads it beside everything else that needs attention
+  (`team-board-and-gap-reports/17`). Which board that is, is one word, held in
+  one place and published to the door from it — the first live report landed
+  on a board no tab could list, because the door and the board had each been
+  given their own copy of it.
 - It has a **kill switch** its maintainers can throw without a deploy, which is
   the honest answer to "what if this ever misbehaves".
 

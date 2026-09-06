@@ -3,11 +3,14 @@
 // `python3 scripts/generate_gap_report_ts.py --check`.
 //
 // The report's vocabulary, in the door's own language: which fields a report
-// may carry, which it must carry, which values each enum accepts, and how long
-// a carried sentence may be. The validator that consumes this is hand-written
-// in `index.ts` (team-board-and-gap-reports/09).
+// may carry, which it must carry, which values each enum accepts, how long a
+// carried sentence may be, and which board a filed report lands on. The
+// validator that consumes this is hand-written in `index.ts`
+// (team-board-and-gap-reports/09, `17`).
 
 export const CONTRACT = {
+  "board": "osgEngineering",
+  "category": "gap",
   "fields": {
     "aad_code": {
       "kind": "nullableString"

@@ -298,7 +298,20 @@ export async function handle(request: Request): Promise<Response> {
   if (typeof written === "string") {
     return refuse(written, written === "rate-limited" ? 429 : 502);
   }
-  console.log(`gap-report ${written.outcome}; this finding now counts ${written.count}`);
+  // The board is named from the generated contract, never spelled here —
+  // `team-board-and-gap-reports/17`. This door does not *choose* where a
+  // report lands: the database routine is the single writer, for the
+  // atomicity argument `0003` records, and the board comes from that table's
+  // column default. What it must not do is describe the landing in its own
+  // words: `09` and `04` were each internally consistent and disagreed by one
+  // literal, which is how the first live report came to sit on a board no tab
+  // lists. `CONTRACT.board` is emitted from `kanban_store.TEAM_BOARD` and
+  // pinned against the SQL default, so a log line that says a board the row
+  // is not on is a red test rather than an hour.
+  console.log(
+    `gap-report ${written.outcome} onto ${CONTRACT.board}; ` +
+      `this finding now counts ${written.count}`,
+  );
   return json(written, 200);
 }
 

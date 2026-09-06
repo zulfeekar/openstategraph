@@ -147,6 +147,15 @@ export function PatrolCard({ card, column, onAnswer, onRelease }: PatrolCardProp
         <span className="patrol-card__evidence">finished: {card.finishedReason}</span>
       ) : null}
 
+      {/* `team-board-and-gap-reports/17`: how many installs have hit this
+          gap. The keyless door counts repeats onto one card, and until this
+          line the board drew a card that said a gap exists with no way to
+          tell one report from forty. Only ever present above one — the
+          mapping drops it at one, because a number true of every card on the
+          board makes the counted one harder to spot. Same caption tone as the
+          evidence lines above it; nothing new is minted. */}
+      {card.count ? <span className="patrol-card__count">reported {card.count} times</span> : null}
+
       {/* `kanban-patrol/19`'s explicit Release: "flag, never auto-release" —
           the card says so honestly, and a human reads it and presses the
           button themselves. Only present once the lease has actually gone

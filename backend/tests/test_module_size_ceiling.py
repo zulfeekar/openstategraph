@@ -1240,6 +1240,20 @@ and the value never does, because that variable holds a URI with a password in
 it. The default on `team_board_env` is imported from `kanban_store` rather than
 retyped, so the published contract cannot come to name a variable the process
 does not read.
+
+`565 -> 566`, 2026-09-06 (`team-board-and-gap-reports/17`). One field on
+`KanbanCardResponse`: how many times a finding has been reported from the
+install that filed it. The keyless door had counted repeats onto one card
+since `09` and the number stopped at the database, so the team tab drew a card
+that said a gap had been reported with no way to tell one report from forty.
+The comment is the load-bearing half once more, and here it is about a
+default: `1` and never `0` or absent, because a card exists because something
+was reported once — which is also why the board draws no label at one.
+
+(`565`, not the `566` the row above ends at: `osg-agent-experience/82` took a
+line back out of this module on the same day without a row of its own —
+`7b81a17c`, three lines added and four removed. Recorded here rather than
+corrected above, because that row is an account of what its own ticket did.)
 """
 
 #: `team-board-and-gap-reports/02`, 2026-09-06. **Departed this table**, which
@@ -1354,7 +1368,7 @@ RECORDED: dict[str, Recorded] = {
     "mcp_server.py": Recorded(990, MCP_SERVER),
     "api/routes/workflows.py": Recorded(619, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
-    "api/schemas.py": Recorded(565, SCHEMAS),
+    "api/schemas.py": Recorded(566, SCHEMAS),
 }
 
 

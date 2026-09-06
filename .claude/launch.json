@@ -62,7 +62,8 @@
       "cwd": "backend",
       "port": 8124,
       "env": {
-        "OPENSTATEGRAPH_STATE_DIR": "/private/tmp/osg-agent-state"
+        "OPENSTATEGRAPH_STATE_DIR": "/private/tmp/osg-agent-state",
+        "OPENSTATEGRAPH_KANBAN_URL": ""
       }
     }
   ]

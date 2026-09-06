@@ -100,6 +100,7 @@ describe('an In Progress card says which stage it is at', () => {
       agent_model: '',
       agent_effort: '',
       finished_reason: '',
+      count: 1,
       stale: false,
     };
     const card = mapKanbanCardToBoardCard(row, Date.now());
