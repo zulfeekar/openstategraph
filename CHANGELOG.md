@@ -79,6 +79,17 @@
   wheel; the provenance moved into comments beside the strings.
 
 ### Fixed
+- **A connection fault told the model to rewrite a `SELECT` no server had seen**
+  (`osg-agent-experience/78`). `tool.mssql-query` opened the connection and ran
+  the statement inside one `try`, so an ODBC `HYT00 Login timeout expired` — a
+  fault raised before any statement was sent — arrived wearing the sentence
+  *"The database refused the query … Rewrite the SELECT against the allowed
+  tables"*, and a live run spent its whole budget taking that advice. A missing
+  driver, a failed connect and a refused statement are now three sentences: the
+  first two name the fault, say no query was sent and tell the model **not** to
+  rewrite, and name no table at all. The rewrite advice survives only where a
+  rewrite can fix it, and its table list is elided on whole names with a count
+  — the live refusal had ended `region_gro`, which is not a table.
 - **The one command a missing driver printed could not be run**
   (`osg-agent-experience/79`). Every refusal naming a missing extra said `pip
   install 'openstategraph[…]'`; measured against a `uv tool` install of a

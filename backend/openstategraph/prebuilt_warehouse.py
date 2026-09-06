@@ -51,6 +51,7 @@ a property of its driver, not of this rung — `MssqlQueryTool` can and does;
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 from typing import Any, Iterable
@@ -59,6 +60,7 @@ from pydantic import BaseModel, Field
 
 from openstategraph.abc.tool import ToolResult
 from openstategraph.config_file import looks_like_a_secret
+from openstategraph.install_hint import install_hint
 from openstategraph.prebuilt_sql import DEFAULT_MAX_ROWS, _SqlExplorerBase
 from openstategraph.workflows_root import workflows_root
 
@@ -124,6 +126,45 @@ def statement_refusal(sql: str) -> str | None:
             "and let the caller keep them."
         )
     return None
+
+
+#: How many characters of table names a single refusal may carry. Generous
+#: enough that an ordinary lens is printed whole, small enough that a shared
+#: allowlist of two hundred pins does not push the sentence out of whatever
+#: window is reading it. The number is here rather than in prose because a
+#: number in prose has no way to fail.
+PIN_LIST_BUDGET = 600
+
+
+def pin_list(pins: Iterable[str], budget: int = PIN_LIST_BUDGET) -> str:
+    """Every readable table, or as many as fit and an honest count of the rest.
+
+    `osg-agent-experience/78`'s third defect: the live refusal ended
+    `gb.region_gro`, which is not a table, and nothing in the sentence said the
+    list had been cut. A model taking that literally cites a name no warehouse
+    has. So the elision happens **here**, on whole names, and says how many it
+    dropped — a shorter true list beats a longer one with a lie at the end.
+
+    Sorted, so the same allowlist renders the same way twice.
+    """
+    names = sorted(pins)
+    if not names:
+        return "(none)"
+    shown: list[str] = []
+    used = 0
+    for name in names:
+        cost = len(name) + (2 if shown else 0)
+        if shown and used + cost > budget:
+            break
+        shown.append(name)
+        used += cost
+    dropped = len(names) - len(shown)
+    if not dropped:
+        return ", ".join(shown)
+    return (
+        f"{', '.join(shown)} (and {dropped} more not listed here; "
+        f"{len(names)} in total)"
+    )
 
 
 def _identifier(token: str) -> str | None:
@@ -403,7 +444,7 @@ class _WarehouseExplorerBase(_SqlExplorerBase):
         if unpinned:
             return ToolResult.failure(
                 f"Not in the allowlist: {', '.join(unpinned)}. "
-                f"Readable tables are: {', '.join(sorted(pins))}."
+                f"Readable tables are: {pin_list(pins)}."
             )
 
         target, refusal = self._connection()
@@ -411,20 +452,53 @@ class _WarehouseExplorerBase(_SqlExplorerBase):
             return ToolResult.failure(refusal)
 
         cap = min(args.max_rows or self.row_cap, self.row_cap)
-        try:
-            with self._open(target) as connection:
+        with contextlib.ExitStack() as stack:
+            try:
+                connection = stack.enter_context(self._open(target))
+            except ModuleNotFoundError:
+                return ToolResult.failure(self._driver_missing())
+            except Exception as exc:
+                return ToolResult.failure(self._connection_failed(exc))
+            try:
                 cursor = connection.cursor().execute(args.query)
                 headers = [d[0] for d in cursor.description or []]
                 rows = list(cursor.fetchmany(cap + 1))
-        except ModuleNotFoundError:
-            return ToolResult.failure(
-                f"The {self._driver_label} driver is not installed. Install the extra: "
-                f"pip install '{self._driver_extra}'. No query was sent."
-            )
-        except Exception as exc:  # the server's own refusal, handed back as data
-            return ToolResult.failure(
-                f"The database refused the query: {exc}. Rewrite the SELECT against "
-                f"the allowed tables: {', '.join(sorted(pins))}."
-            )
+            except Exception as exc:  # the server's own refusal, handed back as data
+                return ToolResult.failure(self._statement_refused(exc, pins))
 
         return ToolResult(content=self._capped_table(headers, rows, cap))
+
+    # -- the three sentences, kept apart on purpose ---------------------------
+
+    def _driver_missing(self) -> str:
+        """No driver, so no socket, so no statement. Never a rewrite."""
+        return (
+            f"The {self._driver_label} driver is not installed, so no connection "
+            "was opened and no query was sent. Install it with: "
+            f"{install_hint(self._driver_extra)}. The query itself was not "
+            "refused — do not rewrite it."
+        )
+
+    def _connection_failed(self, exc: Exception) -> str:
+        """The driver's or the server's own words about *logging in*.
+
+        No table is named here, deliberately. A model handed a list of tables
+        beside a failure reads the list as the thing to act on — which is the
+        whole of the defect `78` recorded, where an ODBC `Login timeout expired`
+        arrived with "rewrite the SELECT against the allowed tables" attached
+        and a run spent its budget rewriting a statement nothing had seen.
+        """
+        return (
+            f"Could not connect to the {self._driver_label} database, so no query "
+            f"was sent: {exc}. This is a connection or login fault, not a problem "
+            "with the SQL — do not rewrite the query. The connection is configured "
+            "outside this workflow; report the message above and try the same "
+            "statement once it is fixed."
+        )
+
+    def _statement_refused(self, exc: Exception, pins: set[str]) -> str:
+        """The one class a rewrite can fix — and the only one that says so."""
+        return (
+            f"The database refused the query: {exc}. Rewrite the SELECT against "
+            f"the allowed tables: {pin_list(pins)}."
+        )

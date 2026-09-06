@@ -275,6 +275,15 @@ flags a pre-release needs. The exact spelling comes from
 `openstategraph.install_hint`, which reads how this interpreter was installed
 rather than assuming `pip`.
 
+**A refusal from one of these atoms names which of three things went wrong**
+(`osg-agent-experience/78`), because only one of them is fixed by writing
+different SQL. A driver that will not import or a login that will not connect
+says so and tells the model *not* to rewrite the query — a run that spends its
+budget rewriting a `SELECT` no server ever saw is the measured cost of one
+sentence for all three. A statement the warehouse itself refused keeps the
+rewrite advice, and lists the tables this binding may read; when that list is
+long it is elided with a count and never cut inside a name.
+
 ---
 
 ## 3. A revision loop is two edges
