@@ -105,6 +105,25 @@ class TestTheGapIsOneLine:
         for noise in ("ModuleNotFoundError", "Traceback", "find_spec"):
             assert noise not in gap.message
 
+    def test_a_uv_tool_install_repairs_without_dropping_what_is_already_here(
+        self,
+    ) -> None:
+        """`osg-agent-experience/82`'s done-when: at least one of the three
+        converted call sites, driven at a simulated `uv tool` install, must
+        still carry the union — the whole reason `install_hint` exists rather
+        than a hand-written `pip install 'openstategraph[bastion]'`, which a
+        `uv tool install --force` would have used to drop every other extra
+        already installed.
+        """
+        from openstategraph.install_hint import Installation, install_hint
+
+        already_here = Installation(
+            shape="uv-tool", version="0.3.0rc1", extras=("anthropic", "server")
+        )
+        hint = install_hint(injection.EXTRA, installation=already_here)
+        assert hint.startswith("uv tool install --force ")
+        assert "'openstategraph[anthropic,bastion,server]==0.3.0rc1'" in hint
+
 
 class TestAskingForItIsExplicit:
     def test_a_document_that_says_nothing_is_not_asking(self) -> None:
