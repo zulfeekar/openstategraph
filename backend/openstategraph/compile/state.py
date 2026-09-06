@@ -11,6 +11,7 @@ this seam.
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated, Any, TypedDict, get_type_hints
@@ -622,6 +623,61 @@ def published_exits(state: Any) -> list[tuple[str, str]]:
     return found
 
 
+#: Format-category code points publication keeps, because something visible
+#: depends on them.
+#:
+#: Two families, and each earns its row. The **joiners** (`ZWNJ`, `ZWJ`) are
+#: how Devanagari writes a half-form, how Persian keeps two letters from
+#: cursively joining, and how an emoji sequence spells one glyph out of
+#: several — removing one changes what a reader sees. The **direction marks
+#: and isolates** decide the order neighbouring runs are drawn in, so
+#: stripping one from an Arabic sentence carrying a Latin number reorders the
+#: sentence.
+#:
+#: Everything else in category `Cf` — the zero-width space, the byte-order
+#: mark, the word joiner, the soft hyphen, the interlinear annotation marks —
+#: carries nothing a reader can see in prose, which is why it can be removed
+#: without anybody being able to tell except by grepping.
+_KEPT_FORMAT_CHARACTERS = frozenset(
+    "\u200c\u200d"  # ZWNJ, ZWJ
+    "\u061c\u200e\u200f"  # ALM, LRM, RLM
+    "\u202a\u202b\u202c\u202d\u202e"  # embeddings and overrides
+    "\u2066\u2067\u2068\u2069"  # isolates
+)
+
+
+def strip_invisible(text: str) -> tuple[str, int]:
+    """`(text without meaningless invisible characters, how many were removed)`.
+
+    **The rule is a category, not a list** — every code point whose Unicode
+    general category is `Cf` except the rows `_KEPT_FORMAT_CHARACTERS` argues
+    for. A list of the ones somebody has met is a list that falls behind the
+    next model's output; the category is what "invisible formatting character"
+    actually means, and `unicodedata` maintains it for us.
+
+    **A flat keep-set rather than a contextual test, and the choice is
+    deliberate.** The tempting rule is *keep a joiner when its neighbours are
+    non-ASCII* — narrower, and it would strip a ZWJ a model emitted between
+    two Latin words. It was measured against the cases that have to survive
+    and it breaks two of them: an emoji tag sequence is a run of `Cf`
+    characters whose neighbours are each other, and a joiner ending a word
+    before an ASCII space has an ASCII neighbour. A rule that eats a flag is
+    worse than a rule that leaves a stray joiner, because only one of those
+    failures is visible to the person it happens to.
+
+    Nothing else is normalised. Punctuation, whitespace, case and every
+    character a reader can see are returned byte for byte — this is publication
+    hygiene, not a text pipeline, and widening it is how a fix like this starts
+    rewriting a model's answer.
+    """
+    kept = [
+        ch
+        for ch in text
+        if ch in _KEPT_FORMAT_CHARACTERS or unicodedata.category(ch) != "Cf"
+    ]
+    return "".join(kept), len(text) - len(kept)
+
+
 def published_answer(state: Any) -> str:
     """A run's answer as a reader must receive it — `launch-readiness/174`.
 
@@ -650,12 +706,46 @@ def published_answer(state: Any) -> str:
     the same way — by *gathering* the branches into `function.format_report`
     rather than by refusing the drawing. This is that answer at the last node,
     where it needs nothing of the author.
+
+    **Either way the text is passed through `strip_invisible` last**
+    (`osg-agent-experience/87`): publication hygiene is stated here, once, and
+    not per node family or per door, because this is where an answer stops
+    being state and becomes something a reader receives. It is the only
+    rewriting this seam does, and `invisible_characters_removed` is how a
+    developer is told it happened.
+    """
+    # `osg-agent-experience/87`: the last thing that happens to an answer is
+    # that its meaningless invisible characters are removed. Here rather than
+    # in each door for the same reason the join is here — and after the join,
+    # so the joined shape cannot be the way around it.
+    cleaned, _removed = strip_invisible(_answer_before_hygiene(state))
+    return cleaned
+
+
+def _answer_before_hygiene(state: Any) -> str:
+    """The answer as the run left it — one exit's text, or the join of several.
+
+    Split out of `published_answer` so the count of what publication removed is
+    read from the same string publication cleaned, rather than from a second
+    reconstruction of the join that could disagree with it.
     """
     answer = str((state.get("answer") if hasattr(state, "get") else "") or "")
     exits = published_exits(state)
     if len(exits) < 2:
         return answer
     return "\n".join(text for _node_id, text in exits)
+
+
+def invisible_characters_removed(state: Any) -> int:
+    """How many characters `published_answer` removed from this run's answer.
+
+    A count and nothing else — no positions, no code points, no excerpt. The
+    same boundary `DeveloperChannel.redactions` draws one field along: a
+    developer is owed the fact that the machinery rewrote the text they are
+    reading, and telling them *which* invisible characters were where would put
+    the characters back into the surface the fix exists to keep clean.
+    """
+    return strip_invisible(_answer_before_hygiene(state))[1]
 
 
 def _upstream_verdict(state: RunState, node_ids: list[str]) -> dict[str, str]:

@@ -295,6 +295,7 @@ def run_health(
     tool_use: Any = None,
     budget_stops: Any = None,
     published: Any = None,
+    answer: Any = None,
 ) -> RunHealth:
     """The one place a run's health is assembled, for **both** doors.
 
@@ -325,6 +326,7 @@ def run_health(
     used = tool_use if isinstance(tool_use, dict) else {}
     starved = budget_stops if isinstance(budget_stops, dict) else {}
     exits = published if isinstance(published, dict) else {}
+    said = answer if isinstance(answer, str) else ""
     return RunHealth(
         failures=node_failure_warnings(flat) + node_failure_warnings(nested),
         silent=(
@@ -337,6 +339,7 @@ def run_health(
             + unrouted_decision_warnings(lost)
             + retry_warnings(retried)
             + several_exits_warnings(exits, flat)
+            + invisible_character_warnings(said, exits, flat)
         ),
         published_rejected=bool(exhausted),
     )
@@ -1245,6 +1248,42 @@ def step_budget_warnings(budget_stops: Mapping[str, Any]) -> list[str]:
         for record in overruled
     )
     return lines
+
+
+def invisible_character_warnings(
+    answer: Any, published: Mapping[str, Any], outputs: Any
+) -> list[str]:
+    """What publication removed from the answer — `osg-agent-experience/87`.
+
+    A model emitted a run of zero-width spaces inside a pair of parentheses and
+    the reader saw empty brackets. `compile.state.published_answer` now removes
+    them, and a rewrite nobody is told about is its own defect: a developer
+    reading the answer is reading text the machinery changed.
+
+    `silent` rather than `failures`, and developer-only, for the reasons the
+    two functions either side of this one give — it is a report about how the
+    answer was reached rather than a claim the run failed, and it is not the
+    customer's vocabulary. It says a count and nothing else: naming the code
+    points would put them back into a surface somebody reads.
+
+    Only when something was actually removed. Every clean run is the ordinary
+    run, and a channel that speaks on the happy path is one people learn to
+    skip.
+    """
+    from openstategraph.compile.state import invisible_characters_removed
+
+    rows = published if isinstance(published, Mapping) else {}
+    removed = invisible_characters_removed(
+        {"answer": answer, "published": dict(rows), "outputs": outputs}
+    )
+    if removed < 1:
+        return []
+    plural = "" if removed == 1 else "s"
+    return [
+        f"The answer carried {removed} invisible formatting character{plural} "
+        "(zero-width or byte-order marks, which a reader cannot see but a copy "
+        "or a grep carries); they were removed before it was published."
+    ]
 
 
 def several_exits_warnings(published: Mapping[str, Any], outputs: Any) -> list[str]:

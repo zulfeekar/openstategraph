@@ -1995,13 +1995,22 @@ async def _run_frames(
         "tool_use": tool_use,
         "redactions": redactions,
         "budget_stops": budget_stops,
+        # The only scalar in the fold, and it is here because `run_health`
+        # grew a source that is one (`osg-agent-experience/87`): the count of
+        # invisible characters publication removed is read off the answer.
+        # Seeded empty and written from the `answer` accumulator just before
+        # the health assembly below — the loops in this fold accumulate maps,
+        # and this one is kept as a scalar the way `attempts` is.
+        "answer": "",
     }
     if _resumes_a_paused_run(graph_input):
         prior = getattr(await graph.aget_state(config), "values", None) or {}
         if hasattr(prior, "get"):
             for state_key, target in folded.items():
                 held = prior.get(state_key)
-                if not isinstance(held, dict):
+                # `answer` is the fold's one scalar and is carried five lines
+                # below, beside `attempts`; every other entry is a map.
+                if not isinstance(target, dict) or not isinstance(held, dict):
                     continue
                 # Each map is seeded in the shape the fold gives it, never a
                 # third shape: the two output maps are cleaned (a value that is
@@ -2664,7 +2673,12 @@ async def _run_frames(
     # cost desk here and the risk desk on `/api/runs`, because `keep_latest_nonempty`
     # over the frames and `LATEST_NONEMPTY` over the state race independently.
     # One seam, so they cannot.
-    answer = published_answer(dict(folded, answer=answer))
+    # Into the fold rather than into a throwaway copy: `run_health_from_state`
+    # reads this same mapping below and needs the answer **as the run left
+    # it**, before publication removed anything from it, or the count it
+    # reports is always nought (`osg-agent-experience/87`).
+    folded["answer"] = answer
+    answer = published_answer(folded)
     turn.record(
         dict(folded, attempts=attempts, answer=answer),
         warnings=_built_warnings(plan, runtime),

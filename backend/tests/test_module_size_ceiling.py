@@ -643,6 +643,15 @@ that write the record are 80 code lines away in `compile/nodes/`. The last six
 of the sixty are the advisory naming a node the new entry preference declined
 to start: not scheduling it is the fix, and doing that in silence would have
 been the same defect one layer down.
+
+**1018 → 1037 (`osg-agent-experience/87`), and the +19 is one more health
+source.** `run_health` gained an `answer` parameter and
+`invisible_character_warnings` beside its eight siblings, so a developer is
+told when publication removed invisible characters from the answer they are
+reading. The rule itself is not here — it is `compile/state.strip_invisible`,
+at the seam that publishes — and this module only reports it, which is what
+every other row of `silent` is. Still one reason to change: this file assembles
+what a finished run has to say about itself.
 """
 
 STREAMING = """
@@ -729,6 +738,14 @@ this one says only what the split was, so a reader arriving at the longest
 streaming file in the package gets a ticket number and no map. That is the
 cheapest available improvement here and it is not a split: give it the header,
 then the fold's shape becomes discussable.
+
+**1038 → 1040 (`osg-agent-experience/87`).** The fold gained one entry and
+one write: `answer` is now a `run_health` source, so this door has to hand the
+answer over **as the run left it** rather than after publication cleaned it.
+Two lines, and they buy back the property the AST pin in
+`test_the_streaming_door_reports_a_recovered_retry.py` exists for — this is the
+one door that can fall behind a health source, and it has.
+
 """
 
 PREBUILT_MCP = """
@@ -1362,8 +1379,8 @@ RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
     "document_checks.py": Recorded(505, DOCUMENT_CHECKS),
     "cli.py": Recorded(1819, CLI),
-    "compile/workflow_compiler.py": Recorded(1018, WORKFLOW_COMPILER),
-    "api/streaming.py": Recorded(1038, STREAMING),
+    "compile/workflow_compiler.py": Recorded(1037, WORKFLOW_COMPILER),
+    "api/streaming.py": Recorded(1040, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(990, MCP_SERVER),
     "api/routes/workflows.py": Recorded(619, ROUTES_WORKFLOWS),
