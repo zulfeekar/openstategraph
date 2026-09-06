@@ -40,6 +40,7 @@ from openstategraph.gap_report import (
     gap_report_schema,
     hashed_project_id,
 )
+from openstategraph.errors import PackageNotFound
 from openstategraph.kanban_store import StageOrderError
 from openstategraph.providers import builtin_specs
 
@@ -216,9 +217,15 @@ def test_the_refusal_is_a_sentence_this_codebase_writes() -> None:
     assert provider.source is RefusalSource.PROVIDER
     assert provider.text == spec.missing_key_message()
 
-    refused = Refusal.for_our_exception(StageOrderError("done does not precede doing"))
+    # `team-board-and-gap-reports/16` narrowed this from *anything defined
+    # under `openstategraph/`* to *anything `openstategraph.errors` defines*,
+    # and this line used to read `StageOrderError` — `kanban_store`'s own
+    # control-flow type. The class census is in
+    # `test_every_error_we_define_can_be_a_refusal.py`; what belongs here is
+    # that the seam produces a sentence of ours.
+    refused = Refusal.for_our_exception(PackageNotFound("no workflow.json in that directory"))
     assert refused.source is RefusalSource.EXCEPTION
-    assert refused.text == "StageOrderError: done does not precede doing"
+    assert refused.text == "PackageNotFound: no workflow.json in that directory"
 
 
 def test_a_model_answer_cannot_become_a_refusal() -> None:

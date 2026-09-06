@@ -60,6 +60,7 @@ from openstategraph.run_findings import (
 
 __all__ = [
     "CHECK_IDS",
+    "ERRORS_THAT_WRAP_FOREIGN_TEXT",
     "GAP_REPORT_SCHEMA_PATH",
     "GapDoor",
     "GapKind",
@@ -111,15 +112,16 @@ _AAD_CODE = re.compile(r"^AADSTS\d+$")
 _AAD_IN_TEXT = re.compile(r"\bAADSTS\d+\b")
 
 #: An exception line: the class this package raised, and its own message.
-_EXCEPTION_LINE = re.compile(r"^[A-Z][A-Za-z0-9]*(?:Error|Exception): .{1,400}$")
-
-#: The same line, when what vouches for it is the **name** rather than the
-#: suffix — `team-board-and-gap-reports/15`. Half of this package's own errors
-#: are not called `…Error` at all (`MissingProviderKey`, `PackageNotFound`,
-#: `ThreadNotResumable`), so a rule written as a suffix does not recognise the
-#: errors this package actually raises. Here the gate is `_our_error_names()`,
-#: which is the set itself; this pattern only splits the class from its
-#: message.
+#:
+#: **One pattern, and it vouches for nothing on its own** — it splits the class
+#: from the message, and `_reportable_error_names()` decides. Until
+#: `team-board-and-gap-reports/16` the `EXCEPTION` source had a second pattern
+#: that ended `(?:Error|Exception): `, and a suffix is not a set: half of this
+#: package's own errors are not called `…Error` at all
+#: (`MissingProviderKey`, `PackageNotFound`, `ThreadNotResumable`), so
+#: `for_our_exception` built a `Refusal` the `Refusal` model then rejected and
+#: the caller got a `ValidationError` where a report was meant to be. The two
+#: questions are one question now, asked in one place.
 _OUR_EXCEPTION_LINE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*): (.{1,400})$")
 
 _VERSION = re.compile(r"^[0-9A-Za-z.+-]{1,40}$")
@@ -238,6 +240,46 @@ def _our_error_names() -> frozenset[str]:
     )
 
 
+#: Errors of ours whose **message** is not, and the reason at each.
+#:
+#: `team-board-and-gap-reports/16`. A line is admitted as
+#: `<class>: <message>`, so admitting a class publishes whatever that class
+#: puts after the colon. Most of `errors.py` writes its own sentence — a
+#: `ProviderSpec`'s variable names, `step_budget`'s wording, a slug — and
+#: `credential_error_from` and `unreachable_endpoint_error_from` go out of
+#: their way to *drop* the vendor's text rather than append it. These two do
+#: not, so they are refused by name at the door: ours by class is not the
+#: test, ours by sentence is, and `07`'s guarantee is about the sentence.
+#:
+#: Refused rather than trimmed, because there is no honest trim: the foreign
+#: half is in the middle of our own words, and a caller who wants to report
+#: one of these knows what refused and can say it themselves.
+ERRORS_THAT_WRAP_FOREIGN_TEXT: dict[str, str] = {
+    "RunProducedNothing": (
+        "its message quotes the run's own first failure, and a node failure "
+        "carries `describe_failure(exc)` — a driver's or a vendor's sentence"
+    ),
+    "DocumentError": (
+        "`schema.py` raises it with `json.JSONDecodeError`'s text interpolated "
+        "into the message; its subclasses write their own sentences and are "
+        "admitted"
+    ),
+}
+
+
+@lru_cache(maxsize=1)
+def _reportable_error_names() -> frozenset[str]:
+    """The class names an `EXCEPTION` refusal line may carry.
+
+    `_our_error_names()` less the classes above — the census minus the ones
+    whose message is somebody else's. Derived at validation time from the
+    module itself, so an error class added tomorrow is reportable the day it
+    is written, and one added tomorrow that wraps foreign text is a name
+    somebody has to add here with a reason beside it.
+    """
+    return frozenset(_our_error_names() - frozenset(ERRORS_THAT_WRAP_FOREIGN_TEXT))
+
+
 #: What **this codebase** says about a finding the patrol recorded, one
 #: sentence per finding kind a report has a `GapKind` for.
 #:
@@ -352,7 +394,8 @@ class Refusal(BaseModel):
             if text in _provider_sentences():
                 return text
         elif source is RefusalSource.EXCEPTION:
-            if _EXCEPTION_LINE.match(text):
+            named = _OUR_EXCEPTION_LINE.match(text)
+            if named is not None and named.group(1) in _reportable_error_names():
                 return text
         elif source is RefusalSource.FINDING:
             if text in _FINDING_SENTENCES.values():
@@ -385,18 +428,44 @@ class Refusal(BaseModel):
 
     @classmethod
     def for_our_exception(cls, exc: BaseException) -> Refusal:
-        """One line from an exception **this package defines**.
+        """One line from an exception **`openstategraph.errors` defines**.
 
         A `TypeError` for anything else, raised rather than validated away: a
         third party's exception carries a third party's message, and the
         caller has to decide what to say instead rather than have this module
         decide quietly for them.
+
+        **`errors.py`, not "anywhere under `openstategraph/`"** —
+        `team-board-and-gap-reports/16`'s ruling, and it is a narrowing of what
+        the module test used to admit. Two reasons, and the second is the one
+        that decides it: `errors.py` is the module whose whole contract is
+        *the exceptions an adopter may catch*, written to be read by someone
+        who cannot fix it, while a door's own type — `DoorClosed`,
+        `AnotherServerIsRunning`, `StageOrderError` — is local control flow
+        with no such promise; and a name arriving as a **string** (the finding
+        path, `for_finding`) can only be resolved against one module, so the
+        alternative was two different sets called by one name. A door's
+        exception is converted into one of ours by its caller, or it is not
+        reported.
+
+        A class of ours whose message quotes somebody else's is refused here
+        too, by name and with the reason — see
+        `ERRORS_THAT_WRAP_FOREIGN_TEXT`.
         """
-        home = type(exc).__module__.partition(".")[0]
-        if home != "openstategraph":
+        from openstategraph.errors import OpenStateGraphError
+
+        name = type(exc).__name__
+        if not isinstance(exc, OpenStateGraphError) or name not in _our_error_names():
             raise TypeError(
-                f"{type(exc).__name__} is defined in {type(exc).__module__!r}, not in "
-                "openstategraph — a report carries our own refusal sentences only"
+                f"{name} is defined in {type(exc).__module__!r}, not in "
+                "openstategraph.errors — a report carries our own refusal "
+                "sentences only"
+            )
+        wrapped = ERRORS_THAT_WRAP_FOREIGN_TEXT.get(name)
+        if wrapped is not None:
+            raise TypeError(
+                f"{name} is ours but its message is not: {wrapped}. Say what "
+                "refused in your own words, or report the finding instead"
             )
         return cls(source=RefusalSource.EXCEPTION, text=first_traceback_line(exc))
 

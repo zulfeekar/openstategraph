@@ -55,10 +55,13 @@ Two details worth knowing because they are the ones people ask about:
   report and have no field to be in.
 - **The refusal is ours.** It is one of the sentences this codebase writes —
   the compiler's *no implementation for tool "…"*, a provider's *has no
-  credential — set …*, one line from an exception this package defines, or
-  this codebase's own sentence about a run failure the patrol recorded.
-  There is no constructor that takes free text, so a model's answer cannot
-  become a refusal.
+  credential — set …*, one line from an exception `openstategraph.errors`
+  defines **and words itself**, or this codebase's own sentence about a run
+  failure the patrol recorded. There is no constructor that takes free text,
+  so a model's answer cannot become a refusal. The emphasis is
+  `team-board-and-gap-reports/16`: an error of ours that quotes a driver's
+  sentence inside its own message is refused by name, because what a report
+  publishes is the message rather than the class.
 
 ## Which refusals you can report, and which are your install's own
 
