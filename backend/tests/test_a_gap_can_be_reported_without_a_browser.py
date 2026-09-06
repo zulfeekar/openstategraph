@@ -192,6 +192,7 @@ class TestTheRepositoryIsDerivedOnce:
             "the repository name is written down twice — derive it from the "
             "package metadata, which is generated from pyproject"
         )
+        owner = slug.partition("/")[0]
         assert owner not in source
 
 
