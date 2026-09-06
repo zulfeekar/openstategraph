@@ -101,6 +101,24 @@ both is a `branch-fan-out` finding that names the port and every destination.
 Fanning a branch out to several nodes at once is `Send`, which is a decision
 somebody makes rather than a side effect of a dict.
 
+**And a branch with *no* edge is the same mark read the other way**
+(`osg-agent-experience/76`). `_router_for` falls through to the first *wired*
+destination when a decision names a branch nothing was drawn from — a stall
+there would be a hang rather than an error — so the run does not fail, it
+quietly does another branch's work. `validate` printed VALID for a classifier
+with four such branches and listed all sixteen names under `Routes:`, while
+the editor, opening the same file, showed four diagnostics. Any out-port
+carrying `branch: true` with no edge is an `unwired-branch` finding now,
+naming the node and the branch its author named. Two exceptions, both decided
+elsewhere: `route.check`'s `fallback` keeps its own `unwired-fallback`
+sentence, because that port is where a check's own failure goes; and a
+grader's `revise` stays `unwired_revise`, a report rather than a problem,
+because a grader-as-recorder is a document somebody may mean.
+
+The absent edge is reported at the **branch**, once. The editor names the same
+absence from the other end — *"<node> needs a … input"* — and a door printing
+both would hand a reader two problems to fix and one edge to draw.
+
 `null`, never `Infinity`: a port descriptor is data that reaches
 `workflow.json`, and `JSON.stringify(Infinity)` is `"null"` — the value would
 not survive its own round trip and nothing would report the loss. The resolver

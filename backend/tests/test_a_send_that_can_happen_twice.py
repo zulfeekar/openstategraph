@@ -246,6 +246,14 @@ def _support_triage_shape() -> dict[str, Any]:
                 "data": {"message": "This reply goes to a customer. Approve to send it."},
             },
             {"id": "out-sent", "type": "output.formatted", "data": {}},
+            # `rejected` was unwired here until `osg-agent-experience/76`,
+            # which is a fourth fact this fixture was not trying to carry: an
+            # unwired branch falls through to the first wired one, so a
+            # *rejected* reply left by the same door as an approved one and
+            # the mail went out. It made this document invalid — correctly —
+            # and the assertion below is about the two report-only findings,
+            # not about a drawing defect nobody meant to test.
+            {"id": "out-held", "type": "output.formatted", "data": {}},
         ],
         "edges": [
             _wire("in1", "text", "router1", "question"),
@@ -255,6 +263,7 @@ def _support_triage_shape() -> dict[str, Any]:
             _wire("grader1", "revise", "router1", "feedback"),
             _wire("grader1", "pass", "gate1", "candidate"),
             _wire("gate1", "approved", "out-sent", "result"),
+            _wire("gate1", "rejected", "out-held", "result"),
         ],
     }
 

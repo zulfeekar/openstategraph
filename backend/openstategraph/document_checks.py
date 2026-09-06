@@ -22,16 +22,19 @@ about one property of one context. The next one due is
 the compiled plan keeps one — which needs the same nodes, the same edges and
 the same catalogue, and so needs no new machinery here.
 
-Eight of them are defined in this module, beside the registry they register into.
+They are defined in this module, beside the registry they register into.
 `test_a_dispatch_table_does_not_hold_its_targets.py` does not see that — it
 looks for `registry.register(key, target)`, and a decorator has no such pair —
 so the claim is made here rather than left to a census that cannot check it:
-these eight are one reason to change, in the sense that module's docstring grants
+they are one reason to change, in the sense that module's docstring grants
 `compile/reducers.py` its four named reducers. They are the *same* question
-asked of seven properties, they share `_typed_nodes` and one skip rule, and a
-ninth registers from wherever it is written.
+asked of one property each, they share `_typed_nodes` and one skip rule, and the
+next one registers from wherever it is written. (The count that stood here was
+`eight` while ten were defined, which is the defect CLAUDE.md names about a
+number in prose. There is no count here now, and `DOCUMENT_CHECKS` is the
+list.)
 
-The eighth (`no_backend_implementation`, `osg-agent-experience/72`) is the same
+`no_backend_implementation` (`osg-agent-experience/72`) is the same
 question asked of the type itself rather than of the document's use of it: a
 placed type this runtime has no implementation for. It reads the catalogue's
 mark and nothing else, for the reason its own docstring gives — this door also
@@ -93,6 +96,9 @@ class FindingClass(str, Enum):
     #: no branch — including the empty answer a raised check produces — has
     #: nowhere to go.
     UNWIRED_FALLBACK = "unwired-fallback"
+    #: Any other declared conditional out-port with no edge, so a decision
+    #: naming it falls through to the first branch that is wired.
+    UNWIRED_BRANCH = "unwired-branch"
     #: A placed node type the editor executes and this runtime has no
     #: implementation for, so a run reports it by name after the model is paid.
     NO_BACKEND = "no-backend"
@@ -142,9 +148,13 @@ class CheckContext:
         return CATALOGUE.field_schema.get(node_type)
 
 
-#: The one out-port that is a destination rather than a branch — see
-#: `unwired_fallback`.
+#: The one branch that is a destination rather than a decision — see
+#: `unwired_branch`, which keeps `60`'s own class and sentence for it.
 FALLBACK_PORT = "fallback"
+
+#: The branch whose absence is already reported, one layer down and on the
+#: other side of the failure/report line — see `unwired_branch`.
+REVISE_PORT = "revise"
 
 #: The checks, in report order. Appended to by `register_document_check`.
 DOCUMENT_CHECKS: list[Callable[[CheckContext], Iterable[DocumentFinding]]] = []
@@ -244,20 +254,30 @@ def _dynamic_groups(
     ]
 
 
-def _configured_row_ids(context: CheckContext, node_id: str, node_type: str) -> set[str]:
-    """Every `id` in this node's own `repeatable-group` rows.
+def _configured_row_ids(
+    context: CheckContext, node_id: str, node_type: str
+) -> dict[str, str]:
+    """`row id -> the name its author typed`, for this node's own rows.
 
     A dynamic port id is its group's prefix plus one of these — a router's
     `branch:<row id>` — so this is what turns the catalogue's *prefix* into the
     set of ports the node actually has. Read off the document rather than
     declared a second time: the row list is the only place the ids exist.
+
+    **A mapping rather than the set this returned until
+    `osg-agent-experience/76`**, and the callers below are unchanged by it: a
+    dict answers `in`, `sorted` and truthiness exactly as the set did. What
+    the ids alone could not answer is what `unwired_branch` has to *say* — a
+    row id is machine-minted and the name is what the author wrote on the card
+    and what `Routes:` prints back at them. Walking the same rows twice for
+    the second half would be two spellings of one traversal.
     """
     node = context.nodes.get(node_id) or {}
     data = node.get("data")
     if not isinstance(data, dict):
-        return set()
+        return {}
     schema = context.schema_for(node_type) or {}
-    found: set[str] = set()
+    found: dict[str, str] = {}
     for key, spec in schema.items():
         if spec.kind != "repeatable-group":
             continue
@@ -266,7 +286,7 @@ def _configured_row_ids(context: CheckContext, node_id: str, node_type: str) -> 
             continue
         for row in rows:
             if isinstance(row, dict) and row.get("id"):
-                found.add(str(row["id"]))
+                found[str(row["id"])] = str(row.get("name") or row.get("label") or "").strip()
     return found
 
 
@@ -746,53 +766,97 @@ def port_overfull(context: CheckContext) -> Iterable[DocumentFinding]:
 
 
 @register_document_check
-def unwired_fallback(context: CheckContext) -> Iterable[DocumentFinding]:
-    """A `route.check` with no edge leaving its `fallback` port.
+def unwired_branch(context: CheckContext) -> Iterable[DocumentFinding]:
+    """A declared conditional out-port with no edge leaving it.
 
-    `osg-agent-experience/60`. An unwired optional out-port is ordinary
-    everywhere else, and on this one node type it is not: `fallback` is where
-    a verdict naming no branch goes, and `call_check` renders a raised
-    exception as an empty answer — so it is also where the check's *own*
-    failure goes. Unwired, `_router_for` falls through to whichever
-    destination happens to be first, because a stall there would be a hang
-    rather than an error, and the run ends with an `unrouted` entry nobody
-    reads.
+    `osg-agent-experience/76`, and it is `60` grown up rather than a second
+    copy of it. A `route.classifier` with sixteen branches had four with no
+    edge; `validate` printed VALID and listed all sixteen under `Routes:`,
+    while the editor, opening the same file, showed four diagnostics. Two
+    doors, one document, opposite answers — and the CLI is the door a coding
+    agent trusts.
 
-    Asked of `route.check` alone, off the catalogue rather than by name: it is
-    the only type declaring a port called `fallback`, and a second one that
-    declared it would be asked the same question by existing. A grader's
-    unwired `revise` is a different finding with its own sentence
-    (`UNWIRED_REVISE`), and `support-triage` ships one on purpose.
+    What such a branch costs is `_router_for`'s documented fallthrough: a
+    decision naming a branch nothing was drawn from takes the first *wired*
+    destination instead, because a stall there would be a hang rather than an
+    error. So the run does not fail; it quietly does another branch's work.
+
+    **Derived from the descriptor, never from a list of types.** The catalogue
+    marks a conditional out-port `branch: true` — the same mark `capacityRule`
+    reads on the canvas and `branch_fan_out` reads here — so a node type that
+    grows a branch is asked this question by existing. Static ports and the
+    configured rows of a dynamic group are the same question.
+
+    **Two branches are deliberately not answered here, and both are answers
+    somebody already gave.**
+
+    - `fallback` keeps `60`'s own class and sentence. It is a branch by the
+      descriptor's mark, so the general walk reaches it; saying it twice would
+      print two lines about one missing edge, and dropping the older sentence
+      would lose what makes that port different — it is where a check's *own*
+      failure goes.
+    - `revise`, and with it every branch on the type that declares it, is left
+      to `Finding.UNWIRED_REVISE`. That finding is `REPORT_ONLY` on a decided
+      argument — a grader-as-recorder is a legitimate document and the runtime
+      publishes the identical observation as a report (`workflow-gallery` 50)
+      — and answering here would reverse a classification into an exit code
+      with nobody deciding to. Recognised by the port the type declares, not
+      by its name, so a third grader-shaped type is covered by existing.
+
+    **The far end is not a second finding.** The editor reports the same
+    absent edge from the target side — *"<mount> needs an input"* — and a door
+    that printed both would hand a reader two problems to fix and one edge to
+    draw. This is the source side, once.
     """
+    edges = [edge for edge in context.document.get("edges") or () if isinstance(edge, dict)]
+    wired = {
+        (
+            str((edge.get("source") or {}).get("nodeId") or ""),
+            str((edge.get("source") or {}).get("portId") or ""),
+        )
+        for edge in edges
+        if isinstance(edge.get("source"), dict)
+    }
+    _, branch_ports_of = _port_index(context)
+
     for node_id, node in context.nodes.items():
         node_type = str(node.get("type") or "")
         record = _record_for(node_type)
         if record is None:
             continue
-        if not any(
-            port.get("id") == FALLBACK_PORT and port.get("direction") == "out"
+        declared_out = {
+            str(port.get("id")): port
             for port in record.get("ports") or ()
-        ):
+            if port.get("direction") == "out"
+        }
+        if REVISE_PORT in declared_out and declared_out[REVISE_PORT].get("branch"):
             continue
-        wired = any(
-            isinstance(edge, dict)
-            and isinstance(edge.get("source"), dict)
-            and str((edge["source"] or {}).get("nodeId") or "") == node_id
-            and str((edge["source"] or {}).get("portId") or "") == FALLBACK_PORT
-            for edge in context.document.get("edges") or ()
-        )
-        if wired:
-            continue
-        yield DocumentFinding(
-            FindingClass.UNWIRED_FALLBACK,
-            f"{node_id}.{FALLBACK_PORT}",
-            f'Node "{node_id}" ({node_type}) has nothing wired to its "fallback" port, '
-            "which is where a verdict naming none of its branches goes — including the "
-            "empty answer a check that raised produces. Unwired, the run takes whichever "
-            "destination happens to be first and records the loss instead of routing it. "
-            'Wire "fallback" to the node that should handle an answer this fork did not '
-            "recognise.",
-        )
+        labels = _configured_row_ids(context, node_id, node_type)
+        for port_id in branch_ports_of(node_id):
+            if (node_id, port_id) in wired:
+                continue
+            if port_id == FALLBACK_PORT:
+                yield DocumentFinding(
+                    FindingClass.UNWIRED_FALLBACK,
+                    f"{node_id}.{FALLBACK_PORT}",
+                    f'Node "{node_id}" ({node_type}) has nothing wired to its "fallback" '
+                    "port, which is where a verdict naming none of its branches goes — "
+                    "including the empty answer a check that raised produces. Unwired, "
+                    "the run takes whichever destination happens to be first and records "
+                    'the loss instead of routing it. Wire "fallback" to the node that '
+                    "should handle an answer this fork did not recognise.",
+                )
+                continue
+            label = labels.get(port_id.removeprefix("branch:")) or port_id
+            yield DocumentFinding(
+                FindingClass.UNWIRED_BRANCH,
+                f"{node_id}.{port_id}",
+                f'Node "{node_id}" ({node_type}) declares a branch "{label}" with no '
+                "edge leaving it. A decision naming that branch falls through to the "
+                "first branch that is wired, so the run does another branch's work "
+                f'without saying so. Wire "{port_id}" to the node that should handle '
+                "it, or remove the branch.",
+            )
 
 
 @register_document_check

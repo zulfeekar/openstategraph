@@ -885,8 +885,31 @@ WORKFLOW_SERVICES = """A recorded exception rather than a split, for the reason 
     to rather than one per package. The same discipline applies to the
     fourteenth."""
 
+DOCUMENT_FINDING_KINDS = """**The eleventh member, and it is `Finding`'s argument at a second door.**
+    `FindingClass` has no methods and no state — every member is one *value*,
+    and the number of them is the number of ways a document has been observed
+    to disagree with what its own node types declare. There is no "and" to
+    split on: half of them in a second enum would be one concept in two
+    drawers, and `document_findings` would walk both.
+
+    The eleventh (`UNWIRED_BRANCH`, `osg-agent-experience/76`) is what took it
+    over, and it took it over by *narrowing* rather than by adding a subject:
+    `UNWIRED_FALLBACK` was the same question asked of one port, and this is the
+    general case behind it. Both are emitted by one check, which is the sense
+    in which the module still has one reason to change — the ways a document
+    disagrees with its own types — and the sense the ceiling's second clause
+    asks about (`test_a_dispatch_table_does_not_hold_its_targets.py`).
+
+    Kept as two members rather than collapsed into one, for `Finding`'s
+    sixteenth-and-seventeenth reason: they carry two sentences with two fixes.
+    A `fallback` is where a *check's own failure* goes, and the sentence says
+    so; an ordinary branch falls through to the first wired one. One member
+    would name neither."""
+
+
 RECORDED: dict[str, Recorded] = {
     "compile.diagnostics.Finding": Recorded(21, FINDING_KINDS),
+    "document_checks.FindingClass": Recorded(11, DOCUMENT_FINDING_KINDS),
     "api.services.WorkflowServices": Recorded(13, WORKFLOW_SERVICES),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),

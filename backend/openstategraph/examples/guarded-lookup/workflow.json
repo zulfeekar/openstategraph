@@ -104,6 +104,10 @@
       {
         "source": { "nodeId": "guard-out", "portId": "allowed" },
         "target": { "nodeId": "out1", "portId": "result" }
+      },
+      {
+        "source": { "nodeId": "guard-out", "portId": "blocked" },
+        "target": { "nodeId": "refused", "portId": "result" }
       }
     ]
   }
