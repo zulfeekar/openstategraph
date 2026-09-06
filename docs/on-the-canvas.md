@@ -386,9 +386,8 @@ a `fallback` *field* naming one of its branches, and the two nodes usually sit
 in the same document, which is how `"fallback": "route"` ends up in a check
 router's data (`osg-agent-experience/60`; `validate` catches that and says so).
 Wire it like any other edge, and do wire it: left unwired there is nowhere for
-an unrecognised verdict to go, the run takes whichever destination happens to be
-first and records the loss, and `validate` now reports the unwired port before
-the run rather than after it.
+an unrecognised verdict to go, so the run stops at the fork and says so, and
+`validate` reports the unwired port before the run rather than after it.
 
 Reach for it when the decision is a **fact the run already has**. The case it
 was built for: a question that names no date range must be asked back rather
@@ -398,6 +397,17 @@ into the edge that reaches an Output. Sent through a Router instead, the same
 question was classified onto a data branch and never asked.
 
 Each branch takes **one** edge, like every other conditional way out.
+
+**A branch you did not wire is not a branch the run may take.** Both routers
+are a single choice — one verdict, one destination — so a verdict naming a
+branch with no edge leaving it takes the **declared fallback** (the Check
+router's `fallback` port, the Router's `fallback` field), and where there is
+none the run **stops at the fork**, with a developer-channel sentence naming
+the node and the branch. It never publishes some other branch's answer, and it
+never runs every branch: that used to happen, and it cost a live run five
+answers to one question (`osg-agent-experience/80`). `validate` reports an
+unwired branch before the run, so the usual way to meet this is on the way in
+rather than in a transcript.
 
 **An Output prints what reaches it, and nothing else.** It has no text field.
 Wiring a branch straight to one publishes whatever that branch was carrying —
