@@ -911,7 +911,8 @@ def no_backend_implementation(context: CheckContext) -> Iterable[DocumentFinding
             f'Node "{node_id}" is a {node_type}, which the editor runs with sample '
             "data and this runtime has no implementation for. A backend run binds "
             "every other tool on the agent and reports this one as missing, after "
-            "the model has been paid. Remove it, or run the workflow in the editor.",
+            "the model has been paid. Remove it, run the workflow in the editor, or "
+            f"tell us: `openstategraph report {node_type}`.",
         )
 
 

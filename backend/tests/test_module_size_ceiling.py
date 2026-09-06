@@ -541,6 +541,16 @@ resolution lives in `agent_config.resolve_server_command` and the wording in
 `agent_config.command_note` — this file gained the call, the wrap and a comment
 saying why that one line may not be broken on hyphens.
 
+**1718 -> 1793** (`team-board-and-gap-reports/08`, 2026-09-06). Seventy-five
+lines for one verb, `report`, and the rule holds: the seam is
+`gap_report_door`, which builds the report, renders the issue and shells out
+to the user's own `gh`. What is here is the parser (a positional, two flags,
+and the comment saying why `--door` declines `choices=` — the enum's module
+pulls the compiler in behind it and `build_parser` runs on every invocation),
+the project-id refusal, and the three ways this command can end. The preview
+text is deliberately *not* here: it lives on the door as `preview()`, so a
+second surface offering the same report cannot show a user different words.
+
 **1694 -> 1703** (`osg-agent-experience/81`, 2026-09-06). Nine lines, and all
 nine are `_plan_advisories` and the one call that folds it into `validate`'s
 notes. The channel already existed and the other door onto validation already
@@ -1317,12 +1327,18 @@ every module registers into. That split is not this ticket — this entry only
 records that the module crossed the ceiling by registration, the sanctioned
 way to grow it, and says where the length would go if somebody spent the
 ticket to move it.
+
+**504 -> 505** (`team-board-and-gap-reports/08`). One line, and no new check:
+`no_backend_implementation`'s sentence now names the door that refusal can be
+reported through (`openstategraph report <type id>`). It is written here
+because here is the one copy owner for that sentence — every surface that
+prints the finding gets the offer without a second string to keep in step.
 """
 
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
-    "document_checks.py": Recorded(504, DOCUMENT_CHECKS),
-    "cli.py": Recorded(1718, CLI),
+    "document_checks.py": Recorded(505, DOCUMENT_CHECKS),
+    "cli.py": Recorded(1793, CLI),
     "compile/workflow_compiler.py": Recorded(1018, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

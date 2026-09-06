@@ -244,16 +244,24 @@ def _calls_named(module: Path, names: set[str]) -> list[str]:
     return found
 
 
+#: The modules that may build a report, each one a door and each one a
+#: deliberate edit here. `gap_report_door.py` is the user's own `gh`
+#: (`team-board-and-gap-reports/08`): it constructs exactly one report, from a
+#: type id, and everything it then hands to a subprocess is that report's own
+#: rendering. The second door (`09`) takes a report it is given and builds
+#: none, which is why it is not on this list.
+BUILDERS = {"gap_report.py", "gap_report_door.py"}
+
+
 def test_nothing_else_in_the_package_builds_one() -> None:
     """Derived, not a list: every module under `openstategraph/` is parsed.
 
-    Two doors are coming (`team-board-and-gap-reports` 08 and 09). This is the
-    test that makes each of them a deliberate edit here rather than a payload
-    invented in place.
+    The doors are named in `BUILDERS` above. This is the test that makes each
+    of them a deliberate edit here rather than a payload invented in place.
     """
     offenders: list[str] = []
     for module in sorted(PACKAGE.rglob("*.py")):
-        if module.name == "gap_report.py":
+        if module.name in BUILDERS:
             continue
         offenders += _calls_named(module, {"GapReport", "Refusal"})
     assert offenders == [], offenders

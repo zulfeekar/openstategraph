@@ -47,6 +47,7 @@ the directory you are standing in.
 | open the editor on the project I am standing in | [`open`](#open) |
 | open the editor, the chat and the API on one port | [`serve`](#serve) |
 | let my own LLM compose workflows | [`mcp`](#mcp) |
+| tell the maintainers this install refused something | [`report`](#report) |
 | hand the package to a different client | [`export plugin`](#export-plugin) |
 
 ## Making things
@@ -629,6 +630,47 @@ leaves nowhere to make that exact insertion — a JSON document that is not an
 object, a `[tool.openstategraph]` written as an inline value under `[tool]`,
 anything that does not parse — is **refused by name and not rewritten**, with
 the key to add by hand.
+
+### `report`
+
+```
+openstategraph report <type-id> [--door DOOR] [--yes]
+```
+
+You placed a card the editor offers, pressed run, and were told this runtime
+has no implementation for it. That refusal already names the type id, and this
+is the command that sends it to us — as **a GitHub issue under your own `gh`
+login**, on the platform-gap form, filed by you and yours to edit, close and
+follow (`team-board-and-gap-reports/08`).
+
+`<type-id>` is the type the refusal named — `tool.reddit-search`,
+`my-package/tools.QueryTool` — never a node id, a question or a path. Anything
+that is not a type id is refused by the report schema itself rather than sent.
+
+**It prints the whole report and stops.** The block it prints is the complete
+payload — the model's own rendering, plus the issue exactly as `gh` would
+receive it — and nothing leaves the machine until you run the same command
+again with `--yes`. There is no setting to turn on, no *don't ask again* and no
+stored consent; each send is its own decision. What a report may carry, and
+what it structurally cannot, is
+[reporting a platform gap](reporting-a-platform-gap.md).
+
+`--door` says which surface refused, when it was not this one: `api`, `mcp`,
+`cli` (the default), `library` or `editor`. The list is the report schema's
+own, and a value outside it is a usage error naming the five.
+
+**No credential of ours is involved anywhere in this.** The GitHub CLI carries
+your credentials; we carry none, read none, and hand `gh` nothing but the issue
+you just read. An install without `gh`, or with a `gh` nobody has logged in,
+prints the report and the form's URL and says `gh auth login` — never a
+traceback. A keyless door for installs that will never have `gh` is designed
+and not deployed (`team-board-and-gap-reports/09`).
+
+A board card id is not a subject and says so: a patrol card records what a run
+did — a driver's own sentence, or a node that failed — and a report carries
+only the sentences this codebase writes, so there is nothing on such a card
+this door could send without putting somebody's prose into a report that has no
+field for it.
 
 ## Knowing what is configured
 

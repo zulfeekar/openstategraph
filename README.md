@@ -216,6 +216,7 @@ look.
 | [`eval`](docs/cli.md#eval) | score a package against a dataset whose answers you know |
 | [`kanban`](docs/cli.md#kanban) | the board, one card at a time — `file`, `triage`, `attend`, `show`, `stage`, `answer`, `release` |
 | [`patrol`](docs/cli.md#patrol) | `run` a patrol over your recorded runs and file what it finds |
+| [`report`](docs/cli.md#report) | tell the maintainers this install refused something — shows the whole report, sends nothing without `--yes` |
 | [`threads`](docs/cli.md#threads) | read back what a past run *said* |
 | [`runs`](docs/cli.md#runs) | read back what your runs *cost* |
 | [`knowledge`](docs/cli.md#knowledge) | `build` or `list` a package's second brain |

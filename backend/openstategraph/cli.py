@@ -1878,6 +1878,80 @@ def cmd_patrol_run(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    """Tell the maintainers about a gap this install refused —
+    `team-board-and-gap-reports/08`.
+
+    The whole report is printed first, every time, and nothing leaves this
+    machine that the person did not confirm in the same run: no `--yes`, no
+    subprocess. There is no setting to turn on and no stored consent, which is
+    the owner's decision and `docs/reporting-a-platform-gap.md`'s promise.
+
+    No logic of its own, per this module's own rule: `gap_report_door` builds
+    the report, renders the issue and shells out to the user's `gh`; this
+    prints what it produced and turns a refusal into an exit code.
+    """
+    from pydantic import ValidationError
+
+    from openstategraph.config_file import active_config
+    from openstategraph.gap_report import GapDoor, hashed_project_id
+    from openstategraph.gap_report_door import (
+        DoorClosed,
+        UnreportableSubject,
+        build_report,
+        file_issue,
+        preview,
+    )
+
+    config = active_config()
+    project_id = config.project_id if config else None
+    if not project_id:
+        # Never minted here. `patrol run` adopts one because a board with no
+        # tenancy key is dead; a report is a courtesy, and writing to somebody's
+        # config as a side effect of one would be a surprise nobody asked for.
+        return _error(
+            "this project has no project_id, and a report carries a hash of it so "
+            "that forty runs of one refusal are one card rather than forty. Run "
+            "`openstategraph init` here (or `openstategraph patrol run`, which "
+            "adopts one) and try again."
+        )
+    doors = [member.value for member in GapDoor]
+    if args.door not in doors:
+        return _usage(f"--door is one of {', '.join(doors)} — not {args.door!r}")
+    try:
+        report = build_report(
+            args.subject,
+            project_hash=hashed_project_id(project_id),
+            door=GapDoor(args.door),
+        )
+    except UnreportableSubject as exc:
+        return _error(str(exc))
+    except ValidationError:
+        return _error(
+            f"{args.subject!r} is not a node or tool type id. A report names the "
+            "type that refused — `tool.reddit-search`, `my-package/tools.QueryTool` "
+            "— and never a value: your question, a table name and a path are not "
+            "things a report carries."
+        )
+    print(preview(report))
+    if not args.yes:
+        print()
+        print(
+            "Nothing has been sent. Run the same command with --yes to file it, or "
+            "do not — there is no stored consent either way."
+        )
+        return EXIT_OK
+    try:
+        url = file_issue(report)
+    except DoorClosed as exc:
+        print()
+        print(str(exc))
+        return EXIT_FAILURE
+    print()
+    print(f"Filed: {url}" if url else "Filed.")
+    return EXIT_OK
+
+
 def cmd_threads_list(args: argparse.Namespace) -> int:
     """Past runs this deployment stored — read from the checkpointer, not a log."""
     from openstategraph.api import threads as thread_queries
@@ -2763,6 +2837,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     patrol_run.add_argument("--workflows-root", dest="workflows_root")
     patrol_run.set_defaults(handler=cmd_patrol_run)
+
+    report = subparsers.add_parser(
+        "report",
+        # `team-board-and-gap-reports/08`.
+        help="tell the maintainers about a gap this install refused — shows the "
+        "whole report, sends nothing without --yes",
+    )
+    report.add_argument(
+        "subject",
+        help="the node or tool type id the refusal named, e.g. tool.reddit-search",
+    )
+    # No `choices=` here, and that is the four-dependency core rather than an
+    # oversight: the legal values are `gap_report.GapDoor`, whose module pulls
+    # the compiler in behind it, and `build_parser` runs on every invocation
+    # including `--help`. The value is checked against the enum itself inside
+    # the command, where the import is already paid for, and a wrong one is
+    # refused with the enum's own list — one source, one answer.
+    report.add_argument(
+        "--door",
+        default="cli",
+        help="which surface refused — the report schema's own list (default: cli)",
+    )
+    report.add_argument(
+        "--yes",
+        action="store_true",
+        help="file the issue printed above, under your own gh login",
+    )
+    report.set_defaults(handler=cmd_report)
 
     threads = subparsers.add_parser("threads", help="past runs stored by the checkpointer")
     thread_commands = threads.add_subparsers(dest="threads_command", required=True)

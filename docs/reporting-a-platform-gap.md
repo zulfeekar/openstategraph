@@ -92,21 +92,36 @@ path can assemble one and dispatch it in the same breath.
 
 ## Where it goes — the two doors
 
-The schema exists so that both doors send the same thing. **Today nothing in
-this package sends anything on its own** — no code path assembles a report and
-dispatches it, there is no timer and no background sender. What exists is the
-two landing places and, for the second, a client you can call.
+The schema exists so that both doors send the same thing. **Nothing in this
+package sends anything on its own** — there is no timer and no background
+sender, and every send below is a thing you asked for in the same breath.
 
-1. **An issue under your own GitHub login.** The primary door: your `gh`
-   credentials, your account, the rendered text shown to you first, filed as an
-   issue on the project's tracker. **The form it files into exists** —
+1. **An issue under your own GitHub login** — `openstategraph report`, the
+   primary door (`team-board-and-gap-reports/08`):
+
+   ```bash
+   openstategraph report tool.reddit-search        # prints the whole report, sends nothing
+   openstategraph report tool.reddit-search --yes  # files it, as you
+   ```
+
+   The subject is the **type id the refusal named**. The first form prints the
+   complete payload — the block above, plus the issue exactly as it would be
+   filed — and stops; the second hands it to the GitHub CLI, which files it on
    `.github/ISSUE_TEMPLATE/platform-gap.yml`, whose boxes are exactly this
    schema's fields, asserted against it rather than transcribed from it
-   (`team-board-and-gap-reports/05`) — so you can file the report by hand
-   today, box by box, and an issue filed that way is copied onto the
-   maintainers' board and told what shipped when it closes. What is not built
-   is the *automatic* door: nothing in this package fills that form in for you
-   or opens a browser.
+   (`team-board-and-gap-reports/05`). The issue is **yours**: your account,
+   your issue, yours to edit, close and follow, and it is copied onto the
+   maintainers' board and told what shipped when it closes.
+
+   No credential of ours is anywhere in it. `gh` carries yours, we carry none,
+   and the subprocess is handed nothing but the issue you just read. An install
+   with no `gh`, or a `gh` nobody has logged in, prints the report and the
+   form's URL and says `gh auth login` — a refusal with a next step, never a
+   traceback. Filling the form in by hand, box by box, lands the same way.
+
+   The command line is the whole of this door, deliberately: filing a public
+   issue under your login is the kind of write `docs/decisions/mcp-layer.md`
+   keeps behind a person, so there is no MCP tool for it.
 2. **A keyless door, for an install with no `gh`.** Described in full below.
 
 ## The keyless door

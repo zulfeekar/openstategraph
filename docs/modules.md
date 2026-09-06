@@ -136,7 +136,7 @@ the same source the software uses, and where to read it.
 | Family | Count | Where its brief lives |
 | --- | --- | --- |
 | Model providers | 4 | `openstategraph providers` — every provider, the variable it reads, and whether it is set |
-| CLI verbs | 20 | [the CLI reference](cli.md) — one section each, held against the real parser |
+| CLI verbs | 21 | [the CLI reference](cli.md) — one section each, held against the real parser |
 | MCP tools | 18 | [the MCP layer](mcp.md) |
 | Bundled agent skills | 3 | [the OpenStateGraph skill](the-openstategraph-skill.md); `init` installs them into your project |
 | Worked examples | 23 | `openstategraph examples list`, one line each; copy one with `openstategraph examples copy <slug>` |

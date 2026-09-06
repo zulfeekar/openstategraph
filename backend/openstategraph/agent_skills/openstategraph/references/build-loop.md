@@ -157,6 +157,24 @@ Two things the line will not tell you, both of which refuse at run time:
   variable. Nothing static can know whether it is set, so an unset one is a
   refusal at the first call, naming the variable.
 
+## When the platform is what refused
+
+A third outcome, and it is not a card at all. If the run refused because *this
+runtime has no implementation for a type* — `No implementation for tool
+"tool.reddit-search"` — no amount of wiring fixes it, and the refusal already
+names the type id. Send it:
+
+```bash
+openstategraph report tool.reddit-search        # prints the whole report, sends nothing
+openstategraph report tool.reddit-search --yes  # files it as an issue, under the user's own gh login
+```
+
+The first form prints the complete payload and stops. Never run the second on
+somebody's behalf without their word in the same sitting: it files a public
+issue under their GitHub account, and there is no stored consent to fall back
+on. What a report carries, and what it structurally cannot, is
+`docs/reporting-a-platform-gap.md`.
+
 ## When a card turns out to be wrong
 
 Two honest outcomes, and both are fine:

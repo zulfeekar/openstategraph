@@ -207,6 +207,12 @@ URL_CENSUS: dict[str, tuple[int, str]] = {
         "a deliberately unreachable loopback URL in an example's own test",
     ),
     "gap_report.py": (1, "the JSON Schema dialect id — a name, never dialled"),
+    "gap_report_door.py": (
+        1,
+        "github.com, the host the issue form and the `gh` door share — the "
+        "owner and repository after it are read from the package's own "
+        "metadata (`team-board-and-gap-reports/08`)",
+    ),
     "install_hint.py": (2, "the two PyPI index URLs pip is told to read"),
     "mssql_connection.py": (3, "Azure AD's own scope and authority"),
     "plugin_interop.py": (2, "the plugin format's published schema ids"),
