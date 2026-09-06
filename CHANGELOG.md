@@ -3,6 +3,27 @@
 ## Unreleased
 
 ### Added
+- **A guard can read a row the run retrieved, not only count the calls**
+  (`osg-agent-experience/86`). `guard.check`'s `RunSummary` answered exactly one
+  question — *did any evidence arrive* — so a figure in a published answer could
+  not be checked against the results the run already held. It now carries
+  `retrieved` (the statements this run sent and what came back) and
+  `contains(value)`, blind to case and to the thousands separators a model adds
+  on the way into a sentence, so a misspelt breakdown row and a count of `0`
+  from a window the warehouse has hundreds of rows for are both settleable with
+  no model and no cost. `fn(text)` is untouched; `contains("")` is False rather
+  than trivially True, and `any_truncated` says when the record cap means an
+  absence proves nothing.
+- **`validate` separates what it judged from what it could not check**
+  (`osg-agent-experience/89`, `team-board-and-gap-reports/19`). Two sentences
+  were riding one `Notes:` list and they are not the same kind of thing: "nothing
+  is wired into this node" is advice about the document, while "this build has no
+  generated field schema for that type" is a statement about the checker's own
+  coverage. Any document holding a workflow-scoped `function.*` node therefore
+  printed a note on every run and could never satisfy the entry sheet's closing
+  gate. `CompiledPlan` gained `unchecked` beside `advisories` and the CLI prints
+  it under `Not checked:`; the gate's sentence is unchanged and nobody is asked
+  to judge which notes count.
 - **A board several machines can share** (`team-board-and-gap-reports/03`, `13`).
   `kanban.sqlite` is resolved per project *per machine*, so three maintainers on
   one map filed cards at each other and none of them ever saw one.
@@ -183,6 +204,43 @@
   wheel; the provenance moved into comments beside the strings.
 
 ### Fixed
+- **A board driver that is not installed no longer takes the live stream down**
+  (`team-board-and-gap-reports/18`). An install whose extras omit `postgres`,
+  with `OPENSTATEGRAPH_KANBAN_URL` pointed at a real board, answered
+  `GET /api/health` with `ok` and `team_board_configured: true` and then died on
+  every `GET /api/events?patrol=1&kanban=1` with a two-hundred-line traceback,
+  once per reconnect — the watcher opens the store *inside* the stream, and the
+  driver's `ImportError` escaped as an ASGI exception. A server now asks once, at
+  startup: `api/team_board.py` probes the configured board and never raises,
+  `/api/health` publishes `team_board_error`, the card routes and the stream both
+  go through the same door, and a board that could not be opened falls back to
+  the local one *loudly* — the OSG Engineering tab prints the recorded sentence
+  with the install command on a line of its own. A silent fallback inside
+  `open_kanban_store` was ruled out for the reason that function refuses one:
+  a board that quietly became a local file is two people disagreeing about what
+  the board says.
+- **A mount carried five keys across its boundary and not the one holding the
+  evidence** (`osg-agent-experience/88`). `runs.sqlite`'s `statements` column is
+  the only record of what a run asked the warehouse, and for a workflow that
+  mounts a package it was `[]` — including a 212,253-token run that reached the
+  warehouse and published a breakdown, so a card filed against one of its figures
+  had to be closed on a rule rather than on a diagnosis. A mount is a closure
+  over the child's `ainvoke` and decides key by key what crosses; `tool_use` was
+  the seventh key and had never been added. One `nested_record` call carries
+  every level, so a two-level composition reads `mount-cargo/mount-inner/lens-sql`.
+- **A run of zero-width spaces reached the reader inside a pair of parentheses**
+  (`osg-agent-experience/87`). A live run published a table cell reading
+  "12 tracks (....)" where the dots were four U+200B: invisible to a reader,
+  carried into a report by anyone who copies the line, and unexplainable to
+  anyone who greps or diffs it. Stated once at `compile.state.published_answer`,
+  the one seam every door reads a run's answer through, and applied after the
+  multi-exit join so the joined shape is not the way around it. The rule is a
+  category — every code point of Unicode general category `Cf` — minus a
+  keep-set carrying its argument: the joiners, because Devanagari half-forms,
+  Persian non-joining and emoji sequences are spelt with them, and the direction
+  marks and isolates, because they decide the order neighbouring runs are drawn
+  in. Nothing a reader can see is touched, and `run_health` gains an `answer`
+  source that reports the count, so a rewrite is never silent.
 - **The keyless door filed onto a board no tab reads**
   (`team-board-and-gap-reports/17`). `09` wrote every filed report onto
   `board = 'gap-reports'` and `04`, in the same hour, fixed the boards a card
@@ -589,6 +647,19 @@
 - **Docs**: `docs/the-patrol-board.md` is the board's own page — the columns,
   the evidence gate, the copy-instruction flow — with `docs/cli.md` and
   `docs/mcp.md` carrying the two doors, and `docs/openapi.json` regenerated.
+
+## 0.3.0rc17 — 2026-09-06
+Everything under *Unreleased* above this line at the time of the cut. The
+pre-release for an install whose extras do not carry the board driver: rc16
+answered `team_board_configured: true` and then killed every live stream with a
+traceback, once per reconnect, and a server now asks once at startup and prints
+the sentence — with the install command on a line of its own — where the tab and
+`/api/health` can both show it. Beside it, three things a live run made visible:
+a mount that carried five keys across its boundary and not the one holding the
+statements it ran, a run of zero-width characters that reached the reader inside
+a pair of parentheses, and a guard that could count a run's tool calls but never
+read a row one returned. `validate` also separates what it judged from what this
+build has no field schema to check.
 
 ## 0.3.0rc16 — 2026-09-06
 Everything under *Unreleased* above this line at the time of the cut. The

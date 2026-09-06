@@ -38,7 +38,7 @@ uv tool install \
   --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple/ \
   --index-strategy unsafe-best-match \
-  "openstategraph[server,ollama]==0.3.0rc16"
+  "openstategraph[server,ollama]==0.3.0rc17"
 ```
 
 Swap `ollama` for `anthropic`, `openai` or `azure` — the extra names the vendor
@@ -56,7 +56,7 @@ PyPI**, leaving `uv tool install "openstategraph[server,ollama]"` —
 [Releasing](docs/releasing.md) says when that is.
 
 **The wheel carries the canvas.** The built editor ships as package data — 110
-files, 1.6 MB of a 4.93 MB wheel, and the browser payload with Mermaid is 55%
+files, 1.6 MB of a 4.94 MB wheel, and the browser payload with Mermaid is 55%
 of the download — so one process serves the editor at `/`, the chat surface at
 `/chat` and the API under `/api`, from one origin. No clone, no Docker, no
 `npm`. Measured footprint:

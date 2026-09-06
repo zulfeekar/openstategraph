@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openstategraph"
-version = "0.3.0rc16"
+version = "0.3.0rc17"
 description = "A compiler from a vendor-neutral workflow.json to a LangGraph StateGraph."
 readme = "README.md"
 requires-python = ">=3.11"
