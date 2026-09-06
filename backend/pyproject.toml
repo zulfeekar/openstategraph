@@ -60,11 +60,11 @@ openstategraph = "openstategraph.cli:console_main"
 # are derived from it by `scripts/build_site.py`, which also writes every
 # `github.com` link on `site/`, so the public rename is this line plus
 # `python3 scripts/build_site.py --write`. `--check` runs in CI.
-Homepage = "https://github.com/zulfeekar/openstategraph-beta"
-Repository = "https://github.com/zulfeekar/openstategraph-beta"
-Source = "https://github.com/zulfeekar/openstategraph-beta"
-Changelog = "https://github.com/zulfeekar/openstategraph-beta/blob/main/CHANGELOG.md"
-Documentation = "https://github.com/zulfeekar/openstategraph-beta/blob/main/docs/adoption.md"
+Homepage = "https://github.com/zulfeekar/openstategraph"
+Repository = "https://github.com/zulfeekar/openstategraph"
+Source = "https://github.com/zulfeekar/openstategraph"
+Changelog = "https://github.com/zulfeekar/openstategraph/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/zulfeekar/openstategraph/blob/main/docs/adoption.md"
 
 [project.optional-dependencies]
 # One provider per extra: `init_chat_model` resolves exactly the one the
