@@ -3,6 +3,54 @@
 ## Unreleased
 
 ### Added
+- **A board several machines can share** (`team-board-and-gap-reports/03`, `13`).
+  `kanban.sqlite` is resolved per project *per machine*, so three maintainers on
+  one map filed cards at each other and none of them ever saw one.
+  `PostgresKanbanStore` is the second member of the store family `02` opened: it
+  adds no rule — every refusal, the stage machine and the evidence gate stay on
+  `AbstractKanbanStore` — and reaches the registry by two `register` lines,
+  `postgresql` and `postgres`, so `OPENSTATEGRAPH_KANBAN_URL` is the whole
+  switch. Its migrations are plain numbered SQL in the package, applied through
+  libpq's simple query protocol (the extended one takes one command per message
+  and a migration file holds twenty) and recorded in a prefixed ledger that
+  unions with the maintainers' CLI's own, so a database already at head is not
+  re-migrated from zero.
+- **`openstategraph report <type id>`** (`team-board-and-gap-reports/08`) — the
+  transport `07`'s closed type did not have. A user whose install refuses a node
+  type this runtime cannot reach was told the type id and nothing else; the
+  command now prints the complete payload and the issue exactly as `gh` would
+  receive it, and stops. `--yes` files it, under the user's own login, with no
+  setting and no stored consent. No `gh`, or a `gh` nobody has logged in, prints
+  the report, the form's URL and `gh auth login` — never a traceback.
+- **A patrol finding can become a report** (`team-board-and-gap-reports/15`). A
+  card carries `gap_evidence`: the finding kind, the tool type ids it names, and
+  a refusal line of one of two shapes, both ours — this codebase's own sentence
+  for that finding kind, or an exception line naming a class
+  `openstategraph.errors` defines. The tool's own prose is still not carried,
+  because that is the widening `07` forbids by name.
+- **An issue a user files lands on the board, and its close says what shipped.**
+  `.github/ISSUE_TEMPLATE/platform-gap.yml`'s boxes are exactly the properties of
+  `docs/gap-report.schema.json` — generated from the Pydantic model, so a field
+  added there and missing here is a red test — and `issues-to-board.yml` files
+  the card and comments the resolution back, reading none of the repository and
+  therefore checking none of it out.
+- **The team tab knows whether a board is configured**
+  (`team-board-and-gap-reports/04`). `GET /api/health` gained
+  `team_board_configured` and `team_board_env`, the same shape of question
+  `model_configured` already answers: the variable's *name* travels and its value
+  never does. A read names its board with `?board=`, and a board this product
+  does not have is refused by name rather than answered with the local board's
+  rows.
+- **`docs/maintainers/public-repository-settings.md`**
+  (`team-board-and-gap-reports/06`) — the repository-level settings six workflows
+  lean on, one row per setting with the value it must have and what breaks if it
+  does not. A settings change leaves no diff, so an unrecorded assumption is one
+  nobody can review or restore.
+- **A finding kind for the day every login was refused.**
+  `redundant-tool-call` and `unstable-tool-result` group by `(tool, normalised
+  arguments)` and need the *same* call twice; a node whose tool answered
+  `Error: …` did not fail, it produced text. So a warehouse that refused every
+  SQL call for a day produced no finding at all.
 - `ProviderDefault.command` — the one-line install command for the elected provider, printed unwrapped beneath the wrapped reason (`osg-agent-experience/83`).
 - **A report door for an install with no `gh`**
   (`team-board-and-gap-reports/09`). Ticket 07 made a gap report a closed type
@@ -76,6 +124,25 @@
   gap](docs/reporting-a-platform-gap.md) says so.
 
 ### Changed
+- **All four config carriers can be given a `project_id`**
+  (`team-board-and-gap-reports/01`). `adopt_project_id` knew one edit — append a
+  column-0 YAML key at end of file — so on `openstategraph.json` and on
+  `pyproject.toml [tool.openstategraph]` it refused, correctly, and
+  `project_id_for_board()` raised forever: a project configured the way the docs
+  invite could not file a card at all. There is one reader and one writer per
+  carrier now, each the edit its own format makes safe, and a file with nowhere
+  to make that exact insertion is still refused by name rather than rewritten.
+- **One owner for the install line** (`osg-agent-experience/82`). Three modules
+  still composed their own `pip install 'openstategraph[…]'`, carrying both
+  defects `79` fixed elsewhere: a `pip` line a `uv tool` install cannot use, and
+  a single named extra a `--force` reinstall would drop every sibling of. All
+  five call sites route through `install_hint`, and the census walks the
+  package's AST rather than a named tuple of files.
+- **A routing node's unwired-branch sentence** stops claiming the old
+  fall-through (`osg-agent-experience/84`) — it branches on the split `80` made,
+  read from the same constants, so a third routing family cannot drift from it.
+- **The document-check registry is under the module ceiling**
+  (`osg-agent-experience/76`), with a row of its own in the census.
 - **The card store has a seam** (`team-board-and-gap-reports/02`). It was one
   690-line module with `sqlite3.connect(db_path)` in fourteen functions and
   `Path` in every signature, so a second backing store could not be added
@@ -116,6 +183,53 @@
   wheel; the provenance moved into comments beside the strings.
 
 ### Fixed
+- **A single choice published five answers** (`osg-agent-experience/80`). A
+  classifier asked one question on rc15 finished at five Outputs, and two
+  independent mechanisms made it, so fixing either alone would have left the
+  transcript looking almost the same. `_router_for` fell through to the first
+  *declared* destination, so a verdict naming a branch nobody had drawn published
+  whichever branch happened to be declared first; and the steps hanging off the
+  undrawn branches had no incoming edge at all, so `plan.entry` wired each of
+  them straight from START and each spent its model and tool call on an empty
+  input. Fixed at the compile seam: `CompiledPlan.unrouted_route` records, per
+  single-choice routing node, the label an unwired verdict takes — the declared
+  fallback, or stop at that node.
+- **A branch nobody wired went nowhere and `validate` called the document VALID.**
+  Sixteen branches, four with no edge; the CLI printed VALID and listed all
+  sixteen, while the editor opening the same file showed four diagnostics.
+  `unwired_branch` walks every out-port the catalogue marks `branch: true` —
+  static ports and a dynamic group's configured rows alike — and reports each one
+  with no edge leaving it, naming the branch as its author named it.
+- **A returning browser showed a white page after an upgrade on the same port**
+  (`osg-agent-experience/77`). `GET /` answered with `ETag` and `Last-Modified`
+  and no `Cache-Control` at all, so a browser could keep a shell naming an
+  `assets/index-<oldhash>.js` the new build does not serve — a 404 in a console
+  nobody has open. `cache_control_for(path)` is now the one place either header
+  is decided: `no-cache` for anything that is not a content-hashed asset, one
+  immutable year for `assets/<name>-<hash>.<ext>`.
+- **A refusal built from our own error was rejected by the field it was built
+  for.** `Refusal.for_our_exception` asked whether the exception's module is
+  ours; the validator that re-checked its output asked whether the class name
+  ends in `Error` or `Exception`, and half of `openstategraph.errors` does not.
+  One question now, decided from `errors.py`'s own members at validation time —
+  with the two classes whose message quotes somebody else's sentence refused by
+  name and the reason written at the refusal.
+- **The migration ledger was the one public table nobody had secured** — the one
+  table no migration file creates, because the runner creates it itself before it
+  can read the ledger. `0004` enables and forces row security on it, with no
+  policy for either role.
+- **Two gates were red on `main`** (`team-board-and-gap-reports/12`) — `kanban
+  stage --reason` printed an internal ticket id at a user who cannot resolve one,
+  and `ruff check backend` carried two committed `F401`s. The help gate had
+  already done its job: the string was red from the keystroke and the commit
+  landed over it.
+- **The store contract proves itself without a database.** Eleven of its cases
+  needed Postgres and skipped on every CI run, so the suite's whole claim — that
+  a rule on `AbstractKanbanStore` holds for more than the store it was written
+  against — rested on cases nobody executed. `FakeKanbanStore` is a third
+  implementation and not a mock (a mock records calls and can never fail a
+  contract suite), living in `backend/tests/` so a store that loses every card on
+  restart is never one `register()` call away from `OPENSTATEGRAPH_KANBAN_URL`.
 - **`validate` prints the nodes the canvas draws in red, and the skill sheet's
   closing step is a gate** (`osg-agent-experience/81`). A session built a router
   from the shipped sheet, ran the package tests (green) and `validate` (VALID),
@@ -460,6 +574,18 @@
 - **Docs**: `docs/the-patrol-board.md` is the board's own page — the columns,
   the evidence gate, the copy-instruction flow — with `docs/cli.md` and
   `docs/mcp.md` carrying the two doors, and `docs/openapi.json` regenerated.
+
+## 0.3.0rc16 — 2026-09-06
+Everything under *Unreleased* above this line at the time of the cut. The
+pre-release that opens the two doors a report needs and gives a team one
+board: `openstategraph report <type id>` prints the exact payload and files it
+under the user's own `gh` login, a patrol finding can become one, and
+`OPENSTATEGRAPH_KANBAN_URL` points several laptops at one Postgres board
+instead of a `kanban.sqlite` each. It also carries the routing fix rc15 was
+missing — a single choice that published five answers
+(`osg-agent-experience/80`) — the unwired branch `validate` called VALID, and
+the `Cache-Control` that stopped a returning browser showing a white page after
+an upgrade on the same port (`77`).
 
 ## 0.3.0rc15 — 2026-09-06
 Everything under *Unreleased* above this line at the time of the cut. The
