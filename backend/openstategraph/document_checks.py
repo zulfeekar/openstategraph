@@ -58,6 +58,7 @@ from pathlib import Path
 from typing import Any
 
 from openstategraph.compile.node_catalogue import CATALOGUE, FieldSpec
+from openstategraph.compile.workflow_compiler import ROUTE_CHECK_TYPE, ROUTER_TYPE
 from openstategraph.concurrent_producers import (
     ControlFlow,
     build_control_flow,
@@ -96,8 +97,11 @@ class FindingClass(str, Enum):
     #: no branch — including the empty answer a raised check produces — has
     #: nowhere to go.
     UNWIRED_FALLBACK = "unwired-fallback"
-    #: Any other declared conditional out-port with no edge, so a decision
-    #: naming it falls through to the first branch that is wired.
+    #: Any other declared conditional out-port with no edge. For a routing
+    #: node (`route.classifier`, `route.check`) a decision naming it takes the
+    #: declared fallback, or the run stops at the node when none is declared
+    #: (`osg-agent-experience/80`); for every other conditional family it
+    #: still falls through to the first branch that is wired.
     UNWIRED_BRANCH = "unwired-branch"
     #: A placed node type the editor executes and this runtime has no
     #: implementation for, so a run reports it by name after the model is paid.
@@ -848,15 +852,28 @@ def unwired_branch(context: CheckContext) -> Iterable[DocumentFinding]:
                 )
                 continue
             label = labels.get(port_id.removeprefix("branch:")) or port_id
-            yield DocumentFinding(
-                FindingClass.UNWIRED_BRANCH,
-                f"{node_id}.{port_id}",
-                f'Node "{node_id}" ({node_type}) declares a branch "{label}" with no '
-                "edge leaving it. A decision naming that branch falls through to the "
-                "first branch that is wired, so the run does another branch's work "
-                f'without saying so. Wire "{port_id}" to the node that should handle '
-                "it, or remove the branch.",
-            )
+            if node_type in (ROUTER_TYPE, ROUTE_CHECK_TYPE):
+                # `osg-agent-experience/80` gave these two families a
+                # single-choice dispatch: a verdict naming an unwired branch
+                # takes the declared fallback, or the run stops at the node
+                # when none is declared. It never runs another branch's work
+                # any more — the sentence below said the old thing until `84`.
+                message = (
+                    f'Node "{node_id}" ({node_type}) declares a branch "{label}" with no '
+                    "edge leaving it. A decision naming that branch takes the declared "
+                    "fallback, or the run stops at this node when none is declared — it "
+                    f'never runs another branch\'s work. Wire "{port_id}" to the node '
+                    "that should handle it, name a fallback, or remove the branch."
+                )
+            else:
+                message = (
+                    f'Node "{node_id}" ({node_type}) declares a branch "{label}" with no '
+                    "edge leaving it. A decision naming that branch falls through to the "
+                    "first branch that is wired, so the run does another branch's work "
+                    f'without saying so. Wire "{port_id}" to the node that should handle '
+                    "it, or remove the branch."
+                )
+            yield DocumentFinding(FindingClass.UNWIRED_BRANCH, f"{node_id}.{port_id}", message)
 
 
 @register_document_check

@@ -102,18 +102,25 @@ Fanning a branch out to several nodes at once is `Send`, which is a decision
 somebody makes rather than a side effect of a dict.
 
 **And a branch with *no* edge is the same mark read the other way**
-(`osg-agent-experience/76`). `_router_for` falls through to the first *wired*
-destination when a decision names a branch nothing was drawn from — a stall
-there would be a hang rather than an error — so the run does not fail, it
-quietly does another branch's work. `validate` printed VALID for a classifier
-with four such branches and listed all sixteen names under `Routes:`, while
-the editor, opening the same file, showed four diagnostics. Any out-port
-carrying `branch: true` with no edge is an `unwired-branch` finding now,
-naming the node and the branch its author named. Two exceptions, both decided
-elsewhere: `route.check`'s `fallback` keeps its own `unwired-fallback`
-sentence, because that port is where a check's own failure goes; and a
-grader's `revise` stays `unwired_revise`, a report rather than a problem,
-because a grader-as-recorder is a document somebody may mean.
+(`osg-agent-experience/76`). At the time, `_router_for` fell through to the
+first *wired* destination when a decision named a branch nothing was drawn
+from — a stall there would be a hang rather than an error — so the run did
+not fail, it quietly did another branch's work. `validate` printed VALID for a
+classifier with four such branches and listed all sixteen names under
+`Routes:`, while the editor, opening the same file, showed four diagnostics.
+Any out-port carrying `branch: true` with no edge is an `unwired-branch`
+finding now, naming the node and the branch its author named. **Since
+`osg-agent-experience/80`, the ending depends on the family**: a
+`route.classifier` or `route.check` no longer falls through — the verdict
+takes the declared fallback, or the run stops at the node when none is
+declared — while every other conditional family (a guard, an approval) still
+falls through the way this paragraph originally described, and the finding's
+sentence says whichever is true for the node it names
+(`osg-agent-experience/84`). Two further exceptions, both decided elsewhere:
+`route.check`'s `fallback` keeps its own `unwired-fallback` sentence, because
+that port is where a check's own failure goes; and a grader's `revise` stays
+`unwired_revise`, a report rather than a problem, because a grader-as-recorder
+is a document somebody may mean.
 
 The absent edge is reported at the **branch**, once. The editor names the same
 absence from the other end — *"<node> needs a … input"* — and a door printing

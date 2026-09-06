@@ -903,8 +903,11 @@ DOCUMENT_FINDING_KINDS = """**The eleventh member, and it is `Finding`'s argumen
     Kept as two members rather than collapsed into one, for `Finding`'s
     sixteenth-and-seventeenth reason: they carry two sentences with two fixes.
     A `fallback` is where a *check's own failure* goes, and the sentence says
-    so; an ordinary branch falls through to the first wired one. One member
-    would name neither."""
+    so; an ordinary branch's ending depends on the family
+    (`osg-agent-experience/84`) — a routing node's unwired branch takes the
+    declared fallback or stops the run at the node, while every other
+    conditional family still falls through to the first wired branch. One
+    member would name neither."""
 
 
 RECORDED: dict[str, Recorded] = {

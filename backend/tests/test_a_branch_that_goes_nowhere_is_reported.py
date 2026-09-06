@@ -78,8 +78,18 @@ class TestOneUnwiredBranchIsOneFinding:
         assert "shipping" in message, message
 
     def test_the_sentence_says_what_a_run_taking_it_would_do(self) -> None:
+        """A router does not fall through any more (`osg-agent-experience/80`).
+
+        The verdict takes the declared fallback, or the run stops at the
+        node when none is declared — never another branch's work. `76`'s
+        sentence said the old thing; this asserts the routing ending rather
+        than the fall-through one, which the guard/approval tests below
+        still get.
+        """
         message = _branch_findings(_classifier([WIRED_B1]))[0].message
-        assert "falls through" in message, message
+        assert "falls through" not in message, message
+        assert "declared fallback" in message, message
+        assert "stops at" in message, message
 
     def test_a_fully_wired_router_is_silent(self) -> None:
         wired_b2 = {
@@ -107,7 +117,12 @@ class TestItIsAskedOfTheDescriptorRatherThanOfATypeName:
                 }
             ],
         }
-        assert [f.subject for f in _branch_findings(document)] == ["guard1.blocked"]
+        findings = _branch_findings(document)
+        assert [f.subject for f in findings] == ["guard1.blocked"]
+        # `guard.policy` is not a routing family (`osg-agent-experience/80`
+        # only changed `route.classifier`/`route.check`): its unwired branch
+        # still falls through, deliberately, and the sentence still says so.
+        assert "falls through" in findings[0].message, findings[0].message
 
     def test_an_approvals_rejected_branch(self) -> None:
         document = {
@@ -123,7 +138,53 @@ class TestItIsAskedOfTheDescriptorRatherThanOfATypeName:
                 }
             ],
         }
-        assert [f.subject for f in _branch_findings(document)] == ["ask1.rejected"]
+        findings = _branch_findings(document)
+        assert [f.subject for f in findings] == ["ask1.rejected"]
+        assert "falls through" in findings[0].message, findings[0].message
+
+
+class TestTheRoutingFamiliesGetTheRoutingSentence:
+    """`route.classifier` and `route.check` since `osg-agent-experience/80`.
+
+    One document holding one of each, and one holding a non-routing
+    conditional family, so the split is asserted rather than assumed
+    (ticket 84's done-when).
+    """
+
+    def test_a_route_check_unwired_branch_gets_the_routing_sentence(self) -> None:
+        document = {
+            "nodes": [
+                {
+                    "id": "fork1",
+                    "type": "route.check",
+                    "data": {
+                        "check": "needs_a_date_range",
+                        "branches": [
+                            {"id": "ask", "name": "ask"},
+                            {"id": "answer", "name": "answer"},
+                        ],
+                    },
+                },
+                {"id": "out1", "type": "io.output", "data": {}},
+            ],
+            "edges": [
+                {
+                    "id": "e1",
+                    "source": {"nodeId": "fork1", "portId": "branch:ask"},
+                    "target": {"nodeId": "out1", "portId": "text"},
+                },
+                {
+                    "id": "e2",
+                    "source": {"nodeId": "fork1", "portId": "fallback"},
+                    "target": {"nodeId": "out1", "portId": "text"},
+                },
+            ],
+        }
+        findings = [f for f in _branch_findings(document) if f.subject == "fork1.branch:answer"]
+        assert len(findings) == 1, findings
+        assert "falls through" not in findings[0].message, findings[0].message
+        assert "declared fallback" in findings[0].message, findings[0].message
+        assert "stops at" in findings[0].message, findings[0].message
 
 
 class TestItNeverSaysTheSameThingTwice:
