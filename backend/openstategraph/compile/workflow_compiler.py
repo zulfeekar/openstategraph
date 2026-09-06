@@ -26,7 +26,7 @@ from __future__ import annotations
 import inspect
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Hashable, Mapping
 
 if TYPE_CHECKING:
     # Types only. Named rather than `Any` because this is the seam where the
@@ -49,6 +49,7 @@ from openstategraph.compile.run_context import (
     unmintable_context_keys,
 )
 from openstategraph.compile.subagents import subagent_declaration_problems
+from openstategraph.compile.fields import _text, branch_ids_by_spelling
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
 from openstategraph.compile.node_doors import with_both_doors
 from openstategraph.compile.side_effects import DEFAULT_MAX_ATTEMPTS
@@ -113,6 +114,30 @@ GUARD_CHECK_TYPE = "guard.check"
 #: `GUARD_CHECK_TYPE`: this is a fork whose branches go forward, not a loop
 #: whose `revise` returns upstream.
 ROUTE_CHECK_TYPE = "route.check"
+
+#: `route.check`'s static way out for a name it could not resolve — a **port**,
+#: unlike `route.classifier`'s `fallback` *field*. Named here, beside the type,
+#: because the compiler's `unrouted_route` reads it (`osg-agent-experience/80`)
+#: and `compile/nodes/route_check.py` cannot own a constant this module needs:
+#: that module imports this one. Its docstring keeps the argument for the
+#: shape.
+ROUTE_CHECK_FALLBACK_BRANCH = "fallback"
+
+#: The label a single-choice router's conditional edge takes to `END` when the
+#: verdict named a branch nobody wired and no fallback was declared
+#: (`osg-agent-experience/80`). A label rather than `END` itself because
+#: `add_conditional_edges` is given a path map and the path function's contract
+#: has always been to return a *label*.
+#:
+#: It is **drawn**, which is why it reads as English rather than as a sentinel:
+#: every branch of the path map becomes an arrow in `draw_mermaid`, so a
+#: document in this state shows a dotted edge from the fork to `__end__` on the
+#: preview and beside the run. That is the honest picture — that branch does
+#: end the run — and `__unrouted__` would have put a compiler's private word on
+#: a customer's diagram. The space is also what makes a collision unreachable:
+#: a branch label here is a `branch:`-stripped port id or the static
+#: `fallback`, and no port id carries one.
+STOP_LABEL = "unwired branch"
 
 #: The port type that marks a fan-out declaration rather than control flow or a
 #: capability binding. An edge landing on a `worker`-typed port means "this is
@@ -1291,11 +1316,42 @@ def unrouted_decision_warnings(unrouted: Mapping[str, Any]) -> list[str]:
     produced the answer it published. This is a report about how that answer
     was reached.
     """
-    return [
+    return [_unrouted_sentence(str(node), label) for node, label in unrouted.items()]
+
+
+def unrouted_record(branch: str, *, stopped: bool) -> dict[str, Any]:
+    """What a **routing** node writes into `unrouted` (`osg-agent-experience/80`).
+
+    A grader writes the bare label and still does: its sentence has one ending
+    — the answer shipped anyway — because a grader's unwired `revise` cannot
+    change where the run goes. A router's can, and now does: it either takes
+    the declared fallback or stops the run at the node. A reader needs to know
+    which, and the bare label cannot say.
+
+    Two shapes in one state key rather than a second key beside it, for the
+    reason `forced` and `unrouted` both record: another channel is the move
+    this project keeps deciding not to make, and every door already carries
+    this one.
+    """
+    return {"branch": branch, "stopped": stopped}
+
+
+def _unrouted_sentence(node: str, label: Any) -> str:
+    """One row of the report, in the vocabulary of whoever lost the verdict."""
+    if isinstance(label, Mapping):
+        branch = str(label.get("branch") or "").strip() or "a branch"
+        ending = (
+            "so the run stopped there — wire that branch, or name a fallback"
+            if label.get("stopped")
+            else "so the run took the declared fallback instead"
+        )
+        return (
+            f'Routing node "{node}" decided "{branch}" and no edge leaves that branch, {ending}.'
+        )
+    return (
         f'Grader "{node}" asked for a {str(label).strip() or "different branch"} and no '
         f"such edge was wired, so the answer shipped as-is."
-        for node, label in unrouted.items()
-    ]
+    )
 
 
 #: The state key a recovered retry is recorded under. Named here rather than
@@ -1553,6 +1609,21 @@ class CompiledPlan:
     fan_out: dict[str, list[str]] = field(default_factory=dict)
     entry: list[str] = field(default_factory=list)
     exits: list[str] = field(default_factory=list)
+    #: node id -> where a verdict naming no *wired* branch goes, for the
+    #: **single-choice** routing families only (`osg-agent-experience/80`).
+    #: The value is a label in `conditional[node]` — the declared fallback —
+    #: or `""` meaning "stop at this node".
+    #:
+    #: A node with no entry here keeps the historic first-destination
+    #: fall-through, and that is deliberate rather than an oversight: a
+    #: grader whose `revise` is unwired is a *recorder*, and
+    #: `Finding.UNWIRED_REVISE` is on the record as "a report, not a
+    #: refusal" — stopping its run would throw away the answer it just
+    #: approved. A router is the other case. Its whole substance is *one
+    #: verdict, one destination*, so falling through to whichever branch
+    #: happened to be declared first publishes an answer the verdict did
+    #: not ask for.
+    unrouted_route: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     #: Reports that stay off `warnings` on purpose — `launch-readiness/24`'s
     #: unknown-`data`-key half, and any dynamically-discovered node type this
@@ -2011,6 +2082,50 @@ class WorkflowCompiler:
     ) -> None:
         self._port = port_resolver
 
+    @staticmethod
+    def _needs_feeding(node: Mapping[str, Any]) -> bool:
+        """Whether this node's type declares an in-port it cannot run without.
+
+        Read off the generated catalogue rather than through `self._port`,
+        which answers about **one named port** and so cannot say what a type
+        declares. An injected resolver therefore does not change this answer,
+        and that is the honest limit of it: a test resolver stands in for the
+        port table, not for the node catalogue. A type the catalogue does not
+        carry — a package tool, a plugin — answers `False`, which is the
+        behaviour every node had before this question was asked.
+        """
+        specs = DEFAULT_PORT_SPECS.get(str(node.get("type") or ""))
+        if not specs:
+            return False
+        return any(spec.direction == "in" and spec.required for spec in specs.values())
+
+    @staticmethod
+    def _declared_fallback(
+        node_type: str, node: Mapping[str, Any], branches: Mapping[str, str]
+    ) -> str:
+        """The label a verdict with no wired branch takes, or `""` for "stop".
+
+        Two families, two spellings of one idea, and the difference is not
+        cosmetic. `route.check` has no prompt, so its fallback is a **port**
+        that always exists and a developer can see on the canvas.
+        `route.classifier` has a prompt, so its fallback is a **field naming
+        one of its own branches** — the model has to be told which branch
+        means "nothing else matched". Either way the answer here is a label in
+        the wired destination map or nothing at all.
+
+        A field naming a branch nobody wired is the same as no fallback: there
+        is nowhere to go, and inventing a destination is what this ticket is
+        about.
+        """
+        if node_type == ROUTE_CHECK_TYPE:
+            return ROUTE_CHECK_FALLBACK_BRANCH if ROUTE_CHECK_FALLBACK_BRANCH in branches else ""
+        data = node.get("data") or {}
+        named = _text(data if isinstance(data, dict) else {}, "fallback").strip()
+        if not named:
+            return ""
+        resolved = branch_ids_by_spelling((data or {}).get("branches")).get(named.casefold(), named)
+        return resolved if resolved in branches else ""
+
     # ------------------------------------------------------------------ #
     # Planning
     # ------------------------------------------------------------------ #
@@ -2199,11 +2314,60 @@ class WorkflowCompiler:
         plan.bound_only = sorted(bound_only - in_control_flow)
 
         plan.edges.sort()
-        plan.entry = sorted(n for n in plan.nodes if n not in has_incoming)
+        # **What can start a run, preferred over what merely has no edge into
+        # it** (`osg-agent-experience/80`). A node with no incoming edge used
+        # to be wired from START unconditionally, and that is how four mounts
+        # hanging off *unwired branches* of a single-choice router ran on
+        # every run: nothing pointed at them, so each became an entry, each
+        # spent a model call on an empty input, and each published its own
+        # Output. The router's verdict never entered into it.
+        #
+        # Asked of the descriptor rather than of a list of types: a node type
+        # declaring a **required** in-port is saying it cannot begin anything
+        # on its own. `input.text` and a router declare none and start runs;
+        # a mount, an Output and an agent's `prompt` declare one.
+        #
+        # A *preference*, not a refusal, and the fallback line is the reason:
+        # a lone agent on a fresh canvas has a required `prompt` with nothing
+        # feeding it and must still run — `_upstream_text` hands it the
+        # question. So a document with nothing else to start it keeps exactly
+        # the behaviour it had. What changes is only the case where something
+        # else *can* start the run, which is the case where a starved node
+        # was never meant to be a second beginning.
+        candidates = [n for n in plan.nodes if n not in has_incoming]
+        startable = [n for n in candidates if not self._needs_feeding(executable[n])]
+        plan.entry = sorted(startable or candidates)
         plan.exits = sorted(n for n in plan.nodes if n not in has_outgoing)
+        # **And the ones the preference dropped are named.** Not scheduling a
+        # starved node is the fix; doing it in silence would be the same defect
+        # one layer down — the owner met this shape as four lens mounts that
+        # ran unasked, and the only thing worse than a node running unasked is
+        # a node the compiler quietly declined to run with nothing said. An
+        # advisory rather than a warning, deliberately: the document is not
+        # invalid — a half-wired canvas is what a canvas looks like mid-build —
+        # so this may never move VALID to INVALID (`launch-readiness/24`'s
+        # precedent, recorded on `advisories` itself).
+        if startable:
+            for node_id in sorted(set(candidates) - set(startable)):
+                plan.advisories.append(
+                    f'"{node_id}" has no incoming edge and cannot start a run on its own, '
+                    f"so it never runs. Wire something into it, or delete it."
+                )
 
         if not plan.entry and plan.nodes:
             plan.warnings.append("No entry node: every node has an incoming edge")
+
+        # Where a single choice goes when the branch it named was never drawn
+        # (`osg-agent-experience/80`). Only the two families whose substance is
+        # *one verdict, one destination*; see `CompiledPlan.unrouted_route` for
+        # why a grader is deliberately not one of them.
+        for src_id, branches in plan.conditional.items():
+            node_type = str((nodes.get(src_id) or {}).get("type") or "")
+            if node_type not in (ROUTER_TYPE, ROUTE_CHECK_TYPE):
+                continue
+            plan.unrouted_route[src_id] = self._declared_fallback(
+                node_type, nodes.get(src_id) or {}, branches
+            )
 
         # A grader/guard whose `revise` is wired but whose `pass` is not: the
         # `pass` verdict is unmapped, so `_router_for` falls through to the
@@ -2414,12 +2578,27 @@ class WorkflowCompiler:
         for src, destinations in plan.conditional.items():
             if not destinations:
                 continue
+            unrouted_route = plan.unrouted_route.get(src)
+            # `dict[Hashable, str]`, which is what `add_conditional_edges`
+            # declares: a `dict[str, str]` is not a subtype of it (a dict is
+            # invariant in its key), and mypy says so.
+            path_map: dict[Hashable, str] = {
+                label: safe_name(dst) for label, dst in destinations.items()
+            }
+            if unrouted_route == "":
+                # A single-choice router with no declared fallback stops the
+                # run at itself rather than publishing some other branch's
+                # answer. END has to be in the map for the path function to be
+                # allowed to name it, and the label is one no branch id can
+                # collide with — `branch:` is stripped off a port id, and a
+                # `route.check`'s static ports are `fallback` and nothing else.
+                path_map[STOP_LABEL] = END
             builder.add_conditional_edges(
                 safe_name(src),
-                self._router_for(src, destinations),
+                self._router_for(src, destinations, unrouted_route),
                 # The complete declared destination set. Without it every
                 # renderer must assume the router reaches any node (ticket 03).
-                {label: safe_name(dst) for label, dst in destinations.items()},
+                path_map,
             )
 
         for orchestrator_id, worker_ids in plan.fan_out.items():
@@ -2525,7 +2704,7 @@ class WorkflowCompiler:
 
     @staticmethod
     def _router_for(
-        node_id: str, destinations: dict[str, str]
+        node_id: str, destinations: dict[str, str], unrouted_route: "str | None" = None
     ) -> Callable[[Any], "str | list[str]"]:
         """The `path` function for one conditional edge.
 
@@ -2563,12 +2742,31 @@ class WorkflowCompiler:
 
         One destination stays a plain string rather than a one-item list, for
         the same reason: the callers downstream have always been handed a name.
+
+        **`unrouted_route` is where the first-destination default stops**
+        (`osg-agent-experience/80`). The paragraphs above argue the default is
+        right for a *grader*, and they still do — a grader whose `revise` is
+        unwired is a recorder, and its approved answer must ship. They were
+        never an argument about a **router**, whose whole substance is one
+        verdict and one destination, and on a live run they made one: a
+        classifier answered `unclear`, that branch had no edge, and the first
+        branch that happened to be declared published an answer nobody asked
+        for. So the two families are now told apart at plan time rather than
+        sharing a default that only ever suited one of them: `None` keeps the
+        historic behaviour, a label sends an unwired verdict to the declared
+        fallback, and `""` stops the run at the node. This function is unmoved
+        on everything else — it still reads a decision somebody else made.
         """
         default = next(iter(destinations))
 
+        def unrouted() -> str:
+            if unrouted_route is None:
+                return default
+            return unrouted_route or STOP_LABEL
+
         def route(state: Any) -> "str | list[str]":
             if not hasattr(state, "get"):
-                return default
+                return unrouted()
             decisions: dict[str, str] = state.get("decisions") or {}
             routes: dict[str, Any] = state.get("routes") or {}
 
@@ -2599,7 +2797,7 @@ class WorkflowCompiler:
             chosen = decisions.get(node_id)
             if chosen in destinations:
                 return chosen
-            return default
+            return unrouted()
 
         return route
 

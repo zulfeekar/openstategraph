@@ -601,6 +601,21 @@ edge as a fork decided by a model — the same one destination per branch. The
 node's behaviour is 69 code lines away in `compile/nodes/route_check.py`, and
 that this file grew by exactly one line for a whole new node type is the split
 between topology and behaviour doing its job rather than a coincidence.
+
+**958 -> 1018** (`osg-agent-experience/80`, 2026-09-06). Sixty lines, and
+they are all one question this file was answering wrongly: *where does a
+verdict go when nobody drew its branch?* It went to whichever branch happened
+to be declared first, and the steps hanging off the undrawn branches were
+wired from `START` because nothing pointed at them — so a live run took one
+verdict and published five answers. The additions are `unrouted_route` on the
+plan and the two small readers that fill it (`_declared_fallback`,
+`_needs_feeding`), the `STOP_LABEL` edge to `END`, and `_unrouted_sentence`
+splitting one report into the two things that can now happen. It is the edge
+table again, which is this module's one reason to change: the node families
+that write the record are 80 code lines away in `compile/nodes/`. The last six
+of the sixty are the advisory naming a node the new entry preference declined
+to start: not scheduling it is the fix, and doing that in silence would have
+been the same defect one layer down.
 """
 
 STREAMING = """
@@ -1250,7 +1265,7 @@ RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(690, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
     "cli.py": Recorded(1694, CLI),
-    "compile/workflow_compiler.py": Recorded(958, WORKFLOW_COMPILER),
+    "compile/workflow_compiler.py": Recorded(1018, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(994, MCP_SERVER),

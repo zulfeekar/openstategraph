@@ -206,7 +206,14 @@ class TestTheGraphShape:
         assert plan.conditional["r1"] == {"b1": "ask", "b2": "ans", "fallback": "fell"}
 
     def test_a_branch_with_nowhere_to_go_is_recorded_rather_than_silent(self) -> None:
-        """`_router_for` falls through to the first destination; say so."""
+        """It is recorded, and since `osg-agent-experience/80` it is routed.
+
+        The record used to be the bare label, because the dispatch had one
+        ending: `_router_for` fell through to the first declared destination
+        whatever the verdict said. A single-choice router now takes its
+        declared fallback — this document wires one — or stops at the node, so
+        the record carries which, and the reader is told the true one.
+        """
         document = _document()
         document["edges"] = [
             edge
@@ -216,4 +223,4 @@ class TestTheGraphShape:
         runtime = NodeRuntime(functions={"function.needs_a_date_range": lambda text: "answer"})
         final = _run(runtime, document, "anything")
 
-        assert final["unrouted"]["r1"] == "b2"
+        assert final["unrouted"]["r1"] == {"branch": "b2", "stopped": False}

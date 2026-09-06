@@ -56,10 +56,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from openstategraph.compile.context import (
-    _branch_entries,
-    _text,
-)
+from openstategraph.compile.context import _text
+from openstategraph.compile.fields import branch_ids_by_spelling as _branch_ids
 from openstategraph.compile.diagnostics import Finding
 from openstategraph.compile.nodes.named_check import call_check
 from openstategraph.compile.upstream import upstream_sources
@@ -67,7 +65,11 @@ from openstategraph.compile.state import (
     RunState,
     _upstream_text,
 )
-from openstategraph.compile.workflow_compiler import CompiledPlan
+from openstategraph.compile.workflow_compiler import (
+    ROUTE_CHECK_FALLBACK_BRANCH,
+    CompiledPlan,
+    unrouted_record,
+)
 
 if TYPE_CHECKING:
     # The class these functions are methods of. Type-only: the import that
@@ -85,39 +87,7 @@ if TYPE_CHECKING:
 #: and nothing to tell, so the honest shape is a port that always exists: a
 #: developer can see on the canvas where an unrecognised answer goes, instead
 #: of discovering it in `_router_for`'s first-destination default.
-FALLBACK_BRANCH = "fallback"
-
-
-def _branch_ids(raw: Any) -> dict[str, str]:
-    """`{how it might be written: the branch id}` for one node's branch table.
-
-    Tolerant in reading, strict in trusting (`CLAUDE.md`). A function may
-    answer with the branch's **name**, which is what a developer writes and
-    what the card shows, or with its stable **id**, which is what the port and
-    the edge carry — both are in the document, so both are real spellings of
-    the same branch and refusing one would be a trap rather than a rule.
-    Case and surrounding whitespace are forgiven for the same reason.
-
-    Nothing else is. A name outside this table resolves to no branch at all
-    and the caller takes `FALLBACK_BRANCH`, which is the strict half: the
-    tolerance widens how a *declared* branch may be spelled, never what counts
-    as one.
-
-    Declaration order decides a tie, so a table whose name and id collide
-    across two rows resolves to the row a reader meets first.
-    """
-    table: dict[str, str] = {}
-    for entry in _branch_entries(raw):
-        if isinstance(entry, dict):
-            branch_id = str(entry.get("id") or entry.get("name") or "")
-            name = str(entry.get("name") or entry.get("id") or "")
-        else:
-            branch_id = name = str(entry)
-        if not branch_id:
-            continue
-        table.setdefault(name.strip().casefold(), branch_id)
-        table.setdefault(branch_id.strip().casefold(), branch_id)
-    return table
+FALLBACK_BRANCH = ROUTE_CHECK_FALLBACK_BRANCH
 
 
 def _route_check(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: CompiledPlan) -> Any:
@@ -175,12 +145,18 @@ def _route_check(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: 
                 node_id: {"verdict": branch, "reason": reason, "check": check_name}
             },
         }
-        # A decision the node understands with nowhere to go. `_router_for`
-        # falls through to the first declared destination rather than hanging,
-        # which is right and was silent — the same pair of facts, and the same
-        # answer, as `_grader`'s `unrouted` (`workflow-gallery` 31).
+        # A decision the node understands with nowhere to go. It was reported
+        # here and dispatched wrongly there: `_router_for` fell through to the
+        # first declared destination, so a fork published a branch its own
+        # verdict had not named (`osg-agent-experience/80`). The dispatch is
+        # fixed at the compiler seam; what this writes is the record of it,
+        # and it now carries *which* of the two things happened, because a
+        # fallback taken and a run stopped read very differently to whoever
+        # is looking for their answer.
         if branch not in wired:
-            update["unrouted"] = {node_id: branch}
+            update["unrouted"] = {
+                node_id: unrouted_record(branch, stopped=not plan.unrouted_route.get(node_id))
+            }
         return update
 
     return run

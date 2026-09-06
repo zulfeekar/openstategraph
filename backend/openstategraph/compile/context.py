@@ -17,29 +17,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from openstategraph.compile.fields import _text  # noqa: F401  (re-exported)
+from openstategraph.compile.fields import (  # noqa: F401  (re-exported)
+    _text,
+    branch_entries as _branch_entries,
+)
 from openstategraph.compile.workflow_compiler import CompiledPlan, ROUTER_TYPE
 from openstategraph.developer_channel import FENCE_CLOSE, FENCE_OPEN
-
-
-def _branch_entries(raw: Any) -> list[Any]:
-    """The router's branch table, in either of its two saved forms.
-
-    v1 documents store a newline-separated string of names; v2 (ticket 20)
-    stores ``[{id, name}]`` so edges survive renames. Anything unusable
-    collapses to a single ``"default"`` branch rather than raising — a router
-    is the entry point, and refusing to compile is a total outage where a
-    misroute is recoverable. `Branch.of` handles per-entry normalisation.
-    """
-    if isinstance(raw, str):
-        names = [line.strip() for line in raw.split("\n") if line.strip()]
-        return names or ["default"]
-    if isinstance(raw, list):
-        entries = [entry for entry in raw if isinstance(entry, (str, dict))]
-        return entries or ["default"]
-    return ["default"]
-
-
 
 
 def nested_record(node_id: str, child_outputs: Any) -> dict[str, Any]:

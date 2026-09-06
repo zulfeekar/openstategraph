@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 from openstategraph.abc.router import Router
 from openstategraph.compile.workflow_compiler import (
     CompiledPlan,
+    unrouted_record,
 )
 from openstategraph.compile.context import (
     _branch_entries,
@@ -83,6 +84,22 @@ def _router(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
     # router-relay case, only the same direct check every feedback-trusting
     # node has always made.
     feedback_sources = self._direct_feedback_sources(node_id, plan)
+    # Which of this router's branches were actually drawn. A verdict naming
+    # one that was not is `osg-agent-experience/80`'s live failure — the
+    # classifier answered `unclear`, nobody had drawn that branch, and the
+    # first branch that happened to be declared published an answer instead.
+    # `route.check` and the grader have reported this since `60` and
+    # `workflow-gallery/31`; the family the owner actually ran was the silent
+    # one, so it says it too now.
+    wired = set(plan.conditional.get(node_id) or {})
+    stops_here = not plan.unrouted_route.get(node_id)
+
+    def _lost(keys: list[str]) -> dict[str, Any]:
+        return (
+            {}
+            if any(key in wired for key in keys)
+            else {"unrouted": {node_id: unrouted_record(keys[0], stopped=stops_here)}}
+        )
 
     def router_for(skill: str, run_ctx: str = "") -> Router:
         """Built per skill value, for the same reason `_agent` is: the
@@ -164,6 +181,7 @@ def _router(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
             return {
                 "decisions": {node_id: replay_branch},
                 "outputs": {node_id: turn},
+                **_lost([replay_branch]),
             }
 
         classified = (
@@ -193,6 +211,14 @@ def _router(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
             # label there, so the graph takes the identical path.
             "routes": {node_id: [router.route_key(b) for b in decision.branches]},
             "outputs": {node_id: turn},
+            # Every branch it matched, not only the one it dispatches on: a
+            # `matchMode: "all"` router that matched two desks and had one of
+            # them wired went somewhere, and only a router that matched
+            # nothing wired lost its verdict.
+            **_lost(
+                [router.route_key(decision.branch)]
+                + [router.route_key(b) for b in decision.branches]
+            ),
         }
 
     return run
