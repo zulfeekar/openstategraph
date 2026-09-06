@@ -1,3 +1,5 @@
+<p align="center"><img src="public/favicon.svg" width="96" height="96" alt="OpenStateGraph — the circuit mark: three nodes, two edges"></p>
+
 # OpenStateGraph — AI Workflow Builder
 
 <!-- The `../../` here is GitHub's own convention: it resolves against the repository root on github.com, so the badge survives a rename — a local link checker will call it broken and be wrong (stable-beta-public/33). -->
