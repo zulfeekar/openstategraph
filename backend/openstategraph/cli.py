@@ -59,7 +59,7 @@ from openstategraph import templates
 #: reader never has to decode a bare integer.
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from openstategraph.kanban_store import Card, KanbanLocation
-    from openstategraph.providers import ProviderCatalogue, ProviderDefault, ProviderEnvironment
+    from openstategraph.providers import ProviderDefault, ProviderEnvironment
     from openstategraph.results import RunResult
 
 EXIT_OK = 0
@@ -1106,7 +1106,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     reset_active_config()
     catalogue = provider_catalogue()
     default = catalogue.elected_default()
-    _print_default_reason("default model: ", default, catalogue)
+    _print_default_reason("default model: ", default)
     print()
     print("no .env was written — a generated credential file is a committed one waiting")
     if ".env" in result.gitignore_gaps:
@@ -2133,21 +2133,21 @@ def _package_directory(services: Any, slug: str) -> Any:
         return None
 
 
-def _print_default_reason(label: str, default: "ProviderDefault", catalogue: "ProviderCatalogue") -> None:
+def _print_default_reason(label: str, default: "ProviderDefault") -> None:
     """`{label}{model} — {reason}`, wrapped — except the shell command inside it.
 
     `osg-agent-experience/83`. On a bare install, `default.reason` is
     `no_provider_message()`, which quotes a real `pip`/`uv tool install`
-    command (`ProviderCatalogue.install_command()`); `textwrap.fill` breaks
-    that command at its own spaces and hyphens, and a command split across
-    two printed lines is not one a reader can paste. So the command, when the
-    reason carries one, is pulled out and printed alone on its own unwrapped
-    line under the wrapped prose that names it. Every other reason has no
-    command in it and prints exactly as it did before this ticket.
+    command — carried alongside it as `default.command`, since
+    `textwrap.fill` breaks that command at its own spaces and hyphens, and a
+    command split across two printed lines is not one a reader can paste. So
+    the command, when there is one, is pulled out and printed alone on its
+    own unwrapped line under the wrapped prose that names it. Every other
+    reason has no command and prints exactly as it did before this ticket.
     """
     indent = " " * len(label)
     reason = default.reason
-    command = catalogue.install_command() if default.spec is None else None
+    command = default.command
     if not command or command not in reason:
         print(
             textwrap.fill(
@@ -3204,7 +3204,7 @@ def cmd_providers(args: argparse.Namespace) -> int:
     # The line the list was missing: which provider won, and why. Everything
     # else here answers "what could work"; only this answers the question the
     # reader actually arrived with (install-experience T3).
-    _print_default_reason("default:     ", default, catalogue)
+    _print_default_reason("default:     ", default)
     print()
     environments = [ProviderEnvironment(spec) for spec in catalogue.list()]
     for here in environments:

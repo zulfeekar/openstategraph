@@ -1347,14 +1347,14 @@ prints the finding gets the offer without a second string to keep in step.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
     "document_checks.py": Recorded(505, DOCUMENT_CHECKS),
-    "cli.py": Recorded(1805, CLI),
+    "cli.py": Recorded(1819, CLI),
     "compile/workflow_compiler.py": Recorded(1018, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(990, MCP_SERVER),
     "api/routes/workflows.py": Recorded(619, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
-    "api/schemas.py": Recorded(566, SCHEMAS),
+    "api/schemas.py": Recorded(565, SCHEMAS),
 }
 
 

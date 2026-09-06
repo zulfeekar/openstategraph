@@ -726,6 +726,13 @@ class ProviderDefault:
     #: Whether the elected provider can be **called** right now. False is a
     #: real election: the extra chose the vendor and only the key is missing.
     configured: bool = False
+    #: The one worked command `reason` quotes, alone — `None` unless `reason`
+    #: is `no_provider_message()`. `osg-agent-experience/83`: a caller that
+    #: must print `reason` through `textwrap.fill` cannot let this be wrapped
+    #: with it, so it is carried separately rather than re-extracted from the
+    #: sentence. A dataclass field, not a new method on `ProviderCatalogue` —
+    #: that class is already at the public-member ceiling (CLAUDE.md).
+    command: str | None = None
 
 
 @dataclass
@@ -814,26 +821,7 @@ class ProviderCatalogue:
         joined = (
             names[0] if len(names) == 1 else ", ".join(names[:-1]) + f" or {names[-1]}"
         )
-        return f"install {joined} — e.g. {self.install_command()}"
-
-    def install_command(self) -> str | None:
-        """The one worked command `install_choices` quotes — alone, for a
-        caller that must not let it wrap.
-
-        `osg-agent-experience/83`: the sentence `install_choices` composes
-        embeds a real shell command, and a caller that prints that sentence
-        through `textwrap.fill` breaks the command at its own spaces and
-        hyphens — `--extra-\\nindex-url` is not a flag, and two lines pasted
-        together run as two commands. `no_provider_warning` prints the whole
-        sentence verbatim on stderr and stays single-line on purpose (nothing
-        there wraps it); a caller that *does* wrap the prose can ask for this
-        instead and print it raw, on its own line, underneath.
-
-        `None` only when no provider is registered at all — there is no
-        install line to quote.
-        """
-        specs = list(self._specs.values())
-        return specs[0].install_hint if specs else None
+        return f"install {joined} — e.g. {_first_install_command(specs)}"
 
     def no_provider_message(self) -> str:
         """The one sentence for an install that can run nothing at all."""
@@ -877,7 +865,12 @@ class ProviderCatalogue:
         here = {spec.name: ProviderEnvironment(spec, env) for spec in self._specs.values()}
         candidates = [spec for spec in self._specs.values() if here[spec.name].is_installed()]
         if not candidates:
-            return ProviderDefault(None, None, self.no_provider_message())
+            return ProviderDefault(
+                None,
+                None,
+                self.no_provider_message(),
+                command=_first_install_command(list(self._specs.values())),
+            )
 
         ready = [spec for spec in candidates if here[spec.name].is_configured()]
         keyed = [spec for spec in ready if spec.requires_key]
@@ -888,6 +881,24 @@ class ProviderCatalogue:
             reason=_default_reason(candidates, ready, elected, here[elected.name]),
             configured=any(spec is elected for spec in ready),
         )
+
+
+def _first_install_command(specs: list[ProviderSpec]) -> str | None:
+    """The one worked command `install_choices` quotes — alone.
+
+    `osg-agent-experience/83`: a caller that must print the sentence
+    `install_choices`/`no_provider_message` compose through `textwrap.fill`
+    cannot let the command inside it be wrapped along with the prose —
+    `--extra-\\nindex-url` is not a flag, and two printed lines pasted
+    together run as two commands. Module-level and private rather than a new
+    method on `ProviderCatalogue`: that class is already at the public-member
+    ceiling CLAUDE.md sets, and this value is carried to a caller through
+    `ProviderDefault.command` instead.
+
+    `None` only when no provider is registered at all — there is no install
+    line to quote.
+    """
+    return specs[0].install_hint if specs else None
 
 
 def _default_reason(
