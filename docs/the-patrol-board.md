@@ -371,6 +371,29 @@ is no delete on the store's interface at all. Retention on a shared board is a
 job that runs as the owner, not something a card-filing door can do by
 accident.
 
+**How the shared store is tested, and how you run that yourself.** Every rule
+the board has — stage order, the evidence gate, the atomic claim, an answer
+written once, the digest moving on a write and standing still on a read — is
+one parametrised suite, `backend/tests/test_kanban_store_contract.py`, run
+against every implementation there is. Two of them need nothing: SQLite, and
+an in-memory store that exists only so the rules are proven against more than
+one concrete on an ordinary run. The third needs a database, so it is gated on
+a variable of its own:
+
+```bash
+OPENSTATEGRAPH_KANBAN_TEST_URL="postgresql://user:password@host:5432/scratch" \
+  python3 -m pytest backend/tests/test_kanban_store_contract.py -q
+```
+
+Unset — which is how CI runs, and how it will stay — the Postgres cases skip
+with a message naming that variable. Set, they run, and a failure is a
+failure. **It is deliberately not `OPENSTATEGRAPH_KANBAN_URL`**: that one
+points at your real board, and a suite that filed and staged cards against
+whatever you had exported would be writing on the board it is meant to be
+independent of. Point it at a scratch database. The suite scopes each case to
+a fresh random `project_hash` and deletes nothing, for the reason in the
+paragraph above.
+
 ---
 
 ## Where to go next

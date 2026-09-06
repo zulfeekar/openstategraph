@@ -43,11 +43,17 @@ from openstategraph.kanban_store import (
 )
 from openstategraph.kanban_sqlite import SqliteKanbanStore
 
+from kanban_fake import FAKE_SCHEME, FAKE_URL, FakeKanbanStore, open_fake_kanban_store
+
 LIVE_URL_ENV = "OPENSTATEGRAPH_KANBAN_TEST_URL"
 
 
-@pytest.fixture(params=["sqlite", "postgres"])
+@pytest.fixture(params=["sqlite", "fake", "postgres"])
 def store(request: pytest.FixtureRequest, tmp_path) -> Iterator[AbstractKanbanStore]:
+    if request.param == "fake":
+        yield open_fake_kanban_store(FAKE_URL)
+        return
+
     if request.param == "sqlite":
         yield SqliteKanbanStore(tmp_path / "kanban.sqlite")
         return
@@ -211,6 +217,15 @@ def test_the_digest_moves_on_a_write_and_not_on_a_read(
     store.list_cards()
     assert store.store_digest() == after
 
+    # And on a write that leaves the card *count* where it was — the case a
+    # digest of `count(*)` alone passes while telling the board nothing.
+    # Filing is the only write that changes the count, and every other write a
+    # maintainer makes is a claim or an answer (`team-board-and-gap-reports/11`).
+    assert store.set_stage(task_id, Stage.ATTENDED, actor="agent-a").ok
+    claimed = store.store_digest()
+    assert claimed != after, "a claim is a change the board has to hear about"
+    assert len(store.list_cards()) == 1
+
 
 def test_every_store_the_registry_holds_is_covered_here() -> None:
     """The parametrisation above is a list, and a list goes stale the day a
@@ -257,3 +272,49 @@ def test_an_unreachable_board_raises_and_names_the_variable() -> None:
     assert "OPENSTATEGRAPH_KANBAN_URL" in message
     assert "OPENSTATEGRAPH_POSTGRES_URL" not in message
     assert "secret" not in message, "a DSN's password never reaches a message"
+
+
+def test_the_fake_is_registered_under_a_test_scheme_and_nowhere_near_the_default() -> None:
+    """`team-board-and-gap-reports/11`. The fake is a third implementation of
+    the same interface, so it opens the way the other two do — through a
+    registry, under a scheme — rather than by a constructor the suite calls
+    directly. That is what makes the parametrisation above a statement about
+    `open_kanban_store`'s world and not about three unrelated objects.
+
+    And it registers into a **fresh** registry, never the default one. A fake
+    reachable from `OPENSTATEGRAPH_KANBAN_URL` would be a board that silently
+    forgot everything on restart, which is a worse failure than the one this
+    ticket is about.
+    """
+    from openstategraph.kanban_store import (
+        KanbanStoreRegistry,
+        default_kanban_store_registry,
+    )
+
+    assert FAKE_SCHEME not in default_kanban_store_registry().list()
+
+    registry = KanbanStoreRegistry()
+    registry.register(FAKE_SCHEME, open_fake_kanban_store)
+    opener = registry.get(FAKE_SCHEME)
+    assert opener is not None
+    assert isinstance(opener(FAKE_URL), FakeKanbanStore)
+    assert FAKE_SCHEME not in default_kanban_store_registry().list()
+
+
+def test_the_fake_is_an_implementation_and_not_a_mock() -> None:
+    """The distinction the ticket makes, as an assertion: a mock records calls
+    and can never fail a contract suite, which is the entire point of having
+    one. This one inherits every rule from `AbstractKanbanStore` and supplies
+    only the seven primitives, so the body above tests the same code paths it
+    tests for sqlite — the rules — over a different store."""
+    store = open_fake_kanban_store(FAKE_URL)
+    assert isinstance(store, AbstractKanbanStore)
+    supplied = {
+        name
+        for name in AbstractKanbanStore.__abstractmethods__
+        if name in vars(FakeKanbanStore)
+    }
+    assert supplied == set(AbstractKanbanStore.__abstractmethods__)
+    inherited = set(vars(AbstractKanbanStore)) - set(vars(FakeKanbanStore))
+    for rule in ("file_card", "file_idea_card", "set_stage", "release_card", "answer_card"):
+        assert rule in inherited, f"{rule} must be the base's, not re-implemented"
