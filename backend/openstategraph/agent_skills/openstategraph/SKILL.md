@@ -50,11 +50,10 @@ back in one line they can disagree with — *"This is a tweak: I will add
 `maxRetries` to that node, with a test that pins the value."* Follow that row and
 no other. **Size decides the ritual, never the rules.**
 
-Non-negotiable at every size, and this paragraph is the whole of it: read the
-ground rules once per session (step 4); never a node type the registry does not
-know, and when nothing registered fits, extend through the family's base, register
-it, and only then use it; the failing test is written before the code that passes it;
-the card is the one record — a decision left in the conversation is lost with it.
+Non-negotiable at every size: read the ground rules once per session (step 4);
+never a node type the registry does not know — extend, register, then use, and
+step 4 says how; the failing test comes before the code that passes it; the card
+is the one record, since a decision left in the conversation is lost with it.
 
 | Size | The ask | The ritual, whole |
 | --- | --- | --- |
@@ -97,8 +96,8 @@ developer; their last answer decides your next. Recommend an answer each time so
 they can agree in one word; the decision is theirs and the facts are yours, so go
 and look before asking what the installation can answer.
 
-Keep going until every dimension below has a concrete answer **or an explicitly
-accepted gap** — an accepted gap is a correct outcome, a silent one is not.
+Keep going until each of the **nine dimensions** below has a concrete answer **or
+an explicitly accepted gap** — an accepted gap is correct, a silent one is not.
 
 | Dimension | The question it answers |
 | --- | --- |
@@ -108,6 +107,7 @@ accepted gap** — an accepted gap is a correct outcome, a silent one is not.
 | Judgement | where a revision loop belongs, and what ends it |
 | Tools | what must be fetched, from where, with whose credentials |
 | Ground truth | what may not be invented, and what happens when it is missing |
+| Units | what every pinned numeric column is measured in — a unit, or "unknown" |
 | Budget | the step budget, and the token budget for the whole build |
 | Done | what "done" looks like, as something you can check |
 

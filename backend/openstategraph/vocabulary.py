@@ -64,7 +64,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-from openstategraph.abc.tool_notes import Substitution
+from openstategraph.abc.tool_notes import DeclaredUnit, Substitution
+from openstategraph.units import UNKNOWN_UNIT_WORDS
 
 #: What the node caps at unless its card says otherwise. A product decision —
 #: context costs latency and tokens — and never raised to dodge the ranking.
@@ -101,6 +102,12 @@ _VALUE_KEYS = ("canonical_value", "value", "literal", "canonical")
 _ALIAS_KEYS = ("aliases", "synonyms", "also_called", "users_may_say")
 _NOTE_KEYS = ("note", "description", "usage_hint", "hint")
 _PREDICATE_KEYS = ("predicate", "where", "glossary_maps_to", "predicate_shape")
+#: `osg-agent-experience/75`. **One more key on the row this module already
+#: reads**, never a second file: a unit that lived somewhere else would be a
+#: second schema for one column, and the two would disagree the week after they
+#: were written. Read as tolerantly as every other key here.
+_UNIT_KEYS = ("unit", "units", "unit_of_measure", "uom", "measured_in")
+_CONVERSION_KEYS = ("converts_to", "convertible_to", "conversions")
 
 
 @dataclass(frozen=True)
@@ -114,6 +121,12 @@ class VocabularyEntry:
     aliases: tuple[str, ...]
     note: str
     predicate: str
+    #: What this column's numbers are measured in — `osg-agent-experience/75`.
+    #: `""` is *the row said nothing*; a row that writes "unknown" is a
+    #: declaration and lands as `unknown`, which `_declared_units` reads.
+    unit: str = ""
+    #: Units this row declares a conversion to. See `DeclaredUnit`.
+    convertible_to: tuple[str, ...] = ()
 
     def render(self) -> str:
         head = f"- {self.term or self.entry_id}"
@@ -128,6 +141,8 @@ class VocabularyEntry:
             lines.append(f"    note: {self.note}")
         if self.predicate:
             lines.append(f"    predicate: {self.predicate}")
+        if self.unit:
+            lines.append(f"    measured in: {self.unit}")
         return "\n".join(lines)
 
 
@@ -177,6 +192,19 @@ def _first(row: Mapping[str, Any], keys: Sequence[str]) -> str:
     return ""
 
 
+def _list_valued(row: Mapping[str, Any], keys: Sequence[str]) -> tuple[str, ...]:
+    """A list-ish field, in whatever shape its author found natural."""
+    for key in keys:
+        value = row.get(key)
+        if isinstance(value, (list, tuple)):
+            return tuple(str(v).strip() for v in value if str(v).strip())
+        if isinstance(value, Mapping):
+            return tuple(str(v).strip() for v in value if str(v).strip())
+        if isinstance(value, str) and value.strip():
+            return tuple(part.strip() for part in value.split(",") if part.strip())
+    return ()
+
+
 def _aliases(row: Mapping[str, Any]) -> tuple[str, ...]:
     for key in _ALIAS_KEYS:
         value = row.get(key)
@@ -205,6 +233,8 @@ def _read_entry(row: Any) -> VocabularyEntry | None:
             aliases=_aliases(row),
             note=note,
             predicate=_first(row, _PREDICATE_KEYS),
+            unit=_first(row, _UNIT_KEYS),
+            convertible_to=_list_valued(row, _CONVERSION_KEYS),
         )
     if isinstance(row, str) and row.strip():
         text = row.strip()
@@ -318,6 +348,31 @@ def _substitutions(question: str, entries: Iterable[VocabularyEntry]) -> tuple[S
     return tuple(notes)
 
 
+def _declared_units(entries: Iterable[VocabularyEntry]) -> tuple[DeclaredUnit, ...]:
+    """`osg-agent-experience/75`'s tuple, minted only where a row declares one.
+
+    Strict in the same way `_substitutions` is: a row without an axis is
+    describing the domain's language rather than a column, so it can make no
+    claim about what a number is measured in. A row with an axis and no unit
+    key mints nothing — silence is not a declaration. A row whose unit is one
+    of `UNKNOWN_UNIT_WORDS` mints a note with an **empty** unit, which is a
+    declaration that nobody knows and is what makes an invented unit refusable.
+    """
+    notes: list[DeclaredUnit] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if not (entry.axis and entry.unit):
+            continue
+        if entry.axis in seen:
+            continue
+        seen.add(entry.axis)
+        declared = "" if entry.unit.strip().casefold() in UNKNOWN_UNIT_WORDS else entry.unit
+        notes.append(
+            DeclaredUnit(axis=entry.axis, unit=declared, convertible_to=entry.convertible_to)
+        )
+    return tuple(notes)
+
+
 @dataclass(frozen=True)
 class Resolution:
     """What one resolution found **and what it covered**."""
@@ -332,6 +387,10 @@ class Resolution:
     errors: tuple[str, ...]
     unreadable: int
     when_uncovered: str
+    #: What the matched columns are measured in, where a row declares it
+    #: (`osg-agent-experience/75`). Last, and defaulted, so a caller that
+    #: constructs a `Resolution` positionally is unchanged.
+    units: tuple[DeclaredUnit, ...] = ()
 
     def render(self) -> str:
         """The block handed downstream. Coverage is never optional."""
@@ -357,6 +416,29 @@ class Resolution:
                     f'- "{note.user_term}" → {note.canonical_value} on {note.axis} '
                     f"({'exact match' if note.how_matched == 'exact' else 'a synonym this vocabulary declares'})"
                     for note in self.substitutions
+                )
+            )
+        if self.units:
+            # Composed context, never an editable rule: this block is what
+            # `resolve.vocabulary` writes downstream, so an agent reading it is
+            # reading machinery the developer cannot clear by accident.
+            parts.append(
+                "### Units declared for these columns — not the model's to choose\n"
+                + "\n".join(
+                    (
+                        f"- {note.axis} is measured in {note.unit}."
+                        + (
+                            " A conversion is declared to "
+                            + ", ".join(note.convertible_to)
+                            + "."
+                            if note.convertible_to
+                            else " Do not convert it: converting needs a density this "
+                            "table does not carry."
+                        )
+                        if note.unit
+                        else f"- No unit is declared for {note.axis}. Do not name one."
+                    )
+                    for note in self.units
                 )
             )
         parts.append("### Coverage\n" + self._coverage())
@@ -451,6 +533,7 @@ def resolve_vocabulary(
         phrases=searched,
         entries=entries,
         substitutions=_substitutions(question or "", entries),
+        units=_declared_units(entries),
         declared=_declared_coverage(source),
         errors=tuple(sorted(errors)),
         unreadable=unreadable,

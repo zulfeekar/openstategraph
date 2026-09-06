@@ -937,6 +937,35 @@ class TestEveryCountedClaimIsMeasured:
             f"the sheet names {claimed.group(1)} starting points and the long form writes {written}"
         )
 
+    def test_the_interview_dimensions_are_the_number_the_sheet_names(self) -> None:
+        """`osg-agent-experience/75`. The interview is the sheet's only step
+        whose content is a *checklist a developer is walked through*, and a
+        dimension present in one of the two documents is a question that gets
+        asked at triage and never at the build, or the other way round.
+
+        Three counts, not two: the sheet's stated number, the sheet's own table,
+        and the long form's sections. The table is what an agent reads at speed
+        and the sections are what it reads when the answer is hard, so a row
+        added to one and not the other is exactly the drift that let a column's
+        unit go unasked while every instrument reported green.
+        """
+        step = next(body for _, heading, body in self._steps() if "interview" in heading.lower())
+        long_form = (REFERENCES / "interview.md").read_text(encoding="utf-8")
+
+        claimed = re.search(r"\*\*([a-z]+) dimensions\*\*", step)
+        assert claimed, "the interview step no longer says how many dimensions it has"
+        rows = [
+            row
+            for row in re.findall(r"^\|\s*([^|]+?)\s*\|", step, re.MULTILINE)
+            if row not in {"Dimension", "---"}
+        ]
+        written = len(re.findall(r"^### ", long_form, re.MULTILINE))
+
+        assert NUMBER_WORDS[claimed.group(1)] == len(rows) == written, (
+            f"the sheet says {claimed.group(1)} dimensions, its table lists {len(rows)} "
+            f"and the long form writes {written}"
+        )
+
     def test_the_short_loop_and_its_long_form_have_the_same_steps(self) -> None:
         """The sheet's step 9 is an eight-item list and `build-loop.md` is the
         same eight, expanded. The sheet then tells a tweak to run four of them

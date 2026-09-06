@@ -113,7 +113,13 @@ def _resolve_vocabulary(self: "NodeRuntime", node_id: str, node: dict[str, Any],
             # `launch-readiness/127`'s tuple, on the run's own rail: the
             # output node discloses the substitution whether or not the
             # model mentions it.
-            record_notes(resolution.substitutions)
+            #
+            # And `osg-agent-experience/75`'s beside it, on the same rail for
+            # the same reason. A declared unit reaches the agent as this
+            # block's own text and the grader as generated context; putting it
+            # on a channel of its own would be a fourth rail two consumers
+            # would each have to remember to read.
+            record_notes(resolution.substitutions + resolution.units)
             block = resolution.render()
 
         output = f"{question}\n\n---\n{block}" if question else block

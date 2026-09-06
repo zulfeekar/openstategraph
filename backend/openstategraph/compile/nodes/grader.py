@@ -29,6 +29,7 @@ from openstategraph.abc.tool_notes import (
     peek_notes,
     record_notes,
 )
+from openstategraph.units import unit_discipline
 from openstategraph.run_summary import (
     evidence_for_grader,
     every_tool_call_failed,
@@ -267,6 +268,20 @@ def _grader(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
         # rejects onto the revise edge like any other judgement rather than
         # forcing the pass branch.
         starved_of_evidence = every_tool_call_failed(state.get("tool_use"), upstream)
+        # The fourth fact of the same kind (`osg-agent-experience/75`), and
+        # the one the live cargo run needed. A column declared in barrels, an
+        # answer of "51,106,422 tonnes", and both judges passing it — the
+        # rubric asked that a unit be *present*, which it was.
+        #
+        # It is a fact and not a judgement: the declaration is on the run's own
+        # rail, put there by `resolve.vocabulary` before any model spoke, so a
+        # model call to notice the contradiction would be slower, costlier and
+        # talkable-out-of. Ordered last of the four because it is the least
+        # specific — an unbound capability or a run whose every tool failed is
+        # a better account of the same answer.
+        wrong_unit = unit_discipline(
+            candidate, seen, question=state.get("question", "")
+        )
         # Spelled as a statement rather than the conditional expression it
         # was: `await` is legal in a ternary and reads as though both arms
         # might be awaited, and the whole point of the `unrun` arm is that
@@ -277,6 +292,8 @@ def _grader(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Compi
             verdict = Verdict.reject(starved_of_evidence, check="tools_all_failed")
         elif unrun:
             verdict = Verdict.reject(unrun, check="unrun_query")
+        elif wrong_unit:
+            verdict = Verdict.reject(wrong_unit, check="unit_mismatch")
         else:
             verdict = await grader.agrade(
                 candidate, question=state.get("question", "")

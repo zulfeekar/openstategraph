@@ -36,7 +36,7 @@ from openstategraph import (
 )
 from openstategraph.abc import (
     ITool, BaseTool, ToolResult, NoArgs, Field, ToolField,
-    Correction, Substitution, SourceChoice, ToolFailure,
+    Correction, Substitution, SourceChoice, DeclaredUnit, ToolFailure,
     UncoveredWindow, UnverifiedAnswer,
     IRouter, BaseRouter, Router, Classification,
     IGrader, BaseGrader, Grader, Verdict,

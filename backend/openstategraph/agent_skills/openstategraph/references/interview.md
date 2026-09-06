@@ -86,6 +86,28 @@ it cannot see will answer anyway, fluently and wrongly.
 "Refuse and say why" is almost always the right default, and it needs to be
 in the prompt rules rather than assumed.
 
+### Units — what every pinned numeric column is measured in
+
+Ask it per column, not per table, and take one of exactly two answers: **the
+unit**, or **"unknown"**. Both are declarations; a shrug is not. Write the
+answer into the vocabulary rows the workflow already pins — `unit: barrels`
+beside the column's `axis` — never into prose, because prose is the one place
+nothing downstream can read it.
+
+This dimension exists because of a run that answered *"51,106,422 tonnes"* for a
+column holding barrels, and passed every check the workflow had: the vocabulary
+listed both words as terms the domain uses and declared no unit for the column,
+so the model supplied one, and the grader asked only that a unit be *present*.
+A number with no stated unit and a number in the wrong unit read identically,
+which is the same trap the ground-truth dimension above is about.
+
+Then ask the second question, which is the expensive one: **is a conversion
+declared?** Barrels to tonnes needs a density — a property of the cargo, not of
+the row — so unless the developer names a conversion, the honest answer to a
+question asked in the other unit is that the table does not carry one. Say that
+back to them: *"asked in tonnes, this will refuse and say why"* is a settled
+dimension; *"it will probably convert"* is a card.
+
 ### Budget — steps and tokens
 
 Two separate numbers, and they are often confused.

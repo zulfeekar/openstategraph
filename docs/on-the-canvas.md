@@ -100,6 +100,17 @@ like a word that was never ambiguous, so the node says which is which: a
 source that declares what it holds gives a conclusive *not covered*, one that
 does not says so plainly, and a failed search is neither.
 
+**A unit lives on the same row, and nowhere else.** A vocabulary row that
+names a column may also declare what its numbers are measured in — `unit:
+barrels` beside the column, or `unit: unknown` when nobody knows, which is a
+declaration too. The node then hands that to the agent as part of the block it
+writes and to the grader as generated context, and a grader whose answer names
+a different unit refuses without paying for a judgement. Asked for a
+conversion nobody declared, the run says the table does not carry the density
+it would need, rather than inventing one: a number with no stated unit and a
+number in the wrong unit read identically, which is the same reason the source
+above is named.
+
 **Resolve source** is the same section's second node and the same idea about
 a different question: *which of the stores that could answer this is
 answering it?* A warehouse often holds one figure from several systems of

@@ -16,6 +16,17 @@
   composed once in `model_readiness.unmet_model_requirement`, so the `error:`
   line, the 503 body and the MCP `error`/`findings` pair all name
   `openstategraph providers` and `openstategraph env-example`.
+- **A declared unit, on the vocabulary row that already pins the column**
+  (`osg-agent-experience/75`). A column holding barrels was answered in tonnes
+  and every check passed: nothing declared the unit, so the model supplied one,
+  and the grader's rubric asked only that a unit be present. A row may now carry
+  `unit:` (and `converts_to:`), which mints a `DeclaredUnit` on the run's note
+  rail beside `Substitution` and `SourceChoice` — reaching the agent as the
+  resolver's own block and the grader as generated context. `route.grader`
+  refuses a mismatched or undeclared unit before paying for a judgement, and a
+  conversion nobody declared is answered with the density the table does not
+  carry rather than a calculation. The skill's interview gained the ninth
+  dimension that asks for it.
 - **`editor_only` on a node descriptor** (`osg-agent-experience/72`) — a palette
   card the backend cannot run says so on every door (the catalogue, `nodes`,
   `docs/modules.md`, and a registered document check) instead of at the end of a

@@ -207,6 +207,40 @@ class SourceChoice(BaseModel):
     how_chosen: Literal["named_in_question", "declared_default", "only_source"]
 
 
+class DeclaredUnit(BaseModel):
+    """`osg-agent-experience/75`: what a column's numbers are measured in.
+
+    The third instance of the shape `Substitution` and `SourceChoice` already
+    carry — *the honest state and the wrong state render identically* — and a
+    sibling kind rather than a field bent onto either. A `Substitution` maps a
+    word to a value; a `SourceChoice` picks one store among several; this is a
+    property of a **column**, true of every number read from it and of no
+    particular question.
+
+    It is minted only where a vocabulary row says so. A row that declares
+    nothing mints nothing, because silence by default is this module's rule and
+    a unit nobody wrote down is not one this run may assert.
+
+    `unit` empty means **declared unknown**, which is a different sentence from
+    a missing note and not a missing value: somebody was asked and said they do
+    not know. That is what makes a unit the model supplied refusable
+    (`openstategraph.units.unit_discipline`) rather than merely unverified.
+    """
+
+    kind: Literal["declared_unit"] = "declared_unit"
+    #: The column, dimension or field the figures live on — the same `axis`
+    #: `Substitution` names, and for the same reason: a unit with no column is
+    #: a claim about a table rather than about a number.
+    axis: str
+    #: What its numbers are measured in, in the declaring row's own words.
+    #: Empty means *declared unknown*; see the class docstring.
+    unit: str = ""
+    #: Units this row declares a conversion to. Empty is the ordinary case —
+    #: barrels to tonnes needs a density, which is a property of the cargo and
+    #: not of the row, so a table that carries one has to say so.
+    convertible_to: tuple[str, ...] = ()
+
+
 class ToolFailure(BaseModel):
     """`launch-readiness/156`: a call that was refused and never ran.
 
@@ -325,7 +359,13 @@ class UnverifiedAnswer(BaseModel):
 #: inside `ToolResult`'s signature, which is the line
 #: `backend/tests/public_api.txt` pins across three interpreters.
 ToolNote = Union[
-    Correction, Substitution, SourceChoice, ToolFailure, UncoveredWindow, UnverifiedAnswer
+    Correction,
+    Substitution,
+    SourceChoice,
+    DeclaredUnit,
+    ToolFailure,
+    UncoveredWindow,
+    UnverifiedAnswer,
 ]
 
 
@@ -348,6 +388,8 @@ def notes_for_model(notes: tuple[ToolNote, ...] | list[ToolNote]) -> str:
                 lines.append(f"Next step: {text}")
         elif isinstance(note, SourceChoice):
             lines.append(_source_choice_for_model(note))
+        elif isinstance(note, DeclaredUnit):
+            lines.append(_declared_unit_for_model(note))
         elif isinstance(note, Substitution) and note.changed_the_question():
             lines.append(
                 f'Substituted: "{note.user_term}" is not a value in this data; '
@@ -355,6 +397,34 @@ def notes_for_model(notes: tuple[ToolNote, ...] | list[ToolNote]) -> str:
                 f"({_HOW_MATCHED_FOR_MODEL[note.how_matched]})."
             )
     return "\n".join(lines)
+
+
+def _declared_unit_for_model(note: DeclaredUnit) -> str:
+    """Told to the model as a constraint on the answer, not as a preference.
+
+    Including the density sentence verbatim, which is deliberate: the parser
+    that reads a decline reads this exact phrase, so the prompt teaches the
+    format the parser can read rather than the other way round — `CLAUDE.md`'s
+    third defect of that shape.
+    """
+    axis = note.axis or "these figures"
+    if not note.unit:
+        return (
+            f"No unit is declared for {axis}. Do not name a unit for those figures; "
+            "say that this data declares none."
+        )
+    line = (
+        f"Unit declared before this call: {axis} is measured in {note.unit}. "
+        f"Report the figures in {note.unit} and name it."
+    )
+    if note.convertible_to:
+        return line + " This data declares a conversion to " + _english_list(
+            note.convertible_to
+        ) + "."
+    return line + (
+        " Do not convert to another unit: converting needs a density this table "
+        "does not carry."
+    )
 
 
 def _source_choice_for_model(note: SourceChoice) -> str:
@@ -425,6 +495,9 @@ def notes_for_reader(
     for note in notes:
         if isinstance(note, SourceChoice):
             lines.append(_source_choice_for_reader(note))
+            continue
+        if isinstance(note, DeclaredUnit):
+            lines.append(_declared_unit_for_reader(note))
             continue
         if isinstance(note, ToolFailure):
             lines.append(_tool_failure_for_reader(note))
@@ -503,6 +576,23 @@ def notes_for_grader(
         "it, whichever way you judge. It is the workflow's own disclosure and "
         "the answer does not have to repeat it:\n" + disclosure
     )
+
+
+def _declared_unit_for_reader(note: DeclaredUnit) -> str:
+    """Always rendered when it exists, for `SourceChoice`'s reason.
+
+    A unit is never implied by the user's own words the way a canonical
+    spelling can be, so there is no *nothing actually changed* case to stay
+    silent about. Silence by default is preserved where it belongs: a row that
+    declares nothing mints no note at all.
+    """
+    axis = note.axis or "The figures above"
+    if not note.unit:
+        return (
+            f"No unit is declared for {axis} in this data, so the figures above are as "
+            "it holds them and this run did not name one."
+        )
+    return f"Figures for {axis} are in {note.unit}, which is what this data declares."
 
 
 def _tool_failure_for_reader(note: ToolFailure) -> str:
@@ -723,7 +813,15 @@ def record_notes(
         note
         for note in notes
         if isinstance(
-            note, (Substitution, SourceChoice, ToolFailure, UncoveredWindow, UnverifiedAnswer)
+            note,
+            (
+                Substitution,
+                SourceChoice,
+                DeclaredUnit,
+                ToolFailure,
+                UncoveredWindow,
+                UnverifiedAnswer,
+            ),
         )
     ]
     if not keepable:
@@ -777,6 +875,7 @@ __all__ = [
     "HOW_CHOSEN",
     "HOW_MATCHED",
     "Correction",
+    "DeclaredUnit",
     "SourceChoice",
     "Substitution",
     "ToolFailure",

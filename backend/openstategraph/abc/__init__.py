@@ -83,6 +83,7 @@ from openstategraph.abc.tool import BaseTool, Field, ITool, NoArgs, ToolField, T
 # for it would be a surface nobody finds.
 from openstategraph.abc.tool_notes import (
     Correction,
+    DeclaredUnit,
     SourceChoice,
     Substitution,
     ToolFailure,
@@ -129,6 +130,7 @@ __all__ = [
     "Redaction",
     "Router",
     "Screening",
+    "DeclaredUnit",
     "SourceChoice",
     "Substitution",
     "ToolFailure",
