@@ -791,16 +791,30 @@ class ProviderCatalogue:
         return {prefix: spec.extra for spec in self._specs.values() for prefix in spec.prefixes}
 
     def install_choices(self) -> str:
-        """Every `pip install` line that would give this install a provider.
+        """Every extra that would give this install a provider, and one command.
 
         One phrase, one owner. `cli.no_provider_warning`, `elected_default`'s
         no-candidate reason and `resolve_model`'s refusal all print it, and
         three copies of a sentence is three chances to fix two of them.
+
+        **Names, then one worked command** (`osg-agent-experience/79`). This
+        used to join a whole install line per provider, which was readable
+        while a line was `pip install 'openstategraph[anthropic]'` and stopped
+        being readable the moment the line learned to carry the index flags a
+        TestPyPI pre-release needs: three commands of a hundred characters, in
+        one sentence, offering a choice of one. So the *choice* is the extras —
+        which is what the reader is actually choosing between — and the command
+        is shown once, for the first of them, because its shape is the same
+        whichever they pick.
         """
-        lines = [spec.install_hint for spec in self._specs.values()]
-        if not lines:
+        specs = list(self._specs.values())
+        if not specs:
             return "(no provider is registered at all)"
-        return lines[0] if len(lines) == 1 else ", ".join(lines[:-1]) + f" or {lines[-1]}"
+        names = [f"openstategraph[{spec.extra}]" for spec in specs]
+        joined = (
+            names[0] if len(names) == 1 else ", ".join(names[:-1]) + f" or {names[-1]}"
+        )
+        return f"install {joined} — e.g. {specs[0].install_hint}"
 
     def no_provider_message(self) -> str:
         """The one sentence for an install that can run nothing at all."""

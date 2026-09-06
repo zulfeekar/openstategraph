@@ -79,6 +79,17 @@
   wheel; the provenance moved into comments beside the strings.
 
 ### Fixed
+- **The one command a missing driver printed could not be run**
+  (`osg-agent-experience/79`). Every refusal naming a missing extra said `pip
+  install 'openstategraph[…]'`; measured against a `uv tool` install of a
+  TestPyPI pre-release, that resolves nothing and `pip` does not manage the
+  interpreter — and the obvious repair, `uv tool install --force`, *replaces*
+  the environment, so fixing `[mssql]` dropped `[server]`. `install_hint` is
+  now the one owner of that sentence and reads the three facts that decide it:
+  how this interpreter was installed, which extras are already present (carried
+  as a union for the `uv tool` shape only, because `pip` uninstalls nothing),
+  and whether the version is a pre-release, which is what makes the index flags
+  necessary and what must retire them.
 - **A reloaded tab put its overnight draft back over a file rewritten that
   morning** (`osg-agent-experience/68`) — the reload alone, with no drag, no
   keystroke and no Save. Three of the four writers of a `workflow.json` could

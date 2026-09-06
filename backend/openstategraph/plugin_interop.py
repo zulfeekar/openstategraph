@@ -26,7 +26,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from openstategraph._extras import document_extras, install_hint
+from openstategraph._extras import document_extras
+from openstategraph.install_hint import documented_install_hint
 from openstategraph.agent_config import ServerDescriptor
 from openstategraph.skills import SkillDocument, has_frontmatter
 
@@ -273,7 +274,9 @@ def _readme(
     )
     lines += ["", "## What this needs", ""]
     if needs.extras:
-        lines += ["```", install_hint(",".join(needs.extras)), "```", ""]
+        # The generic line, not this machine's: an exported bundle is read
+        # somewhere else (`osg-agent-experience/79`).
+        lines += ["```", documented_install_hint(",".join(needs.extras)), "```", ""]
         lines.append("Each extra, and what in this document asks for it:")
         lines += [f"- `[{extra}]` — {why}" for extra, why in needs.reasons]
     else:

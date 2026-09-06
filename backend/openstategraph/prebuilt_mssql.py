@@ -55,6 +55,7 @@ from typing import Any, Iterator
 
 from pydantic import Field
 
+from openstategraph.install_hint import EXTRA_MARKERS
 from openstategraph.mssql_connection import (
     DRIVER_EXTRA,
     ConnectionPlan,
@@ -91,12 +92,17 @@ __all__ = [
 #: inherits three vendor-documented names instead, and says why.
 DEFAULT_CONNECTION_ENV = "OPENSTATEGRAPH_MSSQL_URL"
 
-#: The optional modules this leaf can import, declared the way the SQL family's
-#: engine adapters declare theirs: the ODBC driver, and the token library the
-#: Azure AD shape needs (`73`). Both are lazy, which is what makes the extra
-#: optional and keeps either of them out of the type gate's graph — the property
-#: `test_the_type_gate_survives_a_newer_stub.py` asserts rather than assumes.
-DRIVER_MODULES = ("pyodbc", "msal")
+#: The optional modules this leaf can import: the ODBC driver, and the token
+#: library the Azure AD shape needs (`73`). Both are lazy, which is what makes
+#: the extra optional and keeps either of them out of the type gate's graph —
+#: the property `test_the_type_gate_survives_a_newer_stub.py` asserts rather
+#: than assumes.
+#:
+#: **Read from the one table rather than declared here** (`79`): "what makes
+#: `[mssql]` present" is also what an install hint has to know to keep the
+#: extras it is not repairing, and two spellings of that is how the hint and
+#: the leaf drift apart.
+DRIVER_MODULES = EXTRA_MARKERS["mssql"]
 
 #: `DRIVER_EXTRA` is defined in `mssql_connection` and re-exported here, not
 #: restated: the refusal that names an install line is written in both modules

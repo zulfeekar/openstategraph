@@ -55,6 +55,8 @@ import struct
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from openstategraph.install_hint import install_hint
+
 __all__ = [
     "AAD_SCOPE",
     "ACCESS_TOKEN_ATTRIBUTE",
@@ -199,7 +201,7 @@ def _token(env: Mapping[str, str]) -> tuple[bytes, str | None]:
         return b"", (
             "An Azure AD service principal is configured "
             f"({', '.join(AAD_VARS)}), but the token library is not installed. "
-            f"Install the extra: pip install '{DRIVER_EXTRA}'. No query was sent."
+            f"Install it with: {install_hint(DRIVER_EXTRA)}. No query was sent."
         )
 
     tenant = (env.get("SQL_AZURE_AD_TENANT_ID") or "").strip()

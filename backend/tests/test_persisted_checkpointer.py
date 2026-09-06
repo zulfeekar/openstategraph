@@ -20,6 +20,7 @@ from typing import Any
 from openstategraph.api.services import WorkflowServices
 from openstategraph.compile.node_runtime import RunState
 from openstategraph.compile.workflow_compiler import WorkflowCompiler
+from openstategraph.install_hint import install_hint
 from openstategraph.memory import (
     CHECKPOINT_FILE_NAME,
     CHECKPOINT_PATH_ENV,
@@ -109,7 +110,7 @@ class TestItSaysWhichOneItGot:
             saver = build_checkpointer(tmp_path)
         message = " ".join(r.getMessage() for r in caplog.records)
         assert type(saver).__name__ == "InMemorySaver"
-        assert "pip install 'openstategraph[sqlite]'" in message
+        assert install_hint("sqlite") in message
         assert "approvals are in-memory and will NOT survive a restart" in message
 
 

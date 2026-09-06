@@ -23,6 +23,7 @@ from typing import Any
 import pytest
 
 from openstategraph.errors import DocumentError, SchemaVersionError
+from openstategraph.install_hint import install_hint
 from openstategraph.schema import (
     MIN_SUPPORTED_VERSION,
     SCHEMA_VERSION,
@@ -191,7 +192,10 @@ class TestSqliteDegradesLoudly:
 
         message = " ".join(r.getMessage() for r in caplog.records)
         assert result is sentinel
-        assert "pip install 'openstategraph[sqlite]'" in message
+        # `osg-agent-experience/79`: the remedy is composed for the installation
+        # it is printed on, so it is asserted through `install_hint` rather than
+        # transcribed — a literal here would pin one machine's answer.
+        assert install_hint("sqlite") in message
         assert "NOT survive a restart" in message
 
     def test_the_memory_store_names_the_extra(
@@ -204,7 +208,10 @@ class TestSqliteDegradesLoudly:
             build_store()
 
         message = " ".join(r.getMessage() for r in caplog.records)
-        assert "pip install 'openstategraph[sqlite]'" in message
+        # `osg-agent-experience/79`: the remedy is composed for the installation
+        # it is printed on, so it is asserted through `install_hint` rather than
+        # transcribed — a literal here would pin one machine's answer.
+        assert install_hint("sqlite") in message
         assert "NOT survive a restart" in message
 
     def test_a_workflow_that_never_asked_for_sqlite_says_nothing(self, caplog) -> None:

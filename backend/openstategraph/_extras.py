@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from types import ModuleType
 from typing import Any
 
+from openstategraph.install_hint import install_hint
+
 def provider_extras() -> dict[str, str]:
     """Model-string prefix -> the extra supplying its LangChain integration.
 
@@ -123,9 +125,13 @@ def document_extras(document: dict[str, Any]) -> DocumentRequirements:
     )
 
 
-def install_hint(extra: str) -> str:
-    """The exact line to type. One spelling, quoted for zsh's benefit."""
-    return f"pip install 'openstategraph[{extra}]'"
+#: Re-exported, not reimplemented. This module used to hold a one-line
+#: `pip install` of a single bracketed extra, which is the sentence
+#: `osg-agent-experience/79` measured as unrunnable on a `uv tool` install of a
+#: TestPyPI pre-release. `openstategraph.install_hint` owns it now, reading the
+#: three facts that decide it; every caller here — `require_extra`,
+#: `provider_extra_hint`, and the CLI's `_missing` — is unchanged and simply
+#: gets a command that works.
 
 
 def require_extra(module: str, extra: str, why: str) -> ModuleType:

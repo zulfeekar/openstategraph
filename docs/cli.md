@@ -124,8 +124,13 @@ ends by telling you to restart it. Only when it actually wrote or changed one:
 a second `init` that reports `current` down the whole block has given your
 agent nothing new to read. And each entry runs `openstategraph mcp`, which
 lives behind the `[mcp]` extra — on an installation without it, the report
-names `pip install 'openstategraph[mcp]'` right there, instead of leaving you
-to find a non-zero exit inside your agent's own start-up log.
+names the `[mcp]` extra right there, instead of leaving you to find a non-zero
+exit inside your agent's own start-up log. It prints the **command**, not the
+name: since `osg-agent-experience/79` that line is composed for the
+installation you are standing in — `uv tool install --force` for a tool
+install, `pip install` for a virtual environment, with the TestPyPI flags a
+pre-release needs — so it is not written out here, because a page cannot know
+which machine is reading it.
 
 | Flag | Effect |
 | --- | --- |

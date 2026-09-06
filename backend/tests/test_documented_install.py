@@ -34,6 +34,7 @@ from pathlib import Path
 
 import pytest
 
+from openstategraph.install_hint import install_hint
 from openstategraph.providers import builtin_specs, provider_catalogue
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -298,7 +299,10 @@ class TestServeSaysSoBeforeItServes:
         warning = cli.no_provider_warning()
 
         assert warning is not None
-        assert "pip install 'openstategraph[ghost]'" in warning
+        # `osg-agent-experience/79`: the remedy is composed for the installation
+        # it is printed on, so it is asserted through `install_hint` rather than
+        # transcribed — a literal here would pin one machine's answer.
+        assert install_hint("ghost") in warning
         assert warning.count("\n") == 0
         reset_provider_catalogue()
 

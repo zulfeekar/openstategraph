@@ -61,6 +61,7 @@ from typing import Any, Iterator
 
 from pydantic import Field
 
+from openstategraph.install_hint import EXTRA_MARKERS
 from openstategraph.prebuilt_sql import DEFAULT_MAX_ROWS
 from openstategraph.prebuilt_warehouse import WarehouseQueryArgs, _WarehouseExplorerBase
 
@@ -74,6 +75,12 @@ DEFAULT_TOKEN_ENV = "DATABRICKS_TOKEN"
 #: The extra that carries the driver. Named in the refusal rather than in a doc
 #: page, because the refusal is where somebody is standing when they need it.
 DRIVER_EXTRA = "openstategraph[databricks]"
+
+#: The optional module this leaf imports, read from the one table for the
+#: reason `prebuilt_mssql` gives at its own row (`79`): an install hint has to
+#: know what makes `[databricks]` present in order to keep it while repairing
+#: something else, and a second spelling of that is a drift waiting to happen.
+DRIVER_MODULES = EXTRA_MARKERS["databricks"]
 
 
 @contextlib.contextmanager

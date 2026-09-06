@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from openstategraph.errors import NoProviderInstalled, UnknownProvider
+from openstategraph.install_hint import install_hint
 from openstategraph.providers import ProviderEnvironment, ProviderSpec, provider_catalogue
 
 _AMBIENT = (
@@ -276,7 +277,10 @@ class TestTheInstanceDefaultIsElected:
 
         message = str(caught.value)
         assert "no model provider integration is installed" in message
-        assert "pip install 'openstategraph[anthropic]'" in message
+        # `osg-agent-experience/79`: the remedy is composed for the installation
+        # it is printed on, so it is asserted through `install_hint` rather than
+        # transcribed — a literal here would pin one machine's answer.
+        assert install_hint("anthropic") in message
 
     def test_the_two_copies_of_the_rule_are_now_one(
         self, monkeypatch: pytest.MonkeyPatch
@@ -394,7 +398,19 @@ class TestTheDefaultIsShown:
 
         assert "default:     (none)" in out
         assert "no model provider integration is installed" in out
-        assert "pip install 'openstategraph[anthropic]'" in out
+        # `osg-agent-experience/79`: the remedy is composed for the installation
+        # it is printed on, so it is asserted through `install_hint` rather than
+        # transcribed — a literal here would pin one machine's answer.
+        #
+        # Whitespace-normalised, and that is a finding rather than a
+        # convenience: `providers` prints this line through `textwrap.fill`,
+        # which breaks the command across lines at its spaces, and a command
+        # pasted from two lines runs as two commands. Filed as
+        # `osg-agent-experience/83` — it is a second instance of 79's own law
+        # (do not print a fix that cannot be carried out) in a place 79 did
+        # not own, and it predates this change: a short `pip install` line
+        # could already land on a wrap point.
+        assert install_hint("anthropic") in " ".join(out.split())
 
     def test_serve_states_the_default_and_the_root_before_it_binds(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

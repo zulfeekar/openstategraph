@@ -24,6 +24,7 @@ from __future__ import annotations
 import sys
 
 from openstategraph.api.services import WorkflowServices
+from openstategraph.install_hint import install_hint
 from openstategraph.memory import (
     IN_MEMORY_CHECKPOINT,
     MEMORY_FILE_NAME,
@@ -115,7 +116,7 @@ class TestItSaysWhichOneItGot:
             store = build_store(tmp_path)
         message = " ".join(r.getMessage() for r in caplog.records)
         assert type(store).__name__ == "InMemoryStore"
-        assert "pip install 'openstategraph[sqlite]'" in message
+        assert install_hint("sqlite") in message
         assert "memories are in-memory and will NOT survive a restart" in message
 
     def test_retention_without_a_durable_store_is_still_reported(

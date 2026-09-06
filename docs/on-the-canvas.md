@@ -265,10 +265,15 @@ read the same `Database file` field, and both are the file dialect only: a
 warehouse atom's list of readable tables is its allowlist, which you wrote
 yourself.
 
-Each driver ships as an extra — `pip install 'openstategraph[mssql]'` or
-`pip install 'openstategraph[databricks]'`. The base install carries no
-database driver, and a missing one is a refusal that names the extra rather
-than an import error.
+Each driver ships as an extra. The base install carries no database driver,
+and a missing one is a refusal that names the extra rather than an import
+error — **and prints the command that adds it to *this* installation**
+(`osg-agent-experience/79`): a `uv tool` install is repaired with `uv tool
+install --force`, which replaces the environment, so the line carries every
+extra you already have as well as the one you are missing, plus the index
+flags a pre-release needs. The exact spelling comes from
+`openstategraph.install_hint`, which reads how this interpreter was installed
+rather than assuming `pip`.
 
 ---
 

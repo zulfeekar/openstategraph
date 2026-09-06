@@ -161,14 +161,24 @@ class TestTheReportSaysWhatIsStillLeftToDo:
         assert install_hint("mcp") not in capsys.readouterr().out
 
     def test_the_cli_page_says_the_same_two_things(self) -> None:
-        """`24`'s second done-when. The printed report and the page that
-        describes it are two descriptions of one behaviour, and the install
-        line is the half a reader might copy — so it is asserted against
-        `install_hint`, not transcribed."""
+        """`24`'s second done-when, narrowed by `osg-agent-experience/79`.
+
+        This used to assert `install_hint("mcp")` appeared verbatim in the
+        page. That stopped being a check and became an impossibility the day
+        the hint learned to read the installation it is standing in: the line
+        now differs between a `uv tool` install, a virtual environment and a
+        pre-release, so no fixed text in a document can equal it, and a page
+        that printed one would be telling most readers the wrong command.
+
+        What still has to be true is the part `24` was actually about — the
+        page names the extra the report names, and it says the files are read
+        at start-up. The command itself is asserted where it is composed,
+        `test_the_install_hint_can_be_carried_out.py`.
+        """
         page = (
             Path(__file__).resolve().parents[2] / "docs" / "cli.md"
         ).read_text(encoding="utf-8")
         section = page.split("It also points your coding agent", 1)[1]
 
-        assert install_hint("mcp") in section, "the page never names the install line the report prints"
+        assert "[mcp]" in section, "the page never names the extra the report prints"
         assert "restart" in section, "the page never says the files are read at start-up"

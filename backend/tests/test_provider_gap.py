@@ -26,6 +26,7 @@ from __future__ import annotations
 import pytest
 
 from openstategraph.errors import MissingProviderKey, MissingProviderPackage
+from openstategraph.install_hint import install_hint
 from openstategraph.providers import (
     ProviderEnvironment,
     ProviderSpec,
@@ -83,7 +84,7 @@ class TestTheGapIsOneLine:
 
         assert isinstance(error, MissingProviderPackage)
         assert str(error).count("\n") == 0
-        assert "pip install 'openstategraph[ghost]'" in str(error)
+        assert install_hint("ghost") in str(error)
         assert "Initializing" not in str(error)
 
     def test_building_it_does_not_raise(self, ghost) -> None:
@@ -104,7 +105,7 @@ class TestTheGapIsOneLine:
         error = _raise("ghost:spook-1")
 
         assert "GHOST_API_KEY" in str(error)
-        assert "pip install 'openstategraph[ghost]'" in str(error)
+        assert install_hint("ghost") in str(error)
         assert str(error).count("\n") == 0
 
     def test_fixing_only_the_credential_does_not_change_the_class(
@@ -123,7 +124,7 @@ class TestTheGapIsOneLine:
 
         assert type(after) is type(before) is MissingProviderPackage
         assert "GHOST_API_KEY" not in str(after)
-        assert "pip install 'openstategraph[ghost]'" in str(after)
+        assert install_hint("ghost") in str(after)
         assert len(str(after)) < len(str(before))
 
     def test_a_credential_gap_alone_is_still_a_credential_error(
