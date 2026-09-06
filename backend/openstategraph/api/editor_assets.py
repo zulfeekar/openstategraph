@@ -48,6 +48,41 @@ logger = logging.getLogger(__name__)
 #: A `<base>` element already in the document, however it was spelled.
 _BASE_TAG = re.compile(r"<base\b[^>]*>", re.IGNORECASE)
 
+#: What the shell says about itself: *ask me every time*. `no-cache` stores the
+#: document and revalidates it, which with the `ETag` `StaticFiles` already
+#: sends is a 304 rather than a re-download. Absent this header a browser is
+#: allowed to reuse the shell heuristically from `Last-Modified` alone — and a
+#: shell kept across a release names hashed assets the new server does not have
+#: (osg-agent-experience/77).
+SHELL_CACHE_CONTROL = "no-cache"
+
+#: What a content-hashed asset says: its name changes when its bytes do, so
+#: there is nothing to revalidate. This is the half that makes the other half
+#: affordable — one conditional request per load instead of one per file.
+IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+#: Vite's emitted shape — `assets/index-WfQkFQo-.js`, a name, a dash, and the
+#: content hash. Deliberately narrow: a file whose name is stable across
+#: releases (`favicon.svg`) must not be frozen for a year, because nothing
+#: would ever ask for it again and there is no way to take it back.
+_HASHED_ASSET = re.compile(r"(?:^|/)assets/[^/]+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$")
+
+
+def cache_control_for(path: str) -> str:
+    """The one place either header is decided.
+
+    The shell is served from three places that share no code — `StaticFiles`
+    at `/`, the SPA fallback that answers `/w/<slug>` with the same document,
+    and the `/chat` route, which is a plain `HTMLResponse`. A header set on two
+    of the three is the same defect wearing a smaller hat, so every one of them
+    asks this function rather than writing a value.
+
+    Takes the path and nothing else, so the rule is readable and testable
+    without an HTTP client — the same shape `serves_the_editor` uses.
+    """
+    return IMMUTABLE_CACHE_CONTROL if _HASHED_ASSET.search(path) else SHELL_CACHE_CONTROL
+
+
 #: Set by the container, by `openstategraph serve`, and by nobody else.
 SERVE_STATIC_ENV = "OPENSTATEGRAPH_SERVE_STATIC"
 
@@ -232,6 +267,15 @@ def _editor_files(directory: Path, base: str = "") -> Any:
             return HTMLResponse(html)
 
         async def get_response(self, path: str, scope: Any) -> Any:
+            """Every answer leaves here stamped, including the two fallbacks.
+
+            Stamping in `_respond` instead would mean remembering it at four
+            returns; stamping here means the rule cannot be reached around."""
+            response = await self._respond(path, scope)
+            response.headers["cache-control"] = cache_control_for(path)
+            return response
+
+        async def _respond(self, path: str, scope: Any) -> Any:
             if base and path in ("", ".", "/", "index.html"):
                 return self._document()
             try:
@@ -287,7 +331,15 @@ def mount_editor(
     def editor_not_built() -> Any:
         # 503, not 404. The route exists; the thing behind it has not been
         # built yet, and those are different facts with different fixes.
-        return HTMLResponse(editor_missing_html(), status_code=503)
+        #
+        # It carries the shell's own header for the shell's own reason: this
+        # *is* the document at `/` right now, and a browser that kept it would
+        # keep showing "run npm run build" to somebody who just did.
+        return HTMLResponse(
+            editor_missing_html(),
+            status_code=503,
+            headers={"cache-control": cache_control_for("index.html")},
+        )
 
     logger.warning(
         "no built editor found — serving the 'run npm run build' page at /. "

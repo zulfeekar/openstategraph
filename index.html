@@ -6,9 +6,65 @@
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <title>OpenStateGraph — AI Workflow Builder</title>
+    <!--
+      A shell a browser kept across a release names a hashed bundle the new
+      server does not serve, and the only evidence used to be a 404 in a
+      console nobody had open (osg-agent-experience/77). `Cache-Control:
+      no-cache` on this document is the fix; this is what a browser that
+      ignored it — or an intermediary that stripped it — still gets: one
+      sentence instead of a white page.
+
+      A listener rather than an `onerror` attribute on the entry script,
+      because Vite does not keep one. It removes the source tag and emits its
+      own `<script type="module" crossorigin src="./assets/index-<hash>.js">`
+      into this `<head>`, so the attribute is in the repository and never in
+      `dist/`. That is a fallback that only exists where it is never needed,
+      which is why the pin in `src/theShellSaysWhenItIsStale.test.ts` reads
+      the built document too.
+
+      Capture phase, because `error` from a failed subresource does not
+      bubble. Plain, deliberately: no framework, no tokens, no stylesheet —
+      every dependency is another asset that can fail exactly the way this
+      exists to report, and a fallback with a dependency is not a fallback.
+    -->
+    <script>
+      (function () {
+        function reveal() {
+          var notice = document.getElementById('stale-shell');
+          if (notice) notice.hidden = false;
+        }
+        addEventListener(
+          'error',
+          function (event) {
+            var tag = event.target && event.target.tagName;
+            if (tag !== 'SCRIPT' && tag !== 'LINK') return;
+            // The notice may not be parsed yet when a stylesheet fails, so
+            // try now and again once the document is there.
+            reveal();
+            document.addEventListener('DOMContentLoaded', reveal);
+          },
+          true
+        );
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <div
+      id="stale-shell"
+      hidden
+      style="
+        font: 14px/1.5 system-ui, sans-serif;
+        margin: 3rem auto;
+        max-width: 32rem;
+        padding: 1rem;
+        border: 1px solid currentColor;
+        border-radius: 6px;
+        text-align: center;
+      "
+    >
+      This page is from an older build — reload to get the current one.
+    </div>
     <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>

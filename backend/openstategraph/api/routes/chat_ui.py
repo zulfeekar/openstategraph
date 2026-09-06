@@ -20,11 +20,18 @@ def chat_page() -> Any:
     """The customer chat surface (ticket 64) — one self-contained page."""
 
     from openstategraph.api.chat_page import chat_page_html
+    from openstategraph.api.editor_assets import cache_control_for
 
     # Read per request, not the import-time constant: chat.html is not a
     # .py file, so uvicorn's reloader never picks up edits to it — a
     # cached constant serves stale markup until a coincidental restart.
-    return HTMLResponse(chat_page_html())
+    #
+    # And told to revalidate, from the same function the editor's own shell
+    # asks (osg-agent-experience/77). This page is the third shell and the one
+    # a header set beside `StaticFiles` would have missed.
+    return HTMLResponse(
+        chat_page_html(), headers={"cache-control": cache_control_for("chat")}
+    )
 
 
 @router.get("/chat/mermaid.js", include_in_schema=False)

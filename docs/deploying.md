@@ -399,6 +399,31 @@ authentication: on — shared token from OPENSTATEGRAPH_API_TOKEN
 editor  http://127.0.0.1:8000
 ```
 
+## 5. Upgrading on the same port
+
+A release that reuses the port is the ordinary case, and it used to hand every
+returning browser a white page: the shell it had cached named
+`assets/index-<oldhash>.js`, the new server did not have that file, and the
+only evidence was a 404 in a console nobody had open.
+
+The server states its own caching, and you do not configure it:
+
+| What | `Cache-Control` |
+| --- | --- |
+| the shell — `/`, `/index.html`, `/w/<slug>`, `/chat` | `no-cache` |
+| hashed assets — `assets/<name>-<hash>.<ext>` | `public, max-age=31536000, immutable` |
+
+`no-cache` stores the document and revalidates it; the `ETag` already sent
+makes that a 304 rather than a re-download. The `immutable` half is what keeps
+it cheap — a hashed file's name changes when its bytes do, so nothing ever asks
+about it twice.
+
+**If a proxy sits in front, let both through.** A cache that rewrites or drops
+`Cache-Control` on the shell restores exactly the failure above. The shell also
+carries a plain inline fallback that says "this page is from an older build —
+reload" when a script or stylesheet will not load, so a stripped header is a
+sentence rather than a blank page — but it is a backstop, not the fix.
+
 ## Not solved here
 
 Stated so nobody infers otherwise from the presence of a login form:
