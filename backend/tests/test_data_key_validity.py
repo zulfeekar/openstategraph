@@ -146,8 +146,10 @@ class TestDynamicTypesAreSkippedNotSilently:
         }
         plan = WorkflowCompiler().plan(doc)
         assert plan.warnings == []
-        assert any("tool.custom-discovered-thing" in a for a in plan.advisories), (
-            plan.advisories
+        # `osg-agent-experience/89`: the no-field-schema sentence is "not
+        # checked", not advice — it moved from `advisories` to `unchecked`.
+        assert any("tool.custom-discovered-thing" in a for a in plan.unchecked), (
+            plan.unchecked
         )
 
     def test_a_registered_plugin_family_type_is_not_double_reported(self) -> None:
@@ -173,3 +175,4 @@ class TestDynamicTypesAreSkippedNotSilently:
         }
         plan = WorkflowCompiler().plan(doc)
         assert plan.advisories == []
+        assert plan.unchecked == []
