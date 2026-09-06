@@ -170,3 +170,56 @@ class TestNoPinnedVersionOutlivesTheRelease:
             "a version pinned in prose has no way to fail; these have "
             "stopped tracking the wheel:\n" + "\n".join(offenders)
         )
+
+
+#: The README's version badge, whose text is a literal inside a shields.io URL
+#: — `-` doubled and a space written `%20`, which is shields' own escaping.
+BADGE = re.compile(r"img\.shields\.io/badge/version-(?P<text>[^-][^/]*?)-informational\.svg")
+
+
+def badge_text(version: str) -> str:
+    """What the badge must read for `version` — shields' escaping, applied once."""
+    return version.replace("-", "--").replace(" ", "%20")
+
+
+class TestTheVersionBadgeIsNotProse:
+    """stable-beta-public/33.
+
+    The badge read `0.3.0 unreleased` while `pyproject.toml` said `0.3.0rc17`
+    and TestPyPI listed it — the first line of the front page, wrong, for the
+    same reason the root README sat on `0.3.0rc2` through five candidates: a
+    version written into prose has no way to fail. `scripts/prepare_release.py`
+    rewrites it now, from the version it is bumping; this is the half that
+    fails if anybody bumps by hand.
+    """
+
+    def test_the_badge_reads_the_version_that_ships(self) -> None:
+        found = BADGE.search((REPO / "README.md").read_text())
+
+        assert found is not None, "the README has no version badge to check"
+        assert found.group("text") == badge_text(version()), (
+            f"the badge says {found.group('text')!r}; "
+            f"backend/pyproject.toml ships {version()}"
+        )
+
+    def test_the_release_script_is_what_keeps_it_current(self) -> None:
+        """Derived, not remembered — `prepare_release.py` rewrites both.
+
+        Called on a sample rather than on the real page, so this stays a test
+        of the substitution and not a second copy of the version.
+        """
+        import sys
+
+        sys.path.insert(0, str(REPO / "scripts"))
+        from prepare_release import restate_version
+
+        sample = (
+            "[![Version](https://img.shields.io/badge/version-0.1.0-informational.svg)]\n"
+            '    "openstategraph[server,ollama]==0.1.0"\n'
+        )
+
+        rewritten = restate_version(sample, "9.9.9rc1")
+
+        assert badge_text("9.9.9rc1") in rewritten
+        assert "openstategraph[server,ollama]==9.9.9rc1" in rewritten
+        assert "0.1.0" not in rewritten

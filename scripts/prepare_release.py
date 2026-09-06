@@ -5,6 +5,16 @@
 
     1. `backend/pyproject.toml`  version = "0.3.0"
     2. `CHANGELOG.md`            `## 0.3.0 — unreleased` -> `## 0.3.0 — <today>`
+    3. the documented pins       the README version badge, and every
+                                 `openstategraph[...]==X` a reader is told to
+                                 paste, rewritten to the version being shipped
+
+Step 3 is derivation, not decoration (stable-beta-public/33). The badge read
+`0.3.0 unreleased` for the whole of the 0.3.0 candidate train, and the root
+README once sat on `0.3.0rc2` through five of them, because a version written
+into prose has no way to fail. `backend/tests/test_the_first_command_a_stranger_copies.py`
+is the half that goes red when somebody bumps by hand; this is the half that
+means nobody has to.
 
 That diff *is* the release proposal: a maintainer reviewing the "chore: release
 v0.3.0" pull request is reviewing the version bump and the release notes
@@ -37,6 +47,50 @@ PYPROJECT = ROOT / "backend" / "pyproject.toml"
 # epoch, a local version, a `.post` — would be published under rules nobody has
 # written down, so it is refused here rather than discovered at upload.
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?$")
+
+#: Every page that hands a reader a pinned install of *this* package, and the
+#: one badge that states its version. Mirrored — deliberately — by
+#: `PINNING_DOCS` in the test module named above: the script writes them and the
+#: test refuses to let them drift, and neither is the other's implementation.
+#: History is absent from both: `CHANGELOG.md` and `docs/decisions/` record what
+#: was installed *then*, and rewriting a record to satisfy a gate is how it
+#: stops being one.
+def pinning_docs() -> list[Path]:
+    return [ROOT / "README.md", ROOT / "backend" / "README.md", *sorted((ROOT / "docs").glob("*.md"))]
+
+
+#: The text inside the shields.io badge URL, with shields' own escaping (`-`
+#: doubled, a space written `%20`) — so the group replaced here is the version
+#: and never the `-informational` that follows it.
+BADGE = re.compile(r"(?P<lead>img\.shields\.io/badge/version-)(?P<text>[^/]*?)(?P<tail>-informational\.svg)")
+
+#: `openstategraph[server,ollama]==0.3.0rc17` — the pasteable pin.
+PIN = re.compile(r"(?P<lead>openstategraph\[[a-z0-9,\-]+\]==)(?P<version>[0-9][^\s`\"\']*)")
+
+
+def restate_version(text: str, version: str) -> str:
+    """Every badge and every pasteable pin in `text`, rewritten to `version`."""
+    escaped = version.replace("-", "--").replace(" ", "%20")
+    text = BADGE.sub(lambda m: m.group("lead") + escaped + m.group("tail"), text)
+    return PIN.sub(lambda m: m.group("lead") + version, text)
+
+
+def bump_documented_pins(version: str) -> list[str]:
+    """Rewrite the pins the documentation hands a reader. Returns what changed."""
+    touched = []
+    for path in pinning_docs():
+        if not path.is_file():
+            continue
+        before = path.read_text(encoding="utf-8")
+        after = restate_version(before, version)
+        if after != before:
+            path.write_text(after, encoding="utf-8")
+            touched.append(str(path.relative_to(ROOT)))
+    for name in touched:
+        print(f"    {name} now pins {version}")
+    if not touched:
+        print(f"    the documented pins already say {version}")
+    return touched
 
 
 def bump_pyproject(version: str) -> str:
@@ -101,6 +155,7 @@ def main(argv: list[str]) -> int:
     if checked.returncode:
         return checked.returncode
     bump_pyproject(args.version)
+    bump_documented_pins(args.version)
     dated = subprocess.run([*changelog, args.version, "--set-date", args.date])
     if dated.returncode:
         return dated.returncode

@@ -1,8 +1,9 @@
 # OpenStateGraph — AI Workflow Builder
 
+<!-- The `../../` here is GitHub's own convention: it resolves against the repository root on github.com, so the badge survives a rename — a local link checker will call it broken and be wrong (stable-beta-public/33). -->
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.0%20unreleased-informational.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0rc17-informational.svg)](CHANGELOG.md)
 
 > **Who this page is for:** you have installed nothing yet, and you want the
 > stack running. Read straight down — Install, First run, Where to read next —

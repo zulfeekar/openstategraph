@@ -167,6 +167,9 @@ not "is this good?" but **"is this the thing that was tested?"**
 - [ ] **`docs/stability.md` still tells the truth** if any Tier 1 symbol moved.
 - [ ] **No `PLACEHOLDER` remains** in what a stranger will see:
       `grep -rn PLACEHOLDER backend/pyproject.toml site/index.html .github/CODEOWNERS`
+      (`.github/` is held to this by `backend/tests/test_the_code_owner_is_a_person.py`
+      as well, so a placeholder coming back there is a red test rather than an
+      unrun grep — stable-beta-public/33).
 - [ ] Optional but cheap: install the TestPyPI build yourself and use it for
       thirty seconds. The command is in the job summary.
 
@@ -253,12 +256,13 @@ than failing.
 
 ### 4. `CODEOWNERS`
 
-`.github/CODEOWNERS` still ships with `@PLACEHOLDER`. It was written that way
-because the checkout had no remote and the handle was not a fact; the remote
-and the handle are both facts now, so this is an outstanding edit rather than a
-deferral. An unresolvable owner is silently ignored — and, with *Require review
-from Code Owners* enabled, blocks every pull request. Replace it before
-enabling that setting.
+`.github/CODEOWNERS` named `@PLACEHOLDER` until stable-beta-public/33, because
+the checkout had no remote and the handle was not a fact. It has one now
+(`gh repo view --json owner --jq .owner.login`), the file names it, and
+`backend/tests/test_the_code_owner_is_a_person.py` fails if a placeholder
+returns. An unresolvable owner is silently ignored — and, with *Require review
+from Code Owners* enabled, blocks every pull request with a rule that requests
+nobody; that is why this is a test and not a checklist line.
 
 ### 5. Labels
 

@@ -125,16 +125,25 @@ fork's pull request can read every secret in the table below.
 
 ### 5a. CODEOWNERS resolves, or the review requirement is theatre
 
-`.github/CODEOWNERS` exists and its catch-all owner is still literally
-`@PLACEHOLDER`. GitHub's rule: *"If you specify a user or team that doesn't
+`.github/CODEOWNERS` exists and its catch-all owner is `@zulfeekar`, derived
+from the remote rather than typed (stable-beta-public/33). GitHub's rule: *"If you specify a user or team that doesn't
 exist or has insufficient access, a code owner will not be assigned"*
 ([About code owners](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners),
 which also fixes the file's three legal locations: `.github/`, the repository
 root, or `docs/`). So *Require review from Code Owners* over an unresolvable
-owner requests nobody. Before the repository is public:
+owner requests nobody. The grep below stays in the checklist because the other
+two files are not covered by a test; `.github/` is
+(`backend/tests/test_the_code_owner_is_a_person.py`).
 
 ```bash
 grep -rn PLACEHOLDER .github/CODEOWNERS backend/pyproject.toml site/index.html
+```
+
+If the handle ever changes — a rename, a transfer, an organisation — read it
+from the remote again rather than editing from memory:
+
+```bash
+gh repo view --json owner --jq .owner.login
 ```
 
 ## 6. Secrets and variables
