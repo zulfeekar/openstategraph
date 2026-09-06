@@ -159,10 +159,12 @@ __all__ = [
     "REDUNDANT_TOOL_CALL",
     "UNSTABLE_TOOL_RESULT",
     "NODE_FAILURE",
+    "EVERY_TOOL_CALL_FAILED",
     "FindingRun",
     "RunFinding",
     "grouping_key",
     "normalised_arguments",
+    "refusal_key",
     "run_findings",
 ]
 
@@ -177,6 +179,22 @@ UNSTABLE_TOOL_RESULT = "unstable-tool-result"
 #: for a live run. Fires on **one** occurrence, not two — unlike A and B, a
 #: repeat is not what makes a failure worth reporting.
 NODE_FAILURE = "node-failure"
+
+#: E — every tool call this conversation made was refused, and refused the
+#: same way. `osg-agent-experience/74`.
+#:
+#: A and B need the *same call* twice, so three different SELECTs against a
+#: warehouse that is refusing logins group into nothing at all; C reads the
+#: compiler's failure marker, and a node whose tool answered `Error: …` did
+#: not fail — it produced text. So a day of `HYT00 Login timeout` refusals
+#: produced no finding, no card, and was found by hand.
+#:
+#: **It is not a fourth spelling of A.** Where A and B ask *was this asked
+#: twice*, this asks *did anything come back at all* — the same question
+#: `RunSummary.every_call_failed` asks of a live run, and the same
+#: conjunction: at least one call was made, and not one of them returned
+#: anything. A run that called nothing is never accused.
+EVERY_TOOL_CALL_FAILED = "every-tool-call-failed"
 
 #: The tail `api.threads._cap` appends to a value it had to cut short.
 #:
@@ -297,6 +315,71 @@ def normalised_arguments(text: str) -> str:
     except (TypeError, ValueError):
         return text.strip()
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def refusal_key(result: str) -> str:
+    """What two calls refused for the same reason share — the first line.
+
+    `osg-agent-experience/74`. The rest of a refusal varies between calls and
+    says nothing new: our own `ToolResult.failure` prose appends whatever the
+    caller was doing, a driver appends the statement it was given, and an
+    Azure AD refusal appends the application id it echoed back. Keying on the
+    whole body splits one dead credential into forty problems, which is the
+    outcome this finding exists to avoid.
+
+    Whitespace-stripped, and the marker `abc/tool.TOOL_FAILURE_PREFIX` puts in
+    front is kept: it is what says this is a refusal rather than an answer
+    that happens to mention an error, and it is the same rule
+    `compile/reporting.tool_report` counts `failed` by.
+    """
+    return result.strip().splitlines()[0].strip() if result.strip() else ""
+
+
+def _thread_refusal(history: ThreadHistoryResponse) -> tuple[str, str] | None:
+    """`(tool, refusal)` when every call this thread made was refused the same
+    way — otherwise `None`. `osg-agent-experience/74`.
+
+    Read off the calls the reader already holds, and never off the `tool_use`
+    state channel: `RunSummary` is the live reading of the same fact, but the
+    fields it needs (`calls`, `failed`, `last_error`) were added to that
+    channel by `osg-agent-experience/50`, so on the recorded runs this finding
+    exists for it reads a run that made no calls. What is shared instead is
+    the **rule** — `TOOL_FAILURE_PREFIX`, imported from the one module that
+    owns it, so "what a failed call looks like" has one spelling here and in
+    `tool_report`.
+
+    Strict in trusting, three ways, and each narrowness is deliberate:
+
+    - **A call with no stored answer is not a failed call.** `""` on a
+      `ThreadToolCall` means no answer was recorded — a run that ended or was
+      stopped — and reading it as a refusal accuses a run that was merely
+      interrupted. A thread of nothing but those says nothing.
+    - **One answer that came back clears the whole thread**, the same
+      conjunction `every_tool_call_failed` uses one layer along: a document
+      whose other agent did the reading is not a run without evidence.
+    - **Two different refusals are not one refusal.** Every call failing in
+      two different ways is a run with two problems, and this finding claims
+      one — it is keyed by a refusal, and a key that is true of half the
+      evidence is not a key.
+    """
+    from openstategraph.abc.tool import TOOL_FAILURE_PREFIX
+
+    tools: list[str] = []
+    refusals: set[str] = set()
+    answered = 0
+    for step in history.steps:
+        for call in step.tool_calls or []:
+            if not call.result.strip():
+                continue
+            answered += 1
+            if not call.result.lstrip().startswith(TOOL_FAILURE_PREFIX):
+                return None
+            refusals.add(refusal_key(call.result))
+            if call.name and call.name not in tools:
+                tools.append(call.name)
+    if not answered or len(refusals) != 1:
+        return None
+    return (", ".join(tools) or "a tool"), refusals.pop()
 
 
 def grouping_key(name: str, arguments: str) -> tuple[str, str] | None:
@@ -431,6 +514,19 @@ def _findings_in(
     # `step.namespace`: that field merges a fan-out's sibling instances into
     # one display name on purpose, which is exactly the shape this needs to
     # keep apart.
+    # E first, because it decides whether A and B may be reported at all —
+    # `osg-agent-experience/74`. Three *identical* refused calls do group, and
+    # the card that came out said "called 3 times with an identical result —
+    # real cost, **no error**, fix is a tool note". A day of failed logins
+    # filed as waste, with the words "no error" in it, is worse than the
+    # silence this ticket set out to fix, so on a thread where nothing came
+    # back the waste findings are not emitted: there is no repetition to
+    # avoid, there is a connection to repair.
+    #
+    # C is unaffected. A node that failed while the warehouse was refusing
+    # logins failed, and the marker saying so is still evidence.
+    refused = _thread_refusal(history)
+
     groups: dict[tuple[str, str], list[tuple[str, str, str]]] = {}
     total = 0
     for step in history.steps:
@@ -477,7 +573,39 @@ def _findings_in(
     truncation = history.truncation
 
     found: list[RunFinding] = []
+    if refused is not None:
+        refused_tool, refusal = refused
+        steps = [
+            (step.checkpoint_id, step.checkpoint_ns)
+            for step in history.steps
+            for call in step.tool_calls or []
+            if call.result.strip()
+        ]
+        found.append(
+            RunFinding(
+                name=EVERY_TOOL_CALL_FAILED,
+                thread_id=thread_id,
+                workflow_slug=_attributed_slug(
+                    (namespace for _, namespace in steps), package_of, fallback
+                ),
+                tool=refused_tool,
+                # The refusal rides in `arguments`, the same field
+                # `NODE_FAILURE` already carries its reason in: a finding's
+                # own words about what went wrong, for the classifier to
+                # quote rather than elaborate on.
+                arguments=refusal,
+                calls=len(steps),
+                distinct_results=1,
+                result_digests=[_digest(refusal)],
+                checkpoints=[checkpoint for checkpoint, _ in steps],
+                thread_tool_calls=total,
+                runs=runs,
+                truncation=truncation,
+            )
+        )
     for (tool, arguments), seen in groups.items():
+        if refused is not None:
+            break
         if len(seen) < 2:
             continue
         digests: list[str] = []

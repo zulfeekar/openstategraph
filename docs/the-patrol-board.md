@@ -233,6 +233,26 @@ rather than left to whoever reads the card.
 
 ---
 
+## 7a. A run where nothing came back is not waste, and its card is keyed by the refusal
+
+The patrol's first three kinds all ask *was this asked twice*, and a warehouse
+that has stopped answering is not asked twice — three different SELECTs are
+three different calls, so they group into nothing. That is how a full day of
+*HYT00 Login timeout expired* refusals produced no card at all and was
+found by hand
+(`osg-agent-experience/74`). `every-tool-call-failed` is the kind that asks
+the other question — *did anything come back* — and it fires when every call a
+run made was refused, and refused the same way.
+
+Its card is keyed by the **refusal's first line**, not by the thread, because
+one expired client secret refuses every call across every conversation
+somebody opens: one card, with the count of runs and refused calls on it,
+rather than forty. The story quotes the refusal, names the tool type and the
+**names** of the environment variables its connection reads — never a value —
+and the provider's own error code when there is one.
+
+---
+
 ## 8. One board per project, and the project has an identity
 
 Cards live in a SQLite file called `kanban.sqlite`, keyed by

@@ -19,6 +19,8 @@ over the same evidence agree.
 
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -27,7 +29,14 @@ from openstategraph.api.audience import Audience
 from openstategraph.api.services import WorkflowServices
 from openstategraph.api.threads import savers_for
 from openstategraph.kanban_store import ensure_schema, file_card, kanban_store_path, read_card
-from openstategraph.run_findings import NODE_FAILURE, REDUNDANT_TOOL_CALL, UNSTABLE_TOOL_RESULT, RunFinding, run_findings
+from openstategraph.run_findings import (
+    EVERY_TOOL_CALL_FAILED,
+    NODE_FAILURE,
+    REDUNDANT_TOOL_CALL,
+    UNSTABLE_TOOL_RESULT,
+    RunFinding,
+    run_findings,
+)
 from openstategraph.run_sinks import read_runs, run_store_path
 
 
@@ -89,6 +98,139 @@ class FindingClassification:
     title: str
 
 
+#: Azure AD's own error code, when the refusal carried one
+#: (`osg-agent-experience/73`, which is what made it reachable — the ODBC
+#: driver had been swallowing it and hanging instead). `AADSTS7000222` is
+#: *the client secret is expired*, and a card that holds it and does not print
+#: it has thrown away the one string that ends the investigation.
+_AAD_CODE = re.compile(r"\bAADSTS\d+\b")
+
+
+def refusal_task_id(project_id: str, refusal: str) -> str:
+    """The one card forty runs of one refusal share — `osg-agent-experience/74`.
+
+    `02`'s key is the **thread**, which is right for waste: a repeat is a
+    property of one conversation. A refusal is not — the try project's
+    warehouse refused every call for a day across however many threads
+    somebody happened to open, and a per-thread key would have filed a card
+    per thread for one expired secret.
+
+    A digest rather than the refusal itself, because a `task_id` is a key in a
+    store and appears in a URL, and a driver's message is prose with quotes
+    and newlines in it. Twelve characters, the same width and the same reason
+    as `run_findings._DIGEST_CHARS`.
+    """
+    digest = hashlib.sha256(refusal.encode("utf-8")).hexdigest()[:12]
+    return f"{project_id}:refusal:{digest}"
+
+
+def _tool_types(tool: str) -> list[str]:
+    """The node types behind the tool names a finding reported.
+
+    Resolved through `process_tool_layer` — the read-only door onto the
+    registry the runtime itself binds from — rather than a table here. A
+    second table would be a second answer to *what type is `mssql_query`*,
+    and this module would be the one holding the stale copy.
+
+    A name nothing in the registry claims resolves to nothing and is simply
+    absent from the card, which is the honest answer for a package's own
+    `tools/` leaf: the patrol reads a store, not a workspace.
+    """
+    try:
+        from openstategraph.api.registries import process_tool_layer
+
+        builtin, _ = process_tool_layer()
+    except Exception:  # pragma: no cover - a registry that will not build
+        return []
+    names = {part.strip() for part in tool.split(",") if part.strip()}
+    return sorted(
+        node_type
+        for node_type, leaf in builtin.items()
+        if str(getattr(leaf, "name", "")) in names
+    )
+
+
+def connection_variables(node_types: list[str]) -> list[str]:
+    """The environment variables these tool types read to reach their world.
+
+    **Names, never values** — nothing here touches `os.environ`, and a card is
+    a board row that whoever opens the board can read.
+
+    A registry rather than a chain of `if`s, so a second connector is a
+    registration and not an edit here (`CLAUDE.md`'s **O**), and every entry
+    imports the tuple its own module already owns rather than restating it —
+    a variable's name spelled twice is the drift this repository names by
+    name.
+    """
+    found: list[str] = []
+    for node_type in node_types:
+        supply = _CONNECTION_VARS.get(node_type)
+        if supply is None:
+            continue
+        for name in supply():
+            if name not in found:
+                found.append(name)
+    return found
+
+
+def _mssql_variables() -> tuple[str, ...]:
+    from openstategraph.mssql_connection import AAD_VARS, PART_VARS, SQL_AUTH_VARS
+    from openstategraph.prebuilt_mssql import DEFAULT_CONNECTION_ENV
+
+    return (DEFAULT_CONNECTION_ENV, *PART_VARS, *AAD_VARS, *SQL_AUTH_VARS)
+
+
+#: `node_type -> the names of the variables its connection reads`. Lazy
+#: callables because a leaf's module pulls optional drivers in behind it and
+#: the patrol must stay a reader of files.
+_CONNECTION_VARS: dict[str, Callable[[], tuple[str, ...]]] = {
+    "tool.mssql-query": _mssql_variables,
+}
+
+
+def _every_call_failed_classification(finding: RunFinding) -> FindingClassification:
+    """`osg-agent-experience/74`'s card, in the finding's own words.
+
+    Four things, in the order somebody standing at a red board needs them:
+    what was refused, in the refusal's own text; which tool type it was, so
+    the reader knows what to go and configure; which variables that type
+    reads, by name; and the AAD code when Azure AD supplied one, because that
+    string is the end of the investigation rather than the start of it.
+    """
+    refusal = finding.arguments.strip() or "no message"
+    types = _tool_types(finding.tool)
+    reason = (
+        f"Every one of this run's {finding.calls} tool "
+        f"{'call' if finding.calls == 1 else 'calls'} was refused, all of them "
+        f'the same way: "{refusal}". Nothing this run answered rests on a '
+        "result, because no result arrived."
+    )
+    if types:
+        reason += f" The tool is {finding.tool} ({', '.join(types)})."
+    else:
+        reason += f" The tool is {finding.tool}."
+    variables = connection_variables(types)
+    if variables:
+        reason += (
+            " Its connection is configured by "
+            f"{', '.join(variables)} — check those variables are set and "
+            "current; their values are not printed here and must not be."
+        )
+    code = _AAD_CODE.search(refusal)
+    if code:
+        reason += (
+            f" Azure AD named the cause itself: {code.group(0)} — look that "
+            "code up rather than re-running the query."
+        )
+    return FindingClassification(
+        kind="bug",
+        category="bug",
+        priority="high",
+        reason=reason,
+        title=f"Every {finding.tool} call in this run was refused the same way",
+    )
+
+
 def _redundant_tool_call_priority(calls: int) -> str:
     if calls >= 5:
         return "high"
@@ -104,6 +246,8 @@ def classify_finding(finding: RunFinding) -> FindingClassification:
     filing a card that day. `05`'s model-driven classifier, if it ever
     lands, replaces this function's *body*, never its callers.
     """
+    if finding.name == EVERY_TOOL_CALL_FAILED:
+        return _every_call_failed_classification(finding)
     if finding.name == NODE_FAILURE:
         return FindingClassification(
             kind="bug",
@@ -213,11 +357,18 @@ def run_patrol(
     once a card exists for a `task_id`, a later patrol never touches it
     again, even if the same finding reappears.
 
-    **One card per thread, by construction** (`task_id = project_id +
-    thread_id`) — a thread with more than one finding is classified by its
+    **One card per thread for waste, by construction** (`task_id = project_id
+    + thread_id`) — a thread with more than one finding is classified by its
     single most severe finding (`NODE_FAILURE` > `UNSTABLE_TOOL_RESULT` >
     `REDUNDANT_TOOL_CALL`), and the reason names how many others were seen
     rather than silently dropping them.
+
+    **And one card per refusal for `EVERY_TOOL_CALL_FAILED`**
+    (`osg-agent-experience/74`), which is the one kind whose unit is not the
+    thread: a credential that has stopped working refuses every call in every
+    conversation anybody opens, so the thread key would file a card per
+    thread for one problem. `refusal_task_id` is that key, and the card
+    carries the count across runs.
 
     `savers`/`records` are the same injection seam `run_findings` itself
     exposes — a test operates on fake checkpoints rather than a real
@@ -265,9 +416,18 @@ def run_patrol(
 
     findings = run_findings(savers, records, audience=Audience.DEVELOPER)
 
+    # Two passes, because this map has two units of "one problem"
+    # (`osg-agent-experience/74`). Waste is a property of a conversation, so
+    # `02`'s key is the thread. A refusal is not: one expired client secret
+    # refused every call for a day across every thread anybody opened, and a
+    # per-thread key would have filed a card per thread for it.
+    by_refusal: dict[str, list[RunFinding]] = {}
     by_thread: dict[str, list[RunFinding]] = {}
     for finding in findings:
-        by_thread.setdefault(finding.thread_id, []).append(finding)
+        if finding.name == EVERY_TOOL_CALL_FAILED:
+            by_refusal.setdefault(finding.arguments, []).append(finding)
+        else:
+            by_thread.setdefault(finding.thread_id, []).append(finding)
 
     severity = {NODE_FAILURE: 0, UNSTABLE_TOOL_RESULT: 1, REDUNDANT_TOOL_CALL: 2}
 
@@ -276,6 +436,39 @@ def run_patrol(
 
     filed: list[str] = []
     skipped: list[str] = []
+
+    for refusal, refusal_findings in by_refusal.items():
+        task_id = refusal_task_id(project_id, refusal)
+        try:
+            read_card(db, task_id)
+            skipped.append(task_id)
+            continue
+        except KeyError:
+            pass
+
+        classification = classify_finding(refusal_findings[0])
+        threads = len({f.thread_id for f in refusal_findings})
+        calls = sum(f.calls for f in refusal_findings)
+        reason = classification.reason + (
+            f" Seen in {threads} run{'' if threads == 1 else 's'}, "
+            f"{calls} refused call{'' if calls == 1 else 's'} in total — one "
+            "card, because it is one problem."
+        )
+        file_card(
+            db,
+            task_id=task_id,
+            board="workflows",
+            kind=classification.kind,
+            category=classification.category,
+            title=classification.title,
+            priority=classification.priority,
+            area="backend",
+            priority_reason=reason,
+        )
+        filed.append(task_id)
+        if on_card_filed is not None:
+            on_card_filed(task_id, classification.title)
+
     for thread_id, thread_findings in by_thread.items():
         task_id = f"{project_id}:{thread_id}"
         try:
