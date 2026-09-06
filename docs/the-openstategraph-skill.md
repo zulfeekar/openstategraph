@@ -30,11 +30,13 @@ describe the workflow. The server's presence is enough.
    cannot invent node types, and this is what stops it trying.
 3. **It interviews you, one question per turn.** The questions come from your
    concept, not from a script, and each one carries a recommended answer so
-   you can agree in a word. It keeps going until eight dimensions are settled:
+   you can agree in a word. It keeps going until nine dimensions are settled:
    input, output, which node types carry which step, where judgement belongs,
-   what the tools fetch, what may not be invented, the budgets, and what
-   "done" looks like. **"We do not know yet" is a legal answer** — an
-   explicitly accepted gap is settled; a silent one is not.
+   what the tools fetch, what may not be invented, what unit every pinned
+   numeric column carries, the budgets, and what "done" looks like. **"We do
+   not know yet" is a legal answer** — an explicitly accepted gap is settled;
+   a silent one is not. (This line said eight until `osg-agent-experience/81`
+   noticed it; `75` added the units question and this page did not follow.)
 4. **It recommends a shape, and says what it rejected.** Before a single card
    exists it asks the one question the interview does not: *what in this
    concept is going to multiply?* — specialists, sources, tenants, teams,
@@ -60,6 +62,15 @@ describe the workflow. The server's presence is enough.
    failing test, watch it fail, make it pass, **break the fix and watch it
    fail again**, commit, mark it finished with the commit. The board refuses a
    finished card that carries no commit.
+9. **It proves the work before it tells you it is done.** The closing step is
+   a gate, not a summary: `validate` must print no problems **and** no notes —
+   the same checks the editor draws in red on the canvas, so nobody has to
+   open a browser to find out — and one smoke run must end at exactly one
+   exit. Only then does the brief get written, and it opens with **Not clean
+   yet** and every remaining warning quoted, or the words *no warnings*. This
+   step exists because a router was once reported finished with green tests, a
+   VALID verdict, and four red diagnostics on the canvas nobody had looked at
+   (`osg-agent-experience/81`).
 
 ## The four files `init` writes for your agent
 

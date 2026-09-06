@@ -541,6 +541,14 @@ resolution lives in `agent_config.resolve_server_command` and the wording in
 `agent_config.command_note` — this file gained the call, the wrap and a comment
 saying why that one line may not be broken on hyphens.
 
+**1694 -> 1703** (`osg-agent-experience/81`, 2026-09-06). Nine lines, and all
+nine are `_plan_advisories` and the one call that folds it into `validate`'s
+notes. The channel already existed and the other door onto validation already
+printed it; this command built its own report and never read it, so a node the
+canvas draws in red — a mount or an exit with nothing wired into it — was
+invisible to the only door a coding agent has. The advice-not-verdict rule is
+the comment beside the call, not a second implementation of it.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -1264,7 +1272,7 @@ it.
 RECORDED: dict[str, Recorded] = {
     "kanban_store.py": Recorded(690, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
-    "cli.py": Recorded(1694, CLI),
+    "cli.py": Recorded(1703, CLI),
     "compile/workflow_compiler.py": Recorded(1018, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

@@ -641,6 +641,28 @@ def _compiler_findings(package: Path) -> tuple[list[str], list[str]]:
         workflow.close()
 
 
+def _plan_advisories(document: dict[str, Any]) -> list[str]:
+    """`plan.advisories` for one document — the channel MCP's door already reads.
+
+    Derived here the way `validation.validate_document` derives it, rather than
+    scraped out of `ValidateWorkflowTool`'s printed report: that report's `- `
+    lines are read by `cmd_validate` as *problems*, so an advisory riding that
+    text would move an exit code the channel is defined never to move.
+
+    Best-effort, and deliberately silent on failure. A plan that raises here
+    has already been reported by `ValidateWorkflowTool` or by
+    `_compiler_findings`; a traceback out of an advisory would replace a
+    working command's answer with a crash over advice.
+    """
+    from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+    inner = document.get("document", document) if isinstance(document, dict) else document
+    try:
+        return list(WorkflowCompiler().plan(inner).advisories)
+    except Exception:  # noqa: BLE001 - advice, never the command's verdict
+        return []
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     """The compiler's own plan and findings, via the seam MCP already uses.
 
@@ -747,6 +769,20 @@ def cmd_validate(args: argparse.Namespace) -> int:
     # above searches and the same one a run will resolve a path-valued field
     # against, so `examples/sql-qa` answers about `examples/`.
     schema = [f.message for f in document_findings(document, workflows_root=manifest.parent.parent)]
+    # The fourth channel, and the one the canvas draws in red while this
+    # command was silent (`osg-agent-experience/81`). `plan.advisories` names
+    # every node the entry preference declines to start — a mount or an exit
+    # with nothing wired into it, which never runs (`80`) — and the *other*
+    # door onto validation, `validation.validate_document`, has appended them
+    # since that ticket while this one built its own report and never read the
+    # channel. Two doors of one product answering differently about one
+    # document is exactly what a closing gate cannot be written against.
+    #
+    # A **note**, never a problem: `80` ruled this channel one that can never
+    # move VALID to INVALID, and this command holds no opinion of its own
+    # about a channel's class (see `_compiler_findings`). A `validate` that
+    # failed CI over an advisory would have the advisory suppressed instead.
+    advisories = _plan_advisories(document)
     found = [line[2:] for line in report.splitlines() if line.startswith("- ")]
     # `plan.warnings` reaches this command twice — through the seam above and
     # again on `failure_warnings` — and one problem said once is the point.
@@ -758,6 +794,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         # one answer. A VALID followed by a list of problems is the shape
         # ticket 53 removed from this command.
         report = "\n".join(["PROBLEMS FOUND:", *(f"- {p}" for p in problems), "", topology])
+    notes = [*notes, *(a for a in advisories if a not in notes)]
     if notes:
         # Under their own heading, below the verdict, because that is what a
         # note *is*: a report cannot move the exit code, so printing one among

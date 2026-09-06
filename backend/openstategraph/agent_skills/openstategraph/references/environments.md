@@ -1,6 +1,6 @@
 # Which environment am I in?
 
-Read this when step 13 of `SKILL.md` is the step you are on, or whenever an
+Read this when step 12 of `SKILL.md` is the step you are on, or whenever an
 install does not behave.
 
 ## Two installs, and they are not the same thing

@@ -990,3 +990,114 @@ class TestEveryCountedClaimIsMeasured:
         assert cited <= set(expanded), (
             f"a tweak is told to run steps {sorted(cited)} of a loop that has {expanded}"
         )
+
+
+class TestTheClosingGate:
+    """`osg-agent-experience/81`. A session built the try project's router from
+    this sheet, ran the package tests (green) and `validate` (VALID), wrote the
+    closing brief and reported done. The owner opened the same document in the
+    editor and read four red diagnostics off the canvas: three mounts with no
+    inbound edge, and a static exit with nothing wired to its `when` port.
+
+    Nothing the agent did was against the sheet. The closing step asked for a
+    brief, next steps and a diagram, and **never asked for proof** — so "tests
+    green and VALID" was allowed to stand as "clean".
+
+    The closing step is a gate now, and what is pinned is the *shape* of it, not
+    its wording:
+
+    - it is a numbered list of doors, and **every door it names is real** —
+      derived from the gate's own text against the parser and the tool table,
+      so a door renamed in the software fails here rather than on a stranger's
+      machine mid-build;
+    - the gate is quoted **before** the brief is written, which is the whole
+      ordering the ticket is about;
+    - the brief opens with the **"Not clean yet"** block, or the words that say
+      there is nothing to list. A block a reader may silently omit is the state
+      the sheet was already in.
+
+    Deliberately not pinned: how many doors, or which. The gate is four today;
+    a fifth is somebody's improvement and not this test's business.
+    """
+
+    def _section(self) -> str:
+        text = SHEET.read_text(encoding="utf-8")
+        headings = list(re.finditer(r"^##\s+\d+\.\s+(.*)$", text, re.MULTILINE))
+        for position, match in enumerate(headings):
+            if "gate" not in match.group(1).lower():
+                continue
+            end = headings[position + 1].start() if position + 1 < len(headings) else len(text)
+            return text[match.start() : end]
+        raise AssertionError(
+            "no numbered step of the sheet is a gate: "
+            f"{[m.group(1) for m in headings]}"
+        )
+
+    def _doors(self) -> list[str]:
+        """Every numbered line of the gate, as written."""
+        return [
+            line.strip()
+            for line in self._section().splitlines()
+            if re.match(r"^\d+\.\s", line.strip())
+        ]
+
+    def test_the_gate_is_a_numbered_list_of_doors(self) -> None:
+        doors = self._doors()
+        assert len(doors) >= 3, f"the closing step is not a list of steps to run: {doors}"
+
+    def test_every_door_the_gate_names_can_be_called(self) -> None:
+        """Derived, both halves. A gate whose second line names a verb argparse
+        rejects is a shell error in the middle of a build the developer is
+        watching — and a gate an agent cannot run is one it will skip."""
+        section = self._section()
+        verbs = _verbs()
+
+        commands = {
+            match.group(1)
+            for match in INVOCATION.finditer(section)
+        }
+        unknown = sorted(verb for verb in commands if verb not in verbs)
+        assert not unknown, f"the gate tells an agent to type verbs argparse rejects: {unknown}"
+        assert commands, "the gate names no command at all"
+
+        tools = {match.group(1) for match in TOOL_IN_PROSE.finditer(section)}
+        missing = sorted(name for name in tools if name not in EXPOSED_TOOLS)
+        assert not missing, f"the gate names MCP tools the server does not expose: {missing}"
+        assert tools, "the gate offers no MCP door beside the command line"
+
+    def test_the_gate_is_run_before_the_brief_is_written(self) -> None:
+        """The defect itself, as one assertion: a gate quoted after the brief is
+        a summary of work already reported done."""
+        section = self._section()
+        first_door = section.index(self._doors()[0])
+
+        assert "before you write a word" in section, (
+            "the gate no longer says when it runs, which is the only thing that "
+            "made it a gate rather than a checklist"
+        )
+        assert first_door < section.index("Not clean yet"), (
+            "the brief's opening block is written above the gate that fills it in"
+        )
+
+    def test_the_brief_opens_with_the_not_clean_yet_block(self) -> None:
+        section = self._section()
+
+        assert "Not clean yet" in section
+        #: The escape hatch has to be named too, or an agent with nothing to
+        #: report has no sanctioned way to say so and will simply omit the block.
+        assert "no warnings" in section, (
+            "the block has no stated form for a clean gate, so a clean run has "
+            "no way to say so and the block becomes optional"
+        )
+
+    def test_the_gate_says_a_browser_look_is_not_required(self) -> None:
+        """The ticket's fourth line. Without it an agent with no browser reads
+        the gate as unrunnable and drops the whole of it."""
+        #: Whitespace-flattened and stripped of emphasis: this sheet is hard
+        #: wrapped and the sentence is bolded, so a literal match would pin
+        #: where the author broke a line rather than what the line says.
+        flat = " ".join(self._section().replace("*", "").split())
+
+        assert "browser look is not required" in flat, (
+            "the gate never says whether the canvas has to be opened by hand"
+        )

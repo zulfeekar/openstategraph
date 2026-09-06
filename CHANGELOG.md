@@ -79,6 +79,18 @@
   wheel; the provenance moved into comments beside the strings.
 
 ### Fixed
+- **`validate` prints the nodes the canvas draws in red, and the skill sheet's
+  closing step is a gate** (`osg-agent-experience/81`). A session built a router
+  from the shipped sheet, ran the package tests (green) and `validate` (VALID),
+  wrote the closing brief and reported done; the owner opened the same document
+  and read four red diagnostics off the canvas. Both halves were real. The
+  advisories naming a mount or an exit with nothing wired into it existed — `80`
+  added them — but only `validation.validate_document`, the door MCP calls,
+  printed them, while `cli.cmd_validate` built its own report and never read the
+  channel. They now reach the command under `Notes:`, where they can move no
+  exit code. And the sheet's step 10 is a gate quoted **before** the brief is
+  written, with the brief opening on a **Not clean yet** block listing every
+  remaining warning verbatim, or the words *no warnings*.
 - **A connection fault told the model to rewrite a `SELECT` no server had seen**
   (`osg-agent-experience/78`). `tool.mssql-query` opened the connection and ran
   the statement inside one `try`, so an ODBC `HYT00 Login timeout expired` — a
