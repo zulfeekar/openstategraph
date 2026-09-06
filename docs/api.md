@@ -360,6 +360,14 @@ Each row is one statement a tool was actually handed and answered:
   DSN password, an ODBC `PWD=`, a bearer token or a key-shaped literal found
   *inside* a statement or its result is replaced with `[redacted]` — visibly,
   so nothing is removed silently.
+- **A mounted workflow's statements are here too, under the mount's path**
+  (`osg-agent-experience/88`). A mount is a closure over another workflow's
+  run, so nothing crosses that boundary the mount does not carry across; until
+  it carried this, a composition that reached the warehouse and published a
+  breakdown recorded no statements at all, while the same lens run flat
+  recorded them. `node` reads `<mount>/<node>`, to any depth
+  (`<mount>/<inner mount>/<node>`) — the same path the streaming door builds
+  from a frame.
 - **Developer only.** It quotes node ids, tool names, table names and literal
   values out of the data. The customer gets the answer.
 

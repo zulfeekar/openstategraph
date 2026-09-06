@@ -709,6 +709,31 @@ def _subgraph(self: "NodeRuntime", node_id: str, node: dict[str, Any], plan: Com
         }
         if inside:
             update["nested_outputs"] = inside
+        # And what the child's tools were actually asked
+        # (`osg-agent-experience/88`). `tool_use` is the run's only record of
+        # the statements it sent — `executed_statements.statements_executed`
+        # reads it and nothing else, and `runs.sqlite`'s `statements` column
+        # is that reading — so a composition that did not fold it published a
+        # breakdown from a warehouse beside an empty list of what it asked.
+        # Measured across five recorded runs of one adopter's analyst workflow on 2026-09-06: the flat
+        # workflow recorded its statement, the four routed through mounts
+        # recorded none, and a card about one of their figures was closed on
+        # a rule because the statement behind it could not be read.
+        #
+        # **One call, not two.** `outputs` needs both the child's own map and
+        # its `nested_outputs`, because the child keeps those apart; the
+        # child's `tool_use` is one map that already holds its own mounts'
+        # folds, so prefixing it once carries every level — `mount-cargo/`
+        # over `mount-inner/lens-sql`, which is the same path
+        # `nested_record` mints for the other four keys and the same one the
+        # streaming door builds from a frame's own path.
+        #
+        # The mount writes no row of its own: it called no tool, and a row
+        # saying otherwise would make `used_no_tools` and every grounding
+        # gate read a caller as a caller's tool.
+        ran_inside = nested_record(node_id, final.get("tool_use"))
+        if ran_inside:
+            update["tool_use"] = ran_inside
         # And the child's force-passes. Found while verifying 16: the
         # streaming door reported `Grader "mount-web/grader1" ran out of
         # attempts…` and the blocking door said nothing, because `forced`
