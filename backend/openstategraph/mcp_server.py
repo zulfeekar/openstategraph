@@ -75,8 +75,6 @@ from openstategraph.step_budget import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from mcp.server.fastmcp import Context as _MCPContext
 
     from openstategraph.abc.kanban_store import IKanbanStore

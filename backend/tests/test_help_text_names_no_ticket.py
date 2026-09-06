@@ -74,7 +74,26 @@ def _help_strings(parser: argparse.ArgumentParser) -> list[tuple[str, str]]:
         for pseudo_action in getattr(action, "_choices_actions", []):
             if isinstance(pseudo_action.help, str):
                 strings.append((f"{where} {pseudo_action.dest}", pseudo_action.help))
+    # An argument group prints its own title and description above the
+    # arguments it holds, and neither is an action, so the loop above cannot
+    # see them. Nothing in this CLI passes either today — the walk is widened
+    # because the surface is real, not because a string is hiding in it
+    # (`team-board-and-gap-reports/12`).
+    for group in list(parser._action_groups) + list(parser._mutually_exclusive_groups):
+        for text in (getattr(group, "title", None), getattr(group, "description", None)):
+            if isinstance(text, str):
+                strings.append((f"{where} (group)", text))
     return strings
+
+
+def test_the_walk_reads_an_argument_groups_own_prose() -> None:
+    """The widening, pinned. `--help` prints a group's title and description."""
+    parser = argparse.ArgumentParser(prog="probe")
+    group = parser.add_argument_group("some-map/01", description="other-map/02")
+    group.add_argument("--flag")
+    found = {text for _where, text in _help_strings(parser)}
+    assert "some-map/01" in found
+    assert "other-map/02" in found
 
 
 def test_no_help_string_in_the_whole_parser_names_a_ticket() -> None:

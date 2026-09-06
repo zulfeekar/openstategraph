@@ -2646,13 +2646,16 @@ def build_parser() -> argparse.ArgumentParser:
     # `kanban-patrol/17`+`21`: the evidence gate. The three flags below are
     # what a stage transition must carry.
     kanban_stage.add_argument("--test-id", dest="test_id", default="", help="evidence: the test identifier")
+    # `osg-agent-experience/85` — the provenance of the two-stage reason rule.
+    # It stays here, where a contributor reads it, and out of the help string,
+    # where a user who cannot resolve a gitignored ticket id would (`docs-onramp/08`).
     kanban_stage.add_argument(
         "--reason",
         default="",
         help=(
-            "evidence, read at two stages and refused at the others "
-            "(osg-agent-experience/85): at red it is why the test fails and is "
-            "required; at finished it is what the closing checks said"
+            "evidence, read at two stages and refused at the others: at red it "
+            "is why the test fails and is required; at finished it is what the "
+            "closing checks said"
         ),
     )
     kanban_stage.add_argument("--commit", default="", help="evidence: the commit/diff carrying the work — required at finished")

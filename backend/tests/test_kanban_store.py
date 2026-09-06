@@ -18,7 +18,6 @@ from pathlib import Path
 
 import pytest
 
-from openstategraph import kanban_store
 from openstategraph.kanban_store import BOARD_AREAS, BOARD_COLUMNS, BOARD_PRIORITIES, Card, MissingEvidenceError, Stage, StageOrderError, card_row, column_for
 from kanban_by_path import store as store  # noqa: F401 - the seam a race test patches
 from openstategraph.kanban_sqlite import SqliteKanbanStore
