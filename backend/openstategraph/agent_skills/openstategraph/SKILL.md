@@ -217,11 +217,11 @@ nobody had looked at.
    exists** — a Mermaid sketch is for a **proposed** flow only, because two
    pictures leave the reader no way to tell which one lied.
 
-Then **at most twenty lines**, in your reply and again to
-`workflows/<slug>/AGENTS.md` under a dated heading — no card field carries a
-gate, so that file is the record. Open with **Not clean yet:** and every warning
-the gate printed, verbatim, or the two words **no warnings**; never nothing, and
-never a summary. Then the **shape** step 6 confirmed; the **cards finished**,
+Then **at most twenty lines**, in your reply, again to
+`workflows/<slug>/AGENTS.md` under a dated heading, and — one line of it — as
+`kanban stage <id> finished --reason`, the one card field that keeps a gate.
+Open with **Not clean yet:** and every warning the gate printed, verbatim, or
+the two words **no warnings**; never nothing, and never a summary. Then the **shape** step 6 confirmed; the **cards finished**,
 each with its commit; **what validates and what runs**, naming the verb and its
 answer; the **next two or three steps** in `kanban triage`'s order; **what only
 the developer can supply** — a key, a connection, a decision; the diagram last.

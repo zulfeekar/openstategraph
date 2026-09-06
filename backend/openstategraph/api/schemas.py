@@ -161,6 +161,14 @@ class KanbanCardResponse(BaseModel):
     #: model name, which would read on the board as a decision somebody made.
     agent_model: str = ""
     agent_effort: str = ""
+    #: `osg-agent-experience/85` — what the closing checks said, recorded at
+    #: the `finished` transition. Empty on every card that has not reached it,
+    #: and on a finished one whose actor passed no reason: the same
+    #: one-spelling-of-nothing rule the evidence fields above keep. Published
+    #: on every row rather than only a finished one, because two doors
+    #: publishing different field sets is how a board and an agent come to read
+    #: different cards.
+    finished_reason: str = ""
     #: `kanban-patrol/19`'s explicit Release — whether this card's claim has
     #: gone past the hour-long lease with no heartbeat. Computed by
     #: `flagged_stale` at read time, never stored: the same "flag, never

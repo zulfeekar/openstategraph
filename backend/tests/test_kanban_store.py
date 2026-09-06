@@ -19,24 +19,10 @@ from pathlib import Path
 import pytest
 
 from openstategraph import kanban_store
-from openstategraph.kanban_store import (
-    BOARD_AREAS,
-    BOARD_COLUMNS,
-    BOARD_PRIORITIES,
-    Card,
-    MissingEvidenceError,
-    Stage,
-    StageOrderError,
-    answer_card,
-    card_row,
-    column_for,
-    ensure_schema,
-    file_card,
-    flagged_stale,
-    read_card,
-    release_card,
-    set_stage,
-)
+from openstategraph.kanban_store import BOARD_AREAS, BOARD_COLUMNS, BOARD_PRIORITIES, Card, MissingEvidenceError, Stage, StageOrderError, card_row, column_for
+from kanban_by_path import store as store  # noqa: F401 - the seam a race test patches
+from openstategraph.kanban_sqlite import SqliteKanbanStore
+from kanban_by_path import answer_card, ensure_schema, file_card, flagged_stale, read_card, release_card, set_stage
 
 
 def _db(tmp_path: Path) -> Path:
@@ -748,11 +734,17 @@ class TestTheColumnACardIsIn:
         ensure_schema(db)
         file_card(db, task_id="t", board="b", kind=kind, category=kind, title="x")
         if stage is not None:
+            # `osg-agent-experience/85`: the evidence each stage actually
+            # keeps, rather than all of it at every stage. This helper used to
+            # pass `reason` at all four and relied on three of them dropping
+            # it silently, which is the defect that ticket was filed for.
+            evidence: dict[Stage, dict[str, str]] = {
+                Stage.RED: {"test_id": "tests/test_x.py::t", "reason": "it was red"},
+                Stage.GREEN: {"test_id": "tests/test_x.py::t"},
+                Stage.FINISHED: {"commit": "deadbeef"},
+            }
             for step in (Stage.ATTENDED, Stage.RED, Stage.GREEN, Stage.FINISHED):
-                set_stage(
-                    db, "t", step, actor="alice",
-                    test_id="tests/test_x.py::t", reason="it was red", commit="deadbeef",
-                )
+                set_stage(db, "t", step, actor="alice", **evidence.get(step, {}))
                 if step is stage:
                     break
         return read_card(db, "t")
@@ -932,18 +924,23 @@ class TestAnsweringANeedsYouCard:
         stale_view = read_card(db, "proj-a:thread-1")
         assert answer_card(db, "proj-a:thread-1", actor="zulfeekar", answer="The cloud one.").ok
 
-        real_read = kanban_store.read_card
+        # `team-board-and-gap-reports/02`: the seam moved from a module
+        # function to `AbstractKanbanStore.read_card`, so the stale snapshot is
+        # handed in there instead. The staging and every assertion below are
+        # unchanged — which is the point: the guarantee is the `WHERE`, and
+        # the `WHERE` did not move.
+        real_read = SqliteKanbanStore.read_card
         views = [stale_view]
 
-        def read_the_moment_before(path: Path, task_id: str) -> Card:
-            return views.pop() if views else real_read(path, task_id)
+        def read_the_moment_before(self: SqliteKanbanStore, task_id: str) -> Card:
+            return views.pop() if views else real_read(self, task_id)
 
-        monkeypatch.setattr(kanban_store, "read_card", read_the_moment_before)
+        monkeypatch.setattr(SqliteKanbanStore, "read_card", read_the_moment_before)
         second = answer_card(db, "proj-a:thread-1", actor="someone-else", answer="The local one.")
 
         assert not second.ok
         assert "zulfeekar" in second.reason
-        assert real_read(db, "proj-a:thread-1").answer == "The cloud one."
+        assert real_read(store(db), "proj-a:thread-1").answer == "The cloud one."
 
     def test_the_row_every_door_publishes_carries_the_answer(self, tmp_path: Path) -> None:
         db = self._judgement(tmp_path)

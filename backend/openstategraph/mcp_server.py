@@ -79,6 +79,7 @@ if TYPE_CHECKING:
 
     from mcp.server.fastmcp import Context as _MCPContext
 
+    from openstategraph.abc.kanban_store import IKanbanStore
     from openstategraph.kanban_store import Card
 else:  # the `[mcp]` extra. An installation without it never builds a server,
     # but must still be able to import this module.
@@ -1183,7 +1184,7 @@ The loop, in order:
 """
 
 
-def _card_payload(db: "Path", card: "Card") -> dict[str, Any]:
+def _card_payload(store: "IKanbanStore", card: "Card") -> dict[str, Any]:
     """One card, as both kanban read tools answer with it — `kanban-patrol/16`.
 
     `card_row` is the same function `GET /api/kanban/cards` builds its rows
@@ -1195,7 +1196,7 @@ def _card_payload(db: "Path", card: "Card") -> dict[str, Any]:
     from openstategraph.kanban_store import card_row, column_for, flagged_stale
 
     stale = card.task_id in set(
-        flagged_stale(db, threshold_seconds=_STALE_THRESHOLD_SECONDS)
+        flagged_stale(store, threshold_seconds=_STALE_THRESHOLD_SECONDS)
     )
     return {**card_row(card, stale=stale), "column": column_for(card)}
 
@@ -1425,11 +1426,9 @@ def build_mcp_server(
         exception, and never a silent overwrite. Same guarantee, same
         function, as the `openstategraph kanban attend` CLI door.
         """
-        from openstategraph.kanban_store import Stage, kanban_store_path, set_stage
+        from openstategraph.kanban_store import Stage, open_kanban_store
 
-        db = kanban_store_path(services.store.root)
-        result = set_stage(
-            db,
+        result = open_kanban_store(services.store.root).set_stage(
             task_id,
             Stage.ATTENDED,
             actor=_actor_on_the_card(services.principals, ctx, actor),
@@ -1455,26 +1454,30 @@ def build_mcp_server(
 
         `kanban-patrol/17`+`21`: the same evidence gate the CLI enforces.
         `red` needs `test_id` and `reason`; `green` needs the matching
-        `test_id`; `finished` needs both already recorded — a missing or
-        mismatched piece of evidence is refused the same structured way as a
-        skipped stage, never a fresh assertion accepted at the end.
+        `test_id`; `finished` needs both already recorded plus `commit` — a
+        missing or mismatched piece of evidence is refused the same structured
+        way as a skipped stage, never a fresh assertion accepted at the end.
+
+        `osg-agent-experience/85`: **`reason` is read at exactly two stages.**
+        At `red` it is why the test fails, and it is required. At `finished`
+        it is what your closing checks said, and it is kept on the card. At
+        `attended` and `green` it is **refused by name** rather than accepted
+        and dropped — pass it at one of the two stages that keep it.
         """
         from openstategraph.kanban_store import (
             MissingEvidenceError,
             Stage,
             StageOrderError,
-            kanban_store_path,
-            set_stage,
+            open_kanban_store,
         )
 
-        db = kanban_store_path(services.store.root)
+        store = open_kanban_store(services.store.root)
         try:
             target = Stage(stage)
         except ValueError:
             return {"ok": False, "reason": f"stage must be one of {', '.join(s.value for s in Stage)}"}
         try:
-            result = set_stage(
-                db,
+            result = store.set_stage(
                 task_id,
                 target,
                 actor=_actor_on_the_card(services.principals, ctx, actor),
@@ -1491,14 +1494,14 @@ def build_mcp_server(
         """The card's self-contained instruction — the same text the board's
         own "Copy instruction" button copies, for a client with no clipboard
         of its own to read from."""
-        from openstategraph.kanban_store import kanban_store_path, read_card
+        from openstategraph.kanban_store import open_kanban_store
 
-        db = kanban_store_path(services.store.root)
+        store = open_kanban_store(services.store.root)
         try:
-            card = read_card(db, task_id)
+            card = store.read_card(task_id)
         except KeyError:
             return {"ok": False, "reason": f"no card {task_id!r}"}
-        return _card_payload(db, card)
+        return _card_payload(store, card)
 
     @server.tool(name="kanban_list_cards")
     def kanban_list_cards(
@@ -1535,8 +1538,7 @@ def build_mcp_server(
             BOARD_COLUMNS,
             BOARD_PRIORITIES,
             column_for,
-            kanban_store_path,
-            list_cards,
+            open_kanban_store,
         )
 
         wanted: dict[str, tuple[str, tuple[str, ...] | None]] = {
@@ -1568,9 +1570,9 @@ def build_mcp_server(
                 }
             resolved[field] = match[0].casefold()
 
-        db = kanban_store_path(services.store.root)
+        store = open_kanban_store(services.store.root)
         cards = []
-        for card in list_cards(db):
+        for card in store.list_cards():
             against = {
                 "column": column_for(card),
                 "area": card.area,
@@ -1579,7 +1581,7 @@ def build_mcp_server(
             }
             if any(against[field].casefold() != value for field, value in resolved.items()):
                 continue
-            cards.append(_card_payload(db, card))
+            cards.append(_card_payload(store, card))
         return {"ok": True, "cards": cards}
 
     @server.tool(name="kanban_triage")
@@ -1602,13 +1604,17 @@ def build_mcp_server(
         "<priority> priority, nothing waits on it", or "blocked by <ids>".
         Nothing is stored; call again after the board changes.
         """
-        from openstategraph.kanban_store import kanban_store_path, list_cards, triage
+        from openstategraph.kanban_store import open_kanban_store, triage
 
-        db = kanban_store_path(services.store.root)
+        store = open_kanban_store(services.store.root)
         folded = board.strip().casefold()
-        cards = [card for card in list_cards(db) if not folded or card.board.casefold() == folded]
+        cards = [
+            card
+            for card in store.list_cards()
+            if not folded or card.board.casefold() == folded
+        ]
         rows = [
-            {**_card_payload(db, row.card), "rank": row.rank, "why_here": row.why_here}
+            {**_card_payload(store, row.card), "rank": row.rank, "why_here": row.why_here}
             for row in triage(cards)
         ]
         return {"ok": True, "cards": rows}
@@ -1640,14 +1646,13 @@ def build_mcp_server(
         from openstategraph.kanban_store import (
             MissingEvidenceError,
             StageOrderError,
-            answer_card,
-            kanban_store_path,
+            open_kanban_store,
         )
 
-        db = kanban_store_path(services.store.root)
+        store = open_kanban_store(services.store.root)
         who = _actor_on_the_card(services.principals, ctx, actor)
         try:
-            result = answer_card(db, task_id, actor=who, answer=answer)
+            result = store.answer_card(task_id, actor=who, answer=answer)
         except KeyError:
             return {"ok": False, "reason": f"no card {task_id!r}"}
         except (StageOrderError, MissingEvidenceError) as exc:
@@ -1701,9 +1706,7 @@ def build_mcp_server(
         """
         from openstategraph.kanban_store import (
             column_for,
-            file_idea_card,
-            kanban_store_path,
-            read_card,
+            open_kanban_store,
             unresolved_blockers,
         )
         from openstategraph.project_identity import (
@@ -1716,10 +1719,9 @@ def build_mcp_server(
         except (ProjectIdentityError, OSError) as exc:
             return {"ok": False, "reason": str(exc)}
 
-        db = kanban_store_path(services.store.root)
+        store = open_kanban_store(services.store.root)
         try:
-            task_id = file_idea_card(
-                db,
+            task_id = store.file_idea_card(
                 project_id=project_id,
                 kind=kind,
                 title=title,
@@ -1735,7 +1737,7 @@ def build_mcp_server(
             )
         except ValueError as exc:
             return {"ok": False, "reason": str(exc)}
-        card = read_card(db, task_id)
+        card = store.read_card(task_id)
         return {
             "ok": True,
             "task_id": task_id,
@@ -1744,7 +1746,7 @@ def build_mcp_server(
             # card carries. Not a refusal — blocking on a card not yet filed
             # is a real ordering — but never silent either, because that is
             # also the shape of a typo, and a stranded card never clears.
-            "unresolved_blockers": list(unresolved_blockers(db, card)),
+            "unresolved_blockers": list(unresolved_blockers(store, card)),
         }
 
     @server.tool(name="kanban_release_card")
@@ -1762,10 +1764,11 @@ def build_mcp_server(
         stage, actor, heartbeat, and every evidence field — so the next
         attend starts clean, with nothing left over from the abandoned one.
         """
-        from openstategraph.kanban_store import kanban_store_path, release_card
+        from openstategraph.kanban_store import open_kanban_store
 
-        db = kanban_store_path(services.store.root)
-        result = release_card(db, task_id, threshold_seconds=threshold_seconds)
+        result = open_kanban_store(services.store.root).release_card(
+            task_id, threshold_seconds=threshold_seconds
+        )
         return {"ok": result.ok, "reason": result.reason}
 
     if allow_runs:

@@ -72,7 +72,7 @@ class WorkflowServices:
     ) -> None:
         from openstategraph.api.catalogue_events import CatalogueBroadcaster
         from openstategraph.api.kanban_events import KanbanChangeWatcher
-        from openstategraph.kanban_store import kanban_store_path
+        from openstategraph.kanban_store import open_kanban_store
         from openstategraph.api.patrol_events import PatrolBroadcaster
         from openstategraph.api.patrol_registry import PatrolJobRegistry
         from openstategraph.api.workflow_events import (
@@ -112,7 +112,7 @@ class WorkflowServices:
         #: rebuilt per connection — a per-request watcher would poll once per
         #: open tab.
         self.kanban_events = KanbanChangeWatcher(
-            lambda: kanban_store_path(self.store.root)
+            lambda: open_kanban_store(self.store.root)
         )
         #: Live document changes, per package — the fan-out behind
         #: `GET /api/workflows/{slug}/events` (`osg-agent-experience/69`). A

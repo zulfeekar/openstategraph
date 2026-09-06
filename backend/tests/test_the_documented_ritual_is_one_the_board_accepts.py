@@ -38,14 +38,8 @@ from pathlib import Path
 import pytest
 
 from openstategraph.bundled_skills import BUNDLED_SKILLS
-from openstategraph.kanban_store import (
-    MissingEvidenceError,
-    Stage,
-    ensure_schema,
-    file_card,
-    read_card,
-    set_stage,
-)
+from openstategraph.kanban_store import MissingEvidenceError, Stage
+from kanban_by_path import ensure_schema, file_card, read_card, set_stage
 
 SHEET = BUNDLED_SKILLS["openstategraph"] / "SKILL.md"
 LOOP = BUNDLED_SKILLS["openstategraph"] / "references" / "build-loop.md"

@@ -33,6 +33,7 @@ function row(overrides: Partial<KanbanCardResponse> = {}): KanbanCardResponse {
     blocked_by: [],
     agent_model: '',
     agent_effort: '',
+    finished_reason: '',
     stale: false,
     ...overrides,
   };
@@ -230,5 +231,23 @@ describe('an idea card brings its brief across', () => {
     expect(card.agentModel).toBeUndefined();
     expect(card.agentEffort).toBeUndefined();
     expect(card.blockedBy).toBeUndefined();
+  });
+});
+
+describe('the closing gate reaches the card body — osg-agent-experience/85', () => {
+  it('carries what the finished transition recorded', () => {
+    const card = mapKanbanCardToBoardCard(
+      row({ stage: 'finished', finished_reason: 'validate: no findings; one exit' }),
+      Date.now(),
+    );
+
+    expect(card.finishedReason).toBe('validate: no findings; one exit');
+  });
+
+  it('is absent, never an empty string, on a card that never carried one', () => {
+    // The same absent-not-empty rule every other optional prop here follows:
+    // `PatrolCard` guards on this, so `''` would draw a blank "finished:" line
+    // under every card on the board.
+    expect(mapKanbanCardToBoardCard(row(), Date.now()).finishedReason).toBeUndefined();
   });
 });

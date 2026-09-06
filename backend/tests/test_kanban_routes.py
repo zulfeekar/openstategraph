@@ -17,7 +17,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from openstategraph.api.main import create_app
-from openstategraph.kanban_store import Stage, ensure_schema, file_card, kanban_store_path, set_stage
+from openstategraph.kanban_store import Stage, kanban_store_path
+from kanban_by_path import ensure_schema, file_card, set_stage
 from openstategraph.patrol import PatrolResult
 
 
@@ -462,7 +463,7 @@ class TestTheIdeaBriefOnTheWire:
     read different cards."""
 
     def test_an_idea_cards_five_fields_reach_the_board(self, client: TestClient) -> None:
-        from openstategraph.kanban_store import file_idea_card
+        from kanban_by_path import file_idea_card
 
         db = kanban_store_path(client.app.state.services.store.root)
         ensure_schema(db)

@@ -1562,10 +1562,10 @@ def cmd_runs_path(args: argparse.Namespace) -> int:
 def cmd_kanban_attend(args: argparse.Namespace) -> int:
     """The first-wins claim. Exits nonzero and prints who already has it
     rather than silently overwriting — `kanban-patrol/19`."""
-    from openstategraph.kanban_store import Stage, kanban_store_path, set_stage
+    from openstategraph.kanban_store import Stage, open_kanban_store
 
-    db = kanban_store_path(getattr(args, "workflows_root", None))
-    result = set_stage(db, args.task_id, Stage.ATTENDED, actor=args.actor)
+    store = open_kanban_store(getattr(args, "workflows_root", None))
+    result = store.set_stage(args.task_id, Stage.ATTENDED, actor=args.actor)
     if not result.ok:
         return _error(result.reason)
     print(f"attended {args.task_id} as {args.actor}")
@@ -1598,18 +1598,16 @@ def cmd_kanban_stage(args: argparse.Namespace) -> int:
         MissingEvidenceError,
         Stage,
         StageOrderError,
-        kanban_store_path,
-        set_stage,
+        open_kanban_store,
     )
 
-    db = kanban_store_path(getattr(args, "workflows_root", None))
+    store = open_kanban_store(getattr(args, "workflows_root", None))
     try:
         target = Stage(args.stage)
     except ValueError:
         return _usage(f"stage must be one of {', '.join(s.value for s in Stage)}")
     try:
-        result = set_stage(
-            db,
+        result = store.set_stage(
             args.task_id,
             target,
             actor=args.actor,
@@ -1629,10 +1627,10 @@ def cmd_kanban_release(args: argparse.Namespace) -> int:
     """The human half of "flag, never auto-release" — `kanban-patrol/19`.
     Refuses (nonzero, plain reason) unless the card is already flagged by
     `flagged_stale`; never releases a card by mere request."""
-    from openstategraph.kanban_store import kanban_store_path, release_card
+    from openstategraph.kanban_store import open_kanban_store
 
-    db = kanban_store_path(getattr(args, "workflows_root", None))
-    result = release_card(db, args.task_id, threshold_seconds=args.threshold_seconds)
+    store = open_kanban_store(getattr(args, "workflows_root", None))
+    result = store.release_card(args.task_id, threshold_seconds=args.threshold_seconds)
     if not result.ok:
         return _error(result.reason)
     print(f"released {args.task_id}")
@@ -1651,15 +1649,17 @@ def cmd_kanban_answer(args: argparse.Namespace) -> int:
     from openstategraph.kanban_store import (
         MissingEvidenceError,
         StageOrderError,
-        answer_card,
-        kanban_store_path,
+        kanban_store_location,
+        open_kanban_store,
     )
 
-    db = kanban_store_path(getattr(args, "workflows_root", None))
+    root = getattr(args, "workflows_root", None)
     try:
-        result = answer_card(db, args.task_id, actor=args.actor, answer=args.answer)
+        result = open_kanban_store(root).answer_card(
+            args.task_id, actor=args.actor, answer=args.answer
+        )
     except KeyError:
-        return _error(f"no card {args.task_id!r} in {db}")
+        return _error(f"no card {args.task_id!r} in {kanban_store_location(root).path}")
     except (StageOrderError, MissingEvidenceError) as exc:
         return _error(str(exc))
     if not result.ok:
@@ -1680,9 +1680,7 @@ def cmd_kanban_file(args: argparse.Namespace) -> int:
     """
     from openstategraph.kanban_store import (
         column_for,
-        file_idea_card,
-        kanban_store_path,
-        read_card,
+        open_kanban_store,
         unresolved_blockers,
     )
     from openstategraph.project_identity import ProjectIdentityError, project_id_for_board
@@ -1692,10 +1690,9 @@ def cmd_kanban_file(args: argparse.Namespace) -> int:
     except (ProjectIdentityError, OSError) as exc:
         return _error(str(exc))
 
-    db = kanban_store_path(getattr(args, "workflows_root", None))
+    store = open_kanban_store(getattr(args, "workflows_root", None))
     try:
-        task_id = file_idea_card(
-            db,
+        task_id = store.file_idea_card(
             project_id=project_id,
             kind=args.kind,
             title=args.title,
@@ -1711,12 +1708,12 @@ def cmd_kanban_file(args: argparse.Namespace) -> int:
         )
     except ValueError as exc:
         return _error(str(exc))
-    card = read_card(db, task_id)
+    card = store.read_card(task_id)
     print(f"filed {task_id} in {column_for(card)}")
     # `osg-agent-experience/30`: a blocker nothing carries is a real ordering
     # (the card it waits on may not be filed yet) and also the exact shape of
     # a typo, so it is said out loud rather than refused or swallowed.
-    for blocker in unresolved_blockers(db, card):
+    for blocker in unresolved_blockers(store, card):
         print(f"  waiting on {blocker} — no card carries that id yet")
     return EXIT_OK
 
@@ -1725,13 +1722,15 @@ def cmd_kanban_show(args: argparse.Namespace) -> int:
     """The self-contained instruction — `kanban-patrol/19`'s "Copy
     instruction" affordance, from the CLI door: a coding agent (or a human
     pasting on its behalf) reads the same row the board's Copy buttons read."""
-    from openstategraph.kanban_store import kanban_store_path, read_card
+    from openstategraph.kanban_store import kanban_store_location, open_kanban_store
 
-    db = kanban_store_path(getattr(args, "workflows_root", None))
+    location = kanban_store_location(getattr(args, "workflows_root", None))
     try:
-        card = read_card(db, args.task_id)
+        card = open_kanban_store(getattr(args, "workflows_root", None)).read_card(
+            args.task_id
+        )
     except KeyError:
-        return _error(f"no card {args.task_id!r} in {db}")
+        return _error(f"no card {args.task_id!r} in {location.path}")
     print(f"task_id: {card.task_id}")
     print(f"title: {card.title}")
     print(f"kind: {card.kind}   category: {card.category}   stage: {card.stage.value}")
@@ -1746,6 +1745,11 @@ def cmd_kanban_show(args: argparse.Namespace) -> int:
     if card.answer:
         print(f"decision: {card.answer}")
         print(f"  answered by: {card.answered_by} at {card.answered_at}")
+    # `osg-agent-experience/85`: what the closing checks said, on the card
+    # rather than only in the shell that ran them. An agent picking a resolved
+    # card up to build on reads the gate's own words here.
+    if card.finished_reason:
+        print(f"finished: {card.finished_reason}")
     return EXIT_OK
 
 
@@ -1759,12 +1763,13 @@ def cmd_kanban_where(args: argparse.Namespace) -> int:
     and it is the one command that answers on a project that has never filed a
     card — which is exactly when somebody needs it.
     """
-    from openstategraph.kanban_store import kanban_store_location, list_cards
+    from openstategraph.kanban_store import kanban_store_location, open_kanban_store
 
     location = kanban_store_location(getattr(args, "workflows_root", None))
+    store = open_kanban_store(getattr(args, "workflows_root", None))
     print(f"board  {location.path}")
     print(f"       {location.why}")
-    for line in _board_state_lines(location, list_cards(location.path)):
+    for line in _board_state_lines(location, store.list_cards()):
         print(line)
     return EXIT_OK
 
@@ -1799,12 +1804,17 @@ def cmd_kanban_triage(args: argparse.Namespace) -> int:
     that was never at this address, and a reader could not tell which they
     had been handed.
     """
-    from openstategraph.kanban_store import kanban_store_location, list_cards, triage
+    from openstategraph.kanban_store import (
+        kanban_store_location,
+        open_kanban_store,
+        triage,
+    )
 
     location = kanban_store_location(getattr(args, "workflows_root", None))
+    store = open_kanban_store(getattr(args, "workflows_root", None))
     board = getattr(args, "board", "") or ""
     folded = board.strip().casefold()
-    all_cards = list_cards(location.path)
+    all_cards = store.list_cards()
     cards = [c for c in all_cards if not folded or c.board.casefold() == folded]
     rows = triage(cards)
     if not rows:
@@ -2636,7 +2646,15 @@ def build_parser() -> argparse.ArgumentParser:
     # `kanban-patrol/17`+`21`: the evidence gate. The three flags below are
     # what a stage transition must carry.
     kanban_stage.add_argument("--test-id", dest="test_id", default="", help="evidence: the test identifier")
-    kanban_stage.add_argument("--reason", default="", help="evidence: why the test failed, required at red")
+    kanban_stage.add_argument(
+        "--reason",
+        default="",
+        help=(
+            "evidence, read at two stages and refused at the others "
+            "(osg-agent-experience/85): at red it is why the test fails and is "
+            "required; at finished it is what the closing checks said"
+        ),
+    )
     kanban_stage.add_argument("--commit", default="", help="evidence: the commit/diff carrying the work — required at finished")
     kanban_stage.add_argument("--workflows-root", dest="workflows_root")
     kanban_stage.set_defaults(handler=cmd_kanban_stage)

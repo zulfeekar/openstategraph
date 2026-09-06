@@ -20,17 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from openstategraph.kanban_store import (
-    IDEA_PREFIX,
-    Stage,
-    card_row,
-    column_for,
-    ensure_schema,
-    file_idea_card,
-    idea_task_id,
-    read_card,
-    unresolved_blockers,
-)
+from openstategraph.kanban_store import IDEA_PREFIX, Stage, card_row, column_for, idea_task_id
+from kanban_by_path import ensure_schema, file_idea_card, read_card, unresolved_blockers
 
 
 @pytest.fixture()
@@ -97,7 +88,7 @@ class TestWhatItWrites:
     def test_a_patrol_card_carries_the_five_fields_empty_rather_than_missing(
         self, db: Path
     ) -> None:
-        from openstategraph.kanban_store import file_card
+        from kanban_by_path import file_card
 
         file_card(db, task_id="proj-a:thread-1", board="workflows", kind="bug",
                   category="bug", title="A tool call with no timeout")

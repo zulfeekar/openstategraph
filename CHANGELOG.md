@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Added
+- **A `finished` card keeps what the closing checks said**
+  (`osg-agent-experience/85`). `set_stage` took a `reason` at every stage and
+  kept it at one: an agent that wrote its closing gate into
+  `kanban stage <id> finished --reason` was told nothing and lost it, and both
+  doors advertised the argument. `finished_reason` is one migrated-in-place
+  column, printed by `kanban show`, published on every board row and drawn under
+  the card's evidence line; `attend` and `green` now refuse a reason **by name**,
+  naming the two stages that keep one.
 - **`docs/modules.md` — a brief on each of the 43 built-in node types, linked**
   (`docs-onramp/04`). Every brief already existed in `compile/port_specs.json`
   and nothing carried it: 13 types were named in no file under `docs/`. The page
@@ -49,6 +57,16 @@
   gap](docs/reporting-a-platform-gap.md) says so.
 
 ### Changed
+- **The card store has a seam** (`team-board-and-gap-reports/02`). It was one
+  690-line module with `sqlite3.connect(db_path)` in fourteen functions and
+  `Path` in every signature, so a second backing store could not be added
+  without editing each one. It is a ladder now — `IKanbanStore` →
+  `AbstractKanbanStore` → `SqliteKanbanStore` — with every refusal (the stage
+  machine, the evidence gate, the first-wins claim, the brief check) on the base
+  and five conditional-write primitives on the concrete, and a
+  `KanbanStoreRegistry` that `open_kanban_store()` chooses through, keyed by the
+  scheme of `OPENSTATEGRAPH_KANBAN_URL`. No behaviour changed: every existing
+  test of the store passes with its assertions untouched.
 - **The README is a front door again** (`docs-onramp/01`, `02`, `05`, `06`).
   It was 829 lines and a stranger's path was 148 of them; the four spin-up
   paths each read as *the* way with none saying whose it was; the

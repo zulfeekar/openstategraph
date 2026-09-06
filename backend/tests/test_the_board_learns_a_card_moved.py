@@ -40,15 +40,9 @@ from openstategraph.api.kanban_events import (
     KanbanChangeWatcher,
 )
 from openstategraph.api.main import create_app
-from openstategraph.kanban_store import (
-    Stage,
-    ensure_schema,
-    file_card,
-    kanban_store_path,
-    list_cards,
-    set_stage,
-    store_digest,
-)
+from openstategraph.kanban_store import Stage, kanban_store_path
+from kanban_by_path import store
+from kanban_by_path import ensure_schema, file_card, list_cards, set_stage, store_digest
 
 REPO_BACKEND = str(Path(__file__).resolve().parents[1])
 
@@ -71,8 +65,9 @@ def _attend_in_another_process(db: Path, task_id: str = "idea-1") -> None:
     code = (
         "import sys; sys.path.insert(0, %r)\n"
         "from pathlib import Path\n"
-        "from openstategraph.kanban_store import Stage, set_stage\n"
-        "r = set_stage(Path(%r), %r, Stage.ATTENDED, actor='agent')\n"
+        "from openstategraph.kanban_sqlite import SqliteKanbanStore\n"
+        "from openstategraph.kanban_store import Stage\n"
+        "r = SqliteKanbanStore(Path(%r)).set_stage(%r, Stage.ATTENDED, actor='agent')\n"
         "assert r.ok, r.reason\n" % (REPO_BACKEND, str(db), task_id)
     )
     subprocess.run([sys.executable, "-c", code], check=True, capture_output=True)
@@ -113,7 +108,7 @@ class TestTheWatcher:
         _file_one(db)
 
         async def scenario() -> list:
-            watcher = KanbanChangeWatcher(lambda: db, interval=0.02)
+            watcher = KanbanChangeWatcher(lambda: store(db), interval=0.02)
             received: list = []
             async with watcher.subscribe() as subscriber:
                 stream = subscriber.events(idle_timeout=0.02)
@@ -141,7 +136,7 @@ class TestTheWatcher:
         _file_one(db)
 
         async def scenario() -> int:
-            watcher = KanbanChangeWatcher(lambda: db, interval=0.02)
+            watcher = KanbanChangeWatcher(lambda: store(db), interval=0.02)
             async with watcher.subscribe() as subscriber:
                 for _ in range(10):
                     list_cards(db)
@@ -156,7 +151,7 @@ class TestTheWatcher:
         _file_one(db)
 
         async def scenario() -> tuple[bool, bool, bool]:
-            watcher = KanbanChangeWatcher(lambda: db, interval=0.02)
+            watcher = KanbanChangeWatcher(lambda: store(db), interval=0.02)
             before = watcher.running
             async with watcher.subscribe():
                 during = watcher.running
@@ -173,7 +168,7 @@ class TestTheWatcher:
         _file_one(db)
 
         async def scenario() -> tuple[bool, bool, bool]:
-            watcher = KanbanChangeWatcher(lambda: db, interval=0.02)
+            watcher = KanbanChangeWatcher(lambda: store(db), interval=0.02)
             async with watcher.subscribe():
                 async with watcher.subscribe():
                     pass

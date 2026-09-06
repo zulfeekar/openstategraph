@@ -56,12 +56,9 @@ from openstategraph.kanban_store import (
     STALE_THRESHOLD_SECONDS,
     MissingEvidenceError,
     StageOrderError,
-    answer_card,
     card_row,
     flagged_stale,
-    kanban_store_path,
-    list_cards,
-    release_card,
+    open_kanban_store,
 )
 
 logger = logging.getLogger(__name__)
@@ -164,14 +161,14 @@ def list_kanban_cards(services: Services) -> list[KanbanCardResponse]:
     which is the whole reason "refetch plus subscribe" is a correct answer
     and not a workaround.
     """
-    db = kanban_store_path(services.store.root)
-    stale_ids = set(flagged_stale(db, threshold_seconds=STALE_THRESHOLD_SECONDS))
+    store = open_kanban_store(services.store.root)
+    stale_ids = set(flagged_stale(store, threshold_seconds=STALE_THRESHOLD_SECONDS))
     return [
         # One row shape, built once — `kanban-patrol/16`. `card_row` is the
         # same function the MCP `kanban_list_cards` answers with, so a board
         # and an agent cannot come to read different cards.
         KanbanCardResponse(**card_row(card, stale=card.task_id in stale_ids))
-        for card in list_cards(db)
+        for card in store.list_cards()
     ]
 
 
@@ -193,8 +190,9 @@ def release_kanban_card(task_id: str, services: Services) -> KanbanReleaseRespon
     uses for `run_patrol_once`'s own refusal, never a 200 with a false claim
     of success inside it.
     """
-    db = kanban_store_path(services.store.root)
-    result = release_card(db, task_id, threshold_seconds=STALE_THRESHOLD_SECONDS)
+    result = open_kanban_store(services.store.root).release_card(
+        task_id, threshold_seconds=STALE_THRESHOLD_SECONDS
+    )
     if not result.ok:
         raise HTTPException(status_code=400, detail=result.reason)
     return KanbanReleaseResponse(ok=True)
@@ -240,10 +238,10 @@ def answer_kanban_card(
     (`kanban-patrol/20`) — and when it says nothing either, the door names
     itself rather than writing a blank.
     """
-    db = kanban_store_path(services.store.root)
+    store = open_kanban_store(services.store.root)
     who = principal_id or body.actor.strip() or ANSWERED_BY_THE_BOARD
     try:
-        result = answer_card(db, task_id, actor=who, answer=body.answer)
+        result = store.answer_card(task_id, actor=who, answer=body.answer)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"no card {task_id!r}") from None
     except (StageOrderError, MissingEvidenceError) as exc:

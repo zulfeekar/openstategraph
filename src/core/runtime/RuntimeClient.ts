@@ -1213,6 +1213,10 @@ export interface KanbanCardRow {
   //: the board as a decision somebody made.
   readonly agent_model: string;
   readonly agent_effort: string;
+  //: `osg-agent-experience/85` — what the closing checks said, recorded at the
+  //: `finished` transition. Empty on every card that has not reached it, and on
+  //: a finished one whose actor passed no reason.
+  readonly finished_reason: string;
   //: `kanban-patrol/19`'s explicit Release — whether this card's claim has
   //: gone past the hour-long lease with no heartbeat. Computed by the
   //: backend at read time, never stored.

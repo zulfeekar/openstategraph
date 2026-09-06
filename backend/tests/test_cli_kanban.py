@@ -13,14 +13,8 @@ from pathlib import Path
 import pytest
 
 from openstategraph import cli
-from openstategraph.kanban_store import (
-    Stage,
-    column_for,
-    ensure_schema,
-    file_card,
-    kanban_store_path,
-    read_card,
-)
+from openstategraph.kanban_store import Stage, column_for, kanban_store_path
+from kanban_by_path import ensure_schema, file_card, read_card
 
 
 @pytest.fixture()
@@ -47,7 +41,7 @@ class TestAttend:
         code = cli.main(["kanban", "attend", "proj-a:thread-1", "--actor", "alice"] + _root(_project))
 
         assert code == 0
-        from openstategraph.kanban_store import read_card
+        from kanban_by_path import read_card
 
         assert read_card(db, "proj-a:thread-1").stage is Stage.ATTENDED
 
@@ -75,7 +69,7 @@ class TestStage:
         )
 
         assert code == 0
-        from openstategraph.kanban_store import read_card
+        from kanban_by_path import read_card
 
         card = read_card(db, "proj-a:thread-1")
         assert card.stage is Stage.RED
@@ -125,7 +119,7 @@ class TestEvidenceGate:
         )
 
         assert code == 0
-        from openstategraph.kanban_store import read_card
+        from kanban_by_path import read_card
 
         assert read_card(db, "proj-a:thread-1").stage is Stage.RED
 
@@ -182,7 +176,7 @@ class TestEvidenceGate:
         )
 
         assert code == 0
-        from openstategraph.kanban_store import read_card
+        from kanban_by_path import read_card
 
         card = read_card(db, "proj-a:thread-1")
         assert card.stage is Stage.FINISHED
@@ -222,7 +216,7 @@ class TestRelease:
         code = cli.main(["kanban", "release", "proj-a:thread-1"] + _root(_project))
 
         assert code == 0
-        from openstategraph.kanban_store import read_card
+        from kanban_by_path import read_card
 
         card = read_card(db, "proj-a:thread-1")
         assert card.stage is Stage.UNATTENDED

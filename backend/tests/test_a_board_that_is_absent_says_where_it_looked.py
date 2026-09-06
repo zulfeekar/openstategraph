@@ -30,12 +30,8 @@ from pathlib import Path
 import pytest
 
 from openstategraph import cli
-from openstategraph.kanban_store import (
-    ensure_schema,
-    file_card,
-    kanban_store_location,
-    kanban_store_path,
-)
+from openstategraph.kanban_store import kanban_store_location, kanban_store_path
+from kanban_by_path import ensure_schema, file_card
 from openstategraph.state_dir import STATE_DIR_ENV, resolve_state_dir, state_dir
 
 

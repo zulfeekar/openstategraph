@@ -34,7 +34,8 @@ from typing import Any
 from langchain_core.messages import AIMessage, ToolMessage
 
 from openstategraph.api.audience import Audience
-from openstategraph.kanban_store import kanban_store_path, read_card
+from openstategraph.kanban_store import kanban_store_path
+from kanban_by_path import read_card
 from openstategraph.patrol import classify_finding, refusal_task_id, run_patrol
 from openstategraph.run_findings import (
     EVERY_TOOL_CALL_FAILED,

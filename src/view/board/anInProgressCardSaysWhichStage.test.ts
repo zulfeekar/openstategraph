@@ -99,6 +99,7 @@ describe('an In Progress card says which stage it is at', () => {
       blocked_by: [],
       agent_model: '',
       agent_effort: '',
+      finished_reason: '',
       stale: false,
     };
     const card = mapKanbanCardToBoardCard(row, Date.now());

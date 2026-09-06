@@ -19,7 +19,8 @@ from typing import Any
 import pytest
 
 from openstategraph.api.services import WorkflowServices
-from openstategraph.kanban_store import ensure_schema, file_card, kanban_store_path
+from openstategraph.kanban_store import kanban_store_path
+from kanban_by_path import ensure_schema, file_card
 from openstategraph.mcp_server import EXPOSED_TOOLS, build_mcp_server
 
 
@@ -152,7 +153,8 @@ class TestReleaseCard:
     flagged, then atomic reset"."""
 
     def _staled(self, services: WorkflowServices, task_id: str = "proj-a:thread-1") -> None:
-        from openstategraph.kanban_store import Stage, kanban_store_path, set_stage
+        from openstategraph.kanban_store import Stage, kanban_store_path
+        from kanban_by_path import set_stage
 
         db = kanban_store_path(services.store.root)
         set_stage(db, task_id, Stage.ATTENDED, actor="alice")
@@ -238,7 +240,8 @@ class TestActorIsTheServersToDetermine:
         )
 
     def _actor(self, services: WorkflowServices) -> str | None:
-        from openstategraph.kanban_store import kanban_store_path, read_card
+        from openstategraph.kanban_store import kanban_store_path
+        from kanban_by_path import read_card
 
         return read_card(kanban_store_path(services.store.root), "proj-a:thread-1").actor
 
@@ -274,7 +277,7 @@ class TestActorIsTheServersToDetermine:
             )
 
         assert result.get("ok") is True
-        from openstategraph.kanban_store import read_card
+        from kanban_by_path import read_card
 
         assert read_card(db, "proj-a:judgement").answered_by == "alice@example.com"
 
@@ -536,7 +539,8 @@ class TestAnswerCard:
         )
 
         assert result.get("ok") is True
-        from openstategraph.kanban_store import column_for, read_card
+        from openstategraph.kanban_store import column_for
+        from kanban_by_path import read_card
 
         card = read_card(db, "proj-a:judgement")
         assert card.answer == "The cloud one."
@@ -672,17 +676,17 @@ class TestTwoRealConcurrentCallers:
         """
         import threading
 
-        from openstategraph import kanban_store
+        from openstategraph.abc.kanban_store import AbstractKanbanStore
 
         threads: list[str] = []
-        real = kanban_store.set_stage
+        real = AbstractKanbanStore.set_stage
 
         def note(*args: Any, **kwargs: Any) -> Any:
             threads.append(threading.current_thread().name)
             return real(*args, **kwargs)
 
         server = self._server(services)
-        kanban_store.set_stage = note  # type: ignore[assignment]
+        AbstractKanbanStore.set_stage = note  # type: ignore[assignment]
         try:
 
             async def both() -> Any:
@@ -690,7 +694,7 @@ class TestTwoRealConcurrentCallers:
 
             asyncio.run(both())
         finally:
-            kanban_store.set_stage = real  # type: ignore[assignment]
+            AbstractKanbanStore.set_stage = real  # type: ignore[assignment]
 
         assert threads == ["MainThread", "MainThread"], threads
 
@@ -708,11 +712,14 @@ class TestTwoRealConcurrentCallers:
         """
         import threading
 
-        from openstategraph import kanban_store
+        from openstategraph.abc.kanban_store import AbstractKanbanStore
 
         server = self._server(services)
         both_have_read = threading.Barrier(2, timeout=5)
-        real_read = kanban_store.read_card
+        # `team-board-and-gap-reports/02`: the seam moved from a module
+        # function to the base's own `read_card`, and nothing else in this
+        # test changed — the conditional `UPDATE` is still what decides.
+        real_read = AbstractKanbanStore.read_card
         once: set[str] = set()
         guard = threading.Lock()
 
@@ -733,7 +740,7 @@ class TestTwoRealConcurrentCallers:
             with results_lock:
                 results.append(outcome)
 
-        kanban_store.read_card = read_then_wait_for_the_other  # type: ignore[assignment]
+        AbstractKanbanStore.read_card = read_then_wait_for_the_other  # type: ignore[assignment]
         try:
             threads = [
                 threading.Thread(target=caller, args=("alice",)),
@@ -744,7 +751,7 @@ class TestTwoRealConcurrentCallers:
             for thread in threads:
                 thread.join(timeout=10)
         finally:
-            kanban_store.read_card = real_read  # type: ignore[assignment]
+            AbstractKanbanStore.read_card = real_read  # type: ignore[assignment]
 
         assert len(results) == 2, "both callers must return, neither may hang"
         assert len([r for r in results if r.get("ok") is True]) == 1, results
@@ -752,7 +759,8 @@ class TestTwoRealConcurrentCallers:
         assert "alice" in loser["reason"] or "bob" in loser["reason"]
         # And the card carries exactly one name — the winner's — rather than
         # whichever write happened to land last.
-        from openstategraph.kanban_store import kanban_store_path, read_card
+        from openstategraph.kanban_store import kanban_store_path
+        from kanban_by_path import read_card
 
         actor = read_card(kanban_store_path(services.store.root), "proj-a:thread-1").actor
         assert actor in {"alice", "bob"}
@@ -851,7 +859,8 @@ class TestFileCard:
     def test_the_brief_reaches_the_store(
         self, services: WorkflowServices, _identified: Path
     ) -> None:
-        from openstategraph.kanban_store import kanban_store_path, read_card
+        from openstategraph.kanban_store import kanban_store_path
+        from kanban_by_path import read_card
 
         server = build_mcp_server(services)
 
@@ -944,7 +953,8 @@ class TestTheFilerIsTheServersFinding:
         self, tmp_path: Path, monkeypatch
     ) -> None:
         from openstategraph.config_file import reset_active_config
-        from openstategraph.kanban_store import kanban_store_path, read_card
+        from openstategraph.kanban_store import kanban_store_path
+        from kanban_by_path import read_card
         from openstategraph.principal import TrustedHeaderPrincipals
 
         config = tmp_path / "openstategraph.yaml"
@@ -982,7 +992,7 @@ class TestTriage:
         chain, so the argued order is unambiguous: `root` unblocks one card
         directly and is itself unblocked, `middle` and `leaf` are blocked."""
         db = kanban_store_path(services.store.root)
-        from openstategraph.kanban_store import file_idea_card
+        from kanban_by_path import file_idea_card
 
         file_idea_card(
             db, project_id="proj-a", kind="task", title="Root",

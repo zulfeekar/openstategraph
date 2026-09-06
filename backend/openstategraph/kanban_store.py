@@ -24,25 +24,41 @@ This module is the one place both halves of that problem are made honest:
   Same discipline as `async_tasks.py`'s own `TaskStatus.UNKNOWN`: state the
   uncertainty, never guess it closed.
 
-## What this module deliberately does not do
+## What this module holds, and what it does not
 
-No CLI, no MCP tool, no HTTP route — those are thin adapters over `set_stage`
-and `read_card`, built separately, so the claim/stage logic exists exactly
-once.
+`team-board-and-gap-reports/02` split the family into three. This module is the
+**vocabulary and the rules**: what a card is, which column it is in, the order
+the board is worked in, where the board lives, and the registry a store is
+opened through. It contains no `sqlite3` and no `db_path`.
+
+- `abc/kanban_store.py` — `IKanbanStore` and `AbstractKanbanStore`, which own
+  every refusal and the stage machine itself.
+- `kanban_sqlite.py` — `SqliteKanbanStore`, the one member the family has
+  today, and the only module in the card path that knows what a file is.
+
+The rules here are deliberately **not** on the interface: `triage`,
+`column_for`, `card_row`, `flagged_stale` and `unresolved_blockers` are
+functions over cards a store has already handed back, so a second store cannot
+disagree with them.
+
+No CLI, no MCP tool, no HTTP route either — those are thin adapters over
+`open_kanban_store()`, so the claim/stage logic exists exactly once.
 """
 
 from __future__ import annotations
 
-import json
+import dataclasses
 import os
 import re
-import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from collections.abc import Sequence
-from typing import Any
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any
 from pathlib import Path
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle, types only
+    from openstategraph.abc.kanban_store import IKanbanStore
 
 #: `kanban-patrol/19`. Same shape as `run_sinks.RUN_STORE_PATH_ENV` — an
 #: absolute override for a deployment whose write location genuinely differs
@@ -206,6 +222,14 @@ class Card:
     #: here, which would read on the board as a decision somebody made.
     agent_model: str = ""
     agent_effort: str = ""
+    #: `osg-agent-experience/85`. What the closing checks said, written at the
+    #: `finished` transition and nowhere else. Last in the field order because
+    #: it carries a default and the four evidence fields above it do not — not
+    #: because it is a lesser piece of evidence: it is the one an agent's own
+    #: gate produces, and until this field existed `set_stage` accepted it and
+    #: dropped it. Empty string, never `None`, the same one-spelling-of-nothing
+    #: rule every field above keeps.
+    finished_reason: str = ""
 
 
 #: `kanban-patrol/19`'s explicit Release lease, in seconds — one hour. Owned
@@ -305,133 +329,20 @@ def card_row(card: Card, *, stale: bool) -> dict[str, Any]:
         "blocked_by": list(card.blocked_by),
         "agent_model": card.agent_model,
         "agent_effort": card.agent_effort,
+        # `osg-agent-experience/85`. On every row rather than only a finished
+        # one, for the reason this function exists at all: two doors publishing
+        # different field sets is how a board and an agent come to read
+        # different cards.
+        "finished_reason": card.finished_reason,
         "stale": stale,
     }
 
 
-def _now() -> str:
+def now_iso() -> str:
+    """One spelling of *now* for every card write — a heartbeat, a filing and
+    an answer are stamped by the same clock, in the same format, whatever store
+    they land in."""
     return datetime.now(timezone.utc).isoformat()
-
-
-#: Every column this schema declares, past `CREATE TABLE`'s own reach once a
-#: store already exists — kanban-patrol/26. One source for both: the
-#: `CREATE TABLE` above (a fresh store) and the repair loop below (an old
-#: one), so a column added to one is never forgotten in the other.
-_COLUMN_DEFS: dict[str, str] = {
-    "stage": "TEXT NOT NULL DEFAULT 'unattended'",
-    "actor": "TEXT",
-    "last_heartbeat_at": "TEXT",
-    "priority": "TEXT NOT NULL DEFAULT 'med'",
-    "area": "TEXT NOT NULL DEFAULT 'backend'",
-    "priority_reason": "TEXT NOT NULL DEFAULT ''",
-    "filed_at": "TEXT NOT NULL DEFAULT ''",
-    "evidence_test_id": "TEXT NOT NULL DEFAULT ''",
-    "evidence_red_reason": "TEXT NOT NULL DEFAULT ''",
-    "evidence_green": "INTEGER NOT NULL DEFAULT 0",
-    "evidence_commit": "TEXT NOT NULL DEFAULT ''",
-    "answer": "TEXT NOT NULL DEFAULT ''",
-    "answered_by": "TEXT NOT NULL DEFAULT ''",
-    "answered_at": "TEXT NOT NULL DEFAULT ''",
-    # `osg-agent-experience/25`. Declared only here, not also in the
-    # `CREATE TABLE` below: the repair loop runs on a freshly created store
-    # too, so one declaration covers both cases and the older columns'
-    # duplication is history rather than a pattern to extend.
-    "story": "TEXT NOT NULL DEFAULT ''",
-    "done_when": "TEXT NOT NULL DEFAULT ''",
-    "blocked_by": "TEXT NOT NULL DEFAULT ''",
-    "agent_model": "TEXT NOT NULL DEFAULT ''",
-    "agent_effort": "TEXT NOT NULL DEFAULT ''",
-}
-
-
-def ensure_schema(db_path: Path) -> None:
-    """Build the store if it does not exist; repair it, column by column, if
-    it does — kanban-patrol/26.
-
-    The story this closes: the old version only knew "build one if there's
-    none," so a store made before a column existed was left exactly as it
-    was, and the next read of that column crashed. This asks each declared
-    column for itself and adds whatever is missing — per-column, additive
-    only, deliberately not a versioned migration list: every change this
-    schema has needed so far has been "add a column," never a rename, and
-    the fuller machinery would solve a problem that has not happened yet.
-    """
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS cards (
-                task_id TEXT PRIMARY KEY,
-                board TEXT NOT NULL,
-                kind TEXT NOT NULL,
-                category TEXT NOT NULL,
-                title TEXT NOT NULL,
-                stage TEXT NOT NULL DEFAULT 'unattended',
-                actor TEXT,
-                last_heartbeat_at TEXT,
-                priority TEXT NOT NULL DEFAULT 'med',
-                area TEXT NOT NULL DEFAULT 'backend',
-                priority_reason TEXT NOT NULL DEFAULT '',
-                filed_at TEXT NOT NULL,
-                evidence_test_id TEXT NOT NULL DEFAULT '',
-                evidence_red_reason TEXT NOT NULL DEFAULT '',
-                evidence_green INTEGER NOT NULL DEFAULT 0,
-                evidence_commit TEXT NOT NULL DEFAULT '',
-                answer TEXT NOT NULL DEFAULT '',
-                answered_by TEXT NOT NULL DEFAULT '',
-                answered_at TEXT NOT NULL DEFAULT ''
-            )
-            """
-        )
-        existing = {row[1] for row in conn.execute("PRAGMA table_info(cards)")}
-        for column, definition in _COLUMN_DEFS.items():
-            if column not in existing:
-                conn.execute(f"ALTER TABLE cards ADD COLUMN {column} {definition}")
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def file_card(
-    db_path: Path,
-    *,
-    task_id: str,
-    board: str,
-    kind: str,
-    category: str,
-    title: str,
-    priority: str = "med",
-    area: str = "backend",
-    priority_reason: str = "",
-) -> None:
-    """The patrol's write. `kanban-patrol/02`: once a card leaves
-    `unattended`, a re-patrol must never touch it again — enforced by the
-    caller, not here; this is the initial file only, `INSERT OR IGNORE` so a
-    second patrol filing the same `task_id` is a no-op rather than an error.
-
-    `priority`/`area` default rather than require an argument at every call
-    site that does not yet have an opinion — `test_kanban_store.py`'s own
-    body of tests predates this field and files cards through it constantly;
-    a real patrol (`07`/`08`) is expected to always pass both explicitly.
-    """
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO cards
-                (task_id, board, kind, category, title, stage, priority, area,
-                 priority_reason, filed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                task_id, board, kind, category, title, Stage.UNATTENDED.value,
-                priority, area, priority_reason, _now(),
-            ),
-        )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 #: `osg-agent-experience/25`. Every idea card's id starts here, so a reader of
@@ -446,22 +357,6 @@ IDEA_PREFIX = "idea-"
 IDEA_KINDS: frozenset[str] = frozenset({"task", "bug", "grilling"})
 
 _SLUG_SEPARATORS = re.compile(r"[^a-z0-9]+")
-
-
-def _decode_blocked_by(raw: str | None) -> tuple[str, ...]:
-    """The JSON list the column holds, as ids. Tolerant in reading and strict
-    in trusting, `CLAUDE.md`'s own rule: a blank column, a store written before
-    the column existed and a value that is not a JSON list all mean "no
-    blockers" rather than a crash on a read of somebody else's board."""
-    if not raw:
-        return ()
-    try:
-        loaded = json.loads(raw)
-    except ValueError:
-        return ()
-    if not isinstance(loaded, list):
-        return ()
-    return tuple(str(item) for item in loaded if str(item).strip())
 
 
 def idea_task_id(project_id: str, title: str) -> str:
@@ -483,10 +378,6 @@ def idea_task_id(project_id: str, title: str) -> str:
             "one letter or digit to make an id from"
         )
     return f"{project_id}:{IDEA_PREFIX}{slug}"
-
-
-def _known_card_ids(conn: sqlite3.Connection) -> frozenset[str]:
-    return frozenset(row[0] for row in conn.execute("SELECT task_id FROM cards"))
 
 
 def resolve_blocked_by(
@@ -550,605 +441,14 @@ def resolve_blocked_by(
     return tuple(resolved)
 
 
-def unresolved_blockers(db_path: Path, card: Card) -> tuple[str, ...]:
-    """The ids on `card.blocked_by` that no card on the store carries —
-    `osg-agent-experience/30`'s "reported at filing time, naming it".
-
-    Read-only, and computed here rather than at either door so the CLI and the
-    MCP tool report the same thing. A missing store is an empty board, so
-    every blocker on the card is unresolved.
-    """
-    if not card.blocked_by:
-        return ()
-    if not db_path.is_file():
-        return tuple(card.blocked_by)
-    ensure_schema(db_path)
-    conn = sqlite3.connect(db_path)
-    try:
-        known = _known_card_ids(conn)
-    finally:
-        conn.close()
-    return tuple(b for b in card.blocked_by if b not in known)
-
-
-def file_idea_card(
-    db_path: Path,
-    *,
-    project_id: str,
-    kind: str,
-    title: str,
-    story: str,
-    done_when: str,
-    priority: str,
-    priority_reason: str,
-    area: str = "backend",
-    actor: str = "",
-    blocked_by: Sequence[str] = (),
-    agent_model: str = "",
-    agent_effort: str = "",
-) -> str:
-    """File a card out of a conversation — `osg-agent-experience/25`. Returns
-    its `task_id`.
-
-    **Not `file_card` with more arguments.** That one writes what a patrol
-    found, and its whole justification is the run thread behind it, which any
-    later reader can go and look at. This one writes what somebody *said they
-    wanted*, and the chat log it came from is not a thing the next reader can
-    open. So the brief is required here and defaulted there: an empty `story`
-    is precisely the shape the lost conversation would take on the card.
-
-    **And it refuses a duplicate rather than ignoring it.** `file_card` uses
-    `INSERT OR IGNORE`, which is right for a patrol re-run — the same finding
-    seen again is the same card. Here a collision means two different ideas
-    were given one title, and silently keeping the first would lose the
-    second with nothing said. The caller renames.
-
-    `actor` is who filed it, and it goes in the same column a claimant's name
-    goes in — the card is still `unattended`, so the first `attend` overwrites
-    it with whoever takes the work, which is the honest reading of that column
-    either way: the person this card is currently with. Over MCP the string
-    arriving here is the server's own finding rather than the model's claim
-    (`kanban-patrol/29`); over the CLI it is the shell's, `20`'s stated floor.
-    """
-    if kind not in IDEA_KINDS:
-        raise ValueError(
-            f"kind {kind!r} is not one this door files — use one of "
-            f"{', '.join(sorted(IDEA_KINDS))}"
-        )
-    if priority not in BOARD_PRIORITIES:
-        raise ValueError(
-            f"priority {priority!r} is not one of {', '.join(BOARD_PRIORITIES)}"
-        )
-    if area not in BOARD_AREAS:
-        raise ValueError(f"area {area!r} is not one of {', '.join(BOARD_AREAS)}")
-    for name, value in (
-        ("story", story),
-        ("done_when", done_when),
-        ("priority_reason", priority_reason),
-    ):
-        if not value.strip():
-            raise ValueError(
-                f"{name} is empty — a card filed from a conversation carries "
-                "its brief or the brief is lost with the conversation"
-            )
-
-    task_id = idea_task_id(project_id, title)
-    ensure_schema(db_path)
-    conn = sqlite3.connect(db_path)
-    try:
-        resolved_blockers = resolve_blocked_by(
-            project_id, blocked_by, _known_card_ids(conn)
-        )
-        existing = conn.execute(
-            "SELECT title FROM cards WHERE task_id = ?", (task_id,)
-        ).fetchone()
-        if existing is not None:
-            raise ValueError(
-                f"{task_id} already exists ({existing[0]!r}) — two ideas cannot "
-                "share one title; name this one differently"
-            )
-        conn.execute(
-            """
-            INSERT INTO cards
-                (task_id, board, kind, category, title, stage, actor, priority,
-                 area, priority_reason, filed_at, story, done_when, blocked_by,
-                 agent_model, agent_effort)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                task_id, "workflows", kind, "idea", title.strip(),
-                Stage.UNATTENDED.value, actor.strip() or None,
-                priority, area, priority_reason.strip(),
-                _now(), story.strip(), done_when.strip(),
-                json.dumps(list(resolved_blockers)),
-                agent_model.strip(), agent_effort.strip(),
-            ),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    return task_id
-
-
-_CARD_COLUMNS = (
-    "task_id, board, kind, category, title, stage, actor, last_heartbeat_at, "
-    "priority, area, priority_reason, filed_at, "
-    "evidence_test_id, evidence_red_reason, evidence_green, evidence_commit, "
-    "answer, answered_by, answered_at, "
-    "story, done_when, blocked_by, agent_model, agent_effort"
-)
-
-
-def _row_to_card(row: tuple[Any, ...]) -> Card:
-    return Card(
-        task_id=row[0],
-        board=row[1],
-        kind=row[2],
-        category=row[3],
-        title=row[4],
-        stage=Stage(row[5]),
-        actor=row[6],
-        last_heartbeat_at=row[7],
-        priority=row[8],
-        area=row[9],
-        priority_reason=row[10],
-        filed_at=row[11],
-        evidence_test_id=row[12],
-        evidence_red_reason=row[13],
-        evidence_green=bool(row[14]),
-        evidence_commit=row[15],
-        answer=row[16],
-        answered_by=row[17],
-        answered_at=row[18],
-        story=row[19],
-        done_when=row[20],
-        blocked_by=_decode_blocked_by(row[21]),
-        agent_model=row[22],
-        agent_effort=row[23],
-    )
-
-
-def read_card(db_path: Path, task_id: str) -> Card:
-    if not db_path.is_file():
-        # No store yet means no card yet — the same "no record of that"
-        # honesty `async_tasks.py`'s `TaskStatus.UNKNOWN` names, not a crash
-        # over a transport a caller cannot otherwise distinguish from a
-        # genuine miss.
-        raise KeyError(task_id)
-    # `kanban-patrol/17`+`21` found this live: a store built before this
-    # column set existed (only `patrol.run_patrol` called `ensure_schema`
-    # directly) crashed every later read with "no such column" rather than
-    # being repaired. Guarded on `is_file()` so this never *creates* a store
-    # on a mere read — same rule the check above already holds — only
-    # repairs one that is already there, same repair loop `26` already
-    # wrote for exactly this situation.
-    ensure_schema(db_path)
-    conn = sqlite3.connect(db_path)
-    try:
-        row = conn.execute(
-            f"SELECT {_CARD_COLUMNS} FROM cards WHERE task_id = ?",
-            (task_id,),
-        ).fetchone()
-    finally:
-        conn.close()
-    if row is None:
-        raise KeyError(task_id)
-    return _row_to_card(row)
-
-
 _STAGE_SEQUENCE = list(Stage)
 
 
-def _required_previous(stage: Stage) -> Stage:
+def required_previous_stage(stage: Stage) -> Stage:
     """The one stage a transition *to* `stage` must come from. Stage only
     ever advances one step at a time — this is the entire ordering rule,
     expressed once so every caller checks the same thing."""
     return _STAGE_SEQUENCE[_ORDER[stage] - 1]
-
-
-def _require_matching_test_id(
-    task_id: str, stage_word: str, test_id: str, recorded: str
-) -> None:
-    """The one sentence `green` and `finished` both need when a supplied
-    `test_id` disagrees with the one recorded at `red` — `kanban-patrol/33`
-    found `finished` reading this same parameter and silently ignoring it.
-    A blank `test_id` is not a mismatch here; callers that require one
-    non-blank (`green`) check that separately before calling this."""
-    if test_id and test_id != recorded:
-        raise MissingEvidenceError(
-            f"{task_id}: {stage_word} test_id {test_id!r} does not match the "
-            f"red test_id {recorded!r} recorded on this card"
-        )
-
-
-def set_stage(
-    db_path: Path,
-    task_id: str,
-    stage: Stage,
-    *,
-    actor: str,
-    test_id: str = "",
-    reason: str = "",
-    commit: str = "",
-) -> SetStageResult:
-    """The one write path.
-
-    **Attend (`stage == ATTENDED`) is a race, not a logic error** — two
-    coding agents legitimately racing for one card is `kanban-patrol/13`'s own
-    finding, so a conflict here is reported through `SetStageResult.ok`, told
-    plainly who won, never raised.
-
-    **Every later transition (red/green/finished) is a logic error, not a
-    race** — only the actor that already holds the card advances it, so a
-    mismatch there (skipping a stage, moving backward) is the caller's own
-    mistake and raises `StageOrderError` rather than being folded into `ok`.
-
-    **Atomic against the database, not against a value read a moment ago:**
-    the `WHERE` clause names the *required* previous stage literally — never
-    `current.stage.value` captured earlier — which is what makes this a
-    single conditional `UPDATE` rather than the read-then-write shape that
-    passes every single-caller test and loses a real race.
-
-    **`kanban-patrol/17`+`21`: the evidence gate.** Checked before the atomic
-    UPDATE, same as the stage-order check above — a card only reaches `red`
-    with a test id and a reason, only reaches `green` with the *same* test
-    id already recorded at `red`, and only reaches `finished` once red and
-    green are both already durably on the row. `MissingEvidenceError` names
-    exactly what is absent; it is never folded into `ok` because — like
-    `StageOrderError` — it is the caller's own mistake, not a race.
-    """
-    if not actor.strip():
-        # `kanban-patrol/20`: the floor, not full identity. The CLI's trust
-        # boundary is the shell it runs in — a deliberate, stated decision,
-        # not an oversight. The MCP door is no longer in the same position:
-        # `29` resolves the caller through `IPrincipals` before this is
-        # called, so on a deployment that identifies its callers the string
-        # arriving here is the server's own finding rather than the model's
-        # claim. (This comment said the installed library exposed no request
-        # context at all; `28` found that it does, at
-        # `RequestContext.request`.) Either way "already attended by " with
-        # nothing in the blank is meaningless to a human reading the card,
-        # so the floor stands: an actor must be a real, non-blank string.
-        raise MissingEvidenceError(f"{task_id}: actor must be a real, non-blank name")
-
-    current = read_card(db_path, task_id)
-    required_previous = _required_previous(stage)
-
-    if stage == Stage.ATTENDED:
-        # Attend is a race only between UNATTENDED (fresh) and ATTENDED
-        # (someone else just won it) — either is a legitimate concurrent
-        # outcome, told through `ok`, never raised. Anything already past
-        # attended (red/green/finished) is not a race at all: it is moving
-        # backward on a card the actor already progressed, a logic error.
-        if current.stage not in (Stage.UNATTENDED, Stage.ATTENDED):
-            raise StageOrderError(
-                f"{task_id}: cannot move from {current.stage.value} back to "
-                f"{stage.value} — stage only ever advances"
-            )
-    elif stage == Stage.FINISHED:
-        # Ordering for `finished` is enforced by the evidence check below,
-        # not here: `evidence_green` can only be True once a `green`
-        # transition has actually happened, and a `green` transition can
-        # only happen after `red` — so a complete-evidence check already
-        # implies the correct stage was reached. Checking literal order
-        # here as well would reject `test_finished_without_evidence_is_refused`
-        # (red -> finished, skipping green) with the wrong exception:
-        # `StageOrderError` rather than the more specific `MissingEvidenceError`
-        # this gate exists to raise.
-        pass
-    elif current.stage != required_previous:
-        raise StageOrderError(
-            f"{task_id}: cannot move from {current.stage.value} to {stage.value} "
-            "— stage only ever advances, one step at a time"
-        )
-
-    evidence_test_id = current.evidence_test_id
-    evidence_red_reason = current.evidence_red_reason
-    evidence_green = current.evidence_green
-    evidence_commit = current.evidence_commit
-
-    # `kanban-patrol/17`+`21`, hardened: `.strip()` before every truthiness
-    # check below, everywhere evidence is read as a string — a confirmed
-    # real bug otherwise, the same shape as the blank-actor gap `20` already
-    # closed. `bool(" ")` is `True` in Python, so `reason=" "` passed this
-    # gate silently until this fix; a whitespace string is exactly as
-    # meaningless as an empty one to anyone reading a card's evidence.
-    test_id = test_id.strip()
-    reason = reason.strip()
-    commit = commit.strip()
-
-    if stage == Stage.RED:
-        if not test_id:
-            raise MissingEvidenceError(f"{task_id}: red requires test_id")
-        if not reason:
-            raise MissingEvidenceError(f"{task_id}: red requires reason")
-        evidence_test_id = test_id
-        evidence_red_reason = reason
-    elif stage == Stage.GREEN:
-        if not test_id:
-            raise MissingEvidenceError(f"{task_id}: green requires test_id")
-        _require_matching_test_id(task_id, "green", test_id, current.evidence_test_id)
-        evidence_green = True
-    elif stage == Stage.FINISHED:
-        # `kanban-patrol/33`: `test_id` is optional at `finished` — the
-        # recorded id from `red`/`green` is the evidence — but when an
-        # agent does supply one it is checked against that recorded id with
-        # the same wording `green` uses, rather than being read for
-        # `commit` alone and silently dropped.
-        _require_matching_test_id(task_id, "finished", test_id, current.evidence_test_id)
-        # `kanban-patrol/17`'s own bar names four things, not three — "the
-        # commit or diff that carries the work" is the fourth, and it was
-        # optional here until this fix let a card reach Resolved without
-        # ever naming what actually changed.
-        missing = []
-        if not current.evidence_test_id:
-            missing.append("test_id")
-        if not current.evidence_red_reason:
-            missing.append("red reason")
-        if not current.evidence_green:
-            missing.append("green")
-        if not commit:
-            missing.append("commit")
-        if missing:
-            raise MissingEvidenceError(
-                f"{task_id}: finished requires evidence — missing {', '.join(missing)}"
-            )
-        evidence_commit = commit
-
-    conn = sqlite3.connect(db_path)
-    try:
-        cursor = conn.execute(
-            """
-            UPDATE cards
-            SET stage = ?, actor = ?, last_heartbeat_at = ?,
-                evidence_test_id = ?, evidence_red_reason = ?,
-                evidence_green = ?, evidence_commit = ?
-            WHERE task_id = ? AND stage = ?
-            """,
-            (
-                stage.value, actor, _now(),
-                evidence_test_id, evidence_red_reason,
-                int(evidence_green), evidence_commit,
-                task_id, required_previous.value,
-            ),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    if cursor.rowcount == 0:
-        if stage != Stage.ATTENDED:
-            # A concurrent second advance of an already-progressed card is
-            # not a race this schema allows at all (only the holder calls
-            # these) — treat it the same as any other order violation.
-            raise StageOrderError(
-                f"{task_id}: cannot move to {stage.value} — card is no longer at "
-                f"{required_previous.value}"
-            )
-        # Lost the attend race between the read above and this write —
-        # reread to report who actually holds it, truthfully.
-        loser_view = read_card(db_path, task_id)
-        return SetStageResult(
-            ok=False,
-            reason=f"already attended by {loser_view.actor} — card is at {loser_view.stage.value}",
-        )
-    return SetStageResult(ok=True)
-
-
-def release_card(
-    db_path: Path, task_id: str, *, threshold_seconds: int = 3600
-) -> SetStageResult:
-    """The human half of "flag, never auto-release" — `kanban-patrol/19`.
-
-    `flagged_stale` only ever reports; nothing writes on its own. This is the
-    one function a human's own explicit press calls, and it is guarded twice:
-
-    - **A card must already be flagged.** `task_id` is checked against
-      `flagged_stale`'s own list first — a human can only release what the
-      system has already named as stale, never an arbitrary active card by
-      accident. This is the exact discipline that keeps "a human decides"
-      honest even once a Release button exists: the button cannot invent
-      staleness, only act on what was already found.
-    - **Atomic against the database, same discipline as `set_stage`.** The
-      `UPDATE`'s `WHERE` clause still guards `stage != 'unattended'` — a
-      genuine resume between the `flagged_stale` check above and this write
-      (someone else's `set_stage` call landing first) must not be silently
-      clobbered. Zero rows affected is treated exactly like "no longer
-      stale," reported through `SetStageResult`, never raised.
-
-    A successful release resets the row to a fresh, unattended state —
-    `stage`, `actor`, `last_heartbeat_at`, and all four evidence fields all
-    the way back to their filed-but-never-attended defaults — so the card
-    looks exactly as if nobody had ever touched it. A partial reset would
-    leave stale evidence to bleed into whoever attends next, which is the
-    same bug this module already refuses at the `red`/`green` evidence gate,
-    just at the opposite end of the lifecycle.
-    """
-    if task_id not in flagged_stale(db_path, threshold_seconds=threshold_seconds):
-        return SetStageResult(
-            ok=False,
-            reason=f"{task_id}: not stale — a card can only be released once it has been flagged",
-        )
-
-    conn = sqlite3.connect(db_path)
-    try:
-        cursor = conn.execute(
-            """
-            UPDATE cards
-            SET stage = ?, actor = NULL, last_heartbeat_at = NULL,
-                evidence_test_id = '', evidence_red_reason = '',
-                evidence_green = 0, evidence_commit = ''
-            WHERE task_id = ? AND stage != ?
-            """,
-            (Stage.UNATTENDED.value, task_id, Stage.UNATTENDED.value),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    if cursor.rowcount == 0:
-        # Someone else's `set_stage` genuinely won the race between the
-        # `flagged_stale` read above and this write — reported the same
-        # honest way, never a silent clobber of whoever is now resuming.
-        return SetStageResult(
-            ok=False,
-            reason=f"{task_id}: not stale — a card can only be released once it has been flagged",
-        )
-    return SetStageResult(ok=True)
-
-
-def answer_card(
-    db_path: Path, task_id: str, *, actor: str, answer: str
-) -> SetStageResult:
-    """Record the decision a person made on a Needs You card —
-    `kanban-patrol/15`, the owner's decision of 2026-09-04.
-
-    **The card goes back to Detected, never to Resolved.** A decision is not
-    evidence that anything was built, so `17`'s gate is still the only road
-    to Resolved; and the card must not stay in Needs You either, because that
-    is the column a person reads for outstanding questions. `column_for` does
-    the move on its own, from the answer this writes — no second stored
-    column, the same `18` rule the rest of this module keeps.
-
-    **One write path, and it writes once.** The stage is untouched: the card
-    is still `unattended`, so an agent attends it next exactly as it would
-    any Detected card. Two refusals and one loss:
-
-    - A blank actor or a blank answer is `MissingEvidenceError` — the
-      caller's own mistake, named, never recorded as a decision nobody made.
-      `.strip()` first, because `bool(" ")` is `True`.
-    - A card that is not a judgement waiting in Needs You is
-      `StageOrderError`: a `bug` was never in question, and a claimed
-      judgement already has somebody on it.
-    - A **second** answer is a race, not a mistake — two people reading one
-      board and both deciding is ordinary — so it is reported through
-      `SetStageResult.ok` naming who answered first, exactly as a lost
-      attend is, and the first decision stands.
-
-    **Atomic against the database, not against the read above.** The
-    `WHERE` clause requires the answer to still be blank and the card to
-    still be unattended, so two callers that both read a blank answer do not
-    both write one — the same discipline `set_stage` uses, and the reason
-    this is a conditional `UPDATE` rather than a read-then-write.
-    """
-    if not actor.strip():
-        raise MissingEvidenceError(f"{task_id}: actor must be a real, non-blank name")
-    answer = answer.strip()
-    if not answer:
-        raise MissingEvidenceError(f"{task_id}: answer must be a real, non-blank decision")
-
-    current = read_card(db_path, task_id)
-    if current.answer.strip():
-        return SetStageResult(
-            ok=False,
-            reason=(
-                f"{task_id}: already answered by {current.answered_by} "
-                f"at {current.answered_at} — an answer is written once"
-            ),
-        )
-    if column_for(current) != "needsYou":
-        raise StageOrderError(
-            f"{task_id}: not waiting on a decision — a {current.kind} card at "
-            f"{current.stage.value} is in {column_for(current)}, and only a "
-            "judgement nobody has claimed carries a question to answer"
-        )
-
-    conn = sqlite3.connect(db_path)
-    try:
-        cursor = conn.execute(
-            """
-            UPDATE cards
-            SET answer = ?, answered_by = ?, answered_at = ?
-            WHERE task_id = ? AND stage = ? AND answer = ''
-            """,
-            (answer, actor, _now(), task_id, Stage.UNATTENDED.value),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    if cursor.rowcount == 0:
-        # Lost between the read above and this write — reread and report who
-        # actually holds the decision, truthfully, never a silent overwrite.
-        loser_view = read_card(db_path, task_id)
-        if loser_view.answer.strip():
-            return SetStageResult(
-                ok=False,
-                reason=(
-                    f"{task_id}: already answered by {loser_view.answered_by} "
-                    f"at {loser_view.answered_at} — an answer is written once"
-                ),
-            )
-        return SetStageResult(
-            ok=False,
-            reason=f"{task_id}: no longer waiting on a decision — card is at "
-            f"{loser_view.stage.value}",
-        )
-    return SetStageResult(ok=True)
-
-
-def store_digest(db_path: Path) -> str:
-    """A cheap answer to *has anything in this store changed* —
-    `osg-agent-experience/36`.
-
-    The board's live stream watches the file the way `live.LiveWorkflows`
-    watches a package: the store is the truth and the server is one reader of
-    it, so the only honest question a poll can ask is whether the bytes moved.
-    Every write door — this module's `file_card`, `set_stage`, `release_card`,
-    `answer_card`, from this process or from an `openstategraph kanban stage`
-    in another — goes through sqlite, so the file's `mtime_ns` and size move
-    for all of them and for none of the reads.
-
-    **The four aggregates are not redundancy for its own sake.** `mtime_ns`
-    alone is coarse on filesystems that round it, and sqlite can rewrite a
-    page without changing the row count; `count(*)` catches a filing,
-    `max(last_heartbeat_at)` catches every `set_stage` (which always stamps
-    it), `max(answered_at)` catches an answer. Any one of them moving is a
-    change; none of them moving with the same mtime and size is, for the
-    board's purpose, the same store.
-
-    Opaque on purpose: it is compared, never parsed. An absent store has a
-    digest too — asking never creates anything, and a watcher must not raise
-    on a project whose board has never been opened.
-    """
-    if not db_path.is_file():
-        return "absent"
-    stat = db_path.stat()
-    parts: list[str] = [str(stat.st_mtime_ns), str(stat.st_size)]
-    try:
-        ensure_schema(db_path)
-        conn = sqlite3.connect(db_path)
-        try:
-            row = conn.execute(
-                "SELECT count(*), max(last_heartbeat_at), max(answered_at) FROM cards"
-            ).fetchone()
-        finally:
-            conn.close()
-        parts.extend(str(value) for value in row)
-    except sqlite3.Error:
-        # A store mid-write (or not one) is not a reason to kill the watcher;
-        # the file stamp above is still a true answer to "did the bytes move".
-        parts.append("unreadable")
-    return "|".join(parts)
-
-
-def list_cards(db_path: Path) -> list[Card]:
-    """Every card, current stage included. Empty — never an error — when
-    nothing has been filed yet: `ensure_schema` was never called, so the
-    file itself may not exist, and "no store yet" and "store, no rows" mean
-    the same thing to a reader."""
-    if not db_path.is_file():
-        return []
-    # Same repair-before-read as `read_card` — `kanban-patrol/17`+`21` found
-    # a store built before these columns existed crashing every list, not
-    # just a single-card read.
-    ensure_schema(db_path)
-    conn = sqlite3.connect(db_path)
-    try:
-        rows = conn.execute(f"SELECT {_CARD_COLUMNS} FROM cards").fetchall()
-    finally:
-        conn.close()
-    return [_row_to_card(row) for row in rows]
 
 
 @dataclass(frozen=True)
@@ -1288,53 +588,176 @@ def triage(cards: Sequence[Card]) -> tuple[TriageRow, ...]:
     return tuple(rows)
 
 
-def flagged_stale(db_path: Path, *, threshold_seconds: int) -> list[str]:
+@dataclass(frozen=True)
+class CardEvidence:
+    """The five fields a stage write carries, as one value.
+
+    `team-board-and-gap-reports/02`: `AbstractKanbanStore` decides what the
+    evidence *becomes* and a store writes it, so the two need one thing to pass
+    between them. A record rather than five parameters because they are read
+    and written together at every stage and a sixth would otherwise mean five
+    signatures changing in four places — which is exactly how
+    `osg-agent-experience/85`'s `finished_reason` would have been forgotten
+    somewhere.
+    """
+
+    test_id: str = ""
+    red_reason: str = ""
+    green: bool = False
+    commit: str = ""
+    finished_reason: str = ""
+
+    def replace(self, **changes: object) -> "CardEvidence":
+        return dataclasses.replace(self, **changes)  # type: ignore[arg-type]
+
+
+def unresolved_blockers(store: "IKanbanStore", card: Card) -> tuple[str, ...]:
+    """The ids on `card.blocked_by` that no card on the store carries —
+    `osg-agent-experience/30`'s "reported at filing time, naming it".
+
+    Read-only, and a **rule** rather than a store method
+    (`team-board-and-gap-reports/02`): it is a set difference over cards the
+    store has already handed back, so the CLI and the MCP tool cannot report
+    different things and a second store cannot answer it its own way. An empty
+    board leaves every blocker on the card unresolved, which is the honest
+    answer for a project whose board has never been filed into.
+    """
+    if not card.blocked_by:
+        return ()
+    known = {existing.task_id for existing in store.list_cards()}
+    return tuple(blocker for blocker in card.blocked_by if blocker not in known)
+
+
+def flagged_stale(store: "IKanbanStore", *, threshold_seconds: int) -> list[str]:
     """Cards whose last heartbeat is older than the threshold. Read-only —
     flags, never releases. `kanban-patrol/19`: a human presses Release
-    themselves; this function must never change a row, only report on it.
+    themselves; this must never change a row, only report on it.
 
-    Two stages are excluded by construction (`WHERE stage NOT IN (...)`),
-    and for the same reason at both ends of the lifecycle: staleness is
-    about an abandoned *claim*.
+    Two stages are excluded, and for the same reason at both ends of the
+    lifecycle: staleness is about an abandoned *claim*.
 
     - An `unattended` card has no claim to abandon.
     - A `finished` card's claim was not abandoned, it was *discharged*
-      (`kanban-patrol/32`). Nobody writes to a resolved card again, which
-      is what resolved means, so its heartbeat is older than any threshold
-      within the hour — and flagging it offered `release_card`, the one
-      control here that empties all four evidence fields, on the one column
-      that is read-only. Excluded here rather than at the card because this
-      is where the fact is computed: the API row's `stale`, the CLI's
-      `kanban release` and the MCP `kanban_release_card` all read it, and a
-      rule spelled at one door is a rule the other two do not have.
+      (`kanban-patrol/32`). Nobody writes to a resolved card again, which is
+      what resolved means, so its heartbeat is older than any threshold within
+      the hour — and flagging it offered `release_card`, the one control that
+      empties every evidence field, on the one column that is read-only.
 
-    **No store yet is an empty answer, never a crash** — the same guard
-    `read_card`/`list_cards` already carry, missing here until
-    `kanban-patrol/19`'s Release wiring gave this function its first real
-    caller outside its own test file and found the gap live: a fresh
-    project's kanban board asking "is anything stale" before a single card
-    has ever been filed hit `no such table: cards` instead of the honest
-    "no, nothing is."
+    A **rule**, not a store method (`team-board-and-gap-reports/02`): the API
+    row's `stale`, the CLI's `kanban release` and the MCP `kanban_release_card`
+    all read it, and a threshold or an exclusion spelled at one door is one the
+    other two do not have. An empty board is an empty answer, never a crash.
     """
-    if not db_path.is_file():
-        return []
-    ensure_schema(db_path)
     now = datetime.now(timezone.utc)
-    conn = sqlite3.connect(db_path)
-    try:
-        rows = conn.execute(
-            "SELECT task_id, last_heartbeat_at FROM cards "
-            "WHERE stage NOT IN (?, ?)",
-            (Stage.UNATTENDED.value, Stage.FINISHED.value),
-        ).fetchall()
-    finally:
-        conn.close()
-
-    stale = []
-    for task_id, last_heartbeat_at in rows:
-        if last_heartbeat_at is None:
+    stale: list[str] = []
+    for card in store.list_cards():
+        if card.stage in (Stage.UNATTENDED, Stage.FINISHED):
             continue
-        age = (now - datetime.fromisoformat(last_heartbeat_at)).total_seconds()
+        if not card.last_heartbeat_at:
+            continue
+        age = (now - datetime.fromisoformat(card.last_heartbeat_at)).total_seconds()
         if age > threshold_seconds:
-            stale.append(task_id)
+            stale.append(card.task_id)
     return stale
+
+
+#: `team-board-and-gap-reports/02`, and the owner's round-2 decision: a
+#: **separate** variable for the team board. The checkpointer's
+#: `OPENSTATEGRAPH_POSTGRES_URL` is never reused for cards — one URL doing two
+#: jobs is one mistake away from a project's checkpoints and its board being
+#: the same database by accident.
+KANBAN_URL_ENV = "OPENSTATEGRAPH_KANBAN_URL"
+
+
+class KanbanStoreRegistry:
+    """Which implementation opens which kind of address.
+
+    `CLAUDE.md`'s registry behaviour, the same shape as
+    `search_backends.SearchBackendRegistry`: a duplicate scheme raises (two
+    claims on one name is ambiguity, not precedence), `upsert` is how a caller
+    says it meant to replace one, `list()` enumerates, and a fresh instance is
+    always constructible so a test's registrations never leak into another
+    test's.
+
+    The openers live in their own modules and are imported here, never defined
+    here — `test_a_dispatch_table_does_not_hold_its_targets.py` stays at zero,
+    which is `CLAUDE.md`'s **O** as a test: extend by registering, never by
+    editing the engine.
+    """
+
+    def __init__(self) -> None:
+        self._openers: dict[str, Callable[[str], "IKanbanStore"]] = {}
+
+    def register(self, scheme: str, opener: Callable[[str], "IKanbanStore"]) -> None:
+        if scheme in self._openers:
+            raise ValueError(
+                f'A kanban store is already registered for "{scheme}". Two claims '
+                "on one scheme is ambiguity, not precedence — use upsert() if you "
+                "meant to replace it."
+            )
+        self._openers[scheme] = opener
+
+    def upsert(self, scheme: str, opener: Callable[[str], "IKanbanStore"]) -> None:
+        self._openers[scheme] = opener
+
+    def get(self, scheme: str) -> "Callable[[str], IKanbanStore] | None":
+        return self._openers.get(scheme)
+
+    def list(self) -> tuple[str, ...]:
+        return tuple(self._openers)
+
+
+def default_kanban_store_registry() -> KanbanStoreRegistry:
+    """SQLite today; `team-board-and-gap-reports/03` registers Postgres beside
+    it and edits nothing else. A fresh registry per call — no module-level
+    singleton, so a test that mutates one instance cannot affect another."""
+    from openstategraph.kanban_sqlite import open_sqlite_kanban_store
+
+    registry = KanbanStoreRegistry()
+    registry.register("sqlite", open_sqlite_kanban_store)
+    return registry
+
+
+def open_kanban_store(
+    workflows_root_dir: Path | str | None = None,
+    *,
+    registry: KanbanStoreRegistry | None = None,
+) -> "IKanbanStore":
+    """This project's board — the one door every consumer opens.
+
+    `OPENSTATEGRAPH_KANBAN_URL` decides which implementation, by the scheme it
+    names; unset means this laptop's own `kanban.sqlite`, whose address
+    `kanban_store_location` resolves and reports. A scheme nothing is
+    registered for is refused **by name**, naming the variable that set it and
+    what is registered — a board silently falling back to a local file when the
+    shared one was asked for is the failure nobody would notice until two
+    people disagreed about what the board said.
+
+    Asking never creates anything: a store is opened lazily and a read of a
+    board that has never been filed into is an empty board, not a new one.
+    """
+    registry = default_kanban_store_registry() if registry is None else registry
+    url = os.environ.get(KANBAN_URL_ENV, "").strip()
+    if not url:
+        return registry_opener(registry, "sqlite")(
+            f"sqlite:///{kanban_store_path(workflows_root_dir)}"
+        )
+    scheme = url.split("://", 1)[0].strip().lower()
+    return registry_opener(registry, scheme, url_env=True)(url)
+
+
+def registry_opener(
+    registry: KanbanStoreRegistry, scheme: str, *, url_env: bool = False
+) -> "Callable[[str], IKanbanStore]":
+    """The refusal, worded once so both branches of `open_kanban_store` say the
+    same thing about a scheme nothing claims."""
+    opener = registry.get(scheme)
+    if opener is not None:
+        return opener
+    known = ", ".join(registry.list()) or "none"
+    source = f"{KANBAN_URL_ENV} names" if url_env else "this build asked for"
+    raise ValueError(
+        f"{source} a {scheme!r} kanban store, and nothing is registered for that "
+        f"scheme (registered: {known}). A board that quietly fell back to a local "
+        "file would be two people disagreeing about what the board says."
+    )

@@ -201,6 +201,14 @@ export interface BoardCard {
    */
   readonly agentModel?: string;
   readonly agentEffort?: string;
+  /**
+   * What the closing checks said when this card reached `finished` —
+   * `osg-agent-experience/85`. Distinct from `evidenceRedReason`, which is why
+   * the test failed at `red`: this is the verdict of the gate run at the end,
+   * and until the store kept it the only place it could live was a file beside
+   * the workflow. Absent on every card that never carried one.
+   */
+  readonly finishedReason?: string;
 }
 
 /**

@@ -139,6 +139,14 @@ export function PatrolCard({ card, column, onAnswer, onRelease }: PatrolCardProp
         </Tooltip>
       ) : null}
 
+      {/* `osg-agent-experience/85`: what the closing checks said, on the card
+          rather than in the shell that ran them. The line above names the test
+          that proves the work; this one carries the verdict of the gate run at
+          the end, which until this ticket `set_stage` accepted and dropped. */}
+      {card.finishedReason ? (
+        <span className="patrol-card__evidence">finished: {card.finishedReason}</span>
+      ) : null}
+
       {/* `kanban-patrol/19`'s explicit Release: "flag, never auto-release" —
           the card says so honestly, and a human reads it and presses the
           button themselves. Only present once the lease has actually gone

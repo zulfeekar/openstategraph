@@ -47,7 +47,8 @@ from openstategraph.api.live_stream import LIVE_TOPICS, live_frame_fields, live_
 from openstategraph.api.main import create_app
 from openstategraph.api.patrol_events import PATROL_EVENT, PatrolEvent
 from openstategraph.api.workflow_events import WORKFLOW_EVENT
-from openstategraph.kanban_store import ensure_schema, file_card, kanban_store_path
+from openstategraph.kanban_store import kanban_store_path
+from kanban_by_path import ensure_schema, file_card
 
 REPO_BACKEND = str(Path(__file__).resolve().parents[1])
 
@@ -88,8 +89,9 @@ def _attend_in_another_process(db: Path, task_id: str) -> None:
     code = (
         "import sys; sys.path.insert(0, %r)\n"
         "from pathlib import Path\n"
-        "from openstategraph.kanban_store import Stage, set_stage\n"
-        "r = set_stage(Path(%r), %r, Stage.ATTENDED, actor='agent')\n"
+        "from openstategraph.kanban_sqlite import SqliteKanbanStore\n"
+        "from openstategraph.kanban_store import Stage\n"
+        "r = SqliteKanbanStore(Path(%r)).set_stage(%r, Stage.ATTENDED, actor='agent')\n"
         "assert r.ok, r.reason\n" % (REPO_BACKEND, str(db), task_id)
     )
     subprocess.run([sys.executable, "-c", code], check=True, capture_output=True)

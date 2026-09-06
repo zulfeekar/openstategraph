@@ -216,7 +216,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       part of it this module knows. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 900,
+    lines: 901,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -382,7 +382,14 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       \`PatrolStreamEvent\` are still parsed field for field here, which is what
       \`contractDrift.test.ts\` reads. Nine lines is what a browser's
       six-connections-per-origin budget cost this file, recorded rather than
-      quietly pocketed.`,
+      quietly pocketed.
+
+      **900 -> 901** (\`osg-agent-experience/85\`). One declared member on the
+      kanban card row — \`finished_reason\`, what the closing checks said when a
+      card reached \`finished\`. The same bill this entry's own argument
+      describes: a field of the published contract, documented at its
+      declaration, pinned to \`docs/openapi.json\` by the drift test rather than
+      by codegen. No behaviour, and no new reason to change.`,
   },
 };
 

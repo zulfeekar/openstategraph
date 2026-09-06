@@ -12,7 +12,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from openstategraph.kanban_store import kanban_store_path, read_card
+from openstategraph.kanban_store import kanban_store_path
+from kanban_by_path import read_card
 from openstategraph import patrol as patrol_module
 from openstategraph.patrol import (
     PATROL_SESSION_PREFIX,
@@ -255,7 +256,8 @@ class TestRunPatrolEndToEnd:
     def test_a_card_already_attended_is_never_reclassified(self, tmp_path: Path) -> None:
         """`02`'s own rule: once a card leaves `unattended`, a re-patrol
         must never touch it again, even with new evidence."""
-        from openstategraph.kanban_store import Stage, set_stage
+        from openstategraph.kanban_store import Stage
+        from kanban_by_path import set_stage
 
         root = tmp_path / "workflows"
         run_patrol(project_id="proj-x", workflows_root=root, savers=[_Saver(_redundant_thread())], records=[_run_record()])
@@ -280,7 +282,8 @@ class TestRunPatrolEndToEnd:
         is the end of the ladder, and it is the stage a re-file would be
         most damaging at.
         """
-        from openstategraph.kanban_store import Stage, set_stage
+        from openstategraph.kanban_store import Stage
+        from kanban_by_path import set_stage
 
         root = tmp_path / "workflows"
         run_patrol(project_id="proj-x", workflows_root=root, savers=[_Saver(_redundant_thread())], records=[_run_record()])

@@ -179,11 +179,8 @@ class TestBothDoorsSayIt:
 
     def test_the_cli_prints_the_transitive_sentence(self, tmp_path, capsys) -> None:
         from openstategraph import cli
-        from openstategraph.kanban_store import (
-            ensure_schema,
-            file_idea_card,
-            kanban_store_path,
-        )
+        from openstategraph.kanban_store import kanban_store_path
+        from kanban_by_path import ensure_schema, file_idea_card
 
         (tmp_path / "workflows").mkdir()
         db = kanban_store_path(tmp_path / "workflows")

@@ -1213,7 +1213,23 @@ version*, and a reader who takes it for *unchanged* turns the guard off exactly
 where it is needed.
 """
 
-KANBAN_STORE = """
+#: `team-board-and-gap-reports/02`, 2026-09-06. **Departed this table**, which
+#: is the outcome the ticket asked for and is recorded rather than deleted: the
+#: argument below was the case for one 690-line module, and the split answered
+#: it rather than winning it. `kanban_store.py` is **303** code lines (the
+#: vocabulary, the rules and the store registry), `abc/kanban_store.py` **374**
+#: (the interface and every refusal) and `kanban_sqlite.py` **240** (the schema,
+#: the conditional writes and the encoding) — three modules, none of them within
+#: two hundred lines of the ceiling, where there was one over it.
+#:
+#: Kept in the file because the paragraph it opens with — *"it crossed the
+#: ceiling on the day it gained the second write"* — is the only account of how
+#: a module gets here, and the last two sections are the argument this table
+#: exists to prompt: they say why a `kanban_ideas.py` would have been a second
+#: module with no boundary, and the split that actually happened cuts along a
+#: different seam than the one they rejected. A reason deleted the day it is
+#: discharged takes the reasoning with it.
+_DEPARTED_KANBAN_STORE = """
 The kanban card store — the stage machine, the evidence gate, and the two
 writes that put a card on the board. It crossed the ceiling on the day it
 gained the second write (`osg-agent-experience/25`), which is the honest
@@ -1270,16 +1286,15 @@ it.
 """
 
 RECORDED: dict[str, Recorded] = {
-    "kanban_store.py": Recorded(690, KANBAN_STORE),
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
-    "cli.py": Recorded(1703, CLI),
+    "cli.py": Recorded(1718, CLI),
     "compile/workflow_compiler.py": Recorded(1018, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(994, MCP_SERVER),
+    "mcp_server.py": Recorded(991, MCP_SERVER),
     "api/routes/workflows.py": Recorded(619, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
-    "api/schemas.py": Recorded(556, SCHEMAS),
+    "api/schemas.py": Recorded(557, SCHEMAS),
 }
 
 

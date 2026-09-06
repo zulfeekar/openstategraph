@@ -39,6 +39,10 @@ export interface KanbanCardResponse {
   readonly blocked_by: readonly string[];
   readonly agent_model: string;
   readonly agent_effort: string;
+  //: `osg-agent-experience/85` — what the closing checks said, recorded at the
+  //: `finished` transition. Empty on every card that has not reached it, and on
+  //: a finished one whose actor passed no reason.
+  readonly finished_reason: string;
   //: `kanban-patrol/19`'s explicit Release — whether this card's claim has
   //: gone past the hour-long lease with no heartbeat. Absent-vs-`false`
   //: does not apply here — every row carries this field always, unlike
@@ -120,5 +124,10 @@ export function mapKanbanCardToBoardCard(row: KanbanCardResponse, now: number): 
     blockedBy: row.blocked_by?.length ? row.blocked_by : undefined,
     agentModel: row.agent_model || undefined,
     agentEffort: row.agent_effort || undefined,
+    // `osg-agent-experience/85`. Absent, never `''`, the same rule every line
+    // above follows — and load-bearing here too: the card guards on this prop,
+    // so an empty string would draw a blank "finished:" line under every card
+    // that never carried a gate.
+    finishedReason: row.finished_reason || undefined,
   };
 }

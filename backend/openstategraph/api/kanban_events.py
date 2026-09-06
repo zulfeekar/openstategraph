@@ -65,9 +65,12 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from openstategraph.api.broadcast import DEFAULT_BACKLOG_LIMIT, Broadcaster, Subscriber
+
+if TYPE_CHECKING:  # pragma: no cover - types only
+    from openstategraph.abc.kanban_store import IKanbanStore
 
 logger = logging.getLogger(__name__)
 
@@ -125,16 +128,18 @@ class KanbanChangeWatcher:
 
     def __init__(
         self,
-        db_path: Callable[[], Path],
+        open_store: Callable[[], "IKanbanStore"],
         *,
         interval: float | None = None,
         backlog_limit: int = DEFAULT_BACKLOG_LIMIT,
     ) -> None:
-        #: Resolved per poll rather than at construction: `kanban_store_path`
-        #: reads an environment variable and the state directory, and asking
-        #: for it never creates anything, so a watcher built at app assembly
-        #: must not freeze an answer taken before the process was configured.
-        self._db_path = db_path
+        #: Resolved per poll rather than at construction: opening a board
+        #: reads environment variables and the state directory, and asking
+        #: never creates anything, so a watcher built at app assembly must not
+        #: freeze an answer taken before the process was configured.
+        #: `team-board-and-gap-reports/02`: a store rather than a path, so a
+        #: board that is not a file on this laptop is watched the same way.
+        self._open_store = open_store
         self._interval = POLL_INTERVAL_SECONDS if interval is None else interval
         self._backlog_limit = backlog_limit
         self._broadcaster: Broadcaster[KanbanChangedEvent] = Broadcaster(
@@ -214,9 +219,7 @@ class KanbanChangeWatcher:
             task.cancel()
 
     def _digest(self) -> str:
-        from openstategraph.kanban_store import store_digest
-
-        return store_digest(self._db_path())
+        return self._open_store().store_digest()
 
     async def _poll(self) -> None:
         loop = asyncio.get_running_loop()

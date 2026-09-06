@@ -546,6 +546,14 @@ is given it is refused, with the row unchanged, when it disagrees with the
 one already recorded. A caller missing any of this exits non-zero with the
 gap named plainly, the same way a skipped stage already does.
 
+`osg-agent-experience/85`: `--reason` is read at **two** stages and refused at
+the other two. At `red` it is why the test fails and it is required; at
+`finished` it is what your closing checks said, and it is kept on the card —
+`kanban show` prints it as `finished:` and the board draws it under the
+evidence line. Passing one at `attend` or `green` exits non-zero naming the two
+stages that keep one, rather than accepting it and dropping it, which is what
+this door did until the store gained the field.
+
 `answer` records the decision on a **Needs You** card (`kanban-patrol/15`,
 decided 2026-09-04). A card is in Needs You because the patrol stopped on a
 judgement it should not make, and only a person may make it. Recording the

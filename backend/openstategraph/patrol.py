@@ -28,7 +28,7 @@ from typing import Any, Callable
 from openstategraph.api.audience import Audience
 from openstategraph.api.services import WorkflowServices
 from openstategraph.api.threads import savers_for
-from openstategraph.kanban_store import ensure_schema, file_card, kanban_store_path, read_card
+from openstategraph.kanban_store import open_kanban_store
 from openstategraph.run_findings import (
     EVERY_TOOL_CALL_FAILED,
     NODE_FAILURE,
@@ -431,8 +431,7 @@ def run_patrol(
 
     severity = {NODE_FAILURE: 0, UNSTABLE_TOOL_RESULT: 1, REDUNDANT_TOOL_CALL: 2}
 
-    db = kanban_store_path(workflows_root)
-    ensure_schema(db)
+    store = open_kanban_store(workflows_root)
 
     filed: list[str] = []
     skipped: list[str] = []
@@ -440,7 +439,7 @@ def run_patrol(
     for refusal, refusal_findings in by_refusal.items():
         task_id = refusal_task_id(project_id, refusal)
         try:
-            read_card(db, task_id)
+            store.read_card(task_id)
             skipped.append(task_id)
             continue
         except KeyError:
@@ -454,8 +453,7 @@ def run_patrol(
             f"{calls} refused call{'' if calls == 1 else 's'} in total — one "
             "card, because it is one problem."
         )
-        file_card(
-            db,
+        store.file_card(
             task_id=task_id,
             board="workflows",
             kind=classification.kind,
@@ -472,7 +470,7 @@ def run_patrol(
     for thread_id, thread_findings in by_thread.items():
         task_id = f"{project_id}:{thread_id}"
         try:
-            read_card(db, task_id)
+            store.read_card(task_id)
             skipped.append(task_id)
             continue
         except KeyError:
@@ -485,8 +483,7 @@ def run_patrol(
         if len(thread_findings) > 1:
             reason += f" ({len(thread_findings) - 1} other finding(s) also seen in this thread.)"
 
-        file_card(
-            db,
+        store.file_card(
             task_id=task_id,
             board="workflows",
             kind=classification.kind,

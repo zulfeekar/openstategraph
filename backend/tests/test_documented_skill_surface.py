@@ -1041,6 +1041,27 @@ class TestTheClosingGate:
             if re.match(r"^\d+\.\s", line.strip())
         ]
 
+    def test_the_brief_names_the_card_field_that_keeps_it(self) -> None:
+        """`osg-agent-experience/85`. When `81` wrote this step, `set_stage`
+        accepted a `reason` at `finished` and dropped it, so the sheet said in
+        as many words that *no card field carries a gate* and sent the record to
+        a file beside the workflow instead. The field exists now, and a sheet
+        still saying it does not is a sentence that was true for one day.
+
+        Pinned as *the sheet names the door*, not as its wording: the claim is
+        that an agent closing a card is told where the gate's own output goes.
+        """
+        section = self._section()
+
+        assert "--reason" in section, (
+            "the closing step does not name the card field that keeps a gate: "
+            f"{section}"
+        )
+        assert "no card field carries a gate" not in section, (
+            "the sheet still says no card field carries a gate; "
+            "`kanban stage <id> finished --reason` does (osg-agent-experience/85)"
+        )
+
     def test_the_gate_is_a_numbered_list_of_doors(self) -> None:
         doors = self._doors()
         assert len(doors) >= 3, f"the closing step is not a list of steps to run: {doors}"
