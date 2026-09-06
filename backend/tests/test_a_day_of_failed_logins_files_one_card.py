@@ -71,7 +71,7 @@ class _Stub:
             "channel_values": {"messages": list(messages)},
             "updated_channels": ["messages"],
         }
-        self.metadata = {"step": step, "source": "loop", "workflow_slug": "cpl-analyst"}
+        self.metadata = {"step": step, "source": "loop", "workflow_slug": "chinook-analyst"}
         self.pending_writes = ()
 
 
@@ -143,7 +143,7 @@ def _record(thread: str, **overrides: Any) -> RunRecord:
     fields: dict[str, Any] = {
         "kind": "run",
         "at": "2026-09-05T09:41:00+02:00",
-        "workflow_slug": "cpl-analyst",
+        "workflow_slug": "chinook-analyst",
         "thread_id": thread,
         "seconds": 61.0,
         "attempts": 1,
