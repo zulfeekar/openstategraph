@@ -26,6 +26,14 @@ from openstategraph.providers import (
     reset_provider_catalogue,
 )
 
+# `osg-agent-experience/79`: the remedy is composed for the installation it is
+# printed on — `uv tool install --force` repairs a tool install, and a
+# pre-release carries index flags — so every assertion below reaches it through
+# `install_hint` rather than transcribing it. A literal here would pin one
+# machine's answer and be wrong on every other; the command itself is asserted
+# where it is composed, `test_the_install_hint_can_be_carried_out.py`.
+from openstategraph.install_hint import install_hint
+
 
 @pytest.fixture(autouse=True)
 def _fresh_catalogue():
@@ -199,14 +207,14 @@ class TestNothingHardcodesAClosedListAnymore:
                 ProviderSpec(name="nvidia", default_model="m", extra="nvidia"),
             ),
         )
-        assert provider_extra_hint("nvidia:whatever") == "pip install 'openstategraph[nvidia]'"
+        assert provider_extra_hint("nvidia:whatever") == install_hint("nvidia")
 
     def test_aliases_still_map_to_their_extra(self) -> None:
         from openstategraph._extras import provider_extra_hint
 
         # The two prefixes that are not provider names in their own right.
-        assert provider_extra_hint("claude:x") == "pip install 'openstategraph[anthropic]'"
-        assert provider_extra_hint("azure_openai:x") == "pip install 'openstategraph[openai]'"
+        assert provider_extra_hint("claude:x") == install_hint("anthropic")
+        assert provider_extra_hint("azure_openai:x") == install_hint("openai")
 
 
 # --------------------------------------------------------------------- #

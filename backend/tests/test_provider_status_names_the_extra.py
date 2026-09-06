@@ -25,6 +25,14 @@ from fastapi.testclient import TestClient
 from openstategraph.api.main import create_app
 from openstategraph.providers import ProviderSpec, provider_catalogue, reset_provider_catalogue
 
+# `osg-agent-experience/79`: the remedy is composed for the installation it is
+# printed on — `uv tool install --force` repairs a tool install, and a
+# pre-release carries index flags — so every assertion below reaches it through
+# `install_hint` rather than transcribing it. A literal here would pin one
+# machine's answer and be wrong on every other; the command itself is asserted
+# where it is composed, `test_the_install_hint_can_be_carried_out.py`.
+from openstategraph.install_hint import install_hint
+
 CREDENTIALS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_API_KEY", "OLLAMA_HOST")
 
 #: Registered rather than monkeypatched, same precedent as `test_provider_gap.py`'s
@@ -68,7 +76,7 @@ class TestTheRouteNamesAMissingExtra:
 
     def test_the_pip_line_is_the_one_the_cli_prints(self, monkeypatch: pytest.MonkeyPatch) -> None:
         rows = _providers(monkeypatch)
-        assert rows["ghost"]["install_hint"] == "pip install 'openstategraph[ghost]'"
+        assert rows["ghost"]["install_hint"] == install_hint("ghost")
 
     def test_a_row_that_needs_no_credential_still_reports_installed(
         self, monkeypatch: pytest.MonkeyPatch

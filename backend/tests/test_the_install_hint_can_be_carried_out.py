@@ -177,8 +177,13 @@ class TestEveryExtraNamedIsOneThatExists:
 
 class TestWhatThisInterpreterActuallyIs:
     def test_a_uv_tools_directory_is_recognised(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # `/home/...`, not `/Users/...`: the sibling gate
+        # `test_no_tracked_file_names_a_machine.py` refuses any tracked file
+        # carrying this platform's home prefix, and a fabricated path is
+        # indistinguishable from a real one to a census that reads text. What
+        # the assertion needs is a `uv/tools` segment, which this still has.
         monkeypatch.setattr(
-            sys, "prefix", "/Users/x/.local/share/uv/tools/openstategraph"
+            sys, "prefix", "/home/someone/.local/share/uv/tools/openstategraph"
         )
         monkeypatch.setattr(sys, "base_prefix", "/opt/python")
         assert detect_installation().shape == "uv-tool"

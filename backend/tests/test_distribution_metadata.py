@@ -26,6 +26,14 @@ from pathlib import Path
 
 import pytest
 
+# `osg-agent-experience/79`: the remedy is composed for the installation it is
+# printed on — `uv tool install --force` repairs a tool install, and a
+# pre-release carries index flags — so every assertion below reaches it through
+# `install_hint` rather than transcribing it. A literal here would pin one
+# machine's answer and be wrong on every other; the command itself is asserted
+# where it is composed, `test_the_install_hint_can_be_carried_out.py`.
+from openstategraph.install_hint import install_hint
+
 PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 
 DISTRIBUTION = "openstategraph"
@@ -313,7 +321,7 @@ class TestAMissingExtraSaysWhichOne:
 
         message = str(excinfo.value)
         assert "tier='deep' agent nodes" in message
-        assert "pip install 'openstategraph[deep]'" in message
+        assert install_hint("deep") in message
 
     def test_require_extra_returns_the_module_when_it_is_installed(self) -> None:
         from openstategraph._extras import require_extra
@@ -331,7 +339,7 @@ class TestAMissingExtraSaysWhichOne:
     def test_a_model_string_maps_to_its_provider_extra(self, model: str, extra: str) -> None:
         from openstategraph._extras import provider_extra_hint
 
-        assert provider_extra_hint(model) == f"pip install 'openstategraph[{extra}]'"
+        assert provider_extra_hint(model) == install_hint(extra)
 
     def test_an_unknown_provider_gets_no_guess(self) -> None:
         """A wrong install line is worse than none."""

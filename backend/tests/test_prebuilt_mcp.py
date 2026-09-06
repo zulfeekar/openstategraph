@@ -47,6 +47,14 @@ from openstategraph.prebuilt_mcp import (
     resolve_auth_headers,
 )
 
+# `osg-agent-experience/79`: the remedy is composed for the installation it is
+# printed on — `uv tool install --force` repairs a tool install, and a
+# pre-release carries index flags — so every assertion below reaches it through
+# `install_hint` rather than transcribing it. A literal here would pin one
+# machine's answer and be wrong on every other; the command itself is asserted
+# where it is composed, `test_the_install_hint_can_be_carried_out.py`.
+from openstategraph.install_hint import install_hint
+
 
 class FakeAsyncTool:
     """What `load_mcp_tools` hands back: a coroutine and no `func`."""
@@ -848,7 +856,7 @@ class TestTheExtraIsOurGapNotTheServers:
             ModuleNotFoundError("No module named 'langchain_mcp_adapters'")
         )
         assert status == STATUS_NOT_INSTALLED
-        assert "pip install 'openstategraph[mcp]'" in message
+        assert install_hint("mcp") in message
 
     def test_the_message_never_blames_the_server(self) -> None:
         _status, message = classify_mcp_failure(ModuleNotFoundError("langchain_mcp_adapters"))
@@ -870,7 +878,7 @@ class TestTheExtraIsOurGapNotTheServers:
             verdict = prebuilt_mcp.validate_mcp_server(DEFAULT_MCP_SERVERS[0])
 
         assert verdict.status == STATUS_NOT_INSTALLED
-        assert "pip install 'openstategraph[mcp]'" in verdict.message
+        assert install_hint("mcp") in verdict.message
         assert not verdict.ok
 
     def test_a_nameless_row_names_its_address_once(self) -> None:
@@ -912,7 +920,7 @@ class TestTheExtraIsOurGapNotTheServers:
     def test_the_compile_path_degrades_with_the_same_answer(self) -> None:
         """`_bind_sentence`, not "could not be reached" — a run says one thing."""
         sentence = prebuilt_mcp._bind_sentence(STATUS_NOT_INSTALLED, DEFAULT_MCP_SERVERS[0])
-        assert "pip install 'openstategraph[mcp]'" in sentence
+        assert install_hint("mcp") in sentence
         assert "could not be reached" not in sentence
 
     def test_a_document_binding_a_server_warns_about_the_extra(self) -> None:
@@ -923,7 +931,7 @@ class TestTheExtraIsOurGapNotTheServers:
             bound = node.as_langchain_tools(warnings=warnings)
 
         assert bound == []
-        assert warnings and "pip install 'openstategraph[mcp]'" in warnings[0]
+        assert warnings and install_hint("mcp") in warnings[0]
 
 
 # --------------------------------------------------------------------- #

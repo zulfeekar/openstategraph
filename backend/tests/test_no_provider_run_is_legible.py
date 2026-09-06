@@ -38,6 +38,14 @@ from fastapi.testclient import TestClient
 from openstategraph.api.main import create_app
 from openstategraph.providers import ProviderSpec, provider_catalogue, reset_provider_catalogue
 
+# `osg-agent-experience/79`: the remedy is composed for the installation it is
+# printed on — `uv tool install --force` repairs a tool install, and a
+# pre-release carries index flags — so every assertion below reaches it through
+# `install_hint` rather than transcribing it. A literal here would pin one
+# machine's answer and be wrong on every other; the command itself is asserted
+# where it is composed, `test_the_install_hint_can_be_carried_out.py`.
+from openstategraph.install_hint import install_hint
+
 CREDENTIALS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_API_KEY", "OLLAMA_HOST")
 
 MINIMAL_DOCUMENT = {
@@ -122,7 +130,7 @@ class TestRunNeverAnswers500:
 class TestTheSentenceIsTheOneEverySurfaceAlreadyPrints:
     def test_it_names_the_pip_install_line(self) -> None:
         response = _client().post("/api/runs", json=_run_body())
-        assert "pip install 'openstategraph[" in response.json()["detail"]
+        assert install_hint("ghost") in response.json()["detail"]
 
     def test_it_is_not_a_second_copy(self) -> None:
         """Not a new sentence written for this route — the exact string
