@@ -1664,9 +1664,11 @@ class CompiledPlan:
     #: not ask for.
     unrouted_route: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
-    #: Reports that stay off `warnings` on purpose — `launch-readiness/24`'s
-    #: unknown-`data`-key half, and any dynamically-discovered node type this
-    #: build has no static field schema for at all. `warnings` is the channel
+    #: Advice about the **document** that stays off `warnings` on purpose —
+    #: `launch-readiness/24`'s unknown-`data`-key half, and a node the entry
+    #: preference declines to start (`osg-agent-experience/81`). The
+    #: no-field-schema class used to sit here too and is now `unchecked` below,
+    #: because it is advice about nothing (`89`). `warnings` is the channel
     #: `package_testing.assert_document_shape` and `ValidateWorkflowTool`'s
     #: PROBLEMS FOUND both require empty (`Finding.UNWIRED_REVISE`'s
     #: precedent, `workflow-gallery/31`); an advisory here can never move
@@ -1674,6 +1676,27 @@ class CompiledPlan:
     #: might belong to a newer field or a plugin is the failure mode the
     #: owner's decision on 24 was written to prevent.
     advisories: list[str] = field(default_factory=list)
+    #: Statements about **this validator's own coverage**, not about the
+    #: document — today exactly one: a `tool.*`/`function.*` type this build
+    #: mints no static field schema for, whose `data` keys were therefore not
+    #: read (`osg-agent-experience/89`).
+    #:
+    #: A second list rather than more rows on `advisories`, because the two are
+    #: different acts and a reader acts on only one of them. An advisory says
+    #: *nothing is wired into this node, so it never runs* — a developer
+    #: deletes the node or draws the edge. This says *I did not look*, and
+    #: there is nothing to do about it: the type is legitimate, CLAUDE.md's
+    #: `code -> canvas` channel is what mints it, and a package's own
+    #: `functions/` is checked far more precisely one surface along
+    #: (`validation.uncallable_functions` reads the Python signature).
+    #:
+    #: They shared `advisories` until 89, and the bill was a closing gate no
+    #: package with a function node could ever pass: the sheet asks for no
+    #: `Notes:`, and this sentence printed one on every run. Weakening the
+    #: gate was the alternative and was rejected — `osg-agent-experience/81`
+    #: is on the record for what happens when an agent is taught to discount a
+    #: diagnostic it did not read.
+    unchecked: list[str] = field(default_factory=list)
 
 
 def always_taken_cycles(plan: "CompiledPlan") -> list[tuple[str, ...]]:
@@ -1794,7 +1817,7 @@ def always_taken_cycles(plan: "CompiledPlan") -> list[tuple[str, ...]]:
 def data_key_findings(
     nodes: Mapping[str, dict[str, Any]],
 ) -> tuple[list[str], list[str]]:
-    """`(hard, advisory)` findings for every node's `data` against its own
+    """`(hard, unchecked)` findings for every node's `data` against its own
     field schema — `launch-readiness/24`.
 
     **Hard**: a `required` field absent from `data`. There is no working
@@ -1802,8 +1825,15 @@ def data_key_findings(
     the silent wrong answer this ticket exists to close — the owner's
     decision, 2026-08-24.
 
-    **Advisory**: today, exactly one sentence — a `tool.*`/`function.*` type
-    with no static field schema to check at all, named below.
+    **Unchecked**: today, exactly one sentence — a `tool.*`/`function.*` type
+    with no static field schema to check at all, named below. It rides
+    `CompiledPlan.unchecked` and `openstategraph validate` prints it under
+    **`Not checked:`**, which is a different heading from `Notes:` and the
+    whole of `osg-agent-experience/89`: a note is advice about the document, and
+    this is a statement about what the checker did not read. Two shipped
+    packages hold a function node, so while the two shared a heading the entry
+    sheet's closing gate — *no `PROBLEMS FOUND:` and no `Notes:`* — could not
+    be satisfied by either of them.
 
     It used to carry a second: a key `data` holds that no field on that node
     type declares, reported as advice because "it might be a newer field or a
@@ -1821,10 +1851,13 @@ def data_key_findings(
     Python with no static field schema for this to check against, and
     pretending one exists would be a false-positive avalanche on the
     workflow-scoped types CLAUDE.md says are legitimate. The skip still
-    speaks: it is folded into the advisory list below, named, so nothing
-    about *that* node's keys goes unchecked *silently*.
+    speaks: it is folded into the `unchecked` list below, named, so nothing
+    about *that* node's keys goes unchecked *silently*. What it is not is a
+    complaint about the document — a package's own `functions/` is checked
+    against its Python signature by `validation.uncallable_functions`, which is
+    a stricter question than a field schema could ask.
 
-    **Any other type absent from the catalogue is skipped with no advisory
+    **Any other type absent from the catalogue is skipped with nothing said
     at all** — deliberately. That is either an unknown node type, which
     `ValidateWorkflowTool` already reports on its own loud channel, or a type
     a plugin registered through `openstategraph.node_families`
@@ -1836,12 +1869,12 @@ def data_key_findings(
     from openstategraph.compile.node_catalogue import CATALOGUE
 
     hard: list[str] = []
-    advisory: list[str] = []
+    unchecked: list[str] = []
     for node_id, node in nodes.items():
         node_type = str(node.get("type") or "")
         if node_type not in CATALOGUE.node_types:
             if node_type.startswith(("tool.", "function.")):
-                advisory.append(
+                unchecked.append(
                     f'Node "{node_id}" has type "{node_type}", which this build has no '
                     "generated field schema for (a workflow-scoped or plugin-discovered "
                     "type) — its data keys were not checked."
@@ -1856,7 +1889,7 @@ def data_key_findings(
                     "field schema marks required — there is no working version of this "
                     "node without it."
                 )
-    return hard, advisory
+    return hard, unchecked
 
 
 def _plan_destinations(plan: CompiledPlan) -> dict[str, list[str]]:
@@ -2211,9 +2244,12 @@ class WorkflowCompiler:
             if not str(node.get("type", "")).startswith("annotate.")
         }
 
-        hard_data_key_findings, advisory_data_key_findings = data_key_findings(executable)
+        hard_data_key_findings, unchecked_types = data_key_findings(executable)
         plan.warnings.extend(hard_data_key_findings)
-        plan.advisories.extend(advisory_data_key_findings)
+        # `unchecked`, not `advisories` — see the field's own argument
+        # (`osg-agent-experience/89`). This is what the checker did not read,
+        # and the other channel is what the document should change.
+        plan.unchecked.extend(unchecked_types)
 
         has_incoming: set[str] = set()
         has_outgoing: set[str] = set()

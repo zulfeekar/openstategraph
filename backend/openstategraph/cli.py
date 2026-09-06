@@ -641,8 +641,16 @@ def _compiler_findings(package: Path) -> tuple[list[str], list[str]]:
         workflow.close()
 
 
-def _plan_advisories(document: dict[str, Any]) -> list[str]:
-    """`plan.advisories` for one document — the channel MCP's door already reads.
+def _plan_advisories(document: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """`(advisories, unchecked)` for one document — the channels MCP's door reads.
+
+    Two lists rather than one because `cmd_validate` prints them under two
+    headings, and `osg-agent-experience/89` is why: *nothing is wired into this
+    node* is advice a developer acts on, and *this build has no field schema
+    for that type* is a statement about what the checker did not read. While
+    they shared `Notes:`, the entry sheet's closing gate — no `PROBLEMS FOUND:`
+    and no `Notes:` — was unreachable for every package holding a function
+    node, which is two of the shipped ones.
 
     Derived here the way `validation.validate_document` derives it, rather than
     scraped out of `ValidateWorkflowTool`'s printed report: that report's `- `
@@ -658,9 +666,10 @@ def _plan_advisories(document: dict[str, Any]) -> list[str]:
 
     inner = document.get("document", document) if isinstance(document, dict) else document
     try:
-        return list(WorkflowCompiler().plan(inner).advisories)
+        plan = WorkflowCompiler().plan(inner)
     except Exception:  # noqa: BLE001 - advice, never the command's verdict
-        return []
+        return ([], [])
+    return (list(plan.advisories), list(plan.unchecked))
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
@@ -782,7 +791,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     # move VALID to INVALID, and this command holds no opinion of its own
     # about a channel's class (see `_compiler_findings`). A `validate` that
     # failed CI over an advisory would have the advisory suppressed instead.
-    advisories = _plan_advisories(document)
+    advisories, unchecked = _plan_advisories(document)
     found = [line[2:] for line in report.splitlines() if line.startswith("- ")]
     # `plan.warnings` reaches this command twice — through the seam above and
     # again on `failure_warnings` — and one problem said once is the point.
@@ -794,6 +803,21 @@ def cmd_validate(args: argparse.Namespace) -> int:
         # one answer. A VALID followed by a list of problems is the shape
         # ticket 53 removed from this command.
         report = "\n".join(["PROBLEMS FOUND:", *(f"- {p}" for p in problems), "", topology])
+    if unchecked:
+        # **Its own heading, and that is the whole of `osg-agent-experience/89`.**
+        # A note is advice about the document; this is a statement about what
+        # this build could not read — a `tool.*`/`function.*` type a package's
+        # own Python mints, which has no static field schema to check `data`
+        # against. There is nothing for a reader to act on, and while it rode
+        # `Notes:` the sheet's closing gate (no `PROBLEMS FOUND:` and no
+        # `Notes:`) could not be passed by any package holding a function node.
+        #
+        # The gate's sentence is unchanged and nobody is asked to judge which
+        # notes count — weakening it was the alternative, and `81` is the
+        # record of what teaching an agent to discount a diagnostic costs.
+        # A function node's real contract is checked harder one call above:
+        # `uncallable_functions` reads the Python signature.
+        report = "\n".join([report, "Not checked:", *(f"- {u}" for u in unchecked), ""])
     notes = [*notes, *(a for a in advisories if a not in notes)]
     if notes:
         # Under their own heading, below the verdict, because that is what a

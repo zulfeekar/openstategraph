@@ -568,6 +568,14 @@ canvas draws in red — a mount or an exit with nothing wired into it — was
 invisible to the only door a coding agent has. The advice-not-verdict rule is
 the comment beside the call, not a second implementation of it.
 
+**1819 -> 1822** (`osg-agent-experience/89`, 2026-09-06). Three lines: the
+advisory reader returns the plan's two channels instead of one, and the
+coverage class gets its own `Not checked:` heading. The three lines buy a
+closing gate that a package holding a function node can actually pass — while
+the two shared `Notes:`, the sheet's gate was unreachable for two shipped
+packages, and the only ways out of that were the two an agent must never learn:
+report *Not clean yet:* forever, or discount a diagnostic.
+
 """
 
 WORKFLOW_COMPILER = """
@@ -652,6 +660,11 @@ reading. The rule itself is not here — it is `compile/state.strip_invisible`,
 at the seam that publishes — and this module only reports it, which is what
 every other row of `silent` is. Still one reason to change: this file assembles
 what a finished run has to say about itself.
+
+**1037 -> 1038 (`osg-agent-experience/89`).** One line: `CompiledPlan` grew a
+second advice channel, `unchecked`, so the statement *"this build has no field
+schema for that type"* stops riding the list a developer is asked to act on.
+The argument sits on the field, where a reader meets it.
 """
 
 STREAMING = """
@@ -1378,8 +1391,8 @@ prints the finding gets the offer without a second string to keep in step.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
     "document_checks.py": Recorded(505, DOCUMENT_CHECKS),
-    "cli.py": Recorded(1819, CLI),
-    "compile/workflow_compiler.py": Recorded(1037, WORKFLOW_COMPILER),
+    "cli.py": Recorded(1822, CLI),
+    "compile/workflow_compiler.py": Recorded(1038, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1040, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(990, MCP_SERVER),

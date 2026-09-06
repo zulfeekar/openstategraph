@@ -82,7 +82,13 @@ def validate_document(
 
         inner = document.get("document", document) if isinstance(document, dict) else document
         try:
-            findings = findings + WorkflowCompiler().plan(inner).advisories
+            plan = WorkflowCompiler().plan(inner)
+            # Both channels, because this door has one list and no headings
+            # (`osg-agent-experience/89` split them for the CLI, which does).
+            # A canvas draws a coverage statement the same way it draws a
+            # note, and dropping it here to tidy the CLI would have removed a
+            # sentence from the surface nobody asked about.
+            findings = findings + plan.advisories + plan.unchecked
         except Exception:
             # A plan that fails here despite `ValidateWorkflowTool` succeeding
             # is not this function's failure to report — its own findings

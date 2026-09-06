@@ -204,9 +204,9 @@ the brief**, and quote each answer. Green tests and a VALID verdict are not
 nobody had looked at.
 
 1. `openstategraph validate workflows/<slug>` (or `validate_workflow`) — no
-   `PROBLEMS FOUND:` **and** no `Notes:`. It reads the document against every
-   node type's own fields and ports, and its notes name any node with nothing
-   wired into it.
+   `PROBLEMS FOUND:` **and** no `Notes:`. A note names a node with nothing
+   wired into it. A `Not checked:` line is not a note and the gate ignores it:
+   it says a package's own `function.*`/`tool.*` type has no field schema.
 2. Those are the checks the canvas draws in red, so **a browser look is not
    required** — do not ask the developer for one.
 3. One smoke run with a neutral question, ending at **exactly one** exit. `run`
