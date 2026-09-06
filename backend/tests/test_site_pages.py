@@ -415,3 +415,94 @@ class TestTheRealAppServesThem:
 
         assert client.get("/gallery").status_code == 200
         assert client.get("/behind-the-scenes").status_code == 200
+
+
+class TestThePageNamesTheRepositoryThatWillExist:
+    """stable-beta-public/34.
+
+    Twenty-odd links on `site/index.html` hard-coded the *private* beta
+    repository's name, and the install section still showed the clone route
+    (`pip install -e "backend[ollama]"`) while the README's front door is a
+    pinned install from TestPyPI. `test_site_pages.py` pinned the page's
+    structure and neither of those, so both drifted in silence for two weeks.
+
+    The repository URL is written once — `[project.urls]` in
+    `backend/pyproject.toml` — and `scripts/build_site.py` puts it on the
+    pages. These are the tests that fail if a link, or the install block,
+    stops agreeing with it.
+    """
+
+    import sys as _sys
+
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+
+    @staticmethod
+    def _pages() -> dict[str, str]:
+        import build_site
+
+        return {path.name: path.read_text() for path in build_site.pages()}
+
+    def test_no_page_names_a_repository_other_than_the_declared_one(self) -> None:
+        import build_site
+
+        owner, repo = build_site.declared_repository()
+        offenders = [
+            f"{name}: github.com/{found.group('owner')}/{found.group('repo')}"
+            for name, text in self._pages().items()
+            for found in build_site.REPO_URL.finditer(text)
+            if (found.group("owner"), found.group("repo")) != (owner, repo)
+        ]
+
+        assert offenders == [], (
+            "every one of these 404s for a stranger the day the public "
+            f"repository is not called {repo}:\n" + "\n".join(sorted(set(offenders)))
+        )
+
+    def test_no_page_hands_a_reader_the_clone_route(self) -> None:
+        offenders = [
+            f"{name}:{number}"
+            for name, text in self._pages().items()
+            for number, line in enumerate(text.splitlines(), start=1)
+            if "pip install -e" in line
+        ]
+
+        assert offenders == [], (
+            "`pip install -e` installs from a checkout the reader does not "
+            f"have; the front door is the pinned install: {offenders}"
+        )
+
+    def test_the_install_block_is_the_readme_s_install_block(self) -> None:
+        """Byte for byte, through the same source `test_documented_install.py`
+        pins — so one edit to the README moves both."""
+        import build_site
+
+        assert build_site.install_block() in build_site.rendered_install_text()
+
+    def test_the_committed_pages_are_what_the_builder_would_write(self) -> None:
+        import build_site
+
+        assert build_site.check() == 0, (
+            "site/ is out of date — run python3 scripts/build_site.py --write"
+        )
+
+    def test_every_relative_link_on_the_pages_resolves(self) -> None:
+        """The link audit that found this ticket, run as a test.
+
+        Only the page-relative ones: `../../actions/...` is GitHub's own
+        convention (stable-beta-public/33) and does not exist locally, and an
+        absolute URL is a network call this suite will not make.
+        """
+        import build_site
+
+        directory = site_pages.site_dir({})
+        assert directory is not None
+        offenders = []
+        for path in build_site.pages():
+            for href in re.findall(r'href="([^"#][^"]*)"', path.read_text()):
+                target = href.split("#")[0]
+                if not target or "://" in target or target.startswith(("..", "/", "mailto:")):
+                    continue
+                if not (directory / target).exists():
+                    offenders.append(f"{path.name} -> {href}")
+
+        assert offenders == [], "\n".join(offenders)

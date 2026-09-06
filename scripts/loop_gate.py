@@ -80,7 +80,7 @@ class _JobCoverage:
 CI_COVERAGE = {
     "frontend": _JobCoverage(True, "typecheck + lint + format:check below (not the duplicate vitest — already run)"),
     "clean-install": _JobCoverage(True, "scripts/clean_install_proof.sh below (~40s with a warm dist/)"),
-    "gallery-diagrams-check": _JobCoverage(True, "both --check scripts below"),
+    "gallery-diagrams-check": _JobCoverage(True, "the two diagram --check scripts below; CI also runs build_module_index and build_site --check, which are cheap and not repeated here"),
     "backend": _JobCoverage(True, "pytest below covers it; ruff/mypy run separately (see docs/building-an-atom.md)"),
     "generated-port-specs": _JobCoverage(False, "regenerates port_specs.json and diffs it — not run here"),
     "generated-openapi": _JobCoverage(False, "regenerates docs/openapi.json and diffs it — not run here"),

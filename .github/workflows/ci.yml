@@ -326,6 +326,9 @@ jobs:
       - run: python3 scripts/build_gallery_diagrams.py --check
       - run: python3 scripts/build_behind_the_scenes.py --check
       - run: python3 scripts/build_module_index.py --check
+      # The landing page's repository links and install block, against
+      # `[project.urls]` and the README (stable-beta-public/34).
+      - run: python3 scripts/build_site.py --check
 
   # ONE status check to require in branch protection, instead of six that have
   # to be re-listed by hand every time a job is added, renamed or given a

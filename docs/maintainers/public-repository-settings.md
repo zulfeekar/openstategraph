@@ -199,7 +199,16 @@ in [Releasing ▸ *The `pypi` environment*](../releasing.md).
 
 `pages.yml` needs no secret: it declares `pages: write` and `id-token: write`
 in its own `permissions:` block and deploys through the `github-pages`
-environment.
+environment. **This is one click and it is the whole fix** — every failed run
+of that workflow is this setting being unset, not a bug in it
+(stable-beta-public/34).
+
+What the click publishes is already correct for a public repository: since
+stable-beta-public/34 every `github.com` link on `site/` is written by
+`scripts/build_site.py` from `[project.urls]` in `backend/pyproject.toml`, so
+renaming the repository is one line there followed by
+`python3 scripts/build_site.py --write`. CI's `gallery-diagrams-check` job
+fails if the page and that line ever disagree.
 
 ## What is deliberately not here
 

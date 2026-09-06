@@ -491,10 +491,11 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
 <span class="p">$</span> openstategraph run ./my-workflow <span class="s">"How many invoices are there?"</span></code></pre>
           </div>
           <p class="muted" style="margin-top:.75rem; font-size:.875rem">
-            <b>Not on PyPI yet</b> — the wheel is built and CI installs it into an empty
-            virtualenv outside the repository on every pull request, but the upload has not
-            happened. Until it does, the same artifact comes from a checkout:
-            <code>pip install -e "backend[ollama]"</code>.
+            <b>Not on PyPI yet</b> — the wheel is built, CI installs it into an empty
+            virtualenv outside the repository on every pull request, and the pre-release is on
+            TestPyPI. Until the PyPI upload happens the install is the pinned one under
+            <a href="#quickstart">Quickstart</a>, which names both indexes because TestPyPI
+            carries no <code>pydantic</code> 2.x.
           </p>
         </div>
         <div class="card">
@@ -843,7 +844,11 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
           </p>
           <div class="codeblock">
             <div class="pane-bar">terminal</div>
-<pre><code><span class="p">$</span> pip install <span class="s">"openstategraph[server,ollama]"</span>
+<pre><code><!--site:install--><span class="p">$</span> uv tool install \
+  --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ \
+  --index-strategy unsafe-best-match \
+  "openstategraph[server,ollama]==0.3.0rc17"<!--/site:install-->
 <span class="p">$</span> openstategraph serve --open   <span class="c"># prints the URLs it landed on</span></code></pre>
           </div>
           <p>
@@ -871,8 +876,10 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
               <b>The PyPI upload has not happened yet.</b> The wheel is built and verified — CI
               installs it into an empty virtualenv outside the repository and runs a workflow there
               on every pull request — but this page will not pretend a command works before it
-              does. Until the first release, the identical artifact comes from a checkout:
-              <code>pip install -e "backend[ollama]"</code>, and everything below is unchanged.
+              does. That is what every flag above is: the pre-release lives on TestPyPI, its
+              dependencies on PyPI, and the version is exact because pre-releases are skipped
+              otherwise. All three disappear the day this reaches PyPI, and everything below is
+              unchanged.
             </span>
           </div>
         </li>
@@ -965,9 +972,11 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
       </ol>
 
       <p class="note">
-        <strong>Placeholder:</strong> the clone URL above is
-        <code>https://github.com/zulfeekar/openstategraph-beta.git</code> — replace it along with the
-        other placeholder links before publishing.
+        <strong>One name, one place:</strong> the clone URL above and every
+        <code>github.com</code> link on this site are written by
+        <code>scripts/build_site.py</code> from <code>[project.urls]</code> in
+        <code>backend/pyproject.toml</code>. Renaming the repository is one line there and
+        <code>--write</code>; CI fails if the two disagree.
       </p>
     </div>
   </section>

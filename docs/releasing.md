@@ -511,7 +511,7 @@ gh run list --repo <owner>/<repo> --workflow pages.yml
 | The **`pypi` job** | never run. `0.3.0rc1` is on TestPyPI only, and the human gate has never been clicked |
 | **`release-pr.yml`** (*Release PR*) | every run has failed, all at `peter-evans/create-pull-request` — see below. It has never opened a pull request |
 | `openwiki-update.yml` (*OpenWiki update*) | has fired on schedule and failed every time, for want of `secrets.OPENWIKI_API_KEY`, which is not set on the repository — see `CLAUDE.md`'s OpenWiki block for the dated account and a run id |
-| `pages.yml` (*Deploy landing page*) | every run has failed — `HttpError: Not Found` from `actions/configure-pages`. See production-ready ticket 28 |
+| `pages.yml` (*Deploy landing page*) | every run has failed — `HttpError: Not Found` from `actions/configure-pages`. **One owner click turns it green**: Settings ▸ Pages ▸ *Build and deployment* ▸ Source: **GitHub Actions**, which is what `configure-pages` cannot find. There is nothing to fix in the workflow. See [Public repository settings §8](maintainers/public-repository-settings.md) and production-ready ticket 28 |
 | `issues-to-board.yml` (*Issues to board*) | never run. It fires on `issues` and `issue_comment`, and it is the newest workflow here (`team-board-and-gap-reports/05`). It needs `secrets.OPENSTATEGRAPH_KANBAN_URL`, which is not set — so its first run will fail the way `openwiki-update.yml` does, except that it says which variable was empty. It installs the **released** `openstategraph[postgres]` from PyPI rather than checking this repository out, so it cannot work at all until a release carrying `openstategraph.github_issue_bridge` is on PyPI |
 
 `docs-freshness` used to carry `if: github.event_name == 'pull_request'`,

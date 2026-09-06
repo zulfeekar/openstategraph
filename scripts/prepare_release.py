@@ -160,6 +160,8 @@ def main(argv: list[str]) -> int:
     if dated.returncode:
         return dated.returncode
     print(
+        "\nThen `python3 scripts/build_site.py --write` — the landing page's\n"
+        "install block is the README's, and CI checks that it still is.\n"
         "\nReview the diff, then commit it as:\n"
         f"    chore: release v{args.version}"
     )

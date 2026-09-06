@@ -56,8 +56,13 @@ openstategraph = "openstategraph.cli:console_main"
 #
 # EXTENSION_NAMESPACE is pinned (`org.openstategraph`, plugin_interop.py).
 [project.urls]
+# `Homepage` is the ONE decision here (stable-beta-public/34). The other three
+# are derived from it by `scripts/build_site.py`, which also writes every
+# `github.com` link on `site/`, so the public rename is this line plus
+# `python3 scripts/build_site.py --write`. `--check` runs in CI.
 Homepage = "https://github.com/zulfeekar/openstategraph-beta"
 Repository = "https://github.com/zulfeekar/openstategraph-beta"
+Source = "https://github.com/zulfeekar/openstategraph-beta"
 Changelog = "https://github.com/zulfeekar/openstategraph-beta/blob/main/CHANGELOG.md"
 Documentation = "https://github.com/zulfeekar/openstategraph-beta/blob/main/docs/adoption.md"
 
