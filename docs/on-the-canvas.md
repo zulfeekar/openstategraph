@@ -193,6 +193,34 @@ names it and sends nothing, one variable at a time so there is one thing to go
 and do — which is what a workflow built against a warehouse that does not exist
 yet does on every run, on purpose.
 
+**And the T-SQL atom knows three ways to log in, not one.** A whole connection
+string in one variable is the first, and it still wins whenever it is set. With
+it unset the connection is composed from named parts instead —
+`MSSQL_DB_SERVER` and `MSSQL_DB_NAME` (plus `MSSQL_DB_PORT`, default 1433, and
+`MSSQL_ODBC_DRIVER`, default *ODBC Driver 18 for SQL Server*) — with either a
+SQL login (`MSSQL_DB_USER`, `MSSQL_DB_PASSWORD`) or an Azure AD service
+principal (`SQL_AZURE_AD_TENANT_ID`, `SQL_AZURE_AD_CLIENT_ID`,
+`SQL_AZURE_AD_CLIENT_SECRET`). Nothing on the card changes: the card names one
+variable, and the parts are read from the environment beside it. With none of
+the three complete, the refusal says which shape is closest and which variable
+it still needs, by name.
+
+**On the Azure AD shape the driver is never asked to do Azure AD.** It is asked
+to use a token we already hold: the atom acquires one with MSAL — client
+credentials, scope `https://database.windows.net/.default`, which needs the
+`[mssql]` extra it already needs for the driver — and hands it over as
+`SQL_COPT_SS_ACCESS_TOKEN`. The reason is measured rather than stylistic
+(`osg-agent-experience/73`): ODBC Driver 18's own
+`Authentication=ActiveDirectoryServicePrincipal` flow hung for a full login
+timeout and reported `HYT00 Login timeout expired`, while the same service
+principal got an answer out of Azure AD in one round trip — **AADSTS7000222,
+the client secret is expired**, the cause the driver had swallowed for a day.
+So a credential Azure AD refuses now comes back as a refusal naming its AADSTS
+code, at once, instead of as a timeout that reads exactly like an unreachable
+server. Because a password left beside a token makes the driver try the
+password, `UID=`, `PWD=` and `Authentication=` are stripped from the composed
+string whenever the token route answers.
+
 **The `Allowlist YAML` field is not optional and is not a convenience.** It
 names a file inside `workflows/` whose `resolvers` each carry a `pin:` map,
 and the **values** of those maps — `dbo.invoice_line_v2`, not `dbo.invoice_line` —

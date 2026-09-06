@@ -77,7 +77,16 @@ deep = ["deepagents>=0.7,<1"]
 # dependencies are unchanged. pyodbc still needs a system ODBC driver
 # (msodbcsql18) to reach a server; that is the vendor's floor, not ours, and
 # the tool's refusal names this extra rather than leaving an ImportError.
-mssql = ["pyodbc>=5.0,<6"]
+# `msal` joins it for `osg-agent-experience/73`: ODBC Driver 18's own
+# `Authentication=ActiveDirectoryServicePrincipal` flow hung on the owner's Mac
+# for the full login timeout and reported `HYT00 Login timeout expired`, while
+# the same service principal answered MSAL in one round trip — with
+# AADSTS7000222, the real cause the driver had swallowed. So the token is
+# fetched here and handed to the driver, and the library that fetches it belongs
+# in the same extra as the driver: both are imported lazily at one seam each and
+# a document with no `tool.mssql-query` node needs neither. Pure Python, six
+# dependencies, no system library — a fraction of what pyodbc already asks for.
+mssql = ["pyodbc>=5.0,<6", "msal>=1.28,<2"]
 # Only a document containing a `tool.databricks-query` node needs this
 # (`osg-agent-experience/40`), on the same terms as `[mssql]` above:
 # `prebuilt_databricks` imports it lazily at one seam, so the unconfigured path

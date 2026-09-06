@@ -198,8 +198,17 @@ class TestTheOptionalDriversStayLazy:
 
     An extra is optional because nothing imports its driver at module scope;
     that same property is why the driver never enters mypy's graph. Derived
-    from the leaves' own `DRIVER_MODULES` plus the databricks leaf's one
-    `import_module` call, so a new warehouse leaf is covered the day it lands.
+    from every `DRIVER_MODULES` the package declares plus the `import_module`
+    strings the warehouse leaves write, so a new warehouse leaf is covered the
+    day it lands.
+
+    **That last sentence was not true until `osg-agent-experience/73`.** The
+    derivation read `knowledge_engines` and *one named leaf*, so `msal` — the
+    T-SQL leaf's second optional import, added with the Azure AD login — was
+    outside it, and a static `import msal` would have made the `[mssql]` extra
+    mandatory with this test still green. Widening the derivation is the fix
+    rather than adding `"msal"` to a list here: a list covers the driver
+    somebody remembered.
     """
 
     def test_no_module_statically_imports_an_optional_driver(self) -> None:
@@ -216,16 +225,31 @@ class TestTheOptionalDriversStayLazy:
 
 
 def _declared_driver_modules() -> set[str]:
-    """Every driver name the SQL family declares, read out of the family."""
-    from openstategraph import knowledge_engines, prebuilt_databricks
+    """Every optional-driver name the package declares, read out of the package.
+
+    Two halves, because the package says it in two idioms: a `DRIVER_MODULES`
+    tuple (the engine adapters, and the leaves since `73`), and the literal a
+    lazy `import_module` seam is given. Both are walked across every
+    `prebuilt_*` module rather than one named one.
+    """
+    import importlib as _importlib
+
+    from openstategraph import knowledge_engines
 
     names: set[str] = set()
-    for value in vars(knowledge_engines).values():
-        modules = getattr(value, "DRIVER_MODULES", None)
-        if isinstance(modules, tuple):
-            names.update(module.split(".")[0] for module in modules)
+    modules = [knowledge_engines]
+    for path in sorted(PACKAGE.glob("prebuilt_*.py")):
+        modules.append(_importlib.import_module(f"openstategraph.{path.stem}"))
 
-    source = Path(prebuilt_databricks.__file__).read_text()
+    sources: list[str] = []
+    for module in modules:
+        for value in (module, *vars(module).values()):
+            declared = getattr(value, "DRIVER_MODULES", None)
+            if isinstance(declared, tuple):
+                names.update(str(name).split(".")[0] for name in declared)
+        sources.append(Path(module.__file__ or "").read_text())
+
+    source = "\n".join(sources)
     for node in ast.walk(ast.parse(source)):
         if (
             isinstance(node, ast.Call)

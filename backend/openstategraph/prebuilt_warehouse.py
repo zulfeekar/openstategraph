@@ -243,7 +243,9 @@ class _WarehouseExplorerBase(_SqlExplorerBase):
 
     # -- the refusals that happen before a socket is opened ------------------
 
-    def _env_value(self, *, key: str, name: str, default: str, holds: str) -> tuple[str, str | None]:
+    def _env_value(
+        self, *, key: str, name: str, default: str, holds: str, required: bool = True
+    ) -> tuple[str, str | None]:
         """`(value, refusal)` — a named variable's value, or why there is none.
 
         Three refusals, and the middle one is the reason this is a helper
@@ -252,6 +254,14 @@ class _WarehouseExplorerBase(_SqlExplorerBase):
         The regex alone is not enough — a Databricks personal access token is
         also a legal environment-variable name — so the maintained prefix list
         is consulted too, exactly as `prebuilt_mcp` does.
+
+        `required=False` drops **only the third** refusal, returning `("", None)`
+        for a variable that is simply unset, and it exists because
+        `osg-agent-experience/73` gave one leaf a second way to log in: with
+        `OPENSTATEGRAPH_MSSQL_URL` unset the T-SQL leaf composes its connection
+        from named parts, so "unset" is a fork rather than a refusal there. The
+        first two refusals are unconditional for every leaf — a field that holds
+        a pasted value is a committed credential whichever shape answers next.
         """
         configured = (name or "").strip()
         if not configured:
@@ -267,6 +277,8 @@ class _WarehouseExplorerBase(_SqlExplorerBase):
             )
         value = os.environ.get(configured, "").strip()
         if not value:
+            if not required:
+                return "", None
             return "", (
                 f"The environment variable '{configured}' is unset or empty, so there "
                 f"is nothing to connect to. Set it to {holds} and run again; no query "

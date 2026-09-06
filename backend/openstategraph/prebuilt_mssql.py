@@ -29,20 +29,37 @@ environment variable, never a connection string — a document is committed. A
 value pasted where a name goes is refused as a value, and the refusal does not
 echo it back.
 
+**And the connection is no longer one string.** `osg-agent-experience/73`: with
+that variable unset the login is composed from named parts —
+`MSSQL_DB_SERVER`, `MSSQL_DB_NAME`, and either a SQL login or an Azure AD
+service principal — because a login that needs a secret otherwise needs the
+secret pasted into the URL beside the variable that already held it, and
+because ODBC Driver 18's own Azure AD flow hung for a full login timeout rather
+than reporting that the secret had expired. `mssql_connection.resolve_connection`
+is the one place that decides; this leaf calls it and stays a driver, a
+connection and a dialect name (`40`).
+
 `pyodbc` is an optional extra (`openstategraph[mssql]`), imported lazily at the
 one seam below, so the base wheel gains nothing and the unconfigured path — the
 only path this pass can prove, by the owner's decision of 2026-09-04 — needs no
-driver at all.
+driver at all. `msal` rides in the same extra and is imported the same way, at
+`mssql_connection`'s own seam.
 """
 
 from __future__ import annotations
 
 import contextlib
 import importlib
+import os
 from typing import Any, Iterator
 
 from pydantic import Field
 
+from openstategraph.mssql_connection import (
+    DRIVER_EXTRA,
+    ConnectionPlan,
+    resolve_connection,
+)
 from openstategraph.prebuilt_sql import DEFAULT_MAX_ROWS
 from openstategraph.prebuilt_warehouse import (
     WarehouseQueryArgs,
@@ -55,6 +72,7 @@ from openstategraph.prebuilt_warehouse import (
 __all__ = [
     "DEFAULT_CONNECTION_ENV",
     "DRIVER_EXTRA",
+    "DRIVER_MODULES",
     "MSSQL_TOOLS",
     "MssqlQueryArgs",
     "MssqlQueryTool",
@@ -73,22 +91,35 @@ __all__ = [
 #: inherits three vendor-documented names instead, and says why.
 DEFAULT_CONNECTION_ENV = "OPENSTATEGRAPH_MSSQL_URL"
 
-#: The extra that carries the driver. Named in the refusal rather than in a
-#: doc page, because the refusal is where somebody is standing when they need it.
-DRIVER_EXTRA = "openstategraph[mssql]"
+#: The optional modules this leaf can import, declared the way the SQL family's
+#: engine adapters declare theirs: the ODBC driver, and the token library the
+#: Azure AD shape needs (`73`). Both are lazy, which is what makes the extra
+#: optional and keeps either of them out of the type gate's graph — the property
+#: `test_the_type_gate_survives_a_newer_stub.py` asserts rather than assumes.
+DRIVER_MODULES = ("pyodbc", "msal")
+
+#: `DRIVER_EXTRA` is defined in `mssql_connection` and re-exported here, not
+#: restated: the refusal that names an install line is written in both modules
+#: and two spellings of one extra is the drift `CLAUDE.md` names.
 
 
 @contextlib.contextmanager
-def _connect(dsn: str) -> Iterator[Any]:
+def _connect(plan: ConnectionPlan) -> Iterator[Any]:
     """The one driver seam — lazy, uncommitted, always closed.
 
     Lazy so the base wheel carries no driver and the unconfigured path needs
     none. `autocommit=False` with an unconditional `rollback()` is the half of
     read-only the driver can actually give; the other half is the family's
     `statement_refusal`.
+
+    `attrs_before` is empty on every shape but the Azure AD one, where it
+    carries the access token we fetched ourselves (`73`) — so the driver is
+    handed a token rather than asked to go and get one.
     """
     pyodbc = importlib.import_module("pyodbc")
-    connection = pyodbc.connect(dsn, autocommit=False)
+    connection = pyodbc.connect(
+        plan.connection_string, autocommit=False, attrs_before=plan.attrs_before
+    )
     try:
         yield connection
     finally:
@@ -138,13 +169,29 @@ class MssqlQueryTool(_WarehouseExplorerBase):
         )
 
     def _connection(self) -> tuple[tuple[Any, ...], str | None]:
-        dsn, refusal = self._env_value(
+        """The URL variable if it is set, otherwise the named parts (`73`).
+
+        `required=False` is the whole of the change on this rung: an unset URL
+        variable is a fork here, not a refusal, because there are two more
+        shapes to try. A *pasted* value is still refused first and unchanged —
+        a committed credential is a committed credential whichever shape would
+        have answered next.
+        """
+        url, refusal = self._env_value(
             key="connection",
             name=self.connection,
             default=DEFAULT_CONNECTION_ENV,
             holds="an ODBC connection string",
+            required=False,
         )
-        return (dsn,), refusal
+        if refusal:
+            return (), refusal
+        plan, refusal = resolve_connection(
+            os.environ, url=url, url_name=(self.connection or DEFAULT_CONNECTION_ENV).strip()
+        )
+        if plan is None:
+            return (), refusal
+        return (plan,), None
 
     def _open(self, target: tuple[Any, ...]) -> Any:
         return _connect(*target)

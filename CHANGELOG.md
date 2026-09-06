@@ -33,6 +33,19 @@
   for the `uv tool install` route and wrong for a project venv, an editable
   checkout or an unre-sourced pipx shell — and the failure is an agent showing
   no tools and no reason. The command is resolved once, and `init` says which of
+- **`tool.mssql-query` logs in three ways, and never asks the driver to do
+  Azure AD** (`osg-agent-experience/73`). It knew one shape — a whole ODBC
+  connection string in one variable — so a login needing a secret needed the
+  secret pasted into that string. With the URL variable unset the connection is
+  now composed from named parts (`MSSQL_DB_SERVER`, `MSSQL_DB_NAME`, optional
+  `MSSQL_DB_PORT`/`MSSQL_ODBC_DRIVER`) plus either a SQL login or an Azure AD
+  service principal; the URL still wins when set. On the service-principal
+  shape the token is acquired with MSAL (now in the `[mssql]` extra, still
+  lazily imported) and handed to the driver as `SQL_COPT_SS_ACCESS_TOKEN`,
+  because ODBC Driver 18's own flow hung for a full login timeout and reported
+  `HYT00 Login timeout expired` while Azure AD itself answered in one round
+  trip with the real cause — an expired client secret. A refused credential now
+  comes back at once, naming its AADSTS code and the variable that holds it.
   the three outcomes it wrote.
 - **`--help` no longer prints internal ticket ids** (`docs-onramp/08`). Eleven
   strings across the parser named a file under `.scratch/`, which ships in no
