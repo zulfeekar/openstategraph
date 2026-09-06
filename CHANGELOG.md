@@ -31,6 +31,22 @@
   card the backend cannot run says so on every door (the catalogue, `nodes`,
   `docs/modules.md`, and a registered document check) instead of at the end of a
   paid run.
+- **A gap report is a type, not a promise** (`team-board-and-gap-reports/07`).
+  A user asked to send a report about something their install refused to do
+  can now be told exactly what goes: `openstategraph.gap_report.GapReport` is
+  one closed Pydantic model whose fields are the whole payload, published as
+  [`docs/gap-report.schema.json`](docs/gap-report.schema.json) by
+  `scripts/generate_gap_report_schema.py --write` and pinned by a drift test.
+  The never-list — the document, prompts, field values, table names, question
+  text, file paths, environment values — is structurally unrepresentable
+  rather than merely absent: extra fields are forbidden, the type-id fields
+  take type ids and refuse anything shaped like a path or a sentence, the
+  check field takes only check ids this codebase publishes, and a refusal has
+  no constructor that accepts free text, so model output cannot become one.
+  `render()` shows the exact payload before anything moves, and the module has
+  no network client at all, so no path can build a report and dispatch it in
+  one call. Neither door is built yet; [reporting a platform
+  gap](docs/reporting-a-platform-gap.md) says so.
 
 ### Changed
 - **The README is a front door again** (`docs-onramp/01`, `02`, `05`, `06`).

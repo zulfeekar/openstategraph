@@ -1,0 +1,519 @@
+"""What a gap report may carry, as a type rather than as a promise.
+
+`team-board-and-gap-reports/07`. A user whose install refused to do something
+— a node type this runtime has no implementation for, a provider that is not
+configured, a door that said no — can send **that refusal and nothing else**
+to the maintainers. The only honest way to ask that is to be able to say
+exactly what goes and what does not, and *"we only send anonymous
+diagnostics"* is a sentence, not a guarantee.
+
+So the guarantee is this model. Its fields are the owner's allowlist and
+nothing else, it is closed (`extra="forbid"`), and the classes on the
+never-list are structurally unrepresentable rather than merely absent: a door
+that reaches for the document, a prompt, a field value, a table name, the
+question, a path or an environment value gets a `ValidationError` instead of a
+send.
+
+## Why it is a projection and not one of the three finding shapes we have
+
+`RunFinding` is Pydantic already and carries `arguments` — normalised tool
+arguments, which is user content. `DocumentFinding` carries a subject of
+`<node id>.<field>`, and a node id is a name its author chose. Both are the
+**internal** vocabulary, where user content is exactly what makes a finding
+useful. A report is a narrower projection of them, and the narrowing is the
+product — which is also why the NO_BACKEND refusal here is rendered from the
+*type id* rather than copied from `document_checks`' sentence, whose first
+word after "Node" is the author's own name for it.
+
+## What is deliberately not here
+
+No transport. There is no timer, no background sender and no HTTP client in
+this module, so no call path can construct a report *and* dispatch it; the
+doors (`08`, the user's own `gh`, and `09`, the keyless one) are the only
+things that will ever send, once, after a person has read `render()`. That is
+opt-in per send with no stored consent, and
+`tests/test_a_gap_report_carries_the_allowlist_and_nothing_else.py` holds both
+halves open — including a census asserting nothing else in the package
+constructs one.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import platform
+import re
+from enum import Enum
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+
+from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
+from openstategraph.document_checks import FindingClass
+from openstategraph.run_findings import (
+    _DIGEST_CHARS,
+    EVERY_TOOL_CALL_FAILED,
+    NODE_FAILURE,
+)
+
+__all__ = [
+    "CHECK_IDS",
+    "GAP_REPORT_SCHEMA_PATH",
+    "GapDoor",
+    "GapKind",
+    "GapReport",
+    "Refusal",
+    "RefusalSource",
+    "first_traceback_line",
+    "gap_report_schema",
+    "hashed_project_id",
+]
+
+#: The committed publication of this model. Pydantic is the source of truth
+#: for the wire (CLAUDE.md); this file is its generated, committed schema, the
+#: way `docs/openapi.json` is for the run/stream seam. Written by
+#: `scripts/generate_gap_report_schema.py --write`, never by hand.
+GAP_REPORT_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[2] / "docs" / "gap-report.schema.json"
+)
+
+#: How much of a digest a finding hash carries — imported rather than chosen,
+#: for the reason `patrol.refusal_task_id` gives: twelve characters is the
+#: width this project already reads in a ticket, and a second number would be
+#: a second answer to the same question.
+_FINDING_HASH_CHARS = _DIGEST_CHARS
+
+#: A type id, as every one of CLAUDE.md's four channels spells it: an optional
+#: package slug, then one namespace, one dot, one name. **Type ids, never
+#: values** is the line this pattern draws — a question, a paragraph, a
+#: credential and an absolute path all fail it, and so does a bare table name.
+_TYPE_ID = re.compile(r"^(?:[a-z0-9][a-z0-9-]*/)?([a-z][a-z0-9_]*)\.([A-Za-z0-9_-]+)$")
+
+#: A path-shaped token, replaced wherever a free-text field would otherwise
+#: carry one. Applied in the field validator and not only in the helper, so a
+#: door that assembles the string itself is not a second route.
+_PATHISH = re.compile(r"(?:[A-Za-z]:)?[\\/][\w.\-\\/]{2,}")
+
+#: Azure AD's own error code, when the refusal carried one — the same shape
+#: `patrol._AAD_CODE` matches, for the same reason: `AADSTS7000222` is *the
+#: client secret is expired*, and a report that holds it and does not carry it
+#: has thrown away the one string that ends the investigation
+#: (`osg-agent-experience/73`).
+_AAD_CODE = re.compile(r"^AADSTS\d+$")
+
+#: An exception line: the class this package raised, and its own message.
+_EXCEPTION_LINE = re.compile(r"^[A-Z][A-Za-z0-9]*(?:Error|Exception): .{1,400}$")
+
+_VERSION = re.compile(r"^[0-9A-Za-z.+-]{1,40}$")
+_OS = re.compile(r"^[A-Za-z][A-Za-z0-9 ._-]{0,59}$")
+_PYTHON = re.compile(r"^\d+\.\d+\.\d+[A-Za-z0-9.+-]{0,12}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+#: The longest a single carried sentence may be. A cap rather than a trim of
+#: the model's choosing: the refusal sentences this codebase writes are all
+#: well under it, so a value that needs cutting is a value that did not come
+#: from one of them.
+TEXT_CAP = 400
+
+
+def hashed_project_id(project_id: str) -> str:
+    """The tenancy key a report carries in place of the install's identity.
+
+    The owner's decision: *"a report carries a hash of it; two clones of one
+    repo are one project"*. Full SHA-256 rather than the twelve characters a
+    finding hash carries, because this one is a key that a rate limit and a
+    board's tenancy both hang off, across every install in the world, while a
+    finding hash only has to be distinct inside one project.
+    """
+    return hashlib.sha256(project_id.encode("utf-8")).hexdigest()
+
+
+def _this_version() -> str:
+    from openstategraph import __version__
+
+    return __version__
+
+
+def _this_os() -> str:
+    """The system and its release, and nothing narrower.
+
+    `platform.node()` is the hostname and `platform.platform()` carries it on
+    some systems; neither is on the allowlist, and the reason a report names
+    an OS at all is that a gap can be one platform's.
+    """
+    return f"{platform.system()} {platform.release()}".strip()
+
+
+def _redacted(text: str) -> str:
+    return _PATHISH.sub("<path>", text).strip()[:TEXT_CAP]
+
+
+def first_traceback_line(exc: BaseException) -> str:
+    """One line naming what was raised, with nothing under it.
+
+    The owner's allowlist says *first traceback line*, and read literally the
+    first line of a formatted traceback is `Traceback (most recent call
+    last):` — which carries no information — while every line under it names a
+    file on this machine. So the line carried is the exception line: the one
+    line of a traceback that has a cause in it and no frame, and therefore no
+    path. Later frames are never read at all, which is stronger than stripping
+    them.
+
+    The message is still redacted, because an exception's *class* being ours
+    does not make its *argument* ours: `FileNotFoundError` puts the path it
+    could not find in its own message.
+    """
+    return _redacted(f"{type(exc).__name__}: {exc}")
+
+
+@lru_cache(maxsize=1)
+def _runtime_sentences() -> tuple[re.Pattern[str], ...]:
+    """The compiler's own sentences, as patterns, for the two findings whose
+    subjects are type ids.
+
+    Narrow on purpose. `UNENFORCED_OUTCOME` reads *Team "{0}" mounts "{1}"* —
+    those slots are the names a user gave two workflows, so admitting that
+    template would admit user content through a field this module exists to
+    close.
+    """
+    slot = _TYPE_ID.pattern.strip("^$")
+    patterns = []
+    for finding in (Finding.UNRESOLVED_TOOL, Finding.UNRESOLVED_FUNCTION):
+        pieces = re.split(r"\{\d+\}", CompileDiagnostics.sentence_for(finding))
+        literal = slot.join(re.escape(piece) for piece in pieces)
+        patterns.append(re.compile(f"^{literal}$"))
+    return tuple(patterns)
+
+
+@lru_cache(maxsize=1)
+def _provider_sentences() -> frozenset[str]:
+    """Every refusal a built-in provider spec can write, enumerated from the
+    catalogue itself — a second list here would be the drift this repository
+    names by name."""
+    from openstategraph.providers import builtin_specs
+
+    found: set[str] = set()
+    for spec in builtin_specs():
+        found.add(spec.missing_package_message())
+        if spec.env_vars:
+            found.add(spec.missing_key_message())
+    return frozenset(found)
+
+
+class RefusalSource(str, Enum):
+    """Where a refusal sentence was written. Not *what refused* — that is
+    `GapDoor` — but which of this codebase's three sentence-writing seams
+    produced the words, because each is validated differently."""
+
+    #: The compiler's own `_SENTENCES` table.
+    RUNTIME = "runtime"
+    #: A `ProviderSpec`'s own message about a credential or a package.
+    PROVIDER = "provider"
+    #: An exception this package defines, as one line.
+    EXCEPTION = "exception"
+
+
+class GapKind(str, Enum):
+    """What kind of gap this is, in the vocabulary that already exists.
+
+    Three of the five are imported rather than coined: a gap report about a
+    node type with no implementation is the same fact `FindingClass.NO_BACKEND`
+    names, and one vocabulary is the whole reason this model is a projection
+    of the finding shapes rather than a fourth spelling of them.
+    """
+
+    NO_BACKEND = FindingClass.NO_BACKEND.value
+    NODE_FAILURE = NODE_FAILURE
+    EVERY_TOOL_CALL_FAILED = EVERY_TOOL_CALL_FAILED
+    #: A provider named by a document that this install cannot build a client
+    #: for. Not a defect of ours; a gap in what the install was given.
+    PROVIDER_NOT_CONFIGURED = "provider-not-configured"
+    #: Anything a door refused outright, with its own sentence.
+    DOOR_REFUSED = "door-refused"
+
+
+class GapDoor(str, Enum):
+    """Which surface the user was standing at when it refused.
+
+    The four blocking doors `run_doors.py` names, plus the editor — the same
+    list, because a report that invents a fifth name for `POST /api/runs`
+    makes two boards disagree about where something happens.
+    """
+
+    API = "api"
+    MCP = "mcp"
+    CLI = "cli"
+    LIBRARY = "library"
+    EDITOR = "editor"
+
+
+#: The check ids a report may cite, derived from the three enums that already
+#: publish them: the document checks' classes, the compiler's findings, and
+#: the patrol's finding names. A check id is a name **we** publish; a table
+#: name and a question are not check ids and fail here.
+CHECK_IDS: frozenset[str] = frozenset(
+    {member.value for member in FindingClass}
+    | {member.value for member in Finding}
+    | {NODE_FAILURE, EVERY_TOOL_CALL_FAILED}
+)
+
+
+class Refusal(BaseModel):
+    """The sentence that refused, and which seam of ours wrote it.
+
+    **Ours, not theirs.** There is no constructor here that takes a bare
+    string: the three classmethods take a type id, a `ProviderSpec` and an
+    exception this package defines, and validation re-checks the text against
+    what those seams can produce, so a round trip cannot widen it either. A
+    model's answer is a `str` and has no way in — which matters because this
+    product prints prose constantly and a refusal field is exactly where a
+    door would be tempted to put "what the agent said".
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: RefusalSource
+    text: str
+
+    @field_validator("text")
+    @classmethod
+    def _one_of_ours(cls, value: str, info: Any) -> str:
+        source = info.data.get("source")
+        text = _redacted(value)
+        if source is RefusalSource.RUNTIME:
+            if any(pattern.match(text) for pattern in _runtime_sentences()):
+                return text
+        elif source is RefusalSource.PROVIDER:
+            if text in _provider_sentences():
+                return text
+        elif source is RefusalSource.EXCEPTION:
+            if _EXCEPTION_LINE.match(text):
+                return text
+        raise ValueError(
+            "a refusal is a sentence this codebase writes, not text handed to "
+            "it — build one with Refusal.for_missing_implementation, "
+            "Refusal.for_provider or Refusal.for_our_exception"
+        )
+
+    @classmethod
+    def for_missing_implementation(cls, type_id: str) -> Refusal:
+        """`No implementation for tool "<type id>"` — the archetypal platform
+        gap, in the compiler's own words and about the *type*, never about the
+        node id the author chose."""
+        return cls(
+            source=RefusalSource.RUNTIME,
+            text=CompileDiagnostics.sentence_for(Finding.UNRESOLVED_TOOL).format(type_id),
+        )
+
+    @classmethod
+    def for_provider(cls, spec: Any) -> Refusal:
+        """A `ProviderSpec`'s own refusal — it names variables, never values."""
+        text = spec.missing_key_message() if spec.env_vars else spec.missing_package_message()
+        return cls(source=RefusalSource.PROVIDER, text=text)
+
+    @classmethod
+    def for_our_exception(cls, exc: BaseException) -> Refusal:
+        """One line from an exception **this package defines**.
+
+        A `TypeError` for anything else, raised rather than validated away: a
+        third party's exception carries a third party's message, and the
+        caller has to decide what to say instead rather than have this module
+        decide quietly for them.
+        """
+        home = type(exc).__module__.partition(".")[0]
+        if home != "openstategraph":
+            raise TypeError(
+                f"{type(exc).__name__} is defined in {type(exc).__module__!r}, not in "
+                "openstategraph — a report carries our own refusal sentences only"
+            )
+        return cls(source=RefusalSource.EXCEPTION, text=first_traceback_line(exc))
+
+
+class GapReport(BaseModel):
+    """One platform gap, as it will be sent — and nothing else.
+
+    Every field is on the owner's allowlist. The two hashes are the map's own
+    additions: `project_hash` is the install's identity as a hash
+    (`team-board-and-gap-reports/01`'s seam) and `finding_hash` is the dedup
+    key `09` needs, so forty runs of one refusal are one card with a count.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    #: The package version, from this install. Filled in here rather than
+    #: asked of a caller: a door that has to remember to state the version is
+    #: a door that will one day send a report about an install nobody can name.
+    version: str = Field(default_factory=lambda: _this_version())
+    kind: GapKind
+    #: The node/tool **type ids** involved. Type ids, never values.
+    type_ids: tuple[str, ...] = ()
+    door: GapDoor
+    refusal: Refusal
+    #: A check id this codebase publishes, when a check is what noticed.
+    check: str | None = None
+    traceback_line: str | None = None
+    os: str = Field(default_factory=lambda: _this_os())
+    python: str = Field(default_factory=lambda: platform.python_version())
+    project_hash: str
+    #: Azure AD's own code when the refusal carried one.
+    aad_code: str | None = None
+
+    @field_validator("type_ids")
+    @classmethod
+    def _only_type_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        namespaces = _known_namespaces()
+        for candidate in value:
+            found = _TYPE_ID.match(candidate)
+            if not found or found.group(1) not in namespaces:
+                raise ValueError(
+                    f"{candidate!r} is not a node or tool type id. Type ids, never "
+                    "values: a field's contents, a table name, a question and a path "
+                    "are all things a report does not carry."
+                )
+        return value
+
+    @field_validator("check")
+    @classmethod
+    def _a_published_check_id(cls, value: str | None) -> str | None:
+        if value is None or value in CHECK_IDS:
+            return value
+        raise ValueError(
+            f"{value!r} is not a check id this codebase publishes. The vocabulary is "
+            "the document checks' classes, the compiler's findings and the patrol's "
+            "finding names."
+        )
+
+    @field_validator("traceback_line")
+    @classmethod
+    def _one_redacted_line(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _redacted(value.splitlines()[0] if value.splitlines() else "")
+
+    @field_validator("version")
+    @classmethod
+    def _a_version(cls, value: str) -> str:
+        return _matched(_VERSION, value, "a package version")
+
+    @field_validator("os")
+    @classmethod
+    def _an_os(cls, value: str) -> str:
+        return _matched(_OS, value, "an operating system name and release")
+
+    @field_validator("python")
+    @classmethod
+    def _a_python(cls, value: str) -> str:
+        return _matched(_PYTHON, value, "a Python version")
+
+    @field_validator("project_hash")
+    @classmethod
+    def _a_hashed_id(cls, value: str) -> str:
+        return _matched(_SHA256, value, "a SHA-256 of the project id, never the id")
+
+    @field_validator("aad_code")
+    @classmethod
+    def _an_aad_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _matched(_AAD_CODE, value, "an Azure AD error code")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def finding_hash(self) -> str:
+        """The dedup key, from what the finding *is*.
+
+        Deliberately **not** over the version, the OS or the Python: the same
+        gap on the same install after an upgrade is the same gap, and a key
+        that moved on every release would file a fresh card each time. Not a
+        field either, so a door cannot hand one in.
+        """
+        stable = "\n".join(
+            [
+                self.kind.value,
+                "\t".join(sorted(self.type_ids)),
+                self.door.value,
+                self.check or "",
+                self.refusal.source.value,
+                self.refusal.text,
+                self.traceback_line or "",
+                self.aad_code or "",
+            ]
+        )
+        return hashlib.sha256(stable.encode("utf-8")).hexdigest()[:_FINDING_HASH_CHARS]
+
+    def render(self) -> str:
+        """The exact payload, as a person reads it before deciding.
+
+        Derived from the model's own dump rather than from a list written
+        here, so a field added later cannot be sent unseen — the failure this
+        whole model exists to make impossible would otherwise walk straight
+        back in through its own preview.
+        """
+        payload = self.model_dump(mode="json")
+        width = max(len(name) for name in payload)
+        rows = []
+        for name, value in payload.items():
+            if isinstance(value, dict):
+                shown = " · ".join(f"{key}: {item}" for key, item in value.items())
+            elif isinstance(value, list):
+                shown = ", ".join(str(item) for item in value) or "—"
+            else:
+                shown = "—" if value in (None, "") else str(value)
+            rows.append(f"  {name.ljust(width)}  {shown}")
+        return "\n".join(
+            [
+                "This is the whole report. Nothing else is sent.",
+                "",
+                *rows,
+                "",
+                "Never sent: the document, prompts, field values, table names,",
+                "question text, file paths, environment values. The project id is",
+                "sent as a hash, never as itself.",
+                "",
+                "Nothing has been sent yet. Sending happens once, now, only if you",
+                "say so — there is no stored consent and no background sender.",
+            ]
+        )
+
+
+def _matched(pattern: re.Pattern[str], value: str, expected: str) -> str:
+    if pattern.match(value):
+        return value
+    raise ValueError(f"{value!r} is not {expected}")
+
+
+@lru_cache(maxsize=1)
+def _known_namespaces() -> frozenset[str]:
+    """The namespaces a type id may open with, read off the catalogue.
+
+    Membership is deliberately **not** checked: the archetypal report is about
+    a type this runtime has no implementation for, and a package's own
+    `tools/` leaf is minted per package. So the gate is the shape and the
+    namespace — enough to make a question, a path or a table name
+    unrepresentable, and not so much that the one report this map exists for
+    cannot be filed.
+    """
+    from openstategraph.compile.node_catalogue import CATALOGUE
+
+    namespaces = {node_type.partition(".")[0] for node_type in CATALOGUE.node_types}
+    namespaces |= {
+        str(prefix.get("prefix", "")).rstrip(".") for prefix in CATALOGUE.type_prefixes
+    }
+    #: The package-scoped channel: `<slug>/tools.QueryTool`, whose namespace is
+    #: the folder the discovery walks rather than a palette namespace.
+    namespaces |= {"tools", "functions"}
+    return frozenset(name for name in namespaces if name)
+
+
+def gap_report_schema() -> dict[str, Any]:
+    """The JSON Schema published to `docs/gap-report.schema.json`."""
+    schema = GapReport.model_json_schema(mode="serialization")
+    schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    schema["title"] = "OpenStateGraph gap report"
+    schema["description"] = (
+        "Everything a gap report may carry, and nothing else. Generated from "
+        "openstategraph.gap_report.GapReport by "
+        "scripts/generate_gap_report_schema.py; never hand-edited."
+    )
+    return schema

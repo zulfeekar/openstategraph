@@ -35,6 +35,7 @@ Start with what you came here to do.
 | **know what can be taken away from me** | [The stability contract](stability.md) — the three tiers, the signature snapshot, the `workflow.json` version policy, the CLI's fixed exit codes, and the deprecation rules | [`../CHANGELOG.md`](../CHANGELOG.md) |
 | **cut a release, or fix one that went wrong** | [Releasing](releasing.md) — the train from pull request to PyPI, the one human gate and what to check before clicking it, the branch protection and environment settings to configure by hand, and the rollback commands for a burned version number | [`decisions/sdk-practice.md`](decisions/sdk-practice.md) |
 | **take this repository public, or change a GitHub setting** | [Public repository settings](maintainers/public-repository-settings.md) — the checklist a maintainer ticks in order: issues, the issue templates, Actions workflow permissions (including the one box two workflows need ticked and hardening wants unticked), branch protection and CODEOWNERS, Pages, the `pypi` environment, and a census of every secret and variable the workflows read — derived from `.github/workflows/`, so it cannot go short | [Releasing](releasing.md) |
+| **tell the maintainers what my install refused to do** | [Reporting a platform gap](reporting-a-platform-gap.md) — the automated report: the fields it carries, why the document, your question, table names, field values and paths are structurally unrepresentable rather than merely omitted, the text you read before anything moves, and the two doors that will carry it (neither built yet) | [OpenStateGraph in a LangGraph codebase](openstategraph-in-a-langgraph-codebase.md) |
 | **understand why it is shaped this way** | [`decisions/`](decisions/) — the arguments that were actually had | [`../CLAUDE.md`](../CLAUDE.md) |
 
 Each page has exactly one job, and — with one deliberate exception — nothing
@@ -56,7 +57,9 @@ place authentication, the worker ceiling and the reverse proxy are explained;
 collected for both integration shapes at once;
 [OpenStateGraph in a LangGraph codebase](openstategraph-in-a-langgraph-codebase.md)
 is the only place composition is described in both directions at once, and the
-only place a defect report's shape and destination are written down.
+only place a **hand-written** defect report's shape and destination are written
+down — the automated gap report's fixed schema is
+[reporting a platform gap](reporting-a-platform-gap.md)'s, and only its.
 
 ## The one idea underneath all of it
 
