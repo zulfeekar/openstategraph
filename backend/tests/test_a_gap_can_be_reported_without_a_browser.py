@@ -183,8 +183,12 @@ class TestTheRepositoryIsDerivedOnce:
 
     def test_the_module_hard_codes_no_second_copy(self) -> None:
         source = (PACKAGE / "gap_report_door.py").read_text(encoding="utf-8")
-        owner, _, name = repository().partition("/")
-        assert name not in source, (
+        # The bare name is also the *package* name (`stable-beta-public/34`
+        # pointed `Homepage` at zulfeekar/openstategraph), so every import
+        # line would match it; the second copy this guards against is the
+        # slug, which no import ever spells.
+        slug = repository()
+        assert slug not in source and f"github.com/{slug}" not in source, (
             "the repository name is written down twice — derive it from the "
             "package metadata, which is generated from pyproject"
         )
