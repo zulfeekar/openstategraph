@@ -167,6 +167,33 @@ the one recorded at `red`, and `finished` refuses unless both are durably on the
 card. Every verb is also an MCP tool. Full page:
 [the patrol board](docs/the-patrol-board.md).
 
+## Two surfaces, one API
+
+`openstategraph .` serves two pages, for two different people. **`/` is the
+editor** — where a developer draws the workflow. **`/chat` is the
+customer-facing app** — small on purpose: a customer types a question and reads
+the answer.
+
+Neither is privileged. Both are ordinary clients of the API at `/api`, and so
+is anything you write. The call you want is **`POST /api/runs/stream`**: it
+answers as a server-sent stream, one frame at a time, so your own UI can show
+the answer while it is still being written. The first frame is always
+`started`; the last is exactly one of `done`, `interrupt` or `error`, and
+nothing else ends it. A run takes the document as its input, so fetch it and
+post it back:
+
+```bash
+PORT=8123   # whatever port `openstategraph .` printed
+curl -s "http://127.0.0.1:$PORT/api/workflows/starter" \
+  | python3 -c 'import json,sys;print(json.dumps({"workflow":json.load(sys.stdin)["document"],"question":"say hello"}))' \
+  | curl -sN -X POST "http://127.0.0.1:$PORT/api/runs/stream" -H 'content-type: application/json' --data-binary @-
+```
+
+In a browser use `fetch` and read `response.body` — **not `EventSource`**,
+which can only issue `GET`, and this call is a `POST` because the request body
+carries the document. Every frame, every field, and a working client in one
+file: [the HTTP API](docs/api.md).
+
 ## Building a new module
 
 When nothing in the vocabulary fits your step, the answer is a **new module

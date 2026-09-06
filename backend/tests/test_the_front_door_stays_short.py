@@ -67,7 +67,18 @@ STRANGER_PATH_ENDS_AT = "## The CLI at a glance"
 #: That is the one addition this budget exists to admit rather than refuse — a
 #: path measured at 180 lines that ends in a 503 is shorter and worse. The next
 #: edit that wants ten more lines does not get them for free.
-STRANGER_PATH_CEILING = 200
+#:
+#: Raised from 200 to 230 on 2026-09-06, by `docs-onramp/14`, and it was sitting
+#: exactly on 200 when that ticket arrived — the ratchet was already tight. The
+#: twenty-seven lines bought are § Two surfaces, one API: that `/` is the
+#: editor and `/chat` is the customer-facing app, that both are ordinary
+#: clients of `/api`, and that `POST /api/runs/stream` is a stream anyone can
+#: read frame by frame. The argument for spending a first-glance budget on it
+#: is that a stranger deciding whether this fits their product is asking
+#: exactly one question — *can I put my own UI on it?* — and the page's answer
+#: was a "Where to read next" row that went via the adoption page. A shorter
+#: page that never answers the question a reader came with is not cheaper.
+STRANGER_PATH_CEILING = 230
 
 #: The whole page. 829 lines on 2026-09-05 before `docs-onramp/01`, 305 after.
 #: The budget above the recorded figure is small on purpose — the failure this
@@ -75,7 +86,13 @@ STRANGER_PATH_CEILING = 200
 #: time. Two tables are irreducible and both are pinned elsewhere: the CLI table
 #: (20 rows, held against argparse by `test_the_readme_a_stranger_lands_on.py`)
 #: and the environment table. They are why the number is not lower.
-LINE_CEILING = 330
+#:
+#: 330 → 360 on 2026-09-06 (`docs-onramp/14`), the same twenty-seven lines
+#: passing through both budgets, because they were added inside the stranger's
+#: path rather than below it. Nothing moved off the page to pay for them, and
+#: that is stated rather than dressed up: this is a straight raise, and the
+#: next section that wants one has to make its own case here.
+LINE_CEILING = 360
 
 #: In order, from the top. A prefix, not the full list.
 OPENING_SECTIONS = (
@@ -83,6 +100,10 @@ OPENING_SECTIONS = (
     "## First run",
     "## With your coding agent",
     "## The board",
+    # `docs-onramp/14`. It sits after the two surfaces exist for the reader
+    # (§ First run opens both) and before § Building a new module, which is
+    # about extending the vocabulary rather than about consuming the product.
+    "## Two surfaces, one API",
     "## Building a new module",
     "## Where to read next",
     STRANGER_PATH_ENDS_AT,
