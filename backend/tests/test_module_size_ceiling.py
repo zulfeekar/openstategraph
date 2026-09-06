@@ -1285,8 +1285,33 @@ closed was exactly a field that meant different things depending on who typed
 it.
 """
 
+DOCUMENT_CHECKS = """
+The registry of document checks, and the length is the register count rather
+than an engine somebody keeps editing (2026-09-06). `register_document_check`
+appends to `DOCUMENT_CHECKS`; nothing here dispatches by hand. Four checks
+carried it past the ceiling, each landing as one more registration rather than
+a change to the checks already there: `unwired_branch` — a node type whose
+verdict names a branch nothing on the canvas reads
+(`osg-agent-experience/76`, `a95dc9f`); `no_backend_implementation` — a
+palette card the backend cannot run, said on the card rather than only at run
+time (72); `unwired_fallback` — the fallback-side twin of the same failure,
+kept as its own class and sentence rather than folded into `unwired_branch`
+(60); and `port_overfull` together with `branch_fan_out` — a port carrying
+more than its cardinality allows, and the fan-out check beside it, which asks
+about the out-port `port_overfull` deliberately does not (45).
+
+The honest next step is splitting checks into a `document_checks/` package,
+one module per check the way `compile/nodes/` already holds one module per
+node family, with the registry and `CheckContext` staying put as the seam
+every module registers into. That split is not this ticket — this entry only
+records that the module crossed the ceiling by registration, the sanctioned
+way to grow it, and says where the length would go if somebody spent the
+ticket to move it.
+"""
+
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
+    "document_checks.py": Recorded(504, DOCUMENT_CHECKS),
     "cli.py": Recorded(1718, CLI),
     "compile/workflow_compiler.py": Recorded(1018, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
