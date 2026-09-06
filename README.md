@@ -1,4 +1,4 @@
-<p align="center"><img src="public/favicon.svg" width="96" height="96" alt="OpenStateGraph — the circuit mark: three nodes, two edges"></p>
+<p align="center"><img src="docs/assets/logo.svg" width="300" height="56" alt="OpenStateGraph — the circuit mark beside the wordmark, as the editor's top bar shows it"></p>
 
 # OpenStateGraph — AI Workflow Builder
 

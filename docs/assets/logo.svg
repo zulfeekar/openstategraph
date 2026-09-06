@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 56" width="300" height="56" role="img" aria-labelledby="t">
+  <title id="t">OpenStateGraph</title>
+  <!--
+    The lockup the editor's top bar shows: the owner's authored circuit mark
+    (`public/favicon.svg`, `src/design/brand/Mark.tsx`, LOCKED) beside the
+    wordmark set in `--type-wordmark` (700, IBM Plex Sans, tracking -0.03em).
+    Same two literals as the favicon and for the same reason: an <img> has no
+    cascade, so the ink flips under `prefers-color-scheme` here and the accent
+    does not (stable-beta-public/33).
+  -->
+  <style>
+    :root { --ink: #201e1d; }
+    @media (prefers-color-scheme: dark) { :root { --ink: #f3f2f2; } }
+    .ink { stroke: var(--ink); fill: none; stroke-width: 5.5; }
+    .node { fill: var(--ink); }
+    .word { fill: var(--ink); font-family: 'IBM Plex Sans Variable', 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif; font-weight: 700; font-size: 26px; letter-spacing: -0.03em; }
+  </style>
+  <g transform="translate(4 4) scale(0.48)">
+    <g class="ink">
+      <line x1="38" y1="24" x2="62" y2="24" />
+      <line x1="76" y1="38" x2="76" y2="62" />
+      <line x1="62" y1="76" x2="38" y2="76" />
+      <line x1="33.9" y1="33.9" x2="66.1" y2="66.1" />
+      <circle cx="24" cy="24" r="7.25" />
+    </g>
+    <circle class="node" cx="76" cy="24" r="10" />
+    <circle class="node" cx="76" cy="76" r="10" />
+    <circle cx="24" cy="76" r="10" fill="#ec3013" />
+  </g>
+  <text class="word" x="66" y="37">OpenStateGraph</text>
+</svg>
