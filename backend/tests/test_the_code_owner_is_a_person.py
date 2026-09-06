@@ -49,7 +49,7 @@ class TestNoPlaceholderReachesThePublicRepository:
 
         assert offenders == [], (
             "a code owner GitHub cannot resolve is worse than none — the rule is "
-            f"ignored and no reviewer is requested:\n" + "\n".join(offenders)
+            "ignored and no reviewer is requested:\n" + "\n".join(offenders)
         )
 
     def test_the_catch_all_rule_names_an_owner(self) -> None:
