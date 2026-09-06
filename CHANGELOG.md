@@ -67,17 +67,6 @@
   `KanbanStoreRegistry` that `open_kanban_store()` chooses through, keyed by the
   scheme of `OPENSTATEGRAPH_KANBAN_URL`. No behaviour changed: every existing
   test of the store passes with its assertions untouched.
-- **The README is a front door again** (`docs-onramp/01`, `02`, `05`, `06`).
-  It was 829 lines and a stranger's path was 148 of them; the four spin-up
-  paths each read as *the* way with none saying whose it was; the
-  documentation index was named at line 792 of 829 and did not name every
-  page; and the first instruction was "Press Run" when the run needs a
-  credential nobody had set.
-- **`init` writes an agent config a venv install can run** (`docs-onramp/10`).
-  All four configs carried a bare `"command": "openstategraph"`, which is right
-  for the `uv tool install` route and wrong for a project venv, an editable
-  checkout or an unre-sourced pipx shell — and the failure is an agent showing
-  no tools and no reason. The command is resolved once, and `init` says which of
 - **`tool.mssql-query` logs in three ways, and never asks the driver to do
   Azure AD** (`osg-agent-experience/73`). It knew one shape — a whole ODBC
   connection string in one variable — so a login needing a secret needed the
@@ -91,6 +80,17 @@
   `HYT00 Login timeout expired` while Azure AD itself answered in one round
   trip with the real cause — an expired client secret. A refused credential now
   comes back at once, naming its AADSTS code and the variable that holds it.
+- **The README is a front door again** (`docs-onramp/01`, `02`, `05`, `06`).
+  It was 829 lines and a stranger's path was 148 of them; the four spin-up
+  paths each read as *the* way with none saying whose it was; the
+  documentation index was named at line 792 of 829 and did not name every
+  page; and the first instruction was "Press Run" when the run needs a
+  credential nobody had set.
+- **`init` writes an agent config a venv install can run** (`docs-onramp/10`).
+  All four configs carried a bare `"command": "openstategraph"`, which is right
+  for the `uv tool install` route and wrong for a project venv, an editable
+  checkout or an unre-sourced pipx shell — and the failure is an agent showing
+  no tools and no reason. The command is resolved once, and `init` says which of
   the three outcomes it wrote.
 - **`--help` no longer prints internal ticket ids** (`docs-onramp/08`). Eleven
   strings across the parser named a file under `.scratch/`, which ships in no
