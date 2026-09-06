@@ -140,7 +140,7 @@ export function PatrolBoard({
       {statusLine ? <p className="patrol-board__status">{statusLine}</p> : null}
 
       {state.kind === 'unavailable' ? (
-        <PanelEmpty glyph={PlugZap} title={state.title} body={state.body} />
+        <PanelEmpty glyph={PlugZap} title={state.title} body={state.body} detail={state.command} />
       ) : cards.length === 0 ? (
         /* The blank board says what blank means and offers the one action
            that changes it — `.canvas-empty`'s bargain, one surface along.

@@ -327,6 +327,18 @@ the variable. A board that quietly fell back to a local file when the shared
 one was asked for would be two people disagreeing about what the board says,
 discovered a week later.
 
+**The editor is the one exception, and it is not a quiet one**
+(`team-board-and-gap-reports/18`). A server asks once, at startup: if the
+shared board opens, every door reads it and nothing else happens. If it does
+not, the sentence is recorded rather than raised — `GET /api/health` carries it
+as `team_board_error`, the OSG Engineering tab prints it in place of the cards
+it cannot show, one line goes to the log, and the process serves the **local**
+board so that the editor's own Workflows tab and the live stream keep working.
+Before that, a missing driver arrived as a two-hundred-line traceback on every
+SSE reconnect and a 500 for the tab, while `/api/health` still said `ok`. The
+answer is taken once, so **restart** after fixing whatever it named.
+
+
 It is a **different variable from `OPENSTATEGRAPH_POSTGRES_URL`**, which is the
 checkpointer's and means "put this deployment's durable run state here". One
 setting meaning both would put your cards in somebody's checkpoint database the
@@ -335,6 +347,20 @@ first time they configured durability.
 `pip install 'openstategraph[postgres]'` — the same extra the checkpointer
 uses, and the variable set without it is a refusal that says so rather than a
 board that is quietly empty.
+
+**Name every extra you already have, in one line.** `uv tool install --force`
+**replaces** the tool environment with exactly what the command names, so
+repairing one extra drops the rest — which is how a team-board install lost
+`[server]` and stopped starting at all (`osg-agent-experience/79`). On an
+editor that uses the team board that line is six extras, not one:
+
+```bash
+uv tool install --force 'openstategraph[mcp,mssql,ollama,postgres,server,sqlite]'
+```
+
+The product composes the same line for your installation, with your extras and
+your version already in it, and prints it in the refusal — so the reliable move
+is to paste what it printed rather than to retype this one.
 
 **Which rows are yours.** The shared table carries a `project_hash` column: a
 SHA-256 of your project id, never the id itself. Every read and every write

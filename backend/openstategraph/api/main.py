@@ -251,6 +251,14 @@ def create_app(
     # `services.checkpointer_for(...)`, which resolves this same property.
     services.checkpointer
 
+    # Asked here, once, for the checkpointer's reason exactly
+    # (`team-board-and-gap-reports/18`): a shared board that cannot be opened
+    # has to be a recorded sentence on `/api/health` before a tab asks, rather
+    # than an `ImportError` escaping from inside an SSE stream on every
+    # reconnect. It never raises, and a process whose team board is
+    # unavailable goes on serving the local one.
+    services.board.probe()
+
     app = FastAPI(
         title="OpenStateGraph runtime",
         version="0.1.0",

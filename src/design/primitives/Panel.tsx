@@ -92,10 +92,21 @@ export function PanelEmpty({
   glyph,
   title,
   body,
+  detail,
 }: {
   glyph?: LucideIcon;
   title: string;
   body?: string;
+  /**
+   * One line a reader is meant to copy — a shell command, a path, an
+   * identifier. Rendered monospaced, on its own line, wrapping rather than
+   * truncating and selectable in one click.
+   *
+   * Separate from `body` because prose reflows and a command that reflows
+   * with it cannot be selected whole (`osg-agent-experience/83`, and
+   * `team-board-and-gap-reports/18` where it reached this primitive).
+   */
+  detail?: string;
 }) {
   return (
     <div className="panel-empty">
@@ -106,6 +117,7 @@ export function PanelEmpty({
       ) : null}
       <span className="panel-empty__title">{title}</span>
       {body ? <span className="panel-empty__body">{body}</span> : null}
+      {detail ? <code className="panel-empty__detail">{detail}</code> : null}
     </div>
   );
 }

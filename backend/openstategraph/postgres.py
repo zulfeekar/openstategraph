@@ -119,8 +119,15 @@ def open_pool(url: str, *, env_var: str = POSTGRES_URL_ENV) -> Any:
     except ImportError as exc:
         from openstategraph.install_hint import install_hint
 
+        # The command on a line of its own — `osg-agent-experience/83`'s rule,
+        # which was about a printer that wrapped and is really about every
+        # surface that renders this sentence. `team-board-and-gap-reports/18`
+        # publishes it to a browser, where prose reflows around whatever it
+        # shares a line with and a half-selected command is not one anybody
+        # can paste. The newline costs a terminal reader nothing.
         raise ImportError(
-            f"{env_var} is set, but psycopg is not installed — {install_hint('postgres')}"
+            f"{env_var} is set, but psycopg is not installed —\n"
+            f"{install_hint('postgres')}"
         ) from exc
 
     pool = ConnectionPool(

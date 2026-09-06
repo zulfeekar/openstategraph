@@ -1284,12 +1284,23 @@ was reported once — which is also why the board draws no label at one.
 line back out of this module on the same day without a row of its own —
 `7b81a17c`, three lines added and four removed. Recorded here rather than
 corrected above, because that row is an account of what its own ticket did.)
+
+`566 -> 573`, 2026-09-06 (`team-board-and-gap-reports/18`). Seven lines: one
+field on `HealthResponse` — *why* this process is not on the shared board it
+was configured for. It is the third of the trio the row above began and the
+one that makes the other two usable: `team_board_configured` reads an
+environment variable and opens nothing, so a driver that is not installed
+answered "configured" and then raised inside every SSE reconnect. The
+documentation is the load-bearing half again, and again it is a rule: the
+sentence names the variable and the command that repairs it, and never the
+URL, which holds a password.
 """
 
 #: `team-board-and-gap-reports/02`, 2026-09-06. **Departed this table**, which
 #: is the outcome the ticket asked for and is recorded rather than deleted: the
 #: argument below was the case for one 690-line module, and the split answered
-#: it rather than winning it. `kanban_store.py` is **303** code lines (the
+#: it rather than winning it. `kanban_store.py` was **303** code lines on the
+#: day it left (the
 #: vocabulary, the rules and the store registry), `abc/kanban_store.py` **374**
 #: (the interface and every refusal) and `kanban_sqlite.py` **240** (the schema,
 #: the conditional writes and the encoding) — three modules, none of them within
@@ -1398,7 +1409,7 @@ RECORDED: dict[str, Recorded] = {
     "mcp_server.py": Recorded(990, MCP_SERVER),
     "api/routes/workflows.py": Recorded(619, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
-    "api/schemas.py": Recorded(566, SCHEMAS),
+    "api/schemas.py": Recorded(573, SCHEMAS),
 }
 
 

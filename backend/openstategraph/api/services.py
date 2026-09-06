@@ -72,7 +72,12 @@ class WorkflowServices:
     ) -> None:
         from openstategraph.api.catalogue_events import CatalogueBroadcaster
         from openstategraph.api.kanban_events import KanbanChangeWatcher
-        from openstategraph.kanban_store import open_kanban_store
+        from openstategraph.api.team_board import TeamBoard
+        from openstategraph.kanban_store import (
+            open_kanban_store,
+            open_local_kanban_store,
+            team_board_status,
+        )
         from openstategraph.api.patrol_events import PatrolBroadcaster
         from openstategraph.api.patrol_registry import PatrolJobRegistry
         from openstategraph.api.workflow_events import (
@@ -111,9 +116,21 @@ class WorkflowServices:
         #: connected boards, so it must outlive any one request rather than be
         #: rebuilt per connection — a per-request watcher would poll once per
         #: open tab.
-        self.kanban_events = KanbanChangeWatcher(
-            lambda: open_kanban_store(self.store.root)
+        #: Which card store this process actually has, and why it is not the
+        #: one that was asked for (`team-board-and-gap-reports/18`). A
+        #: collaborator rather than two methods here, for the reason every
+        #: other field on this class is one: it is a kind of shared state
+        #: three unrelated doors read — the health endpoint, the card routes
+        #: and the watcher below. Probed once, by `create_app`, beside the
+        #: checkpointer; a server that cannot open the shared board records
+        #: the sentence and keeps serving the local one, where before the
+        #: `ImportError` escaped into every SSE reconnect.
+        self.board = TeamBoard(
+            lambda: open_kanban_store(self.store.root),
+            lambda: open_local_kanban_store(self.store.root),
+            is_configured=lambda: team_board_status().configured,
         )
+        self.kanban_events = KanbanChangeWatcher(self.board.open)
         #: Live document changes, per package — the fan-out behind
         #: `GET /api/workflows/{slug}/events` (`osg-agent-experience/69`). A
         #: fourth broadcaster rather than a fifth `CatalogueEvent.reason`, for

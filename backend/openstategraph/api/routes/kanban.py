@@ -60,7 +60,6 @@ from openstategraph.kanban_store import (
     StageOrderError,
     card_row,
     flagged_stale,
-    open_kanban_store,
 )
 
 logger = logging.getLogger(__name__)
@@ -165,10 +164,15 @@ def list_kanban_cards(services: Services, board: str = LOCAL_BOARD) -> list[Kanb
 
     **`board` picks the tab, not the store** (`team-board-and-gap-reports/04`).
     The owner's decision is one table with a `board` column, so the local and
-    the shared board are two sets of rows in whatever store
-    `open_kanban_store` opens — that dispatch is `02`'s and is untouched here.
-    The default is the board that has always been there, so every existing
-    caller reads exactly what it read before.
+    the shared board are two sets of rows in whatever store this process
+    actually has — that dispatch is `02`'s and is untouched here. The default
+    is the board that has always been there, so every existing caller reads
+    exactly what it read before.
+
+    **Which store that is, is `services.board`'s answer and not this route's**
+    (`team-board-and-gap-reports/18`): the configured one when it opened at
+    startup, the local one when it did not, with the reason published on
+    `GET /api/health` rather than raised into this handler.
     """
     if board not in BOARD_IDS:
         # Refused by name rather than answered with the local board's rows —
@@ -183,7 +187,7 @@ def list_kanban_cards(services: Services, board: str = LOCAL_BOARD) -> list[Kanb
                 f"{', '.join(BOARD_IDS)}). A tab is not always a board."
             ),
         )
-    store = open_kanban_store(services.store.root)
+    store = services.board.open()
     stale_ids = set(flagged_stale(store, threshold_seconds=STALE_THRESHOLD_SECONDS))
     return [
         # One row shape, built once — `kanban-patrol/16`. `card_row` is the
@@ -213,7 +217,7 @@ def release_kanban_card(task_id: str, services: Services) -> KanbanReleaseRespon
     uses for `run_patrol_once`'s own refusal, never a 200 with a false claim
     of success inside it.
     """
-    result = open_kanban_store(services.store.root).release_card(
+    result = services.board.open().release_card(
         task_id, threshold_seconds=STALE_THRESHOLD_SECONDS
     )
     if not result.ok:
@@ -261,7 +265,7 @@ def answer_kanban_card(
     (`kanban-patrol/20`) — and when it says nothing either, the door names
     itself rather than writing a blank.
     """
-    store = open_kanban_store(services.store.root)
+    store = services.board.open()
     who = principal_id or body.actor.strip() or ANSWERED_BY_THE_BOARD
     try:
         result = store.answer_card(task_id, actor=who, answer=body.answer)

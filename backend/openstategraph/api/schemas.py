@@ -102,6 +102,20 @@ class HealthResponse(BaseModel):
             "The name only — the value is never published."
         ),
     )
+    #: Why this process is **not** on the shared board it was configured for,
+    #: or `null` — `team-board-and-gap-reports/18`. `team_board_configured`
+    #: reads the environment and opens nothing; this is the answer to the
+    #: question it deliberately does not ask, taken once at startup and
+    #: recorded, so asking it costs a reader nothing. The sentence names the
+    #: variable and the command that repairs it; it never carries the URL,
+    #: which holds a password.
+    team_board_error: str | None = Field(
+        default=None,
+        description=(
+            "Why the configured shared board could not be opened, taken once "
+            "at startup. Null when there is nothing wrong. Never the URL."
+        ),
+    )
 
 
 class NodeContractResponse(BaseModel):

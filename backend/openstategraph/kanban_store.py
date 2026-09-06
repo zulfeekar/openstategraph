@@ -847,11 +847,33 @@ def open_kanban_store(
     registry = default_kanban_store_registry() if registry is None else registry
     url = os.environ.get(KANBAN_URL_ENV, "").strip()
     if not url:
-        return registry_opener(registry, "sqlite")(
-            f"sqlite:///{kanban_store_path(workflows_root_dir)}"
-        )
+        return open_local_kanban_store(workflows_root_dir, registry=registry)
     scheme = url.split("://", 1)[0].strip().lower()
     return registry_opener(registry, scheme, url_env=True)(url)
+
+
+def open_local_kanban_store(
+    workflows_root_dir: Path | str | None = None,
+    *,
+    registry: KanbanStoreRegistry | None = None,
+) -> "IKanbanStore":
+    """This laptop's own `kanban.sqlite`, whatever the environment names.
+
+    The branch `open_kanban_store` already took when nothing is configured,
+    given a name so that one caller can ask for it *while* something is
+    configured: `api/team_board.py`, which keeps a server on the local board
+    when the shared one could not be opened (`team-board-and-gap-reports/18`).
+
+    It is deliberately not a mode of `open_kanban_store`. That function's whole
+    rule is that a configured board never quietly becomes a local file — two
+    people disagreeing about what the board says, discovered a week later — so
+    the fallback belongs to the one caller that also publishes *why* it fell
+    back, and is spelled differently at the call site.
+    """
+    registry = default_kanban_store_registry() if registry is None else registry
+    return registry_opener(registry, "sqlite")(
+        f"sqlite:///{kanban_store_path(workflows_root_dir)}"
+    )
 
 
 def registry_opener(

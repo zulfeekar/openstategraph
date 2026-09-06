@@ -294,6 +294,18 @@
             "description": "The environment variable that configures the shared board. The name only \u2014 the value is never published.",
             "title": "Team Board Env",
             "type": "string"
+          },
+          "team_board_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the configured shared board could not be opened, taken once at startup. Null when there is nothing wrong. Never the URL.",
+            "title": "Team Board Error"
           }
         },
         "required": [
@@ -2889,7 +2901,7 @@
     },
     "/api/kanban/cards": {
       "get": {
-        "description": "An empty list, never an error, when nothing has been filed yet \u2014\n`kanban-patrol/19`'s own rule for an unattended-nothing board: a patrol\nthat ran and found nothing is a different claim from a patrol that\ncannot run, and this route only ever makes the first one.\n\n**Independently correct regardless of event history** (`kanban-patrol\n/07`'s own \"done when\"): this is a plain SQL read of the store, with no\nmemory of which SSE frames were sent or missed. A client that connects\nmid-patrol, refetches here, and sees a card the patrol filed while it was\ndisconnected \u2014 that is this route doing exactly what it always did,\nwhich is the whole reason \"refetch plus subscribe\" is a correct answer\nand not a workaround.\n\n**`board` picks the tab, not the store** (`team-board-and-gap-reports/04`).\nThe owner's decision is one table with a `board` column, so the local and\nthe shared board are two sets of rows in whatever store\n`open_kanban_store` opens \u2014 that dispatch is `02`'s and is untouched here.\nThe default is the board that has always been there, so every existing\ncaller reads exactly what it read before.",
+        "description": "An empty list, never an error, when nothing has been filed yet \u2014\n`kanban-patrol/19`'s own rule for an unattended-nothing board: a patrol\nthat ran and found nothing is a different claim from a patrol that\ncannot run, and this route only ever makes the first one.\n\n**Independently correct regardless of event history** (`kanban-patrol\n/07`'s own \"done when\"): this is a plain SQL read of the store, with no\nmemory of which SSE frames were sent or missed. A client that connects\nmid-patrol, refetches here, and sees a card the patrol filed while it was\ndisconnected \u2014 that is this route doing exactly what it always did,\nwhich is the whole reason \"refetch plus subscribe\" is a correct answer\nand not a workaround.\n\n**`board` picks the tab, not the store** (`team-board-and-gap-reports/04`).\nThe owner's decision is one table with a `board` column, so the local and\nthe shared board are two sets of rows in whatever store this process\nactually has \u2014 that dispatch is `02`'s and is untouched here. The default\nis the board that has always been there, so every existing caller reads\nexactly what it read before.\n\n**Which store that is, is `services.board`'s answer and not this route's**\n(`team-board-and-gap-reports/18`): the configured one when it opened at\nstartup, the local one when it did not, with the reason published on\n`GET /api/health` rather than raised into this handler.",
         "operationId": "list_kanban_cards_api_kanban_cards_get",
         "parameters": [
           {

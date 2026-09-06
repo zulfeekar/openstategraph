@@ -882,8 +882,19 @@ WORKFLOW_SERVICES = """A recorded exception rather than a split, for the reason 
     *not* folded into `events`, the catalogue broadcaster: that one publishes
     only for writes through this API, which is three of the four writers of a
     document missing, and it is the same fan-out every open surface subscribes
-    to rather than one per package. The same discipline applies to the
-    fourteenth."""
+    to rather than one per package.
+
+    Fourteen is `team-board-and-gap-reports/18`'s `board` — which card store
+    this process actually has, and the sentence for why it is not the one that
+    was asked for. It lands here rather than as two methods for the reason the
+    paragraph above states about width: it is one *kind* of shared state, read
+    by three unrelated doors (the health endpoint, the card routes, and the
+    watcher that polls the store), and probed exactly once at startup so that
+    none of them pays for the question. Two methods would have been the same
+    fourteenth member spelled as a fifteenth and a sixteenth; a second
+    parameter object would be one more name to import for a fact that already
+    lives beside its closest relative, `kanban_events`, which reads it. The
+    same discipline applies to the fifteenth."""
 
 DOCUMENT_FINDING_KINDS = """**The eleventh member, and it is `Finding`'s argument at a second door.**
     `FindingClass` has no methods and no state — every member is one *value*,
@@ -913,7 +924,7 @@ DOCUMENT_FINDING_KINDS = """**The eleventh member, and it is `Finding`'s argumen
 RECORDED: dict[str, Recorded] = {
     "compile.diagnostics.Finding": Recorded(21, FINDING_KINDS),
     "document_checks.FindingClass": Recorded(11, DOCUMENT_FINDING_KINDS),
-    "api.services.WorkflowServices": Recorded(13, WORKFLOW_SERVICES),
+    "api.services.WorkflowServices": Recorded(14, WORKFLOW_SERVICES),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.ReactAgentNode": Recorded(12, NARRATE_TOGGLE),
     "abc.agent.DeepAgentNode": Recorded(13, NARRATE_TOGGLE),

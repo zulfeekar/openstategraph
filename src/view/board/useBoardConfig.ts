@@ -37,6 +37,7 @@ export function useBoardConfig(open: boolean): BoardConfig | null {
       setConfig({
         teamBoardConfigured: result.value.teamBoardConfigured,
         teamBoardEnvVar: result.value.teamBoardEnvVar,
+        teamBoardError: result.value.teamBoardError,
       });
     });
     return () => {

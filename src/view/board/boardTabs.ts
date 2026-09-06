@@ -22,7 +22,18 @@ export const BOARD_TABS: readonly TabDefinition<BoardTabId>[] = [
 
 export type BoardTabState =
   | { readonly kind: 'board' }
-  | { readonly kind: 'unavailable'; readonly title: string; readonly body: string };
+  | {
+      readonly kind: 'unavailable';
+      readonly title: string;
+      readonly body: string;
+      /**
+       * A shell command the reader is meant to run, kept out of `body` —
+       * `osg-agent-experience/83`. Prose reflows, and a command that reflows
+       * with it cannot be selected in one piece; so it is a field of its own,
+       * rendered on a line of its own.
+       */
+      readonly command?: string;
+    };
 
 /**
  * What the backend said about the environment it is running in —
@@ -37,6 +48,18 @@ export type BoardTabState =
 export interface BoardConfig {
   readonly teamBoardConfigured: boolean;
   readonly teamBoardEnvVar: string;
+  /**
+   * Why the configured board could not be opened, or `null`/absent —
+   * `team-board-and-gap-reports/18`. The backend probes once at startup and
+   * publishes the sentence; nothing here composes one, for the same reason
+   * nothing here spells the variable's name.
+   *
+   * Optional, because an older process does not answer it and because the
+   * two tests written before this ticket construct a `BoardConfig` without
+   * it: absent means *nothing said anything went wrong*, which is the same
+   * reading a `null` gets.
+   */
+  readonly teamBoardError?: string | null;
 }
 
 /**
@@ -48,7 +71,11 @@ export interface BoardConfig {
  * name is empty because nothing has said one, and the sentence below is
  * written to survive that.
  */
-const UNANSWERED: BoardConfig = { teamBoardConfigured: false, teamBoardEnvVar: '' };
+const UNANSWERED: BoardConfig = {
+  teamBoardConfigured: false,
+  teamBoardEnvVar: '',
+  teamBoardError: null,
+};
 
 /**
  * What a tab has behind it.
@@ -81,6 +108,9 @@ export function boardTabState(tab: BoardTabId, config: BoardConfig = UNANSWERED)
     case 'workflows':
       return { kind: 'board' };
     case 'osgEngineering':
+      if (config.teamBoardConfigured && config.teamBoardError) {
+        return unopenable(config.teamBoardError);
+      }
       if (config.teamBoardConfigured) return { kind: 'board' };
       return {
         kind: 'unavailable',
@@ -107,4 +137,43 @@ export function boardTabState(tab: BoardTabId, config: BoardConfig = UNANSWERED)
           'columns would be a claim rather than a state.',
       };
   }
+}
+
+/**
+ * ## And a fourth state, since `team-board-and-gap-reports/18`
+ *
+ * *Configured, and this server could not open it.* The owner upgraded with an
+ * extras line that lacked the board's driver, so the backend answered
+ * `configured: true`, this tab drew four empty columns, and the real reason
+ * arrived as a traceback in the terminal once per stream reconnect.
+ *
+ * Four empty columns here is the worst form of the claim-versus-state mistake
+ * this module exists to prevent: not *a patrol ran and found nothing*, but
+ * *the findings exist and you are looking at the wrong table*.
+ *
+ * The sentence is the backend's, unedited — it names the variable, what is
+ * wrong, and the command that repairs **this** installation, none of which a
+ * browser can know. What is added here is the frame a reader needs around it:
+ * which tab this is about, and that a restart is what applies the fix,
+ * because the board is opened once at startup and not per request.
+ */
+function unopenable(error: string): BoardTabState {
+  // The backend puts the command on its own line, because it is the only
+  // thing that knows where its prose ends (`osg-agent-experience/83`). So the
+  // split is on that newline — never on a guess about what a command looks
+  // like, which is the parse that breaks the first time the sentence changes.
+  const [prose = '', ...rest] = error.split('\n');
+  const command = rest.join('\n').trim();
+  return {
+    kind: 'unavailable',
+    title: 'Board unavailable',
+    body:
+      'This tab would list what a patrol found in the engineering source this ' +
+      'project points at. Something points at one, and this server could not open ' +
+      'it — so an empty board here would be somebody else\u2019s cards missing, not ' +
+      'a patrol that came back clean. It is opened once, at startup, so restart ' +
+      'after fixing it. The server said: ' +
+      prose.trim(),
+    ...(command ? { command } : {}),
+  };
 }

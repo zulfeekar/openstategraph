@@ -238,7 +238,7 @@ async def catalogue_events(
     summary="Liveness, and whether a model name can be resolved",
     tags=["Operations"],
 )
-def health() -> HealthResponse:
+def health(services: Services) -> HealthResponse:
     """Answers "is this process up?" and nothing more expensive.
 
     `model_configured` asks whether **any** registered provider has the
@@ -266,6 +266,12 @@ def health() -> HealthResponse:
     # that answers "what does the environment name", and the board tab needs
     # exactly that and nothing more. The value never leaves this process.
     team_board = team_board_status()
+    # And the question `team_board_status` deliberately does not ask
+    # (`team-board-and-gap-reports/18`): *did it actually open?* Read off the
+    # startup probe rather than asked here — a health endpoint that opened a
+    # database connection would answer at the speed of the slowest thing it
+    # reports on, which is the bargain `model_configured` above already makes
+    # in the other direction.
     # Still cheap: two `stat` walks over a directory the process already sits
     # in, and `None` the moment there is no source tree to compare against —
     # which is every installed wheel.
@@ -275,6 +281,7 @@ def health() -> HealthResponse:
         editor_stale=editor_is_stale(),
         team_board_configured=team_board.configured,
         team_board_env=team_board.env_var,
+        team_board_error=services.board.error,
     )
 
 

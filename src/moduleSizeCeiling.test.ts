@@ -216,7 +216,7 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       part of it this module knows. The transcript seam is still the next one.`,
   },
   'core/runtime/RuntimeClient.ts': {
-    lines: 907,
+    lines: 912,
     reason: `The clearest case in either census of a long file that is not a design
       failure, and the reason this measure needs a recorded-exception mechanism
       rather than a bare number. Six hundred code lines against 1,682 physical,
@@ -410,7 +410,17 @@ const RECORDED: Readonly<Record<string, Recorded>> = {
       same bill every entry above records: a field of the published contract,
       documented at its declaration, pinned to \`docs/openapi.json\` by the
       drift test. No behaviour — whether a count of one is worth drawing is
-      \`kanbanCardMapping\`'s decision, one layer up.`,
+      \`kanbanCardMapping\`'s decision, one layer up.
+
+      **907 -> 912** (\`team-board-and-gap-reports/18\`). Five lines: the
+      \`teamBoardError\` field on \`RuntimeHealth\` and the read that fills it.
+      The two fields \`17\`'s sibling ticket added say whether a shared board is
+      *configured*, which is an environment variable and not a board — so an
+      install missing the driver answered "configured" while every card read
+      and every live stream failed. This is the field that carries why. The
+      read is three lines rather than \`asString\` because the two falsy cases
+      differ: a missing key and an empty sentence both mean *nothing to
+      report*, and rendering an empty error box would be worse than silence.`,
   },
 };
 

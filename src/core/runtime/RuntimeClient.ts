@@ -1343,6 +1343,19 @@ export interface RuntimeHealth {
    */
   readonly teamBoardConfigured: boolean;
   readonly teamBoardEnvVar: string;
+  /**
+   * Why that configured board could **not** be opened, or `null` —
+   * `team-board-and-gap-reports/18`. `teamBoardConfigured` reads an
+   * environment variable and opens nothing, so it answered `true` on an
+   * install whose driver was missing while every card read and every live
+   * stream failed. The backend probes once at startup and publishes the
+   * sentence it got; it names the variable and the command that repairs it,
+   * and never the URL, which holds a password.
+   *
+   * `null` from a process that has nothing to report **and** from one too old
+   * to answer — the same *say nothing* rule the two fields above carry.
+   */
+  readonly teamBoardError: string | null;
 }
 
 /** Injected so tests need no server and no network. */
@@ -2255,6 +2268,12 @@ export class RuntimeClient implements IRuntimeClient {
         editorStale: typeof stale === 'boolean' ? stale : null,
         teamBoardConfigured: payload['team_board_configured'] === true,
         teamBoardEnvVar: asString(payload['team_board_env']),
+        // A sentence or nothing: anything else on the wire is not one a
+        // person can act on, and rendering it would be worse than silence.
+        teamBoardError:
+          typeof payload['team_board_error'] === 'string' && payload['team_board_error']
+            ? (payload['team_board_error'] as string)
+            : null,
       });
     } catch {
       return Err('Runtime is not reachable');
