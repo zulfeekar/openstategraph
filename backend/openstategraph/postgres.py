@@ -97,20 +97,28 @@ def redacted(url: str) -> str:
     return _KEYWORD_PASSWORD.sub(r"\1***", text)
 
 
-def _pool(url: str) -> Any:
+def open_pool(url: str, *, env_var: str = POSTGRES_URL_ENV) -> Any:
     """An open `ConnectionPool` configured the way langgraph expects.
 
     The three connection settings are not ours to choose: langgraph's own
     pooled path sets them, its SQL is written against `dict_row`, and
     `prepare_threshold=0` is what keeps a pooled connection from accumulating
     server-side prepared statements it will never reuse.
+
+    `env_var` names the setting the caller read the URL out of, and it is a
+    parameter rather than this module's own constant because there is a second
+    one now: `team-board-and-gap-reports/03`'s card store reads
+    `OPENSTATEGRAPH_KANBAN_URL`, and a refusal that named the checkpointer's
+    variable would send a maintainer to change a setting that is not the one
+    they typed. The pool itself is the same pool — same settings, same
+    "connect here, with our message, rather than on somebody's first write".
     """
     try:
         from psycopg.rows import dict_row
         from psycopg_pool import ConnectionPool
     except ImportError as exc:
         raise ImportError(
-            f"{POSTGRES_URL_ENV} is set, but psycopg is not installed — "
+            f"{env_var} is set, but psycopg is not installed — "
             "pip install 'openstategraph[postgres]'"
         ) from exc
 
@@ -129,9 +137,9 @@ def _pool(url: str) -> Any:
     except Exception as exc:
         raise PostgresUnavailable(
             f"could not connect to {redacted(url)} ({exc}). "
-            f"{POSTGRES_URL_ENV} is set, so this deployment asked for Postgres and "
+            f"{env_var} is set, so this deployment asked for Postgres and "
             "will not silently fall back to a local sqlite file. Fix the database, "
-            f"or unset {POSTGRES_URL_ENV} to use the state directory."
+            f"or unset {env_var} to use the state directory."
         ) from exc
     return pool
 
@@ -151,7 +159,7 @@ def checkpointer(url: str) -> Any:
             "installed — pip install 'openstategraph[postgres]'"
         ) from exc
 
-    pool = _pool(url)
+    pool = open_pool(url)
     saver = PostgresSaver(pool)
     _migrate(saver, pool, url, "checkpointer")
     logger.info("approvals persist in Postgres at %s", redacted(url))
@@ -168,7 +176,7 @@ def store(url: str) -> Any:
             "installed — pip install 'openstategraph[postgres]'"
         ) from exc
 
-    pool = _pool(url)
+    pool = open_pool(url)
     memory_store = PostgresStore(conn=pool)
     _migrate(memory_store, pool, url, "memory store")
     logger.info("long-term memory persists in Postgres at %s", redacted(url))

@@ -280,10 +280,12 @@ root. This document used to state the second of those three as if it were the
 whole rule, which sent a reader looking in the one place their board was not
 (`osg-agent-experience/65`).
 
-**The board is machine-local state, and that is a decision rather than an
-oversight.** It is not committed, a clone does not carry it, and a colleague
-cannot see it. So **a card is not a record**: it is a working queue for the
-agents driving this checkout. Anything that has to survive the machine —
+**By default the board is machine-local state, and that is a decision rather
+than an oversight.** It is not committed, a clone does not carry it, and a
+colleague cannot see it — unless the team of you have pointed
+`OPENSTATEGRAPH_KANBAN_URL` at one shared database, which §9 below describes
+and which changes only *where* the cards are. So **a card is not a record**: it
+is a working queue for the agents driving this checkout. Anything that has to survive the machine —
 a decision, a defect, an argument — belongs in a commit, a ticket or a
 document, and the card is the thing that points at it.
 
@@ -299,6 +301,61 @@ sentences and the caller prints the right one.
 
 A project made before that field existed is told so, and pointed at the
 upgrade, rather than having an identity invented for it.
+
+---
+
+## 9. Team board — one board, several laptops
+
+Everything above describes the board as machine-local, and that is still the
+default and always will be. Set one variable and it is not:
+
+```bash
+export OPENSTATEGRAPH_KANBAN_URL="postgresql://user:password@host:5432/board"
+```
+
+Unset, cards live in `kanban.sqlite` exactly as §8 describes. Set, they live in
+that database, and everyone who sets the same URL is looking at the same board.
+Set but unreachable is neither: it **raises when the board is opened**, naming
+the variable. A board that quietly fell back to a local file when the shared
+one was asked for would be two people disagreeing about what the board says,
+discovered a week later.
+
+It is a **different variable from `OPENSTATEGRAPH_POSTGRES_URL`**, which is the
+checkpointer's and means "put this deployment's durable run state here". One
+setting meaning both would put your cards in somebody's checkpoint database the
+first time they configured durability.
+
+`pip install 'openstategraph[postgres]'` — the same extra the checkpointer
+uses, and the variable set without it is a refusal that says so rather than a
+board that is quietly empty.
+
+**Which rows are yours.** The shared table carries a `project_hash` column: a
+SHA-256 of your project id, never the id itself. Every read and every write
+this store makes is scoped to it, so two projects sharing one database do not
+see each other's cards. `board` — the column that already separates the
+editor's three tabs — separates them there too.
+
+**The schema is SQL you can read.** It ships as numbered files in the package
+(`openstategraph/kanban_migrations/`), applied in filename order when the store
+opens and recorded so they are applied once. They are ordinary Postgres: a
+maintainer with a migration CLI pushes the same directory, and a stranger with
+their own database runs the same files by hand. Every file is written to be
+safe to apply twice, which is what lets those two paths coexist.
+
+**Row level security is on and forced**, with policies keyed on
+`project_hash`. Read that precisely, because the honest version is narrower
+than the reassuring one: the URL above is normally an owner-level role, and an
+owner-level role on a managed Postgres has `bypassrls` — forcing RLS closes the
+table-owner exemption, not that one. So the policies are the floor for every
+*other* reader, and the store's own `where project_hash = …` is what scopes
+your own reads. A reader arriving with a narrower role declares which project
+it is (`app.project_hash` on its connection) and sees that project and nothing
+else; a reader that declares nothing sees nothing.
+
+**Nobody gets `delete`.** Not through a policy, not through a grant, and there
+is no delete on the store's interface at all. Retention on a shared board is a
+job that runs as the owner, not something a card-filing door can do by
+accident.
 
 ---
 

@@ -346,6 +346,11 @@ Precedence, most specific first:
 | `OPENSTATEGRAPH_POSTGRES_URL=...` | That database. |
 | *(nothing)* | sqlite under `state_dir()`. |
 
+`OPENSTATEGRAPH_KANBAN_URL` is a **different** setting and never this one: it
+puts the patrol board in a database several maintainers share, and pointing one
+URL at both would file a maintainer's cards into an adopter's checkpoint
+database ([The patrol board](the-patrol-board.md) § Team board).
+
 The store follows the same shape — the same four rows, with
 `OPENSTATEGRAPH_MEMORY_PATH` in the checkpoint variable's place and
 `memory.sqlite` beside `checkpoints.sqlite` in the last one. Since

@@ -708,13 +708,23 @@ class KanbanStoreRegistry:
 
 
 def default_kanban_store_registry() -> KanbanStoreRegistry:
-    """SQLite today; `team-board-and-gap-reports/03` registers Postgres beside
-    it and edits nothing else. A fresh registry per call — no module-level
-    singleton, so a test that mutates one instance cannot affect another."""
+    """SQLite and Postgres. A fresh registry per call — no module-level
+    singleton, so a test that mutates one instance cannot affect another.
+
+    `team-board-and-gap-reports/03` added the second one and edited nothing
+    else, which is what the registry was for. Two schemes, one opener:
+    `postgresql://` is what the URI standard says and `postgres://` is what
+    half the hosting dashboards print, and a maintainer who pasted the short
+    form is not making a different request. The openers live in their own
+    modules and are imported here, never defined here.
+    """
+    from openstategraph.kanban_postgres import open_postgres_kanban_store
     from openstategraph.kanban_sqlite import open_sqlite_kanban_store
 
     registry = KanbanStoreRegistry()
     registry.register("sqlite", open_sqlite_kanban_store)
+    registry.register("postgresql", open_postgres_kanban_store)
+    registry.register("postgres", open_postgres_kanban_store)
     return registry
 
 
