@@ -1878,6 +1878,33 @@ def cmd_patrol_run(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _report_for(args: argparse.Namespace, *, project_hash: str) -> Any:
+    """The report for whichever of the two subjects was named.
+
+    A card id carries the project it belongs to and a colon
+    (`<project>:<thread>`); a type id cannot hold one, which is the same rule
+    `gap_report_door.build_report` already refuses on. So the split is the
+    subject's own shape and there is no flag to get wrong.
+
+    `team-board-and-gap-reports/15`: the card branch reads the board this
+    project already has, and hands the door the `Card` itself — the door
+    re-validates every field of it through `GapReport`, so a row somebody
+    edited is refused rather than sent.
+    """
+    from openstategraph.gap_report import GapDoor
+    from openstategraph.gap_report_door import build_report, report_for_card
+
+    door = GapDoor(args.door)
+    if ":" not in args.subject.strip():
+        return build_report(args.subject, project_hash=project_hash, door=door)
+    from openstategraph.kanban_store import open_kanban_store
+
+    store = open_kanban_store(getattr(args, "workflows_root", None))
+    return report_for_card(
+        store.read_card(args.subject.strip()), project_hash=project_hash, door=door
+    )
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     """Tell the maintainers about a gap this install refused —
     `team-board-and-gap-reports/08`.
@@ -1898,7 +1925,6 @@ def cmd_report(args: argparse.Namespace) -> int:
     from openstategraph.gap_report_door import (
         DoorClosed,
         UnreportableSubject,
-        build_report,
         file_issue,
         preview,
     )
@@ -1919,13 +1945,14 @@ def cmd_report(args: argparse.Namespace) -> int:
     if args.door not in doors:
         return _usage(f"--door is one of {', '.join(doors)} — not {args.door!r}")
     try:
-        report = build_report(
-            args.subject,
-            project_hash=hashed_project_id(project_id),
-            door=GapDoor(args.door),
-        )
+        report = _report_for(args, project_hash=hashed_project_id(project_id))
     except UnreportableSubject as exc:
         return _error(str(exc))
+    except KeyError:
+        return _error(
+            f"no card {args.subject!r} on this board. `openstategraph kanban list` "
+            "prints the ids, or pass the type id the refusal named instead."
+        )
     except ValidationError:
         return _error(
             f"{args.subject!r} is not a node or tool type id. A report names the "
@@ -2864,6 +2891,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="file the issue printed above, under your own gh login",
     )
+    # Only the card subject reads it, and a subject is one argument
+    # (`team-board-and-gap-reports/15`) rather than two verbs.
+    report.add_argument("--workflows-root", dest="workflows_root")
     report.set_defaults(handler=cmd_report)
 
     threads = subparsers.add_parser("threads", help="past runs stored by the checkpointer")

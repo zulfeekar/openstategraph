@@ -72,6 +72,12 @@ _COLUMN_DEFS: dict[str, str] = {
     # next open, in place, with every row it already holds intact. Nothing is
     # rewritten and nothing is dropped.
     "finished_reason": "TEXT NOT NULL DEFAULT ''",
+    # `team-board-and-gap-reports/15`. The finding a patrol card was minted
+    # from, as JSON — added the same way `26` made cheap: an existing
+    # kanban.sqlite gains it on the next open, in place, with every row it
+    # already holds intact. A card filed before it existed reads back with
+    # `""`, which is exactly what it means — no finding behind this card.
+    "gap_evidence": "TEXT NOT NULL DEFAULT ''",
 }
 
 _CARD_COLUMNS = (
@@ -79,7 +85,8 @@ _CARD_COLUMNS = (
     "priority, area, priority_reason, filed_at, "
     "evidence_test_id, evidence_red_reason, evidence_green, evidence_commit, "
     "answer, answered_by, answered_at, "
-    "story, done_when, blocked_by, agent_model, agent_effort, finished_reason"
+    "story, done_when, blocked_by, agent_model, agent_effort, finished_reason, "
+    "gap_evidence"
 )
 
 
@@ -126,6 +133,7 @@ def _row_to_card(row: tuple[Any, ...]) -> Card:
         agent_model=row[22],
         agent_effort=row[23],
         finished_reason=row[24],
+        gap_evidence=row[25],
     )
 
 
@@ -267,6 +275,7 @@ class SqliteKanbanStore(AbstractKanbanStore):
                     card.answer, card.answered_by, card.answered_at,
                     card.story, card.done_when, json.dumps(list(card.blocked_by)),
                     card.agent_model, card.agent_effort, card.finished_reason,
+                    card.gap_evidence,
                 ),
             )
             conn.commit()

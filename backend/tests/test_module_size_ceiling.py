@@ -541,6 +541,15 @@ resolution lives in `agent_config.resolve_server_command` and the wording in
 `agent_config.command_note` — this file gained the call, the wrap and a comment
 saying why that one line may not be broken on hyphens.
 
+**1793 -> 1805** (`team-board-and-gap-reports/15`, 2026-09-06). Twelve lines,
+and eleven of them are `_report_for` — the seam that decides which of the two
+subjects was named, because a card id carries a colon and a type id cannot.
+The card branch reads the board this project already has and hands the door a
+`Card`; the door re-validates every field of it through `GapReport`, so
+nothing about what may be sent is decided here. The thirteenth is the
+`--workflows-root` the card branch needs, spelled the way every other command
+that reads the store spells it.
+
 **1718 -> 1793** (`team-board-and-gap-reports/08`, 2026-09-06). Seventy-five
 lines for one verb, `report`, and the rule holds: the seam is
 `gap_report_door`, which builds the report, renders the issue and shells out
@@ -1338,7 +1347,7 @@ prints the finding gets the offer without a second string to keep in step.
 RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
     "document_checks.py": Recorded(505, DOCUMENT_CHECKS),
-    "cli.py": Recorded(1793, CLI),
+    "cli.py": Recorded(1805, CLI),
     "compile/workflow_compiler.py": Recorded(1018, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1038, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),

@@ -71,7 +71,8 @@ export const CONTRACT = {
   "refusalSources": [
     "runtime",
     "provider",
-    "exception"
+    "exception",
+    "finding"
   ],
   "required": [
     "kind",

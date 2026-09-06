@@ -230,6 +230,22 @@ class Card:
     #: dropped it. Empty string, never `None`, the same one-spelling-of-nothing
     #: rule every field above keeps.
     finished_reason: str = ""
+    #: `team-board-and-gap-reports/15`. What the patrol finding behind this
+    #: card was, as JSON: the finding name, the tool **type ids** it named, the
+    #: refusal text it carried, and the hash of the report those make. Written
+    #: at filing time and never after, because the run it was read from is the
+    #: only place those facts exist and a later reader has the card instead.
+    #:
+    #: Empty on every card nobody can build a report from — a hand-filed idea,
+    #: a repeated call, an unstable answer — which is what makes
+    #: `gap_report_door.report_for_card` able to refuse one by name rather than
+    #: assemble a report out of somebody's prose.
+    #:
+    #: JSON in a column rather than four columns: three of the four are lists
+    #: or absent, and the reader that matters re-validates the whole thing
+    #: through `GapReport` anyway, so a row edited by hand is refused at the
+    #: door rather than trusted because it came out of our own store.
+    gap_evidence: str = ""
 
 
 #: `kanban-patrol/19`'s explicit Release lease, in seconds — one hour. Owned
@@ -352,6 +368,16 @@ def card_row(card: Card, *, stale: bool) -> dict[str, Any]:
         # different field sets is how a board and an agent come to read
         # different cards.
         "finished_reason": card.finished_reason,
+        # `gap_evidence` is deliberately **not** here
+        # (`team-board-and-gap-reports/15`). This function is the row the two
+        # *board* doors publish, and a finding hash is not something a reader
+        # of a card reads — it is machine evidence for one caller, the report
+        # door, which holds the `Card` itself because it opened the store to
+        # find it. Publishing it would put a field on the wire, in the OpenAPI
+        # schema and in the board's TypeScript row with no reader at either
+        # end. The rule this bends — one field set for every door — is about
+        # two doors showing a *person* different cards, and neither door shows
+        # this one.
         "stale": stale,
     }
 

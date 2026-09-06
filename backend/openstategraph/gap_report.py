@@ -42,6 +42,7 @@ from __future__ import annotations
 import hashlib
 import platform
 import re
+from collections.abc import Sequence
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
@@ -66,6 +67,7 @@ __all__ = [
     "Refusal",
     "RefusalSource",
     "first_traceback_line",
+    "report_for_finding",
     "gap_report_schema",
     "hashed_project_id",
 ]
@@ -102,8 +104,23 @@ _PATHISH = re.compile(r"(?:[A-Za-z]:)?[\\/][\w.\-\\/]{2,}")
 #: (`osg-agent-experience/73`).
 _AAD_CODE = re.compile(r"^AADSTS\d+$")
 
+#: The same code, **found** in a longer sentence rather than validated as a
+#: whole field. Two patterns for one code because they answer two questions: a
+#: field is not a haystack, so `_AAD_CODE` stays anchored, and a finding's
+#: refusal is prose with the code somewhere inside it.
+_AAD_IN_TEXT = re.compile(r"\bAADSTS\d+\b")
+
 #: An exception line: the class this package raised, and its own message.
 _EXCEPTION_LINE = re.compile(r"^[A-Z][A-Za-z0-9]*(?:Error|Exception): .{1,400}$")
+
+#: The same line, when what vouches for it is the **name** rather than the
+#: suffix — `team-board-and-gap-reports/15`. Half of this package's own errors
+#: are not called `…Error` at all (`MissingProviderKey`, `PackageNotFound`,
+#: `ThreadNotResumable`), so a rule written as a suffix does not recognise the
+#: errors this package actually raises. Here the gate is `_our_error_names()`,
+#: which is the set itself; this pattern only splits the class from its
+#: message.
+_OUR_EXCEPTION_LINE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*): (.{1,400})$")
 
 _VERSION = re.compile(r"^[0-9A-Za-z.+-]{1,40}$")
 _OS = re.compile(r"^[A-Za-z][A-Za-z0-9 ._-]{0,59}$")
@@ -201,6 +218,46 @@ def _provider_sentences() -> frozenset[str]:
     return frozenset(found)
 
 
+@lru_cache(maxsize=1)
+def _our_error_names() -> frozenset[str]:
+    """Every error class `openstategraph.errors` defines, by name.
+
+    Derived from the module rather than listed here, for the reason every
+    census in this repository is: a list written down covers the errors
+    somebody already thought of. Narrower than `for_our_exception`'s test,
+    which asks whether the *object*'s module is ours — a name in a string
+    cannot be asked that, and the package's own error module is the set that
+    can be resolved from one.
+    """
+    from openstategraph import errors
+
+    return frozenset(
+        name
+        for name, value in vars(errors).items()
+        if isinstance(value, type) and issubclass(value, errors.OpenStateGraphError)
+    )
+
+
+#: What **this codebase** says about a finding the patrol recorded, one
+#: sentence per finding kind a report has a `GapKind` for.
+#:
+#: Written here rather than taken from the finding, and that is the whole of
+#: `team-board-and-gap-reports/15`'s judgement. A finding's own `arguments`
+#: is what a tool produced: `ToolResult.failure` puts the driver's sentence
+#: there, and `Invalid arguments: …` puts the model's own arguments there. So
+#: the words a report carries about a run failure are ours, and what makes
+#: the report worth reading is the structure beside them — the tool **type**
+#: that could not be reached, the check that noticed, and Azure AD's own code
+#: when the refusal carried one.
+_FINDING_SENTENCES: dict[str, str] = {
+    EVERY_TOOL_CALL_FAILED: (
+        "Every tool call this run made was refused, all of them the same way, "
+        "and no result came back."
+    ),
+    NODE_FAILURE: "A node failed after retries and produced no result.",
+}
+
+
 class RefusalSource(str, Enum):
     """Where a refusal sentence was written. Not *what refused* — that is
     `GapDoor` — but which of this codebase's three sentence-writing seams
@@ -212,6 +269,13 @@ class RefusalSource(str, Enum):
     PROVIDER = "provider"
     #: An exception this package defines, as one line.
     EXCEPTION = "exception"
+    #: A finding the patrol recorded — `team-board-and-gap-reports/15`. Two
+    #: shapes, both ours and both re-checked on every construction: this
+    #: module's own sentence for that finding kind, or an exception line
+    #: naming a class `openstategraph.errors` defines, which is what the tool
+    #: seam wrote when the thing that failed was ours. Never the finding's own
+    #: text otherwise, because that text is a vendor's or a model's.
+    FINDING = "finding"
 
 
 class GapKind(str, Enum):
@@ -290,10 +354,17 @@ class Refusal(BaseModel):
         elif source is RefusalSource.EXCEPTION:
             if _EXCEPTION_LINE.match(text):
                 return text
+        elif source is RefusalSource.FINDING:
+            if text in _FINDING_SENTENCES.values():
+                return text
+            named = _OUR_EXCEPTION_LINE.match(text)
+            if named is not None and named.group(1) in _our_error_names():
+                return text
         raise ValueError(
             "a refusal is a sentence this codebase writes, not text handed to "
             "it — build one with Refusal.for_missing_implementation, "
-            "Refusal.for_provider or Refusal.for_our_exception"
+            "Refusal.for_provider, Refusal.for_our_exception or "
+            "Refusal.for_finding"
         )
 
     @classmethod
@@ -328,6 +399,73 @@ class Refusal(BaseModel):
                 "openstategraph — a report carries our own refusal sentences only"
             )
         return cls(source=RefusalSource.EXCEPTION, text=first_traceback_line(exc))
+
+    @classmethod
+    def for_finding(cls, finding: str, text: str = "") -> Refusal:
+        """What a patrol finding refused, in words this codebase wrote.
+
+        `team-board-and-gap-reports/15`. **Tolerant in reading, strict in
+        trusting**, and here the strict half is the product: the finding's own
+        text is read, and it is carried only when it turns out to be an
+        exception line naming a class `openstategraph.errors` defines — the
+        subset `15` named, the one a tool of ours put there. Anything else —
+        an ODBC message, an `AADSTS` sentence, `Invalid arguments: …` with the
+        model's own arguments echoed back — is dropped, and the sentence this
+        module writes for that finding kind is carried instead.
+
+        A finding kind no report has a `GapKind` for is refused by name rather
+        than given a sentence: waste is not a platform gap, and a report
+        saying nothing about a real problem is worse than no report.
+        """
+        if finding not in _FINDING_SENTENCES:
+            raise ValueError(
+                f"{finding!r} is not a finding a gap report can be built from. "
+                f"The reportable ones are {', '.join(sorted(_FINDING_SENTENCES))} "
+                "— a repeated call and an unstable answer are this install's own "
+                "waste, not a gap in the platform."
+            )
+        from openstategraph.abc.tool import TOOL_FAILURE_PREFIX
+
+        line = _redacted(text).removeprefix(TOOL_FAILURE_PREFIX).strip()
+        named = _OUR_EXCEPTION_LINE.match(line)
+        if named is not None and named.group(1) in _our_error_names():
+            return cls(source=RefusalSource.FINDING, text=line)
+        return cls(source=RefusalSource.FINDING, text=_FINDING_SENTENCES[finding])
+
+
+def report_for_finding(
+    *,
+    finding: str,
+    type_ids: Sequence[str],
+    refusal_text: str,
+    project_hash: str,
+    door: GapDoor = GapDoor.CLI,
+) -> GapReport:
+    """The report a patrol finding supports, and nothing more than it supports.
+
+    `team-board-and-gap-reports/15`. The finding's contribution is its
+    **structure** — which kind of failure, which tool types were involved, the
+    check that named it, and Azure AD's own code when the refusal carried one
+    (`osg-agent-experience/73`: that string ends the investigation). The words
+    come from `Refusal.for_finding`, which is where the judgement about whose
+    sentence it is lives.
+
+    Built here rather than at either caller, so the module that owns the
+    allowlist is still the only one that constructs a report from parts — the
+    census in `tests/test_a_gap_report_carries_the_allowlist_and_nothing_else.py`
+    holds unchanged, and the patrol, which calls this only for the hash and
+    sends nothing, does not become a door.
+    """
+    code = _AAD_IN_TEXT.search(refusal_text or "")
+    return GapReport(
+        kind=GapKind(finding),
+        type_ids=tuple(type_ids),
+        door=door,
+        refusal=Refusal.for_finding(finding, refusal_text),
+        check=finding,
+        project_hash=project_hash,
+        aad_code=code.group(0) if code else None,
+    )
 
 
 class GapReport(BaseModel):

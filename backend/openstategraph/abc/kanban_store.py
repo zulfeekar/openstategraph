@@ -83,6 +83,7 @@ class IKanbanStore(Protocol):
         priority_reason: str = "",
         story: str = "",
         done_when: str = "",
+        gap_evidence: str = "",
     ) -> None: ...
 
     def file_idea_card(
@@ -195,6 +196,7 @@ class AbstractKanbanStore(ABC):
         priority_reason: str = "",
         story: str = "",
         done_when: str = "",
+        gap_evidence: str = "",
     ) -> None:
         """The patrol's write. `kanban-patrol/02`: once a card leaves
         `unattended`, a re-patrol must never touch it again — enforced by the
@@ -214,6 +216,12 @@ class AbstractKanbanStore(ABC):
         `file_idea_card`, which mints its own id from the title and forces
         `board="workflows"` — an issue's identity is its number, on the
         `github` board.
+
+        `gap_evidence` is the third to default that way, and its reason is the
+        narrowest yet (`team-board-and-gap-reports/15`): only a patrol card
+        minted from a finding a gap report can be built from carries one, and
+        the emptiness of every other card is what lets the report door refuse
+        a hand-filed card by name instead of guessing at it.
         """
         self._insert_card(
             Card(
@@ -238,6 +246,7 @@ class AbstractKanbanStore(ABC):
                 answered_at="",
                 story=story.strip(),
                 done_when=done_when.strip(),
+                gap_evidence=gap_evidence.strip(),
             )
         )
 

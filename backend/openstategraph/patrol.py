@@ -20,6 +20,7 @@ over the same evidence agree.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +29,7 @@ from typing import Any, Callable
 from openstategraph.api.audience import Audience
 from openstategraph.api.services import WorkflowServices
 from openstategraph.api.threads import savers_for
+from openstategraph.gap_report import hashed_project_id
 from openstategraph.kanban_store import open_kanban_store
 from openstategraph.run_findings import (
     EVERY_TOOL_CALL_FAILED,
@@ -186,6 +188,53 @@ def _mssql_variables() -> tuple[str, ...]:
 _CONNECTION_VARS: dict[str, Callable[[], tuple[str, ...]]] = {
     "tool.mssql-query": _mssql_variables,
 }
+
+
+def finding_evidence(finding: RunFinding, *, project_hash: str) -> str:
+    """What this finding contributes to a gap report, as JSON for the card.
+
+    `team-board-and-gap-reports/15`. `08` shipped the report door and could
+    not point it at a card, because a card recorded the classifier's prose and
+    nothing else — no finding name, no type ids, nothing a report has a field
+    for. This is that record, written at filing time for the reason every
+    field on a card is: the run it was read from is not something the card
+    carries, and a later reader has the card.
+
+    `""` for a finding no report can be built from — a repeated call, an
+    unstable answer, a name this version does not know. That emptiness is the
+    door's refusal: a card with no evidence is one nobody can honestly report,
+    and saying so by name is `docs-onramp/09`'s rule rather than a gap in this
+    function.
+
+    The report is built by `gap_report`, never here. The patrol sends nothing
+    and is not a door; it asks the module that owns the allowlist what the
+    hash of this finding's report is, and writes that down.
+    """
+    from openstategraph.gap_report import GapKind, report_for_finding
+
+    if finding.name not in {member.value for member in GapKind}:
+        return ""
+    types = _tool_types(finding.tool)
+    report = report_for_finding(
+        finding=finding.name,
+        type_ids=types,
+        refusal_text=finding.arguments,
+        project_hash=project_hash,
+    )
+    return json.dumps(
+        {
+            "finding": finding.name,
+            "type_ids": list(types),
+            # The finding's own text, as recorded. Kept because it is what
+            # decides which of the two sentences a refusal carries, and safe
+            # to keep because deciding that is `Refusal.for_finding`'s job and
+            # it re-runs on every read: nothing here is trusted for having
+            # come out of our own store.
+            "refusal": finding.arguments,
+            "finding_hash": report.finding_hash,
+        },
+        sort_keys=True,
+    )
 
 
 def _every_call_failed_classification(finding: RunFinding) -> FindingClassification:
@@ -462,6 +511,9 @@ def run_patrol(
             priority=classification.priority,
             area="backend",
             priority_reason=reason,
+            gap_evidence=finding_evidence(
+                refusal_findings[0], project_hash=hashed_project_id(project_id)
+            ),
         )
         filed.append(task_id)
         if on_card_filed is not None:
@@ -492,6 +544,9 @@ def run_patrol(
             priority=classification.priority,
             area="backend",
             priority_reason=reason,
+            gap_evidence=finding_evidence(
+                primary, project_hash=hashed_project_id(project_id)
+            ),
         )
         filed.append(task_id)
         if on_card_filed is not None:

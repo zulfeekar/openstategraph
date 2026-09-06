@@ -634,7 +634,7 @@ the key to add by hand.
 ### `report`
 
 ```
-openstategraph report <type-id> [--door DOOR] [--yes]
+openstategraph report <type-id|card-id> [--door DOOR] [--yes] [--workflows-root DIR]
 ```
 
 You placed a card the editor offers, pressed run, and were told this runtime
@@ -666,11 +666,27 @@ prints the report and the form's URL and says `gh auth login` — never a
 traceback. A keyless door for installs that will never have `gh` is designed
 and not deployed (`team-board-and-gap-reports/09`).
 
-A board card id is not a subject and says so: a patrol card records what a run
-did — a driver's own sentence, or a node that failed — and a report carries
-only the sentences this codebase writes, so there is nothing on such a card
-this door could send without putting somebody's prose into a report that has no
-field for it.
+**A patrol card is the other subject** (`team-board-and-gap-reports/15`). A card
+the patrol filed from a run failure records the finding it was minted from — the
+finding kind, the tool **type ids**, and Azure AD's own code if the refusal
+carried one — so `openstategraph report <card-id>` builds the same report from
+it. The two subjects are told apart by their shape: a card id carries the
+project it belongs to and a colon, and a type id cannot. `--workflows-root` says
+which board to read, defaulting the way every other command that reads the store
+defaults.
+
+What such a report does **not** carry is the refusal's own words, unless those
+words are ours. `ToolResult.failure` puts whatever the tool was handed on the
+finding — an ODBC message, a vendor's sentence, and, when arguments would not
+parse, the model's own arguments echoed back — so the sentence a report carries
+about a run failure is one this codebase wrote, and only an exception line
+naming a class `openstategraph.errors` defines survives as itself. The type ids
+are what make it worth reading.
+
+A card with no finding behind it is still refused, by name: a card somebody
+typed, and a card about a repeated call or an unstable answer, records a
+judgement about your install rather than a gap in the platform. The refusal
+prints the by-hand form.
 
 ## Knowing what is configured
 

@@ -55,9 +55,37 @@ Two details worth knowing because they are the ones people ask about:
   report and have no field to be in.
 - **The refusal is ours.** It is one of the sentences this codebase writes —
   the compiler's *no implementation for tool "…"*, a provider's *has no
-  credential — set …*, or one line from an exception this package defines.
+  credential — set …*, one line from an exception this package defines, or
+  this codebase's own sentence about a run failure the patrol recorded.
   There is no constructor that takes free text, so a model's answer cannot
   become a refusal.
+
+## Which refusals you can report, and which are your install's own
+
+The question `team-board-and-gap-reports/15` settled, because both answers were
+defensible and only one of them is true:
+
+| What refused | Reportable | Why |
+| --- | --- | --- |
+| A node type this runtime has no implementation for | yes | the archetypal platform gap: a type the editor offers and the backend cannot run |
+| A provider this install cannot build a client for | yes | the spec's own sentence names a variable, never a value |
+| A run whose every tool call was refused, or a node that failed after retries | **yes, as structure** | the tool **type** that could not be reached is ours to fix or to document; the driver's sentence is not ours to publish |
+| A repeated call, or a tool that answered two ways | no | real cost and worth fixing, but it is this install's own waste, not a gap in the platform |
+| Anything you typed onto a card yourself | no | a card somebody wrote is a person's account, and the hand-written form is the right artifact for it |
+
+The third row is the one worth reading twice. A warehouse refusing your login
+**is** worth telling us about — which tool type, which check noticed, and Azure
+AD's own error code when it supplied one — and the sentence the driver wrote is
+**not** sent. `ToolResult.failure` carries whatever the tool was handed: an ODBC
+message, a vendor's prose, and, when arguments would not parse, the model's own
+arguments echoed back. So the words in the report are ours, with one exception
+that is still ours — an exception line naming a class `openstategraph.errors`
+defines, which is what a tool of ours raising put there.
+
+That is why `openstategraph report <card-id>` works for a card the patrol filed
+and refuses a card you typed by name. The card records the finding, not the
+prose; the door rebuilds the report from the finding and validates every field
+of it again, so a row edited by hand is refused rather than sent.
 
 ## Seeing it before it goes
 

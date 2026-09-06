@@ -48,7 +48,8 @@
       "enum": [
         "runtime",
         "provider",
-        "exception"
+        "exception",
+        "finding"
       ],
       "title": "RefusalSource",
       "type": "string"

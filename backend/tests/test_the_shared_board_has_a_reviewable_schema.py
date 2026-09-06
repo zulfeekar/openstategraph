@@ -43,10 +43,13 @@ from openstategraph.kanban_store import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = REPO_ROOT / "backend" / "openstategraph"
 
-#: The two columns the shared table has that a `Card` does not carry:
-#: the tenancy key (a hash of the project id, never the id) and the
-#: database-maintained watermark the board's poll reads.
-EXTRA_COLUMNS = ("project_hash", "updated_at")
+#: The columns the shared table has that a `Card` does not carry: the tenancy
+#: key (a hash of the project id, never the id), the database-maintained
+#: watermark the board's poll reads, and the keyless door's own two
+#: (`team-board-and-gap-reports/09`) — the identity of a filed report and how
+#: many times it has been sent, which live on the row rather than on a `Card`
+#: because only that door reads them.
+EXTRA_COLUMNS = ("project_hash", "updated_at", "finding_hash", "count")
 
 
 def migration_text() -> str:
@@ -96,10 +99,27 @@ def test_the_files_are_numbered_and_ordered() -> None:
         assert re.fullmatch(r"\d{4}_[a-z0-9_]+\.sql", name), name
 
 
+def added_columns(sql: str, table: str) -> set[str]:
+    """Every column a later file `alter table`s onto `table`.
+
+    The schema is the `create table` **plus** the alters, and until
+    `team-board-and-gap-reports/15` this file read only the first of those —
+    so `0003`'s two columns were invisible to it and the first `Card` field to
+    arrive by an alter would have read as a column the schema had lost.
+    """
+    return set(
+        re.findall(
+            rf"alter table public\.{table}\s*\n?\s*add column if not exists (\w+)",
+            sql,
+        )
+    )
+
+
 def test_the_columns_are_the_card_plus_the_tenancy_key() -> None:
-    body = create_table_body(migration_text(), "cards")
+    sql = migration_text()
+    body = create_table_body(sql, "cards")
     expected = {field.name for field in dataclasses.fields(Card)} | set(EXTRA_COLUMNS)
-    assert set(declared_columns(body)) == expected
+    assert set(declared_columns(body)) | added_columns(sql, "cards") == expected
 
 
 @pytest.mark.parametrize(

@@ -54,6 +54,7 @@ from openstategraph.gap_report_door import (
     repository,
 )
 from openstategraph.github_issue_bridge import FIELD_LABELS, parse_issue_form
+from openstategraph.kanban_store import kanban_store_path
 
 PACKAGE = Path(__file__).resolve().parents[1] / "openstategraph"
 
@@ -382,3 +383,356 @@ def test_a_no_backend_refusal_names_the_command() -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__]))
+
+
+# --------------------------------------------------------------------------
+# A patrol finding, as a report — `team-board-and-gap-reports/15`
+
+
+class TestWhichOfTheTwoAnswersShipped:
+    """`15` asked a judgement: is a run failure a platform gap at all?
+
+    **Both, split by who wrote the sentence.** The gap is real and reportable —
+    a tool type this install cannot reach is exactly the thing maintainers want
+    to hear about — and the driver's own words are not, because
+    `ToolResult.failure` carries whatever the tool was handed: an ODBC message,
+    a vendor's prose, and (via `Invalid arguments: …`) the model's own
+    arguments. So a finding is admitted as a **fourth refusal source** and the
+    text it contributes is one of two shapes, both ours: this codebase's own
+    sentence for that finding kind, or an exception line naming a class
+    `openstategraph.errors` defines, which is what `Refusal.for_our_exception`
+    already accepts from a live exception.
+
+    `07`'s guarantee is therefore unwidened: there is still no way to put text
+    a model or a vendor wrote into a `Refusal`.
+    """
+
+    def test_a_drivers_own_words_are_not_carried(self) -> None:
+        from openstategraph.gap_report import Refusal, RefusalSource
+        from openstategraph.run_findings import EVERY_TOOL_CALL_FAILED
+
+        refusal = Refusal.for_finding(
+            EVERY_TOOL_CALL_FAILED,
+            "Error: ('HYT00', '[Microsoft][ODBC Driver 18]Login timeout expired')",
+        )
+
+        assert refusal.source is RefusalSource.FINDING
+        assert "ODBC" not in refusal.text
+        assert "HYT00" not in refusal.text
+        assert "refused" in refusal.text
+
+    def test_our_own_error_survives_as_itself(self) -> None:
+        """The subset `15` named: a tool that raised one of *our* errors put a
+        sentence we wrote on the finding, and that one is worth carrying."""
+        from openstategraph.gap_report import Refusal, RefusalSource
+        from openstategraph.run_findings import NODE_FAILURE
+
+        refusal = Refusal.for_finding(
+            NODE_FAILURE, "Error: MissingProviderKey: openai has no credential — set OPENAI_API_KEY"
+        )
+
+        assert refusal.source is RefusalSource.FINDING
+        assert refusal.text.startswith("MissingProviderKey: ")
+        assert "OPENAI_API_KEY" in refusal.text
+
+    def test_a_foreign_exception_line_falls_back_to_our_sentence(self) -> None:
+        """`OperationalError` is psycopg's, not ours, and its message is the
+        statement it was given — which is the customer's SQL."""
+        from openstategraph.gap_report import Refusal
+        from openstategraph.run_findings import NODE_FAILURE
+
+        refusal = Refusal.for_finding(
+            NODE_FAILURE, "Error: OperationalError: SELECT name FROM customers"
+        )
+
+        assert "customers" not in refusal.text
+        assert "SELECT" not in refusal.text
+
+    def test_a_round_trip_cannot_widen_it(self) -> None:
+        """The validator re-checks, so a stored evidence row someone edited by
+        hand is refused rather than sent — which is the property that makes it
+        safe for the card store to hold the finding's raw text."""
+        from openstategraph.gap_report import Refusal, RefusalSource
+
+        with pytest.raises(ValidationError):
+            Refusal(source=RefusalSource.FINDING, text="Sure! Here is the table")  # type: ignore[call-arg]
+        with pytest.raises(ValidationError):
+            Refusal(  # type: ignore[call-arg]
+                source=RefusalSource.FINDING,
+                text="OperationalError: SELECT name FROM customers",
+            )
+
+    def test_an_unreportable_finding_is_refused_by_name(self) -> None:
+        from openstategraph.gap_report import Refusal
+        from openstategraph.run_findings import REDUNDANT_TOOL_CALL
+
+        with pytest.raises(ValueError) as raised:
+            Refusal.for_finding(REDUNDANT_TOOL_CALL, "Error: anything")
+        assert REDUNDANT_TOOL_CALL in str(raised.value)
+
+
+class TestACardThePatrolFiledCanBeReported:
+    """The door `08` could not build, now that a card records the finding."""
+
+    def _store(self, tmp_path: Path):
+        from openstategraph.kanban_sqlite import SqliteKanbanStore
+
+        return SqliteKanbanStore(tmp_path / "kanban.sqlite")
+
+    def test_the_patrol_records_the_findings_type_ids_and_hash(self) -> None:
+        import json
+
+        from openstategraph.patrol import finding_evidence
+        from openstategraph.run_findings import EVERY_TOOL_CALL_FAILED, RunFinding
+
+        evidence = json.loads(
+            finding_evidence(
+                RunFinding(
+                    name=EVERY_TOOL_CALL_FAILED,
+                    tool="mssql_query",
+                    arguments="Error: AADSTS7000222: the client secret is expired",
+                    calls=3,
+                ),
+                project_hash=hashed_project_id(A_PROJECT),
+            )
+        )
+
+        assert evidence["finding"] == EVERY_TOOL_CALL_FAILED
+        assert evidence["type_ids"] == ["tool.mssql-query"]
+        assert len(evidence["finding_hash"]) == 12
+
+    def test_waste_records_nothing_because_it_is_not_a_gap(self) -> None:
+        from openstategraph.patrol import finding_evidence
+        from openstategraph.run_findings import REDUNDANT_TOOL_CALL, RunFinding
+
+        assert (
+            finding_evidence(
+                RunFinding(name=REDUNDANT_TOOL_CALL, tool="mssql_query", calls=9),
+                project_hash=hashed_project_id(A_PROJECT),
+            )
+            == ""
+        )
+
+    def test_a_card_with_a_finding_builds_a_report(self, tmp_path: Path) -> None:
+        import json
+
+        from openstategraph.gap_report_door import report_for_card
+        from openstategraph.patrol import finding_evidence
+        from openstategraph.run_findings import EVERY_TOOL_CALL_FAILED, RunFinding
+
+        store = self._store(tmp_path)
+        project_hash = hashed_project_id(A_PROJECT)
+        evidence = finding_evidence(
+            RunFinding(
+                name=EVERY_TOOL_CALL_FAILED,
+                tool="mssql_query",
+                arguments="Error: Azure AD refused: AADSTS7000222: the secret is expired",
+                calls=3,
+            ),
+            project_hash=project_hash,
+        )
+        store.file_card(
+            task_id=f"{A_PROJECT}:refusal:abc123abc123",
+            board="workflows",
+            kind="bug",
+            category="bug",
+            title="Every mssql_query call in this run was refused the same way",
+            gap_evidence=evidence,
+        )
+
+        report = report_for_card(
+            store.read_card(f"{A_PROJECT}:refusal:abc123abc123"),
+            project_hash=project_hash,
+        )
+
+        assert report.kind is GapKind.EVERY_TOOL_CALL_FAILED
+        assert report.type_ids == ("tool.mssql-query",)
+        assert report.check == EVERY_TOOL_CALL_FAILED
+        assert report.aad_code == "AADSTS7000222"
+        assert report.finding_hash == json.loads(evidence)["finding_hash"]
+
+    def test_a_hand_filed_card_is_still_refused_by_name(self, tmp_path: Path) -> None:
+        """`08`'s refusal, kept for the card it was always right about: a card
+        somebody typed has a person's prose on it and no finding behind it."""
+        from openstategraph.gap_report_door import report_for_card
+
+        store = self._store(tmp_path)
+        store.file_card(
+            task_id=f"{A_PROJECT}:idea-a-nicer-palette",
+            board="workflows",
+            kind="task",
+            category="gap",
+            title="A nicer palette",
+        )
+
+        with pytest.raises(UnreportableSubject) as raised:
+            report_for_card(
+                store.read_card(f"{A_PROJECT}:idea-a-nicer-palette"),
+                project_hash=hashed_project_id(A_PROJECT),
+            )
+        said = str(raised.value)
+        assert f"{A_PROJECT}:idea-a-nicer-palette" in said
+        assert repository() in said
+
+    def test_an_older_store_gains_the_column(self, tmp_path: Path) -> None:
+        """`kanban-patrol/26`'s repair loop, on the column this ticket adds."""
+        import sqlite3
+
+        store = self._store(tmp_path)
+        store.file_card(
+            task_id="proj:one", board="workflows", kind="bug", category="bug", title="One"
+        )
+        conn = sqlite3.connect(store.path)
+        try:
+            conn.execute("ALTER TABLE cards DROP COLUMN gap_evidence")
+            conn.commit()
+        finally:
+            conn.close()
+
+        assert store.read_card("proj:one").gap_evidence == ""
+
+    def test_the_board_does_not_publish_the_evidence(self, tmp_path: Path) -> None:
+        """`card_row` is what the two *board* doors publish, and a finding hash
+        is not a thing a reader of a card reads. The report door reads the card
+        itself, from the store it already opened."""
+        from openstategraph.kanban_store import card_row
+
+        store = self._store(tmp_path)
+        store.file_card(
+            task_id="proj:one", board="workflows", kind="bug", category="bug", title="One"
+        )
+
+        assert "gap_evidence" not in card_row(store.read_card("proj:one"), stale=False)
+
+
+def test_the_cli_reports_a_card_and_sends_nothing(
+    tmp_path: Path, a_project: Path, fake_gh: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The verb `08` shipped, on the subject `08` could not take."""
+    from openstategraph.kanban_sqlite import SqliteKanbanStore
+    from openstategraph.patrol import finding_evidence
+    from openstategraph.run_findings import EVERY_TOOL_CALL_FAILED, RunFinding
+
+    root = tmp_path / "workflows"
+    root.mkdir()
+    store = SqliteKanbanStore(kanban_store_path(root))
+    task_id = f"{A_PROJECT}:refusal:0123456789ab"
+    store.file_card(
+        task_id=task_id,
+        board="workflows",
+        kind="bug",
+        category="bug",
+        title="Every mssql_query call in this run was refused the same way",
+        gap_evidence=finding_evidence(
+            RunFinding(
+                name=EVERY_TOOL_CALL_FAILED,
+                tool="mssql_query",
+                arguments="Error: login timed out",
+                calls=4,
+            ),
+            project_hash=hashed_project_id(A_PROJECT),
+        ),
+    )
+
+    code = cli.main(["report", task_id, "--workflows-root", str(root)])
+
+    printed = capsys.readouterr().out
+    assert code == 0
+    assert "tool.mssql-query" in printed
+    assert _calls(fake_gh) == []
+
+
+class _OneRefusedThread:
+    """A checkpointer holding one conversation whose every tool call was
+    refused the same way — `osg-agent-experience/74`'s shape, small enough to
+    live beside the assertion that needs it.
+
+    Written here rather than imported from the patrol's own suite because what
+    is being pinned is the **wiring**: that `run_patrol` puts the finding on
+    the card it files. Every other case in this file works on the seam
+    directly, and a seam that nothing calls is the defect
+    `team-board-and-gap-reports/15` was filed against.
+    """
+
+    REFUSAL = "Error: ('HYT00', 'Login timeout expired')"
+
+    def __init__(self) -> None:
+        from langchain_core.messages import AIMessage, ToolMessage
+
+        messages: list[object] = []
+        self._tuples: list[object] = []
+        for index in range(2):
+            call_id = f"c{index}"
+            messages = [
+                *messages,
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": call_id,
+                            "name": "mssql_query",
+                            "args": {"sql": f"SELECT {index}"},
+                            "type": "tool_call",
+                        }
+                    ],
+                ),
+            ]
+            self._tuples.append(self._stub(index * 2, messages))
+            messages = [
+                *messages,
+                ToolMessage(content=self.REFUSAL, tool_call_id=call_id, name="mssql_query"),
+            ]
+            self._tuples.append(self._stub(index * 2 + 1, messages))
+        self._tuples.reverse()
+
+    def _stub(self, step: int, messages: list[object]) -> object:
+        return type(
+            "_Checkpoint",
+            (),
+            {
+                "config": {"configurable": {"thread_id": "t-1", "checkpoint_ns": ""}},
+                "checkpoint": {
+                    "id": f"cp-{step}",
+                    "ts": f"2026-09-06T09:{step:02d}:00+00:00",
+                    "channel_values": {"messages": list(messages)},
+                    "updated_channels": ["messages"],
+                },
+                "metadata": {"step": step, "source": "loop", "workflow_slug": "chinook"},
+                "pending_writes": (),
+            },
+        )()
+
+    def list(self, config: object, *, limit: int = 200) -> list[object]:
+        return self._tuples[:limit]
+
+
+def test_the_patrol_puts_the_finding_on_the_card_it_files(tmp_path: Path) -> None:
+    """The wiring, end to end: a refused run becomes a card, and that card can
+    be reported without anybody re-reading the run it came from."""
+    from openstategraph.gap_report_door import report_for_card
+    from openstategraph.kanban_store import open_kanban_store
+    from openstategraph.patrol import run_patrol
+    from openstategraph.run_sinks import RunRecord
+
+    root = tmp_path / "workflows"
+    root.mkdir()
+    result = run_patrol(
+        project_id=A_PROJECT,
+        workflows_root=root,
+        savers=[_OneRefusedThread()],
+        records=[
+            RunRecord(
+                thread_id="t-1",
+                workflow_slug="chinook",
+                at="2026-09-06T09:00:00+00:00",
+                seconds=1.0,
+            )
+        ],
+    )
+
+    assert result.filed, "the patrol filed nothing to report"
+    card = open_kanban_store(root).read_card(result.filed[0])
+    report = report_for_card(card, project_hash=hashed_project_id(A_PROJECT))
+    assert report.kind is GapKind.EVERY_TOOL_CALL_FAILED
+    assert report.type_ids == ("tool.mssql-query",)
+    assert "HYT00" not in report.refusal.text

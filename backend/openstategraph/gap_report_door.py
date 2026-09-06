@@ -60,13 +60,20 @@ typing one command. The CLI is the door; an agent that wants one runs the verb.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from collections.abc import Sequence
 from typing import Any, Callable, Protocol
 
 from openstategraph.document_checks import FindingClass
-from openstategraph.gap_report import GapDoor, GapKind, GapReport, Refusal
+from openstategraph.gap_report import (
+    GapDoor,
+    GapKind,
+    GapReport,
+    Refusal,
+    report_for_finding,
+)
 from openstategraph.github_issue_bridge import FIELD_LABELS
 
 __all__ = [
@@ -81,6 +88,7 @@ __all__ = [
     "issue_title",
     "issue_form_url",
     "preview",
+    "report_for_card",
     "repository",
 ]
 
@@ -203,6 +211,60 @@ def build_report(
         refusal=Refusal.for_missing_implementation(candidate),
         check=FindingClass.NO_BACKEND.value,
         project_hash=project_hash,
+    )
+
+
+def report_for_card(
+    card: Any,
+    *,
+    project_hash: str,
+    door: GapDoor = GapDoor.CLI,
+) -> GapReport:
+    """One gap, from a card the patrol filed — `team-board-and-gap-reports/15`.
+
+    `08` refused every card id and said why: a card recorded the classifier's
+    prose and nothing a report has a field for. `15` settled both halves of
+    that. A card minted from a finding now records the finding
+    (`Card.gap_evidence`), and the words a report carries about a run failure
+    are this codebase's own — so what is sent is which kind of failure, which
+    tool **types** were involved, the check that named it, and Azure AD's own
+    code when the refusal carried one. The driver's sentence is not on the
+    card's evidence's account; `Refusal.for_finding` decides that, and it
+    decides it again here rather than trusting what the store held.
+
+    A card with no evidence is refused **by name**, which is the whole of why
+    the field is empty rather than absent: a hand-filed idea, a repeated call
+    and an unstable answer are not platform gaps, and a report assembled from
+    one would be a maintainer reading somebody's prose under our schema.
+    """
+    task_id = str(getattr(card, "task_id", "") or "")
+    evidence = str(getattr(card, "gap_evidence", "") or "").strip()
+    if not evidence:
+        raise UnreportableSubject(
+            f"{task_id!r} is a card with no finding behind it, so there is nothing "
+            "on it a report could carry. Cards filed from a run failure record "
+            "the finding they were minted from; a card somebody typed, and a card "
+            "about a repeated call or an unstable answer, record a judgement about "
+            "this install rather than a gap in the platform. Report the type id a "
+            f"refusal named, or file this one by hand: {issue_form_url()}"
+        )
+    try:
+        recorded = json.loads(evidence)
+        finding = str(recorded["finding"])
+        type_ids = tuple(str(item) for item in recorded.get("type_ids") or ())
+        refusal_text = str(recorded.get("refusal") or "")
+    except (ValueError, KeyError, TypeError) as exc:
+        raise UnreportableSubject(
+            f"{task_id!r} carries evidence this version cannot read ({exc}), so "
+            "nothing was built from it. Report the type id the refusal named, or "
+            f"file it by hand: {issue_form_url()}"
+        ) from exc
+    return report_for_finding(
+        finding=finding,
+        type_ids=type_ids,
+        refusal_text=refusal_text,
+        project_hash=project_hash,
+        door=door,
     )
 
 
