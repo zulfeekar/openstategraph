@@ -1,5 +1,9 @@
 <!--
-  The film, for the landing page.
+  The films, for the landing page. Two, because they answer different
+  questions: the first is for somebody deciding whether to build with this, the
+  second for somebody deciding what their own customer would get. One stitched
+  film answers both badly — a reader who came for the second would have to sit
+  through forty seconds of node editing to reach it.
 
   Two sources: Safari takes the MP4, everything else prefers the smaller WebM.
   `muted` is what makes `autoplay` legal in every browser, and the film has no
@@ -30,7 +34,7 @@
     <a href="media/demo.mp4">Download it instead.</a>
   </video>
   <figcaption id="demo-chapters" class="demo__chapters">
-    <span>Draw a workflow, ask it a question, watch what ran, then let a patrol read the run back.</span>
+    <span>Building it: draw a workflow, ask it a question, watch what ran, let a patrol read the run back.</span>
     <ol>
       <li><a href="#t=0" data-t="0">The palette</a></li>
       <li><a href="#t=4" data-t="4">One drag builds a workflow</a></li>
@@ -39,6 +43,30 @@
       <li><a href="#t=19" data-t="19">The answer, and the timeline</a></li>
       <li><a href="#t=34" data-t="34">A patrol files what it found</a></li>
     </ol>
+  </figcaption>
+</figure>
+
+<figure class="demo">
+  <video
+    class="demo__video"
+    controls
+    muted
+    playsinline
+    loop
+    preload="none"
+    poster="media/chat-poster.jpg"
+    aria-describedby="chat-caption"
+  >
+    <source src="media/chat.webm" type="video/webm" />
+    <source src="media/chat.mp4" type="video/mp4" />
+    Your browser cannot play this video.
+    <a href="media/chat.mp4">Download it instead.</a>
+  </video>
+  <figcaption id="chat-caption" class="demo__chapters">
+    <span>Using it: the same question from <code>/chat</code>, the surface a
+    customer sees. The router picks the workflow, the flow draws itself while it
+    runs, and the answer arrives with the SQL behind it. No chapters — it is
+    eighteen seconds and it is one thing.</span>
   </figcaption>
 </figure>
 

@@ -8,7 +8,7 @@ import { defineScene, beat, reachAndClick } from './support/scene';
  * Nothing here is seeded. If the run had been clean, the film would show a
  * clean board.
  */
-const { test, expect } = defineScene({ order: '06', name: 'patrol', speed: 1.5 });
+const { test, expect } = defineScene({ film: 'demo', order: '06', name: 'patrol', speed: 1.5 });
 
 test('a patrol files cards from the run that just happened', async ({
   stage: page,

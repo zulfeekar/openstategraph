@@ -22,7 +22,17 @@ import { resolve } from 'node:path';
  *   paste. `slowType` presses keys.
  */
 export interface SceneSpec {
-  /** Sort order in the finished film. */
+  /**
+   * Which film this scene belongs to.
+   *
+   * Two, deliberately, and they have different audiences: `demo` is the
+   * builder's film — the canvas, the run, the board — and `chat` is the one
+   * surface a customer ever sees. Stitched together they would answer both
+   * questions badly, because a viewer who wants to know "what does my customer
+   * get" would have to sit through forty seconds of node editing to find out.
+   */
+  film: string;
+  /** Sort order within that film. */
   order: string;
   /** File-name stem, and what the chapter list calls this scene. */
   name: string;
@@ -30,7 +40,7 @@ export interface SceneSpec {
   speed: number;
 }
 
-const SCENES_DIR = resolve(process.cwd(), 'demo-out/scenes');
+const scenesDir = (film: string) => resolve(process.cwd(), 'demo-out/scenes', film);
 
 /**
  * A pointer the camera can see.
@@ -121,6 +131,7 @@ export async function beat(page: Page, ms = 700) {
  * editor, paints the cursor, and files the video under the scene's name.
  */
 export function defineScene(spec: SceneSpec) {
+  const SCENES_DIR = scenesDir(spec.film);
   mkdirSync(SCENES_DIR, { recursive: true });
 
   let startedAt = 0;

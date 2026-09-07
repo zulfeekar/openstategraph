@@ -1,7 +1,7 @@
 import { defineScene, beat, hideInspector, reachAndClick } from './support/scene';
 
 /** Scene 2 — a workflow exists in one drag. Input, agent, output, wired. */
-const { test, expect } = defineScene({ order: '02', name: 'starter', speed: 2 });
+const { test, expect } = defineScene({ film: 'demo', order: '02', name: 'starter', speed: 2 });
 
 test('dragging Starter flow onto the canvas places a wired workflow', async ({
   stage: page,

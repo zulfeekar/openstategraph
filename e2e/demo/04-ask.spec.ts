@@ -1,7 +1,7 @@
 import { defineScene, beat, hideInspector, reachAndClick, slowType } from './support/scene';
 
 /** Scene 4 — the question. Typed, not pasted. */
-const { test, expect } = defineScene({ order: '04', name: 'ask', speed: 2 });
+const { test, expect } = defineScene({ film: 'demo', order: '04', name: 'ask', speed: 2 });
 
 export const QUESTION = 'How many customers are in the database?';
 
