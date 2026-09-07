@@ -27,6 +27,14 @@ const externalBaseUrl = process.env.OSG_E2E_BASE_URL?.trim();
 
 export default defineConfig({
   testDir: 'e2e',
+  // **`e2e/demo/` is not a suite, and this line is why CI went red the first
+  // time it existed.** Those specs are the recording rig for the product film:
+  // they need their own backend, a package library and a live model call, and
+  // they are driven by `playwright.demo.config.ts` which supplies all three.
+  // Run here, against a bare `npm run dev` with no Python behind it, four of
+  // them fail for the only reason they could — there is nothing to open, ask
+  // or patrol. A scene is a camera, not an assertion about the product.
+  testIgnore: 'demo/**',
   timeout: 30_000,
   retries: process.env.CI ? 1 : 0,
   use: {
