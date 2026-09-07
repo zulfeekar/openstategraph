@@ -235,6 +235,14 @@
   wheel; the provenance moved into comments beside the strings.
 
 ### Fixed
+- **A workflow's display name could break out of an HTML attribute in `/chat`**
+  (found by GitHub code scanning, CodeQL #2/#3). The customer-facing chat
+  page's HTML escaper handled `&`, `<` and `>` and stopped there, so a value
+  written into `<option value="...">` — a workflow's `name`, free text anyone
+  with write access to that workflow can set — could still carry a `"` and
+  close the attribute early. A name of `x" onmouseover="alert(1)` reached the
+  template unescaped. The escaper now handles `"` and `'` too; verified against
+  that exact string, which now renders as inert text.
 - **The front page no longer says "unreleased", and `CODEOWNERS` names a person**
   (`stable-beta-public/33`). The README's version badge read `0.3.0 unreleased`
   while `backend/pyproject.toml` shipped `0.3.0rc17` and the index listed it —
