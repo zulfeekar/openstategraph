@@ -145,6 +145,37 @@
   gap](docs/reporting-a-platform-gap.md) says so.
 
 ### Changed
+- **The documented install is a plain PyPI install** (`stable-beta-public/37`).
+  `0.3.0rc18` is the first version of this distribution published to **PyPI**,
+  so the three flags every onramp page carried — `--index-url`,
+  `--extra-index-url` and `uv`'s `--index-strategy unsafe-best-match` — are
+  gone from the README, `backend/README.md`, `docs/adoption.md`,
+  `docs/deploying.md` and
+  `docs/adding-openstategraph-to-your-project.md`. They were the cost of a
+  TestPyPI-only distribution and nothing else, and a reader pasting them now
+  reaches an index carrying older builds than the page is about. The TestPyPI
+  form is not deleted: it moves to `docs/releasing.md`, which owns the
+  rehearsal, and the corpus rule that every TestPyPI command names both indexes
+  is unchanged. The exact version survives all of it — pip and `uv` exclude
+  pre-releases from an unpinned requirement — so the line is
+  `uv tool install "openstategraph[server,ollama]==0.3.0rc18"`, and the pin is
+  what goes when a final release lands.
+- **The install command the product prints names no index either**
+  (`stable-beta-public/37`). `install_hint` read "is this a pre-release?" and
+  rendered TestPyPI's flags from the answer, which was right for as long as the
+  two facts coincided — every published build lived on TestPyPI, so
+  "pre-release" and "not on the default index" named the same set. Publishing a
+  candidate to PyPI separated them, and the hint would have sent a reader to an
+  index without their own build on it. The version still decides the `==`;
+  nothing decides an index, because where a build was uploaded is a fact about
+  the upload.
+- **`docs/releasing.md` says how a release candidate actually reaches PyPI**
+  (`stable-beta-public/37`). The train's `pypi` job skips a pre-release by
+  design, so a candidate stops at the rehearsal — which left no path at all for
+  a candidate a stranger can install, and the whole point of cutting one is to
+  be tried. The by-hand path is written down as the path, with TestPyPI first
+  and the same artefact both times; the train stays the only route for a final
+  release, and its condition is not to be edited.
 - **All four config carriers can be given a `project_id`**
   (`team-board-and-gap-reports/01`). `adopt_project_id` knew one edit — append a
   column-0 YAML key at end of file — so on `openstategraph.json` and on
@@ -204,6 +235,27 @@
   wheel; the provenance moved into comments beside the strings.
 
 ### Fixed
+- **The front page no longer says "unreleased", and `CODEOWNERS` names a person**
+  (`stable-beta-public/33`). The README's version badge read `0.3.0 unreleased`
+  while `backend/pyproject.toml` shipped `0.3.0rc17` and the index listed it —
+  the first line of the page, wrong, because a version written into prose has
+  no way to fail. `scripts/prepare_release.py` rewrites the badge and every
+  documented pin from the version it is bumping, and a test fails if anybody
+  bumps by hand. The `PLACEHOLDER` in `.github/CODEOWNERS` is gone the same way:
+  a test refuses it rather than a grep in a checklist.
+- **The landing page links to a repository that exists**
+  (`stable-beta-public/34`). Every "view the source" route out of `site/` and
+  out of `backend/pyproject.toml`'s `[project.urls]` pointed at a URL that
+  would 404 for the visitor it was written for, and `scripts/build_site.py`
+  now refuses when the page's links and the packaging metadata disagree.
+- **Three ledger tests no longer read this checkout's own history**
+  (`stable-beta-public/35`). They asserted about commits only this clone has, so
+  they were green here and red for anyone else — including CI on a shallow
+  fetch. Each builds the repository it makes claims about now.
+- **A stream test no longer fails only when the machine is busy**
+  (`stable-beta-public/36`). A wall-clock deadline written for an idle runner
+  failed a correct stream under load, which is the shape of assertion that
+  teaches a suite to be ignored.
 - **A board driver that is not installed no longer takes the live stream down**
   (`team-board-and-gap-reports/18`). An install whose extras omit `postgres`,
   with `OPENSTATEGRAPH_KANBAN_URL` pointed at a real board, answered
@@ -647,6 +699,18 @@
 - **Docs**: `docs/the-patrol-board.md` is the board's own page — the columns,
   the evidence gate, the copy-instruction flow — with `docs/cli.md` and
   `docs/mcp.md` carrying the two doors, and `docs/openapi.json` regenerated.
+
+## 0.3.0rc18 — 2026-09-07
+Everything under *Unreleased* above this line at the time of the cut. **The
+first version of this distribution on PyPI**, uploaded by hand because the
+release train's publish job skips a pre-release by design — so the install line
+on every onramp page loses its three index flags and becomes
+`uv tool install "openstategraph[server,ollama]==0.3.0rc18"`, and the command
+the product itself prints when an extra is missing loses them too. The `==`
+stays: a pre-release is excluded from an unpinned requirement, and that is a
+fact about the version rather than about the index. The TestPyPI form moves to
+`docs/releasing.md`, which owns the rehearsal and now also records how a
+candidate reaches PyPI at all.
 
 ## 0.3.0rc17 — 2026-09-06
 Everything under *Unreleased* above this line at the time of the cut. The

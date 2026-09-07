@@ -162,34 +162,52 @@ class TestTheCliTableAndArgparseAgree:
 
 
 class TestTheInstallLineIsTheOneThatWorks:
-    def test_the_uv_line_carries_all_three_prerelease_flags(self) -> None:
-        """Each flag fails differently, and two of them fail silently.
+    def test_the_uv_line_carries_no_index_flags_at_all(self) -> None:
+        """Inverted by `stable-beta-public/37`, and both directions were right.
 
+        This required three flags, and each of them failed differently:
+        `--index-url` because PyPI had never heard of this package;
         `--extra-index-url` because TestPyPI carries no `pydantic` 2.x and pip
-        blames the dependency rather than the missing index;
-        `--index-strategy unsafe-best-match` because `uv` will not otherwise
-        take a package from one index and its dependencies from another; the
-        pinned version because pre-releases are excluded from an unpinned
-        requirement. The pin itself is held against `pyproject.toml` by
-        `test_the_first_command_a_stranger_copies.py`.
+        blames the dependency rather than the missing index; `--index-strategy
+        unsafe-best-match` because `uv` will not otherwise take a package from
+        one index and its dependencies from another. All three were the cost of
+        a distribution that lived on TestPyPI only.
+
+        `0.3.0rc18` is on PyPI, so the cost is gone and the flags are the
+        defect: a reader who pastes `--index-url
+        https://test.pypi.org/simple/` is sent to an index that does not carry
+        the build this page is about. The pinned version survives — that one is
+        the pre-release's cost, not TestPyPI's — and is held against
+        `pyproject.toml` by `test_the_first_command_a_stranger_copies.py`.
         """
         text = readme()
         assert "uv tool install" in text, (
             "the owner's install line is `uv tool install`; the README no "
             "longer shows it"
         )
-        for flag in (
-            "--index-url https://test.pypi.org/simple/",
-            "--extra-index-url https://pypi.org/simple/",
-            "--index-strategy unsafe-best-match",
-        ):
-            assert flag in text, f"the uv install line has lost {flag}"
+        block = next(
+            (b for b in re.findall(r"```[a-z]*\n(.*?)```", text, re.S) if "uv tool install" in b),
+            None,
+        )
+        assert block is not None, "the README has no `uv tool install` block"
+        for flag in ("--index-url", "--extra-index-url", "--index-strategy"):
+            assert flag not in block, (
+                f"the install block has regained {flag}; this distribution is "
+                "on PyPI, which uv reaches with no flags"
+            )
 
     def test_it_says_plainly_that_this_is_a_prerelease(self) -> None:
+        """The pin is still unexplained without this, and the word moved.
+
+        The page used to owe a reader "TestPyPI", because that is where the
+        build was. It owes them "pre-release" now, because that is the whole
+        reason the command is not the two plain words — and it is the word they
+        would search for when `uv tool install "openstategraph[server,ollama]"`
+        answers with nothing.
+        """
         text = readme()
-        assert "TestPyPI" in text
         assert "pre-release" in text, (
-            "a reader pasting an index URL deserves to be told why, in the "
+            "a reader pasting an exact version deserves to be told why, in the "
             "words they would search for"
         )
 

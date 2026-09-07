@@ -4,11 +4,13 @@ Until docs-and-gaps/18 it was::
 
     pip install "openstategraph[ollama]"
 
-and ``https://pypi.org/pypi/openstategraph/json`` answers **404**. The release
-train (``docs/releasing.md``) stops at TestPyPI pending a human approval that
-has never been clicked, so that command has never worked for anybody who did
-not already have a checkout — and it fails in the reader's favour, because a
-404 from pip looks like a typo rather than like a broken README.
+and ``https://pypi.org/pypi/openstategraph/json`` answered **404** — the
+release train (``docs/releasing.md``) stopped at TestPyPI pending a human
+approval nobody had clicked, so that command had never worked for anybody who
+did not already have a checkout, and it failed in the reader's favour, because
+a 404 from pip looks like a typo rather than like a broken README. The name
+resolves now (``0.3.0rc18``, published by hand); the unpinned line above still
+does not, for the different reason ``TestTheReadmeSaysWhyBeforeItAsks`` holds.
 
 `docs/adoption.md` said so correctly, four hundred lines into a different
 document. The page a stranger lands on did not.
@@ -19,17 +21,22 @@ published yet" and stops is worse than the broken line, because the reader who
 block stays copyable, and the shape it takes is decided by the one fact that
 actually determines it — whether `backend/pyproject.toml` names a pre-release:
 
-* **pre-release** (today, ``0.3.0rc7``) — the block routes through TestPyPI,
-  names both indexes, and pins the version in full. All three are required and
-  each fails differently: TestPyPI because PyPI has never heard of us;
-  ``--extra-index-url`` because TestPyPI carries no ``pydantic`` 2.x and pip
-  blames the dependency rather than the index (launch-readiness/21); the exact
-  version because pip excludes pre-releases from an unpinned requirement,
-  which is the same trap ``docs/building-an-atom.md`` records for a plugin's
-  ``>=`` specifier.
-* **final release** — the TestPyPI detour is no longer the honest answer, and
-  this module goes red until the block is the plain ``pip install
-  "openstategraph[…]"`` it should always have been.
+* **pre-release** (today) — the block pins the version in full, because pip
+  excludes pre-releases from an unpinned requirement: the same trap
+  ``docs/building-an-atom.md`` records for a plugin's ``>=`` specifier.
+* **final release** — the pin is no longer the honest answer, and this module
+  goes red until the block is the plain ``pip install "openstategraph[…]"`` it
+  should always have been.
+
+**Two of the three requirements above were retired by
+``stable-beta-public/37``, and the reason is worth keeping.** Until
+``0.3.0rc18`` the block also had to name TestPyPI and carry
+``--extra-index-url`` — the first because PyPI had never heard of this package,
+the second because TestPyPI carries no ``pydantic`` 2.x and pip blames the
+dependency rather than the index (launch-readiness/21). Publishing a release
+candidate to PyPI retired both at once, and left the third standing on its own:
+"pre-release" is a statement about a version, "not on the default index" was a
+statement about an upload, and they had simply never disagreed before.
 
 That is the half a doc claim normally cannot have: a way to fail. The pinned
 version tracks ``pyproject.toml`` rather than sitting in prose, because the
@@ -84,17 +91,24 @@ class TestTheFirstBlockIsCopyable:
             "copies before reading anything; it has stopped being an install"
         )
 
-    def test_a_prerelease_routes_through_testpypi_with_both_indexes(self) -> None:
-        if not is_prerelease(version()):
-            return
+    def test_no_command_here_names_an_index_at_all(self) -> None:
+        """`stable-beta-public/37` inverted this, and the inversion is the point.
+
+        This asserted the opposite until `0.3.0rc18`: a pre-release *had* to
+        name TestPyPI, because PyPI had never heard of this package and the
+        second index was mandatory on top of that. Both facts were true and
+        the assertion was right.
+
+        Publishing `0.3.0rc18` to PyPI retired them together. A reader pasting
+        `--index-url https://test.pypi.org/simple/` now reaches an index that
+        does not carry the build this page is about, and gets it from a page
+        whose whole job is the first command that works — which is the same
+        defect this module was opened for, pointing the other way.
+        """
         block = first_code_block()
-        assert "test.pypi.org/simple/" in block, (
-            f"{version()} is on TestPyPI and PyPI has never heard of this "
-            "package, so the first command must name that index"
-        )
-        assert "--extra-index-url https://pypi.org/simple/" in block, (
-            "TestPyPI carries no pydantic 2.x; without the second index pip "
-            "fails on the dependency and never mentions the missing index"
+        assert "index-url" not in block and "test.pypi.org" not in block, (
+            "the first command routes through an index; this distribution is "
+            f"on PyPI, which pip reaches with no flags:\n{block}"
         )
 
     def test_a_prerelease_is_pinned_in_full(self) -> None:
@@ -106,46 +120,69 @@ class TestTheFirstBlockIsCopyable:
             "published versions are pre-releases"
         )
 
-    def test_a_final_release_drops_the_detour(self) -> None:
-        """The day the PyPI gate is approved, this goes red on purpose.
+    def test_a_final_release_drops_the_pin(self) -> None:
+        """The day a final release ships, this goes red on purpose.
 
-        A TestPyPI command left standing after a real release is the same
-        defect in the other direction — a working line that is no longer the
-        one a reader should copy.
+        The pin is the pre-release's cost, exactly as the index flags were
+        TestPyPI's, and a pin left standing after a final release is the same
+        defect the flags became: a working line that is no longer the one a
+        reader should copy, and that quietly freezes them on one build.
         """
         if is_prerelease(version()):
             return
         block = first_code_block()
-        assert "test.pypi.org" not in block, (
+        assert not PINNED.search(block), (
             f"{version()} is a final release; the first command should be the "
-            "plain PyPI install, not the pre-release detour"
+            "plain install, not a version somebody has to keep editing"
         )
         assert 'pip install "openstategraph[' in block
 
 
 class TestTheReadmeSaysWhyBeforeItAsks:
-    def test_the_unqualified_pypi_line_is_marked(self) -> None:
-        """The lazy fix's mirror image: keeping the broken line unmarked.
+    def test_the_unpinned_line_is_marked(self) -> None:
+        """The lazy fix's mirror image: keeping the not-yet-working line unmarked.
 
         `pip install "openstategraph[…]"` may still appear — it is the shape
-        the command takes after release, and hiding it would leave the page
-        with no headline. It may not appear *unqualified*.
+        the command takes once a final release exists, and hiding it would
+        leave the page with no headline. It may not appear *unqualified*: an
+        unpinned requirement still resolves to nothing while every published
+        version is a pre-release, and pip reports that as a package it cannot
+        find rather than as a candidate it skipped.
+
+        The marker word moved with the fact (`stable-beta-public/37`). It was
+        "once published", because the package was on no index a reader could
+        reach; it is "final release" now, because the package is on PyPI and
+        the only thing still missing is a version without an `rc` in it.
         """
         text = BACKEND_README.read_text()
         offenders = [
             f"{number}: {line.strip()}"
             for number, line in enumerate(text.splitlines(), start=1)
-            if re.search(r'^\s*pip install "openstategraph\[', line)
-            and "once published" not in line
+            if re.search(r'^\s*pip install "openstategraph\[[a-z0-9,\-]+\]"', line)
+            and "final release" not in line
         ]
         assert offenders == [], (
-            "a bare PyPI install of a package that is not on PyPI returns a "
-            "404 the reader reads as their own mistake:\n" + "\n".join(offenders)
+            "an unpinned install resolves to nothing while every published "
+            "version is a pre-release, and pip calls that a missing "
+            "package:\n" + "\n".join(offenders)
         )
 
-    def test_it_names_the_gate_that_is_actually_shut(self) -> None:
+    def test_it_says_what_the_pin_is_for(self) -> None:
+        """Rewritten by `stable-beta-public/37`, which retired what it asked for.
+
+        This required the words "not on PyPI", and that sentence was the honest
+        account of the page for as long as it was true. `0.3.0rc18` is on PyPI,
+        so requiring the claim would be requiring a false one — the page still
+        owes a reader the reason its command is not the plain two words, and
+        the reason is now the pre-release.
+        """
         text = BACKEND_README.read_text()
-        assert "not on PyPI" in text
+        assert "not on PyPI" not in text, (
+            "this distribution is on PyPI; the page still says otherwise"
+        )
+        assert "pre-release" in text, (
+            "the pin is the pre-release's cost and the page never says so"
+        )
         assert "releasing.md" in text, (
             "the reader deserves the page that says when this changes"
         )

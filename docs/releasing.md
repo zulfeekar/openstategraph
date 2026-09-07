@@ -85,6 +85,64 @@ derivation, no reconciliation job.
 To rehearse without releasing, prepare `0.3.0rc1`: the train runs end to end,
 uploads to TestPyPI, rehearses, and stops. No approval is even requested.
 
+### A release candidate reaches PyPI by hand, and only by hand
+
+The `pypi` job's condition reads the version and skips a pre-release, which is
+the design above working: the train's irreversible step is reserved for a final
+release, and a candidate is meant to stop at the rehearsal.
+
+That leaves a real gap, and `0.3.0rc18` is the first version to close it. A
+candidate nobody can install from PyPI is a candidate no stranger tries, and
+the whole reason for cutting one is to be tried. So a **release candidate is
+published by hand**, from a maintainer's machine, and a **final release goes
+through the train**. There is no third path, and the train is not to be edited
+to publish pre-releases — the condition that stops it is the gate.
+
+By hand means exactly this, after CI is green on the release commit:
+
+```bash
+python3 -m build backend
+python3 -m twine upload --repository testpypi --skip-existing backend/dist/openstategraph-<version>*
+python3 -m twine upload --skip-existing backend/dist/openstategraph-<version>*
+```
+
+TestPyPI first, always — same artefact, cheaper index to be wrong on. Then
+verify the name resolves (`https://pypi.org/pypi/openstategraph/json`) and
+install it into an isolated `UV_TOOL_DIR` before believing the documentation.
+
+### The TestPyPI install command, which is a rehearsal instruction only
+
+This is the form the rehearsal uses, and **the only place in the tree that
+should still carry it**. The onramp pages install from PyPI with no index
+flags; a reader sent to TestPyPI reaches an index carrying older builds than
+the one the page is about.
+
+```bash
+uv tool install \
+  --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ \
+  --index-strategy unsafe-best-match \
+  "openstategraph[server,ollama]==0.3.0rc18"
+```
+
+Each flag fails differently, and two of them fail silently:
+
+- `--index-url` points at the rehearsal index, which is the only index that has
+  the build a rehearsal is about.
+- `--extra-index-url` is **mandatory**: TestPyPI carries no `pydantic` 2.x, and
+  pip blames the dependency rather than the missing index, so a reader's
+  obvious conclusion is that this package depends on a version that does not
+  exist. `backend/tests/test_the_testpypi_command_names_both_indexes.py` fails
+  on any page in the tree that drops it.
+- `--index-strategy unsafe-best-match` is `uv`'s alone — pip has no such flag —
+  and without it `uv` will not take a package from one index and its
+  dependencies from another.
+
+The exact version is a separate matter and outlives all three: pip and `uv`
+exclude pre-releases from an unpinned requirement, so a candidate is named in
+full wherever it appears, including on PyPI. That is why the README's line
+still carries `==` while carrying no flags.
+
 ### What the rehearsal actually proves
 
 `scripts/clean_install_proof.sh` is the whole rehearsal, and it runs twice per
@@ -508,7 +566,7 @@ gh run list --repo <owner>/<repo> --workflow pages.yml
 
 | | State |
 | --- | --- |
-| The **`pypi` job** | never run. `0.3.0rc1` is on TestPyPI only, and the human gate has never been clicked |
+| The **`pypi` job** | never run. The human gate has never been clicked — every version cut so far is a release candidate, and the job's condition skips those. `0.3.0rc18` reached PyPI by hand instead (see *A release candidate reaches PyPI by hand*), which is not this job running |
 | **`release-pr.yml`** (*Release PR*) | every run has failed, all at `peter-evans/create-pull-request` — see below. It has never opened a pull request |
 | `openwiki-update.yml` (*OpenWiki update*) | has fired on schedule and failed every time, for want of `secrets.OPENWIKI_API_KEY`, which is not set on the repository — see `CLAUDE.md`'s OpenWiki block for the dated account and a run id |
 | `pages.yml` (*Deploy landing page*) | every run has failed — `HttpError: Not Found` from `actions/configure-pages`. **One owner click turns it green**: Settings ▸ Pages ▸ *Build and deployment* ▸ Source: **GitHub Actions**, which is what `configure-pages` cannot find. There is nothing to fix in the workflow. See [Public repository settings §8](maintainers/public-repository-settings.md) and production-ready ticket 28 |
@@ -556,11 +614,18 @@ available before anything downstream assumes it. Measured 2026-08-21:
 
 | Index | `openstategraph` |
 | --- | --- |
-| `pypi.org` | **HTTP 404 — the name is unregistered and free** |
+| `pypi.org` | HTTP 404 — the name was unregistered and free |
 | `test.pypi.org` | HTTP 200 — `0.3.0rc1`, wheel *and* sdist, uploaded by the rc1 run |
 
-Nothing on the real index has to be worked around, and the rehearsal artefact
-a stranger would fetch demonstrably exists on the test index.
+Nothing on the real index had to be worked around, and the rehearsal artefact
+a stranger would fetch demonstrably existed on the test index.
+
+**The name is taken now, and it is taken by us.** `0.3.0rc18` was uploaded to
+PyPI by hand on 2026-09-07, so `pypi.org/project/openstategraph/` resolves and
+the table above is history rather than a check anybody still has to run. Two
+consequences follow immediately, and both are already claimed elsewhere on this
+page: the project-scoped token in §2 is now creatable, and Trusted Publishing —
+which could not be configured before the project existed — is unblocked.
 
 ### CI only ever sees what was pushed
 

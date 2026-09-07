@@ -5,7 +5,7 @@
 <!-- The `../../` here is GitHub's own convention: it resolves against the repository root on github.com, so the badge survives a rename — a local link checker will call it broken and be wrong (stable-beta-public/33). -->
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.0rc17-informational.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0rc18-informational.svg)](CHANGELOG.md)
 
 > **Who this page is for:** you have installed nothing yet, and you want the
 > stack running. Read straight down — Install, First run, Where to read next —
@@ -37,29 +37,29 @@ workflow.graph          # a langgraph CompiledStateGraph. Yours now.
 globally, and point it at any project. You need **Python 3.11+**.
 
 ```bash
-uv tool install \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ \
-  --index-strategy unsafe-best-match \
-  "openstategraph[server,ollama]==0.3.0rc17"
+uv tool install "openstategraph[server,ollama]==0.3.0rc18"
 ```
 
 Swap `ollama` for `anthropic`, `openai` or `azure` — the extra names the vendor
 you already pay. If your shell then cannot find the command, `~/.local/bin` is
 not on your `PATH`: run `uv tool update-shell` and open a new terminal.
 
-**That is a pre-release on TestPyPI, and every flag above is the cost of it.**
-`https://pypi.org/pypi/openstategraph/json` answers 404 today, so the package
-comes from TestPyPI (`--index-url`), its dependencies from PyPI
-(`--extra-index-url`, because TestPyPI carries no `pydantic` 2.x), `uv` is told
-it may mix the two (`--index-strategy unsafe-best-match`), and the version is
-exact because pip and `uv` skip pre-releases otherwise. `pipx install` takes
-the same two index flags. **All three flags disappear the day this reaches
-PyPI**, leaving `uv tool install "openstategraph[server,ollama]"` —
-[Releasing](docs/releasing.md) says when that is.
+**No index flags: this comes from PyPI, like anything else you install.** Until
+`0.3.0rc18` it did not — `https://pypi.org/pypi/openstategraph/json` answered
+404, the package came from TestPyPI, and the line above carried three flags
+that were the cost of that detour. It is published now, so they are gone.
+
+**The version is still named in full, and that is the one thing left to
+explain.** `0.3.0rc18` is a *pre-release*, and pip and `uv` exclude
+pre-releases from an unpinned requirement — so `uv tool install
+"openstategraph[server,ollama]"` with no `==` resolves nothing at all, which
+reads like a missing package rather than a skipped candidate. The `==` is what
+makes it resolve; the day a final release lands, it stops being necessary.
+[Releasing](docs/releasing.md) says how a version gets here, and carries the
+TestPyPI rehearsal form for maintainers.
 
 **The wheel carries the canvas.** The built editor ships as package data — 110
-files, 1.6 MB of a 4.94 MB wheel, and the browser payload with Mermaid is 55%
+files, 1.6 MB of a 4.95 MB wheel, and the browser payload with Mermaid is 55%
 of the download — so one process serves the editor at `/`, the chat surface at
 `/chat` and the API under `/api`, from one origin. No clone, no Docker, no
 `npm`. Measured footprint:

@@ -213,7 +213,6 @@ URL_CENSUS: dict[str, tuple[int, str]] = {
         "owner and repository after it are read from the package's own "
         "metadata (`team-board-and-gap-reports/08`)",
     ),
-    "install_hint.py": (2, "the two PyPI index URLs pip is told to read"),
     "mssql_connection.py": (3, "Azure AD's own scope and authority"),
     "plugin_interop.py": (2, "the plugin format's published schema ids"),
     "prebuilt_mcp.py": (2, "two MCP servers a user picks from a catalogue"),

@@ -314,15 +314,15 @@ must be resumed on the same instance.
 ### Postgres: worth doing, and not the lift
 
 ```bash
-pip install 'openstategraph[postgres]'   # once published — see the note below
+pip install 'openstategraph[postgres]==0.3.0rc18'
 export OPENSTATEGRAPH_POSTGRES_URL="postgresql://osg:...@db.internal:5432/osg"
 ```
 
-**That install line does not work yet.** `openstategraph` is not on PyPI: the
-release candidates reach TestPyPI and the publish gate has not been clicked, so
-a bare `pip install` returns a 404 until it is. Until then, take it from
-TestPyPI with the two index flags the project README's install section spells
-out ([Releasing](releasing.md) says when that changes).
+**That line names a version on purpose.** `openstategraph` is on PyPI as of
+`0.3.0rc18`, so no index flag is needed — but the shipped version is a
+pre-release, and pip excludes pre-releases from an unpinned requirement, so a
+bare `pip install 'openstategraph[postgres]'` returns what looks like a 404.
+The pin goes away with the first final release ([Releasing](releasing.md)).
 
 This moves checkpoints and long-term memory into a database your operations
 team already backs up, replicates and restores, instead of a sqlite file whose

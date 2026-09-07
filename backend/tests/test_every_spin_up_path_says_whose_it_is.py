@@ -70,8 +70,21 @@ DECLARED_BY_LINE = 12
 #: A pasteable `pip install` of a package that answers 404 today. Each has to
 #: carry a hedge on its own line or the one after it — this is not prose, it is
 #: a command somebody copies.
-BARE_PIP = re.compile(r'^\s*pip install [\'"]?openstategraph\[')
-HEDGES = ("once published", "after the first release", "does not work yet", "not on PyPI")
+#: A pasteable `pip install openstategraph[...]` with **no version**.
+#: `stable-beta-public/37` narrowed this from "any bare pip install": until
+#: `0.3.0rc18` the package was on no index a reader could reach, so every such
+#: line 404'd and every one of them needed a hedge. It is on PyPI now, and a
+#: *pinned* line resolves — what still does not is an unpinned one, because
+#: pip excludes pre-releases from an unpinned requirement and reports the
+#: result as a package it cannot find rather than a candidate it skipped.
+UNPINNED_PIP = re.compile(r'^\s*pip install [\'"]?openstategraph\[[a-z0-9,\-]+\][\'"]?\s*(?:#.*)?$')
+HEDGES = (
+    "once published",
+    "after the first release",
+    "does not work yet",
+    "not on PyPI",
+    "final release",
+)
 
 
 def read(relative: str) -> list[str]:
@@ -141,8 +154,19 @@ class TestTheClonePhraseStaysWithTheCloneReader:
 
 
 class TestACommandThatAnswers404IsNeverUnhedged:
-    def test_every_pasteable_pip_install_carries_a_hedge(self) -> None:
-        """`openstategraph` is not on PyPI. A pasteable line that 404s must say so."""
+    def test_every_unpinned_pip_install_carries_a_hedge(self) -> None:
+        """A pasteable line that resolves to nothing must say so.
+
+        The reason moved with the facts (`stable-beta-public/37`). It used to
+        be that `openstategraph` was not on PyPI at all, so every pasteable
+        `pip install openstategraph[...]` returned a 404 that reads like the
+        reader's typo. `0.3.0rc18` is published, and a line naming the version
+        works — but an *unpinned* one still resolves to nothing while every
+        published version is a release candidate, and pip reports that
+        identically. The pages that show the unpinned shape show it because it
+        is the shape the command takes once a final release exists, which is
+        exactly what the hedge has to say.
+        """
         offenders = []
         for page in sorted(REPO.glob("docs/*.md")) + [
             REPO / "README.md",
@@ -151,7 +175,7 @@ class TestACommandThatAnswers404IsNeverUnhedged:
         ]:
             lines = page.read_text(encoding="utf-8").splitlines()
             for number, line in enumerate(lines):
-                if not BARE_PIP.match(line):
+                if not UNPINNED_PIP.match(line):
                     continue
                 window = "\n".join(lines[max(0, number - 1) : number + 6])
                 if not any(hedge in window for hedge in HEDGES):

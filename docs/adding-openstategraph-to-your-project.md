@@ -27,82 +27,61 @@ throwaway FastAPI project outside any checkout, in its own virtualenv
 distribution; everything after them was run against a wheel built from this
 repository, for the reason §0 gives.
 
-## 0. The install line, and the one a stranger tries first
-
-`openstategraph` **is not on PyPI**. A bare `pip install openstategraph` returns
-a 404, and a 404 from pip reads like your typo rather than our gap. It *is*
-published to **TestPyPI**, which is a real, installable index — the release
-train stops there pending an approval nobody has clicked, and
-[Releasing](releasing.md) says when that changes.
-
-The obvious next move is to point pip at TestPyPI with `-i` (or its long
-spelling, `--index-url`) and nothing else. **That fails**, and this is what it
-looks like:
-
-```
-ERROR: ResolutionImpossible
-Additionally, some packages in these conflicts have no matching distributions
-available for your environment:
-    pydantic
-```
-
-If that is where you are: the missing flag is `--extra-index-url`, and the
-command below is the one to use.
-
-**TestPyPI is not a mirror of PyPI.** It carries this distribution and almost
-none of its dependencies — no `pydantic` 2.x, no `langgraph`, no `langchain` —
-and `--index-url` *replaces* the default index rather than adding to it. pip
-then reports the missing dependency and never mentions the index it cannot
-reach, so the obvious reading is *this package depends on a pydantic that does
-not exist*. Add the second index and it resolves:
+## 0. The install line
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
-            "openstategraph[ollama]==0.3.0rc17"
+pip install "openstategraph[ollama]==0.3.0rc18"
 ```
 
-That was run into an empty virtualenv and installs the distribution plus
-`langgraph`, `langchain`, `langchain-core`, `pydantic` and the one provider
-integration you named. Extras resolve through the same pair —
-`[ollama,sqlite]` and `[server,ollama]` were both installed this way — because
-every extra's own dependencies come from PyPI like the core's.
+That is the whole thing. **`openstategraph` is on PyPI**, so there is no index
+to name and no flag to remember, and it was run into an empty virtualenv:
+it installs the distribution plus `langgraph`, `langchain`, `langchain-core`,
+`pydantic` and the one provider integration you named. Extras behave the same
+way — `[ollama,sqlite]` and `[server,ollama]` were both installed like this.
 
-The version is pinned because a pinned version is a version a test can check,
-and this repository holds every documented pin against
-[`backend/pyproject.toml`](../backend/pyproject.toml). It is not, today, what
-makes the command work: pip normally excludes pre-releases from an unpinned
-requirement, but it falls back to them when no stable version satisfies the
-requirement at all, and every published version of this distribution is a
-release candidate. Unpinned resolves to the same wheel — until the day a stable
-one exists, when it will silently stop meaning the same thing.
+**Until `0.3.0rc18` this section was three times as long, and every word of it
+was earned.** The distribution lived on TestPyPI only, so a bare `pip install
+openstategraph` returned a 404 that reads like your typo rather than our gap;
+pointing pip at TestPyPI with `--index-url` alone then failed with
+`ResolutionImpossible` naming `pydantic`, because TestPyPI is not a mirror and
+`--index-url` *replaces* the default index rather than adding to it, so the
+obvious reading was *this package depends on a pydantic that does not exist*.
+The fix was `--extra-index-url https://pypi.org/simple/`, and the whole
+paragraph existed to hand a reader one flag. It is recorded here rather than
+deleted because the same shape catches anyone installing a rehearsal build —
+[Releasing](releasing.md) carries that command now, and it is the only place
+that should.
 
-After the PyPI gate is approved the whole detour collapses:
+**The `==` is not a formality.** `0.3.0rc18` is a pre-release, and pip excludes
+pre-releases from an unpinned requirement unless nothing stable satisfies it at
+all — which is true today and will stop being true the moment a final release
+exists, silently, without changing this page. A pinned version is also a
+version a test can check, and this repository holds every documented pin
+against [`backend/pyproject.toml`](../backend/pyproject.toml).
+
+When a final release lands, the pin goes too:
 
 ```bash
-pip install "openstategraph[ollama]"          # once published
+pip install "openstategraph[ollama]"          # once a final release is published
 ```
 
-> **The published pre-release is older than this page, and one of the gaps
-> lands on the shape this page recommends.** The pin above is what TestPyPI
-> serves; it was uploaded before four changes that reach a reader here. Two are
-> behavioural and are called out where they bite — `init` in
-> [§2](#2-init-into-the-directory-you-already-have) and error handling in
-> [§4](#4-rewiring-your-endpoint), and §4's code is written to be correct on
-> both. Two are fixes it does not have: repeated `ask()` in one long-lived
-> process — precisely what a service does — returned an empty string on every
-> second call until `launch-readiness/171`; and the shipped `chinook-assistant`
-> package bound none of its own tools until `every-workflow-green/43`, which
-> landed on `main` the day this page was written.
+> **This note used to say the published build was older than the page, and
+> `0.3.0rc18` is the later pre-release it said would close it.** The gaps it
+> named are all in: repeated `ask()` in one long-lived process returning an
+> empty string on every second call (`launch-readiness/171`), and the shipped
+> `chinook-assistant` binding none of its own tools (`every-workflow-green/43`).
+> The two behavioural differences it warned about are still described where
+> they bite — `init` in [§2](#2-init-into-the-directory-you-already-have) and
+> error handling in [§4](#4-rewiring-your-endpoint) — because a reader may be
+> on an older build, and §4's code is written to be correct on both either way.
 >
-> So: **use the index path above to install, and build from a checkout for
-> anything you are judging the product by.** `backend/` is the Python project
-> root — the repository root has no `pyproject.toml` — so it is `python3 -m
-> build backend --outdir <somewhere>`, never a bare `python3 -m build` at the
-> root, whose `dist/` is the editor bundle rather than a wheel.
+> Building from a checkout is still how you judge changes that have not shipped
+> yet. `backend/` is the Python project root — the repository root has no
+> `pyproject.toml` — so it is `python3 -m build backend --outdir <somewhere>`,
+> never a bare `python3 -m build` at the root, whose `dist/` is the editor
+> bundle rather than a wheel.
 > [adoption.md, *Be honest about the install*](adoption.md#be-honest-about-the-install)
-> has the editable form. A later pre-release closes this note; nothing else on
-> this page depends on which one you have.
+> has the editable form.
 
 > **Somebody already timed this walk.**
 > [`decisions/stranger-install-2026-08-29.md`](decisions/stranger-install-2026-08-29.md)
@@ -140,30 +119,23 @@ The tool form is why the verb takes a directory. One global install, and
 workflows — the same way you run a formatter you installed once:
 
 ```bash
-uv tool install "openstategraph[server,ollama]"
+uv tool install "openstategraph[server,ollama]==0.3.0rc18"
 
 cd ~/svc  && openstategraph .      # svc's workflows
 cd ~/app2 && openstategraph .      # app2's workflows
 ```
 
-**While this lives on TestPyPI only, the global install needs two more flags**,
-and the reason is the same one `explicit = true` answers for a project
-dependency. `uv` will not, by default, take a package from one index and its
-dependencies from another — so the line above resolves nothing until it is told
-where each half comes from and that mixing is intended:
+**No index flags, for the reason §0 gives**: this is on PyPI. Until
+`0.3.0rc18` this block carried three of them — `--index-url`,
+`--extra-index-url`, and `uv`'s own `--index-strategy unsafe-best-match`,
+because `uv` will not by default take a package from one index and its
+dependencies from another. The last of those is worth remembering even though
+it is gone: `unsafe-best-match` is uv's own name for it, and the name is the
+warning — it lets a package on *either* index satisfy a requirement, which is
+exactly the shadowing risk a second index carries. One index carries no such
+risk, which is the real argument for not naming one.
 
-```bash
-uv tool install \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ \
-  --index-strategy unsafe-best-match \
-  "openstategraph[server,ollama]==<version>"
-```
-
-`unsafe-best-match` is uv's own name for it, and the name is the warning: it
-lets a package on either index satisfy a requirement, which is exactly the
-shadowing risk a pre-release index carries. **Both flags disappear the day this
-reaches PyPI**, and the two-line form above is what remains.
+The `==` stays for as long as the shipped version is a release candidate.
 
 If the command installs and your shell still cannot find it, `~/.local/bin` is
 not on your `PATH`: `uv tool update-shell`, then a new terminal.
@@ -220,7 +192,7 @@ created ./
   workflows/starter/      the smallest workflow that runs
 ```
 
-> **On the release TestPyPI serves today, that refuses.** A non-empty
+> **On a build older than `0.3.0rc18`, that refuses.** A non-empty
 > directory was a hard stop, and the refusal points at `--force`:
 >
 > ```
@@ -390,9 +362,9 @@ Four details, each of which is the reason this is not three lines:
   builds a model and executes the package's own `tools/*.py`. Hold the compiled
   object in a module-level cache once you have more than a demo.
 - **A run that produces nothing arrives two different ways, so gate on both.**
-  Newer builds *raise* — `RunProducedNothing`, carrying the whole run on its
-  `.result` — where the release TestPyPI serves today *returns* an empty
-  `RunResult` with `.failures` set. The commonest first failure of all, an
+  Builds from `0.3.0rc18` on *raise* — `RunProducedNothing`, carrying the whole
+  run on its `.result` — where older ones *return* an empty `RunResult` with
+  `.failures` set. The commonest first failure of all, an
   unconfigured provider, comes back through whichever of the two your build
   does. Catching `OpenStateGraphError` and then checking `result.failures`
   handles both and needs no version check: it is the base class of every error

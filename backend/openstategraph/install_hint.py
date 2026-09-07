@@ -27,10 +27,23 @@ name of the extra:
    rather than an omission: `pip install` is additive — it uninstalls
    nothing — so a pip line naming nine extras to repair one would be a
    sentence implying all nine are needed.
-3. **Whether the version is a pre-release**, which is the whole reason the
-   TestPyPI index flags exist — and the reason they must disappear the day it
-   is not. The README says the same thing in prose; the flags are pinned
-   against that block by a test rather than copied beside it.
+3. **Whether the version is a pre-release**, because pip and `uv` exclude a
+   pre-release from an unpinned requirement — so the version has to be named
+   in full or the command resolves nothing. The README says the same thing in
+   prose; the shape is pinned against that block by a test rather than copied
+   beside it.
+
+**No index is named, and that is a decision rather than an omission**
+(`stable-beta-public/37`). This module used to render TestPyPI's two index
+flags plus `uv`'s `--index-strategy unsafe-best-match` whenever the version
+was a pre-release, and the condition was right for as long as the two facts
+coincided: every published build lived on TestPyPI only, so "pre-release" and
+"not on the default index" named the same set. `0.3.0rc18` is a pre-release
+published to **PyPI**, which separates them — and a hint pointing at TestPyPI
+now sends a reader to an index that does not carry the build they are running.
+Nothing about a version has ever implied an index; where a build was uploaded
+is a fact about the upload. The rehearsal still uses TestPyPI and
+`docs/releasing.md` carries that form, which is where an index belongs.
 
 **This module owns the sentence, and it is the only one that may.** The defect
 was two spellings of one install line drifting apart, so
@@ -79,18 +92,6 @@ EXTRA_MARKERS: dict[str, tuple[str, ...]] = {
     "postgres": ("langgraph.checkpoint.postgres", "psycopg"),
     "bastion": ("bastion_prompt_protection",),
 }
-
-#: TestPyPI, and the two indexes `uv` must be told it may mix. Rendered only
-#: for a pre-release: they are the cost of one, not a property of the project,
-#: and the README's install block says so in the same words.
-_INDEX_FLAGS = (
-    "--index-url https://test.pypi.org/simple/",
-    "--extra-index-url https://pypi.org/simple/",
-)
-
-#: `uv`'s alone — `pip` has no such flag, so a pip line that carried it would
-#: fail on the flag rather than on the resolve.
-_UV_ONLY_FLAGS = ("--index-strategy unsafe-best-match",)
 
 #: A PEP 440 pre-release tail: `0.3.0rc15`, `1.0.0b2`, `2.0.0.dev3`.
 _PRE_RELEASE = re.compile(r"(?:a|b|rc|dev)\d*$", re.I)
@@ -187,17 +188,15 @@ def install_hint(extra: str, *, installation: Installation | None = None) -> str
         # the one shape that must carry the union.
         wanted = ",".join(sorted({*here.extras, name} - {""}))
         command = ["uv", "tool", "install", "--force"]
-        flags = [*_INDEX_FLAGS, *_UV_ONLY_FLAGS] if pinned else []
     else:
         # `pip install` is additive: it never uninstalls what it was not asked
         # about, so naming the union here would be noise at best and, at worst,
         # a sentence implying nine extras are required to fix one.
         wanted = name
         command = ["pip", "install"] + (["--user"] if here.shape == "pip-user" else [])
-        flags = list(_INDEX_FLAGS) if pinned else []
 
     spec = f"openstategraph[{wanted}]" + (f"=={here.version}" if pinned else "")
-    return " ".join([*command, *flags, f"'{spec}'"])
+    return " ".join([*command, f"'{spec}'"])
 
 
 def _extra_name(extra: str) -> str:

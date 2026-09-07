@@ -15,8 +15,15 @@ Three facts decide the sentence, and none of them can be guessed:
   environment, or neither),
 - **which extras are already here**, because a `--force` reinstall carries
   only what the command names,
-- **whether the version is a pre-release**, because that is what makes the
-  TestPyPI index flags necessary — and what makes them wrong once it is not.
+- **whether the version is a pre-release**, because pip and `uv` exclude a
+  pre-release from an unpinned requirement, so the version has to be named in
+  full or the command resolves nothing.
+
+The third fact used to carry a second job — it also decided whether TestPyPI
+index flags were rendered — and `stable-beta-public/37` took that job away.
+`0.3.0rc18` is a pre-release published to **PyPI**, so "pre-release" and "not
+on the default index" stopped naming the same builds; see
+`TestThePinIsAboutTheVersion` below.
 
 `install_hint` is the one place all three are read. Everything that used to
 compose an install line — the warehouse leaves' missing-driver refusal, the
@@ -149,27 +156,47 @@ class TestTheCommandCannotWrapItself:
         assert "\n" not in hint
 
 
-class TestThePreReleaseFlags:
-    def test_a_pre_release_carries_the_index_flags_and_an_exact_version(self) -> None:
-        hint = install_hint("mssql", installation=UV_TOOL)
-        assert "--index-url https://test.pypi.org/simple/" in hint
-        assert "--extra-index-url https://pypi.org/simple/" in hint
-        assert "--index-strategy unsafe-best-match" in hint
-        assert "==0.3.0rc15" in hint
+class TestThePinIsAboutTheVersion:
+    """`stable-beta-public/37`: the flags belonged to the rehearsal, not to the
+    version, and the module said otherwise for as long as both were true at once.
 
-    def test_a_released_version_carries_none_of_them(self) -> None:
+    Until `0.3.0rc18` every published build lived on TestPyPI only, so "this is
+    a pre-release" and "this comes from a non-default index" named the same
+    builds and one condition served both. Publishing a release candidate to
+    PyPI separated them: `0.3.0rc18` is a pre-release **on the default index**,
+    and a hint carrying `--index-url https://test.pypi.org/simple/` now sends a
+    reader to an index that does not have the build they are running.
+
+    So one of the three facts the module reads changed meaning. The version
+    still decides whether the requirement must be named exactly — pip and `uv`
+    exclude pre-releases from an unpinned requirement, which is unchanged and
+    is why `==` survives below. It no longer decides anything about indexes,
+    because nothing about a version does: an index is where a build was
+    uploaded, and this project uploads to PyPI.
+    """
+
+    def test_a_pre_release_is_named_exactly_and_reaches_the_default_index(self) -> None:
+        hint = install_hint("mssql", installation=UV_TOOL)
+        assert "==0.3.0rc15" in hint
+        assert "index-url" not in hint
+        assert "--index-strategy" not in hint
+        assert "test.pypi.org" not in hint
+
+    def test_a_released_version_needs_no_pin_either(self) -> None:
         hint = install_hint("mssql", installation=RELEASED)
         assert "test.pypi.org" not in hint
         assert "--index-strategy" not in hint
         assert "==" not in hint
         assert "'openstategraph[mssql,server]'" in hint
 
-    def test_the_flags_are_the_ones_the_readme_documents(self) -> None:
+    def test_the_hint_is_the_shape_the_readme_documents(self) -> None:
         """Derived from the README's own install block, never copied beside it.
 
-        The block is the fenced command a reader is told to run, not the prose
-        around it — the prose names the same flags while explaining them, and a
-        sentence ending in a backtick is not a flag.
+        The claim held here is the one that changed: the block a reader is told
+        to paste names **no index at all**, and neither does the line the
+        product prints. Two spellings of one install command drifting apart is
+        the defect this module exists to prevent, and a flag is the half that
+        drifted.
         """
         blocks = re.findall(r"```[a-z]*\n(.*?)```", (REPO / "README.md").read_text("utf-8"), re.S)
         install = [b for b in blocks if "uv tool install" in b]
@@ -177,10 +204,12 @@ class TestThePreReleaseFlags:
         documented = set(
             re.findall(r"--(?:extra-)?index-url \S+|--index-strategy \S+", install[0])
         )
-        assert len(documented) == 3, documented
+        assert documented == set(), (
+            "the README's install block has regained index flags; the published "
+            f"form takes none: {documented}"
+        )
         hint = install_hint("mssql", installation=UV_TOOL)
-        for flag in documented:
-            assert flag in hint, flag
+        assert "index-url" not in hint and "--index-strategy" not in hint
 
 
 class TestEveryExtraNamedIsOneThatExists:

@@ -10,27 +10,29 @@ compiled LangGraph object that runs, streams, checkpoints and deploys
 anywhere Python runs, with or without this package's editor.
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
-            "openstategraph[ollama]==0.3.0rc17"
+pip install "openstategraph[ollama]==0.3.0rc18"
 ```
 
-That is the line that works today, and the two flags are both load-bearing.
-**`openstategraph` is not on PyPI yet** — the release train
-(`../docs/releasing.md`) stops at TestPyPI pending a human approval nobody has
-clicked, so `pip install "openstategraph[ollama]"` returns a 404 that reads
-like the reader's mistake rather than ours. `--extra-index-url` is mandatory
-because TestPyPI carries no `pydantic` 2.x, and pip blames the dependency
-instead of the missing index. The version is named in full because pip
-excludes pre-releases from an unpinned requirement — the same trap
-[`../docs/building-an-atom.md`](../docs/building-an-atom.md) records for a
-plugin's `>=` specifier.
+That is the line that works today, and it names no index because it needs
+none: **this is on PyPI**. The `--index-url` / `--extra-index-url` pair this
+block carried until `0.3.0rc18` was the cost of a TestPyPI-only distribution,
+and that is over.
 
-Once the PyPI gate is approved this collapses back to the one line it should
-always have been:
+The `==` is the one thing left to explain, and it is there because the version
+above is a **pre-release**. pip excludes pre-releases from an unpinned
+requirement — the same trap
+[`../docs/building-an-atom.md`](../docs/building-an-atom.md) records for a
+plugin's `>=` specifier — so `pip install "openstategraph[ollama]"` with no
+`==` resolves nothing, and pip reports that as a package it cannot find rather
+than as a candidate it skipped. The pin goes away with the first final release;
+[`../docs/releasing.md`](../docs/releasing.md) is the page that says how a
+version gets here, and holds the TestPyPI rehearsal form for maintainers.
+
+The day a **final** release lands, the pin goes too and this collapses to the
+one line it should always have been:
 
 ```bash
-pip install "openstategraph[ollama]"          # once published
+pip install "openstategraph[ollama]"          # once a final release is published
 ```
 
 Either way you can install the identical artifact from a checkout —

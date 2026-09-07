@@ -487,19 +487,15 @@ footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text
           </p>
           <div class="codeblock" style="margin-top:.75rem">
             <div class="pane-bar">terminal</div>
-<pre><code><!--site:install--><span class="p">$</span> uv tool install \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ \
-  --index-strategy unsafe-best-match \
-  "openstategraph[server,ollama]==0.3.0rc17"<!--/site:install-->
+<pre><code><!--site:install--><span class="p">$</span> uv tool install "openstategraph[server,ollama]==0.3.0rc18"<!--/site:install-->
 <span class="p">$</span> openstategraph run ./my-workflow <span class="s">"How many invoices are there?"</span></code></pre>
           </div>
           <p class="muted" style="margin-top:.75rem; font-size:.875rem">
-            <b>Not on PyPI yet</b> — the wheel is built, CI installs it into an empty
-            virtualenv outside the repository on every pull request, and the pre-release is on
-            TestPyPI. Until the PyPI upload happens the install is the pinned one under
-            <a href="#quickstart">Quickstart</a>, which names both indexes because TestPyPI
-            carries no <code>pydantic</code> 2.x.
+            <b>On PyPI, as a pre-release</b> — the wheel is built and CI installs it into an
+            empty virtualenv outside the repository on every pull request. The version is named
+            in full because pip and <code>uv</code> skip pre-releases in an unpinned
+            requirement; there is no index to name, and the pin goes away with the first final
+            release.
           </p>
         </div>
         <div class="card">
@@ -848,11 +844,7 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
           </p>
           <div class="codeblock">
             <div class="pane-bar">terminal</div>
-<pre><code><!--site:install--><span class="p">$</span> uv tool install \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ \
-  --index-strategy unsafe-best-match \
-  "openstategraph[server,ollama]==0.3.0rc17"<!--/site:install-->
+<pre><code><!--site:install--><span class="p">$</span> uv tool install "openstategraph[server,ollama]==0.3.0rc18"<!--/site:install-->
 <span class="p">$</span> openstategraph serve --open   <span class="c"># prints the URLs it landed on</span></code></pre>
           </div>
           <p>
@@ -869,11 +861,7 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
           </p>
           <div class="codeblock">
             <div class="pane-bar">terminal</div>
-<pre><code><!--site:install--><span class="p">$</span> uv tool install \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ \
-  --index-strategy unsafe-best-match \
-  "openstategraph[server,ollama]==0.3.0rc17"<!--/site:install-->
+<pre><code><!--site:install--><span class="p">$</span> uv tool install "openstategraph[server,ollama]==0.3.0rc18"<!--/site:install-->
 <span class="p">$</span> openstategraph new my-workflow
 <span class="p">$</span> openstategraph validate ./workflows/my-workflow
 <span class="p">$</span> openstategraph run ./workflows/my-workflow <span class="s">"Say hello."</span>   <span class="c"># a fresh scaffold knows nothing yet</span></code></pre>
@@ -881,13 +869,15 @@ answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by re
           <div class="callout callout-info">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
             <span>
-              <b>The PyPI upload has not happened yet.</b> The wheel is built and verified — CI
-              installs it into an empty virtualenv outside the repository and runs a workflow there
-              on every pull request — but this page will not pretend a command works before it
-              does. That is what every flag above is: the pre-release lives on TestPyPI, its
-              dependencies on PyPI, and the version is exact because pre-releases are skipped
-              otherwise. All three disappear the day this reaches PyPI, and everything below is
-              unchanged.
+              <b>This is a pre-release, and that is the whole reason for the
+              <code>==</code>.</b> The wheel is built and verified — CI installs it into an empty
+              virtualenv outside the repository and runs a workflow there on every pull request —
+              and it is on PyPI, so the command above names no index. Until <code>0.3.0rc18</code>
+              it named three: the build lived on TestPyPI, its dependencies on PyPI, and
+              <code>uv</code> had to be told it could mix them. Those are gone. The exact version
+              stays until a final release exists, because pip and <code>uv</code> skip
+              pre-releases in an unpinned requirement — and everything below is unchanged either
+              way.
             </span>
           </div>
         </li>

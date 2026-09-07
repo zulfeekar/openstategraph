@@ -21,6 +21,13 @@ or that adds a *new* single-index TestPyPI command somewhere in the docs
 tree, goes red instead of silently reopening the same failure for the next
 reader.
 
+**The onramp is no longer where that command lives** (`stable-beta-public/37`).
+`0.3.0rc18` was published to PyPI, so the README installs with no index flags
+and the TestPyPI form belongs to `docs/releasing.md`, where the rehearsal is.
+The corpus rule is untouched by that — it was always about every page in the
+tree, and the rehearsal's own command has to be as correct as the onramp's
+was.
+
 **`uv` joined the pattern in `stable-beta-public/05`**, which made the
 README's onramp `uv tool install` rather than `pip install` — the tool form,
 because the editor is a developer tool installed once and pointed at any
@@ -31,9 +38,10 @@ misleading under `uv` as under pip. So the installer half is now a small
 alternation, and widening it strengthened the first rule as a side effect —
 `uv tool install` / `uv pip install` lines in the docs tree were invisible to
 it before. `uv` needs a *third* flag (`--index-strategy unsafe-best-match`)
-that pip does not; that one is pinned beside the README's other onramp
-claims in `test_the_readme_a_stranger_lands_on.py`, because it is a claim
-about one page rather than a rule about the corpus.
+that pip does not; that one is a claim about one page rather than a rule about
+the corpus, and `test_the_readme_a_stranger_lands_on.py` is still where it is
+held — asserting its **absence** from the README's block since
+`stable-beta-public/37`, for the reason above.
 """
 
 from __future__ import annotations
@@ -87,15 +95,36 @@ class TestEveryTestPyPICommandCarriesTheExtraIndex:
             "index:\n" + "\n".join(offenders)
         )
 
-    def test_the_readme_onramp_still_has_the_working_two_index_command(self) -> None:
-        readme = (REPO / "README.md").read_text()
-        collapsed = readme.replace("\n", " ")
-        matches = [
-            m.group(0)
-            for m in INSTALL_TESTPYPI.finditer(collapsed)
-        ]
-        assert matches, "README no longer shows a TestPyPI install command at all"
+    def test_the_rehearsal_form_still_exists_where_it_belongs(self) -> None:
+        """`stable-beta-public/37` moved this claim off the front page.
+
+        It used to be about `README.md`, and had to be: a stranger installing
+        this package went to TestPyPI, so the front page owed them the
+        two-index command. `0.3.0rc18` is on PyPI, the README's install line
+        names no index at all, and requiring a TestPyPI command there would
+        require the page to keep a detour nobody should take.
+
+        The command itself has not stopped existing — the release train still
+        rehearses from TestPyPI before anything reaches PyPI — so the claim
+        moves to the page that owns the rehearsal rather than being deleted.
+        The corpus rule above is unchanged and now covers it.
+        """
+        releasing = (REPO / "docs" / "releasing.md").read_text()
+        collapsed = releasing.replace("\n", " ")
+        matches = [m.group(0) for m in INSTALL_TESTPYPI.finditer(collapsed)]
+        assert matches, (
+            "docs/releasing.md no longer shows the TestPyPI rehearsal install "
+            "at all, and it is the last page that owns one"
+        )
         assert any("--extra-index-url https://pypi.org/simple/" in m for m in matches), (
-            "README's TestPyPI command must carry "
+            "the rehearsal's TestPyPI command must carry "
             "--extra-index-url https://pypi.org/simple/"
+        )
+
+    def test_the_front_page_sends_nobody_to_testpypi(self) -> None:
+        """The other half of the move, so the detour cannot come back quietly."""
+        readme = (REPO / "README.md").read_text()
+        assert "test.pypi.org" not in readme, (
+            "the README routes a reader through TestPyPI; this distribution "
+            "is on PyPI and the rehearsal index carries older builds"
         )
