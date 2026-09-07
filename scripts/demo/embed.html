@@ -1,0 +1,84 @@
+<!--
+  The film, for the landing page.
+
+  Two sources: Safari takes the MP4, everything else prefers the smaller WebM.
+  `muted` is what makes `autoplay` legal in every browser, and the film has no
+  sound, so nothing is lost. `playsinline` stops iOS taking the video fullscreen
+  on its own. `poster` is the frame shown before the first byte of video is
+  decoded, so the block never opens as a grey rectangle.
+
+  `preload="none"` is deliberate: the video is several megabytes and a landing
+  page is judged on its first paint. It costs a tap on mobile, which is a fair
+  trade for not spending a visitor's data before they asked.
+
+  The chapter links seek an already-loaded video and do not reload it.
+-->
+<figure class="demo">
+  <video
+    class="demo__video"
+    controls
+    muted
+    playsinline
+    loop
+    preload="none"
+    poster="media/demo-poster.jpg"
+    aria-describedby="demo-chapters"
+  >
+    <source src="media/demo.webm" type="video/webm" />
+    <source src="media/demo.mp4" type="video/mp4" />
+    Your browser cannot play this video.
+    <a href="media/demo.mp4">Download it instead.</a>
+  </video>
+  <figcaption id="demo-chapters" class="demo__chapters">
+    <span>Draw a workflow, ask it a question, watch what ran, then let a patrol read the run back.</span>
+    <ol>
+      <li><a href="#t=0" data-t="0">The palette</a></li>
+      <li><a href="#t=4" data-t="4">One drag builds a workflow</a></li>
+      <li><a href="#t=8" data-t="8">Open a real package</a></li>
+      <li><a href="#t=15" data-t="15">Ask a question</a></li>
+      <li><a href="#t=19" data-t="19">The answer, and the timeline</a></li>
+      <li><a href="#t=34" data-t="34">A patrol files what it found</a></li>
+    </ol>
+  </figcaption>
+</figure>
+
+<style>
+  .demo { margin: 3rem auto; max-width: 1000px; }
+  .demo__video {
+    width: 100%;
+    display: block;
+    border-radius: 12px;
+    background: #000;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 8px 24px rgb(0 0 0 / 8%);
+  }
+  .demo__chapters { margin-top: 0.9rem; font-size: 0.9rem; }
+  .demo__chapters ol {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.25rem;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    counter-reset: chapter;
+  }
+  .demo__chapters li::before {
+    counter-increment: chapter;
+    content: counter(chapter) ". ";
+    opacity: 0.55;
+  }
+</style>
+
+<script>
+  // Seek instead of navigating. Without this a chapter link puts `#t=16` in the
+  // address bar and does nothing, because the media fragment is only honoured
+  // on the media URL itself, not on the page holding it.
+  document.querySelectorAll('.demo__chapters a[data-t]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      const video = document.querySelector('.demo__video');
+      if (!video) return;
+      video.currentTime = Number(link.dataset.t);
+      video.play();
+    });
+  });
+</script>
