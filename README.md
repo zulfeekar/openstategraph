@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/assets/logo.svg" width="300" height="56" alt="OpenStateGraph — the circuit mark beside the wordmark, as the editor's top bar shows it"></p>
 
-# OpenStateGraph — AI Workflow Builder
+# OpenStateGraph — a visual editor for LangGraph
 
 <!-- The `../../` here is GitHub's own convention: it resolves against the repository root on github.com, so the badge survives a rename — a local link checker will call it broken and be wrong (stable-beta-public/33). -->
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
@@ -28,6 +28,17 @@ from openstategraph import load_workflow
 workflow = load_workflow("./workflows/chinook-assistant")
 workflow.graph          # a langgraph CompiledStateGraph. Yours now.
 ```
+
+<!-- A bare URL on its own line is how GitHub renders an uploaded video as a
+     player, and it carries no `##` heading on purpose: the section order above
+     § Install is pinned, and a film belongs to the pitch rather than between
+     the pitch and the first command. The file is on GitHub's own CDN, not in
+     this repository — a 4.7 MB binary would be paid for by every clone. -->
+
+https://github.com/user-attachments/assets/ad5d9a2a-3853-45ff-9905-a814e2991abd
+
+Forty seconds: a workflow built in one drag, a live question answered off a SQL
+database, the run timeline of every superstep, and a patrol reading the run back.
 
 ---
 
@@ -67,6 +78,28 @@ of the download — so one process serves the editor at `/`, the chat surface at
 
 > Changing OpenStateGraph itself rather than using it? That is a different
 > path: [Working on OpenStateGraph itself](#working-on-openstategraph-itself).
+
+## The idea
+
+A canvas **is** a LangGraph `StateGraph`. It is not a picture of one, and
+nothing here interprets it: the editor compiles `workflow.json` and hands you
+the object, and LangGraph runs it.
+
+| On the canvas | In LangGraph |
+| --- | --- |
+| the canvas itself | a `StateGraph` |
+| an **Agent** node | `create_agent` — the tool-calling loop |
+| a **Router** node | a conditional edge |
+| a **Workflow** node | another workflow, run as one isolated step — task in, answer out |
+| an edge back into an agent | a cycle, which is how a revision loop is drawn |
+
+So a feedback loop is two edges rather than a different tool, and a new kind of
+router is configuration rather than a new class.
+
+**Most people drive this with a coding agent** — Claude Code, GitHub Copilot,
+Cursor or Codex. Set the project up first (§ First run), because the skills and
+the agent configuration your agent reads are what `init` writes. Then
+§ With your coding agent.
 
 ## First run
 

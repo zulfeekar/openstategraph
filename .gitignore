@@ -78,3 +78,6 @@ HANDOVER.md
 # of one machine, not a fact about this repository, and the one file it holds
 # today is the CLI's latest version number (team-board-and-gap-reports/09).
 supabase/.temp/
+
+# The recording rig writes here. The published copies live in site/media/.
+demo-out/

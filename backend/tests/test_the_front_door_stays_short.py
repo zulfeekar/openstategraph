@@ -78,7 +78,22 @@ STRANGER_PATH_ENDS_AT = "## The CLI at a glance"
 #: exactly one question — *can I put my own UI on it?* — and the page's answer
 #: was a "Where to read next" row that went via the adoption page. A shorter
 #: page that never answers the question a reader came with is not cheaper.
-STRANGER_PATH_CEILING = 230
+#: 241 → 263 on 2026-09-07 for § The idea, and this budget is again the one
+#: that decides it. The section is the mapping a reader needs before any other
+#: sentence on the page means anything — canvas is a `StateGraph`, an Agent
+#: node is `create_agent`, an edge back into an agent is a cycle — and it was
+#: nowhere on the front door. A reader met "compiles to an ordinary LangGraph
+#: object" in the pitch and then a `mkdir`. Twenty-two lines to stop every
+#: later sentence being read on trust is the cheapest exchange on this page.
+#:
+#: Raised from 230 to 241 on 2026-09-07 for the product film, and this is the
+#: budget it belongs in rather than the page total: the whole claim for putting
+#: a video on the front door is that it shortens the stranger's path, so if it
+#: could not be paid for here it should not be on the page at all. Forty
+#: seconds answers "what is this" faster than any eleven lines of prose can,
+#: and the reader who watches it arrives at § Install already knowing what they
+#: are installing.
+STRANGER_PATH_CEILING = 263
 
 #: The whole page. 829 lines on 2026-09-05 before `docs-onramp/01`, 305 after.
 #: The budget above the recorded figure is small on purpose — the failure this
@@ -92,11 +107,31 @@ STRANGER_PATH_CEILING = 230
 #: path rather than below it. Nothing moved off the page to pay for them, and
 #: that is stated rather than dressed up: this is a straight raise, and the
 #: next section that wants one has to make its own case here.
-LINE_CEILING = 360
+#:
+#: 367 → 389 on 2026-09-07, the same twenty-two lines of § The idea passing
+#: through both budgets because they sit inside the stranger's path. The
+#: argument is made at `STRANGER_PATH_CEILING`; it is not made twice here.
+#:
+#: 360 → 367 on 2026-09-07: eleven lines for the product film, minus four the
+#: pitch gave back. It is the one addition that makes the page *shorter* to
+#: read rather than longer — a stranger who watches forty seconds has the
+#: answer to "what is this" that the paragraph above it spends four sentences
+#: approaching, and can then skip to § Install. It carries no `## ` heading, so
+#: the section order below is untouched: the film belongs to the pitch, not
+#: between the pitch and the first command. The next raise still has to argue
+#: for itself; "the last one was allowed" is not the argument.
+LINE_CEILING = 389
 
 #: In order, from the top. A prefix, not the full list.
 OPENING_SECTIONS = (
     "## Install",
+    # 2026-09-07. It sits between the command that installs and the command
+    # that scaffolds, because it is what makes `init`'s output legible: a
+    # reader who knows the canvas is a `StateGraph` reads every heading below
+    # as a consequence, and a reader who does not takes the whole page on
+    # trust. It is deliberately not first — a mapping is only interesting to
+    # somebody who has decided to try the thing.
+    "## The idea",
     "## First run",
     "## With your coding agent",
     "## The board",
