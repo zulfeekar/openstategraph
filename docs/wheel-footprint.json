@@ -1,9 +1,9 @@
 {
-  "wheel": "openstategraph-0.3.0rc18-py3-none-any.whl",
-  "version": "0.3.0rc18",
+  "wheel": "openstategraph-0.3.0-py3-none-any.whl",
+  "version": "0.3.0",
   "measured": "2026-09-07",
-  "total_bytes": 4945292,
-  "browser_bytes": 2734139,
+  "total_bytes": 4945043,
+  "browser_bytes": 2734272,
   "browser_share_percent": 55,
   "groups": {
     "editor": {
@@ -19,7 +19,7 @@
     "static_other": {
       "label": "the served HTML shells",
       "files": 5,
-      "bytes": 122830
+      "bytes": 122963
     },
     "python": {
       "label": "our own Python",
@@ -34,7 +34,7 @@
     "metadata": {
       "label": "wheel metadata",
       "files": 5,
-      "bytes": 26830
+      "bytes": 26488
     },
     "other": {
       "label": "the rest of the package data",

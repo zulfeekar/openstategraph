@@ -47,7 +47,7 @@ canvas existed only for people who cloned the repository or ran Docker. The
 built editor now ships as package data.
 
 ```bash
-pip install "openstategraph[server,ollama]==0.3.0rc18"
+pip install "openstategraph[server,ollama]==0.3.0"
 openstategraph init my_demo && cd my_demo
 openstategraph serve --open
 ```

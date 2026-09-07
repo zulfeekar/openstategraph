@@ -75,6 +75,27 @@ derivation, no reconciliation job.
    version that is already tagged, already dated, or has an empty section.
 3. **Review the release PR.** Two edits, no more. Read the rendered notes in
    the PR body the way a stranger will read them on the PyPI page.
+
+   **Dropping the `rc` suffix for the first time?** `prepare_release.py` only
+   rewrites version strings — three checks assert things it does not touch,
+   found on `0.3.0`, the first final release this repository ever cut, because
+   nothing before it had exercised them:
+
+   - `backend/README.md`'s first command should read as a plain
+     `pip install "openstategraph[...]"` with no pin once there is no
+     pre-release left to force one — write it by hand; the pin's whole
+     explanation becomes prose about a problem the page no longer has.
+   - `site/` is stale: `python3 scripts/build_site.py --write`.
+   - The wheel footprint page and its JSON name the old version:
+     `npm run build && python3 -m build backend --wheel
+     && python3 scripts/measure_wheel_footprint.py --write`, then copy the
+     regenerated block into `docs/what-is-this.md` by hand — the script
+     writes only `docs/wheel-footprint.json`, deliberately, because the
+     surrounding prose is a claim a script should not get to make silently.
+
+   CI on the release PR is what actually tells you which of these a given cut
+   needs; do not run all three pre-emptively for an ordinary version bump
+   that changes nothing they measure.
 4. **Merge it.** This starts `release.yml`. Nothing is published yet.
 5. **Wait for the rehearsal.** It ends with a job summary containing the exact
    `pip install` line it used.
@@ -122,7 +143,7 @@ uv tool install \
   --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple/ \
   --index-strategy unsafe-best-match \
-  "openstategraph[server,ollama]==0.3.0rc18"
+  "openstategraph[server,ollama]==0.3.0"
 ```
 
 Each flag fails differently, and two of them fail silently:

@@ -35,6 +35,7 @@ audience line would be a claim it exists to contradict.
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -166,7 +167,23 @@ class TestACommandThatAnswers404IsNeverUnhedged:
         identically. The pages that show the unpinned shape show it because it
         is the shape the command takes once a final release exists, which is
         exactly what the hedge has to say.
+
+        Guarded for the same reason `test_the_first_command_a_stranger_copies.py`
+        guards its own two hedge assertions: once a final release ships, an
+        unpinned line is not a forward-looking shape any more, it is simply
+        correct, and a hedge beside it would be explaining a problem that page
+        no longer has. `0.3.0` is the first final release this repository has
+        cut, and the first time this assertion ran against one — the local
+        `is_prerelease` check below is duplicated from that file on purpose
+        rather than imported: it is two lines of pure logic, not a shared rule,
+        and a cross-test-module import would be the odd pattern in this suite,
+        not the established one.
         """
+        version = tomllib.loads((REPO / "backend" / "pyproject.toml").read_text())[
+            "project"
+        ]["version"]
+        if not re.search(r"(rc|a|b)\d+$", version):
+            return
         offenders = []
         for page in sorted(REPO.glob("docs/*.md")) + [
             REPO / "README.md",

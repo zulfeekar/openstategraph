@@ -2168,8 +2168,7 @@ that section was written:
   languages, and the two blockers it found (a run request that could name a
   file; a closable panel that orphaned its run) fixed.
 
-## 0.3.0 — unreleased
-
+## 0.3.0 — 2026-09-07
 Packaging OpenStateGraph as a framework somebody else can install: an honest
 install footprint, a declared public surface, and a document version that is
 finally read by code. Wayfinder tickets 02–04;

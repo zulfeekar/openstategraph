@@ -30,7 +30,7 @@ repository, for the reason §0 gives.
 ## 0. The install line
 
 ```bash
-pip install "openstategraph[ollama]==0.3.0rc18"
+pip install "openstategraph[ollama]==0.3.0"
 ```
 
 That is the whole thing. **`openstategraph` is on PyPI**, so there is no index
@@ -119,7 +119,7 @@ The tool form is why the verb takes a directory. One global install, and
 workflows — the same way you run a formatter you installed once:
 
 ```bash
-uv tool install "openstategraph[server,ollama]==0.3.0rc18"
+uv tool install "openstategraph[server,ollama]==0.3.0"
 
 cd ~/svc  && openstategraph .      # svc's workflows
 cd ~/app2 && openstategraph .      # app2's workflows

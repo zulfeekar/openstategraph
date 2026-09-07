@@ -314,7 +314,7 @@ must be resumed on the same instance.
 ### Postgres: worth doing, and not the lift
 
 ```bash
-pip install 'openstategraph[postgres]==0.3.0rc18'
+pip install 'openstategraph[postgres]==0.3.0'
 export OPENSTATEGRAPH_POSTGRES_URL="postgresql://osg:...@db.internal:5432/osg"
 ```
 

@@ -153,7 +153,16 @@ class TestTheReadmeSaysWhyBeforeItAsks:
         "once published", because the package was on no index a reader could
         reach; it is "final release" now, because the package is on PyPI and
         the only thing still missing is a version without an `rc` in it.
+
+        Guarded the same way `test_a_final_release_drops_the_pin` is, and for
+        the reason this whole class is named `...SaysWhyBeforeItAsks`: once
+        `0.3.0` ships there is no pin left to explain, and an unpinned line
+        needs no marker because it is simply the line now. Missing until
+        `0.3.0` itself proved it missing — the first final release this
+        repository has cut, and the first time this class ran against one.
         """
+        if not is_prerelease(version()):
+            return
         text = BACKEND_README.read_text()
         offenders = [
             f"{number}: {line.strip()}"
@@ -175,7 +184,15 @@ class TestTheReadmeSaysWhyBeforeItAsks:
         so requiring the claim would be requiring a false one — the page still
         owes a reader the reason its command is not the plain two words, and
         the reason is now the pre-release.
+
+        Same guard as its sibling above, for the same reason: once there is no
+        pre-release, keeping the word "pre-release" in the page to satisfy this
+        assertion would be writing a false explanation for a problem the page
+        no longer has — the exact defect this repository's own tests exist to
+        catch, committed by the test rather than by the document it checks.
         """
+        if not is_prerelease(version()):
+            return
         text = BACKEND_README.read_text()
         assert "not on PyPI" not in text, (
             "this distribution is on PyPI; the page still says otherwise"
