@@ -116,7 +116,12 @@ carried="$(git log "$BRIDGE_BRANCH" --format=%B | sed -nE 's/^\(cherry picked fr
 # already agree on, and it would rot at the next squash.
 bridge_root="$(git rev-list --max-parents=0 "$BRIDGE_BRANCH")"
 bridge_tree="$(git rev-parse "$bridge_root^{tree}")"
-baseline="$(git log "$SOURCE_BRANCH" --format='%H %T' | awk -v t="$bridge_tree" '$2 == t { print $1; exit }')"
+# No `exit` in the awk and no `head`: either one closes the pipe while `git log`
+# is still writing, and `pipefail` turns that SIGPIPE into a failed pipeline —
+# the script died with 141 and no message. Scan the whole history, then keep the
+# first line here.
+baseline="$(git log "$SOURCE_BRANCH" --format='%H %T' | awk -v t="$bridge_tree" '$2 == t { print $1 }')"
+baseline="${baseline%%$'\n'*}"
 
 if [ -z "$baseline" ]; then
   echo "Cannot find the commit on $SOURCE_BRANCH whose tree the public squash was"
@@ -126,19 +131,28 @@ if [ -z "$baseline" ]; then
 fi
 echo "     baseline $(git rev-parse --short "$baseline") — the commit public was cut from"
 
-outstanding=()
+# A newline-separated list, not an array. macOS ships bash 3.2, where `set -u`
+# and an *empty* array are incompatible: `${#empty[@]}` is an unbound-variable
+# error rather than zero, so the "nothing outstanding" path — the one this
+# script takes most often — was the one path that could not run. It exited
+# silently at the line that counted them, which is exactly the failure a
+# release gate must not have.
+outstanding=""
 while read -r sha; do
   [ -n "$sha" ] || continue
-  printf '%s\n' "$carried" | grep -q "^$sha$" || outstanding+=("$sha")
+  printf '%s\n' "$carried" | grep -q "^$sha$" || outstanding="$outstanding$sha
+"
 done < <(git log "$baseline..$SOURCE_BRANCH" --format=%H --reverse)
 
-if [ ${#outstanding[@]} -eq 0 ]; then
+count="$(printf '%s' "$outstanding" | grep -c . || true)"
+if [ "${count:-0}" -eq 0 ]; then
   say "Nothing outstanding. Public is up to date."
   exit 0
 fi
 
-echo "     ${#outstanding[@]} commit(s) to carry:"
-for sha in "${outstanding[@]}"; do
+echo "     $count commit(s) to carry:"
+printf '%s' "$outstanding" | while read -r sha; do
+  [ -n "$sha" ] || continue
   printf '       %s  %s\n' "$(git rev-parse --short "$sha")" "$(git log -1 --format=%s "$sha")"
 done
 
@@ -148,7 +162,7 @@ if [ "$DRY_RUN" = 1 ]; then
 fi
 
 git switch -q "$BRIDGE_BRANCH"
-for sha in "${outstanding[@]}"; do
+for sha in $outstanding; do
   # `--allow-empty` because the docs-freshness escape hatch is an empty commit
   # by design, and it has to reach public with the rest.
   if ! git cherry-pick -x --allow-empty "$sha"; then
