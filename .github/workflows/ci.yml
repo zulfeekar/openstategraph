@@ -254,7 +254,15 @@ jobs:
           if [ -z "$code" ]; then
             echo "No src/ or backend/ changes — nothing to check."; exit 0
           fi
-          docs=$(printf '%s\n' "$changed" | grep -E '^(README\.md|docs/|openwiki/)' || true)
+          # CHANGELOG.md is documentation of what changed and belongs in this
+          # list on its own terms — found the hard way when a real security
+          # fix (chat.html's escaper, d55c06c6) shipped with exactly the entry
+          # this gate asks for, under Unreleased's own `### Fixed`, and this
+          # gate still failed: its pattern only ever recognised README.md,
+          # docs/ and openwiki/, so a changelog-only doc update read as no
+          # documentation at all. The gate had been telling authors to write
+          # something it could not see.
+          docs=$(printf '%s\n' "$changed" | grep -E '^(README\.md|CHANGELOG\.md|docs/|openwiki/)' || true)
           if [ -n "$docs" ]; then
             echo "Docs updated alongside code:"; printf '%s\n' "$docs"; exit 0
           fi
