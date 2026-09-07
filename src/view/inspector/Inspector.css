@@ -1,0 +1,257 @@
+.inspector {
+  flex: none;
+}
+
+.inspector__description {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  line-height: var(--line-height-relaxed);
+}
+
+.inspector__stats {
+  display: flex;
+  gap: var(--space-3);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.inspector__port {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.inspector__port-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The link mode's two endpoint rows (ticket 24). Same shape as a port row —
+   a name that truncates, a badge that never does — because they are the same
+   idea read from the link's side rather than the node's. */
+.inspector__link-end {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.inspector__link-node {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.inspector__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.inspector__error {
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+  font: var(--type-caption);
+  line-height: var(--line-height-snug);
+}
+
+/* Run log: monospaced and dense — it's a trace, read by scanning. */
+.inspector__log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--box-inset-dense);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface-sunken);
+  border: var(--border-width-hairline) solid var(--color-border);
+  font: var(--type-mono-sm);
+  color: var(--color-text-secondary);
+  max-height: 200px;
+  overflow-y: auto;
+  counter-reset: log;
+}
+
+.inspector__log li {
+  display: flex;
+  gap: var(--space-2);
+  word-break: break-word;
+}
+
+.inspector__log li::before {
+  counter-increment: log;
+  content: counter(log);
+  flex: none;
+  min-width: 1.2em;
+  text-align: right;
+  color: var(--color-text-quaternary);
+}
+
+.inspector__diagnostic {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font: var(--type-caption);
+  line-height: var(--line-height-snug);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  transition: var(--transition-colors);
+}
+
+.inspector__diagnostic:hover:not(:disabled) {
+  background: var(--color-bg-muted);
+}
+
+.inspector__diagnostic:disabled {
+  cursor: default;
+}
+
+.inspector__diagnostic--error {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
+.inspector__diagnostic--warning {
+  background: color-mix(in srgb, var(--color-status-warning) 12%, transparent);
+  color: color-mix(in srgb, var(--color-status-warning) 85%, var(--color-text-primary));
+}
+
+/* Progressive disclosure for a group's advanced fields (ticket 38). */
+.inspector__advanced {
+  margin-top: var(--space-2);
+}
+
+.inspector__advanced-summary {
+  cursor: pointer;
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+  user-select: none;
+  margin-bottom: var(--space-2);
+}
+
+.inspector__advanced-summary:hover {
+  color: var(--color-text-primary);
+}
+
+/* Locked prompt sections (ticket 31): visible, never editable. */
+.inspector__locked {
+  margin: 0 0 var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+}
+.inspector__locked-row {
+  margin: 0;
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+  border-left: var(--border-width-marker) solid var(--color-border);
+  padding-left: var(--space-2);
+}
+.inspector__locked-tag {
+  display: block;
+  font-size: var(--font-size-10);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+  margin-bottom: var(--space-0-5);
+}
+
+/* The "overridden" badge on a field label, while a mount is displayed
+   (ticket 42). A button rather than a chip because it *does* something —
+   clicking it drops this instance's override and the package's own value
+   applies again. Sized to sit inside the label row without changing its
+   height, since fields are rendered on height-constrained node cards too. */
+.field__override {
+  font: inherit;
+  font-size: var(--font-size-11);
+  line-height: 1;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+  /* `--color-accent-border/-subtle/-text` — three names this product has never
+     declared, so all three fallbacks were in force and the badge was ink on
+     nothing inside a currentColor hairline. It is the quiet one of the pair on
+     purpose: an override is the ordinary state of a mount, and the roles below
+     are the ones the theme already has for "a chip that is not saying
+     anything alarming".
+
+     No `--color-accent-*` role was minted to keep the old spelling alive. In
+     this identity the accent tint and the accent text step are already
+     declared, under the names `--color-danger-subtle` and `--color-danger` —
+     one accent voice, and it is red. A synonym would have been the same two
+     values under a second name, and would have made the revert button the
+     colour of an error. */
+  border: var(--border-width-hairline) solid var(--color-border);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.field__override:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* "Push to package" (`production-ready` 17) — beside `.field__override`,
+   never the same colour: the revert goes back to the package's value, this
+   one writes a new one *into* the package for every mount that does not
+   already narrow it, and the two must not be mistaken for one control with
+   two labels. */
+.field__push {
+  font: inherit;
+  font-size: var(--font-size-11);
+  line-height: 1;
+  padding: 0.125rem 0.375rem;
+  margin-left: 0.25rem;
+  border-radius: var(--radius-sm);
+  /* And this is the loud one, which is the whole point of the paragraph above
+     it: the two controls had asked for `--color-accent-*` and
+     `--color-warning-*`, neither of which exists, so both fell to
+     `currentColor` on transparent and the two buttons that "must not be
+     mistaken for one control with two labels" rendered **identically**.
+
+     `--color-warning-*` was not minted either, and the reason is contrast
+     rather than taste: the amber ramp this product carries stops at
+     `--amber-600` (#d97706), which is 3.0:1 on `--amber-50` — a warning
+     nobody can read at 11px. The accent voice is the one step the design
+     system publishes *as* accent text at body size (`--osg-accent-700`,
+     6.35:1), and it is already declared as `--color-danger`. Writing into a
+     package for every mount that has not narrowed the field is the
+     consequential half of this pair, so it gets it. */
+  border: var(--border-width-hairline) solid var(--color-danger);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+  cursor: pointer;
+}
+
+.field__push:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* Reported in place — this deep in the tree there is no toast context
+   (`CompositionBody`'s `OpenMount` makes the same call). Pre-line so the
+   confirmation's own blank-line-separated sentences (the instance count,
+   the shadowing warning) stay legible rather than running together. */
+.field__push-result {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: var(--font-size-11);
+  white-space: pre-line;
+}

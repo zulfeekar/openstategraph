@@ -1,0 +1,80 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Code graph — derived, rebuild with `graphify update .`
+graphify-out/
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Local env and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Python (backend, not yet created)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Test output. `.coverage` is the sqlite database a coverage run writes: a
+# build artifact with no reader, carrying the absolute paths of whichever
+# machine produced it. It was tracked until `publishable/04`, which is what an
+# artifact with no ignore rule does — an untracked file comes back on the next
+# careless `git add`.
+coverage/
+.coverage
+.coverage.*
+.gstack/
+
+# No PDF belongs at the repository root. A third party's article was committed
+# there and went unnoticed for weeks (`publishable/04`); republishing somebody
+# else's copyrighted work is the reason that mattered, and a careless `git add`
+# at the root is how it arrived. Anchored, so a PDF that a document genuinely
+# needs can still live beside that document. `git add -f` is the hatch.
+/*.pdf
+
+# Code Workshop workflow — runtime jail and PR dry-run output, never sources
+harness-loop-graph.pdf
+.claude/settings.local.json
+.dev/
+
+# Runtime state, not content: thread checkpoints (ticket 05) live beside the
+# workflow packages they are state about. The -wal/-shm siblings are sqlite's.
+.openstategraph/
+workflows/.openstategraph/
+test-results/
+playwright-report/
+
+# Internal planning substrate — local only, never published
+.scratch/
+HANDOVER.md
+
+# The refused-term table for `backend/tests/test_the_tree_is_publishable.py`.
+# The gate is the one place a client engagement is named, and `publishable/06`
+# measured what that cost: tracked, the gate would have published the list it
+# exists to keep out, in the commit and in the sdist both. So the words live
+# here, untracked, and the gate loads them — skipping loudly when the file is
+# absent rather than reporting a green it did not earn. At the repository root
+# on purpose: the sdist is built from `backend/`, so a table up here cannot
+# reach a distribution even if this rule were deleted.
+/.engagement-terms.json
+
+# The migration CLI's own scratch directory. It caches a version string and a
+# link state for whichever project a maintainer is pointed at — a working note
+# of one machine, not a fact about this repository, and the one file it holds
+# today is the CLI's latest version number (team-board-and-gap-reports/09).
+supabase/.temp/

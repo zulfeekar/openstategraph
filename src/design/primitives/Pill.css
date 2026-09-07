@@ -1,0 +1,131 @@
+/* ---------- Pill — a runtime chip, and what it opens ----------
+ *
+ * `canvas-feels-right/07`. **The look is the promise**: a pill must be
+ * visibly not a node. So it borrows nothing from `.node` — no card surface,
+ * no border radius from the node scale, no port geometry, no shadow that
+ * reads as "sitting on the canvas". It is a rounded chip in the caption type
+ * scale, the same rail marks `Thinking` uses, and it is transparently a piece
+ * of chrome about a run rather than a piece of the document.
+ */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  /* Fully round. The one shape nothing on this canvas is: every node card is
+     a rectangle on the node radius scale, so a stadium is unmistakable at a
+     glance and at any zoom. */
+  border-radius: 999px;
+  padding: 2px var(--space-2) 2px var(--space-1-5);
+  border: var(--border-width-hairline) dashed var(--color-border);
+  background: var(--color-bg-surface-sunken);
+  color: var(--color-text-tertiary);
+  font: var(--type-caption);
+  cursor: pointer;
+  max-width: 100%;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+/* Dashed, and it is not decoration: a solid outline is what every savable
+   thing on this surface wears. A dashed one says "this is not in the file"
+   without a word of copy, which is the constraint the ticket spends its
+   longest paragraph on. */
+
+.pill:hover,
+.pill--open {
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+}
+
+/* No `:focus-visible` block of its own. There was one — a 2px outline in
+   `--color-accent`, a name this product has never declared, so the whole
+   declaration was invalid at computed-value time and the pill had **no focus
+   ring at all**. An invalid `var()` does not fall through to the rule below
+   it; it unsets the property. Deleting it is the fix rather than renaming it:
+   `reset.css` already draws one ring for every interactive surface, and a
+   chip on the canvas is not the place to invent a second geometry. */
+
+.pill__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pill__detail {
+  color: var(--color-text-quaternary);
+  white-space: nowrap;
+}
+
+/* Two `var()` fallbacks stood here — `--color-text-tertiary` behind the
+   detail's ink and `--color-border-default` behind this mark — and neither
+   could ever render: both outer names are declared at `:root`, so they are in
+   scope on every element in both themes and nothing behind them is reachable.
+   Deleted rather than renamed; the values on screen are unchanged, because
+   they were always the outer names'. `the-look-has-an-author-now/10`.
+
+   The mark: the same dot the thinking rail uses, so a pill and the account it
+   opens read as one system rather than two features. */
+.pill__mark {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-border);
+}
+
+/* The comment above says this is the dot the thinking rail uses, and now it
+   is: `--color-status-running`, exactly as `.thinking--live .thinking__mark`.
+   It was `--color-accent`, which resolved to nothing, so the mark the whole
+   `--live` state exists to show was drawn in no colour whatsoever. */
+.pill--live .pill__mark {
+  background: var(--color-status-running);
+  animation: pill-pulse 1.6s var(--ease-in-out) infinite;
+}
+
+@keyframes pill-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill--live .pill__mark {
+    animation: none;
+  }
+}
+
+/* ---------- the popover ---------- */
+
+.pill-popover {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-popover);
+  width: min(380px, calc(100vw - 32px));
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface-raised);
+  border: var(--border-width-hairline) solid var(--color-border);
+}
+
+.pill-popover__title {
+  margin: 0 0 var(--space-2);
+  font: var(--type-label);
+  color: var(--color-text-primary);
+}
+
+.pill-popover__brief {
+  margin: 0 0 var(--space-2);
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+}
+
+.pill-popover__note {
+  margin: var(--space-2) 0 0;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}

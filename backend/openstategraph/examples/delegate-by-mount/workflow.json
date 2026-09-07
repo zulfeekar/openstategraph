@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "name": "Delegate by Mount",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Delegate by Mount",
+    "settings": {
+      "purpose": "Delegation, as far as today's vocabulary reaches: a classifier picks one of two whole packages, and that package answers. A supervisor of packages rather than of agents."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Request",
+        "data": {},
+        "position": {
+          "x": 40,
+          "y": 320
+        }
+      },
+      {
+        "id": "router1",
+        "type": "route.classifier",
+        "title": "Which package answers this",
+        "data": {
+          "branches": [
+            {
+              "id": "b-database",
+              "name": "database"
+            },
+            {
+              "id": "b-web",
+              "name": "web"
+            }
+          ],
+          "fallback": "web",
+          "rules": "database: asks for a figure, a count, a total or a ranking that would be looked up in this company's own records — customers, invoices, tracks, albums, genres.\nweb: asks about anything outside this company — a release, a project, a person, a news item, a fact that lives on the open web.\n\nRoute on where the answer lives, never on how the question is phrased. \"How many\" is a database question when the thing being counted is ours and a web question when it is not."
+        },
+        "position": {
+          "x": 380,
+          "y": 320
+        }
+      },
+      {
+        "id": "mount-sql",
+        "type": "workflow.subgraph",
+        "title": "SQL QA",
+        "data": {
+          "workflow": "sql-qa"
+        },
+        "position": {
+          "x": 760,
+          "y": 180
+        }
+      },
+      {
+        "id": "mount-web",
+        "type": "workflow.subgraph",
+        "title": "Web Research Digest",
+        "data": {
+          "workflow": "web-research-digest",
+          "outcome": "Loops until its own grader accepts a digest with a source it actually fetched."
+        },
+        "position": {
+          "x": 760,
+          "y": 460
+        }
+      },
+      {
+        "id": "out-database",
+        "type": "output.formatted",
+        "title": "Database answer",
+        "data": {},
+        "position": {
+          "x": 1120,
+          "y": 180
+        }
+      },
+      {
+        "id": "out-web",
+        "type": "output.formatted",
+        "title": "Web digest",
+        "data": {},
+        "position": {
+          "x": 1120,
+          "y": 460
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "router1",
+          "portId": "question"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-database"
+        },
+        "target": {
+          "nodeId": "mount-sql",
+          "portId": "input"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "router1",
+          "portId": "branch:b-web"
+        },
+        "target": {
+          "nodeId": "mount-web",
+          "portId": "input"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "mount-sql",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out-database",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "mount-web",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "out-web",
+          "portId": "result"
+        }
+      }
+    ]
+  }
+}

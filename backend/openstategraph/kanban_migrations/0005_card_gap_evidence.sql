@@ -1,0 +1,33 @@
+-- The finding a patrol card was minted from — team-board-and-gap-reports/15.
+--
+-- `08` shipped a report door that takes a type id and refused a card id by
+-- name, because a `Card` recorded nothing a report could be built from: the
+-- classifier's prose, and no type ids. `15` settled the judgement — a run
+-- failure *is* a reportable gap, in this codebase's own words rather than in
+-- the driver's — and this column is what a later reader needs to build one,
+-- since the run it was read from is not something a card carries.
+--
+-- JSON in a text column, not four columns: the finding name, the tool type
+-- ids, the refusal text as recorded, and the hash of the report they make.
+-- Three of the four are lists or absent, nothing queries them from SQL, and
+-- the reader that matters re-validates the whole thing through `GapReport` —
+-- so a row edited by hand is refused at the door rather than trusted for
+-- having come out of our own store.
+--
+-- Additive and idempotent, the rule every file here follows: both appliers
+-- (the store's own runner and the maintainers' migration CLI) run every file
+-- they find unrecorded. A card filed before this column existed reads back as
+-- `''`, which is what it means — no finding behind this card.
+--
+-- No `create table`, so no row-security block: `0002` and `0004` already own
+-- `public.cards`, and the census in
+-- `tests/test_every_table_the_board_creates_has_row_security.py` derives the
+-- table set from the files that create one.
+--
+-- Not `finding_hash`, which `0003` added and which belongs to the keyless
+-- door: that column is the identity of a *filed report*, unique per project
+-- and conflicted on by `file_gap_report`. Writing a patrol's evidence into it
+-- would make two local cards about two findings collide on one row.
+
+alter table public.cards
+    add column if not exists gap_evidence text not null default '';

@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "name": "Budget Exhaustion",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Budget Exhaustion",
+    "settings": {
+      "purpose": "A loop that stops without ever passing: the grader's criteria contradict each other, the attempt counter runs out, and the last candidate ships anyway."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Question",
+        "data": {},
+        "position": { "x": 40, "y": 200 }
+      },
+      {
+        "id": "draft1",
+        "type": "agent.llm",
+        "title": "Answer",
+        "data": {
+          "systemPrompt": "Answer the user's question in exactly seven words. Count them before you reply. No preamble, no heading, no trailing punctuation beyond a full stop.\n\nWhen you are given feedback on a previous attempt, treat it as the specification and try again. If the feedback asks for something that cannot be true at the same time as the seven-word limit, keep the seven words and answer as well as you can — a partly-satisfying answer is worth more than none."
+        },
+        "position": { "x": 380, "y": 200 }
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "title": "Impossible rubric",
+        "data": {
+          "criteria": "- The answer must be exactly seven words. Count them.\n- The answer must ALSO contain a full explanation of the reasoning, in at least forty words, in the same answer.\n- Both rules are mandatory and neither may be relaxed.\n- If it falls short, say which rule it broke and by how much.",
+          "rulesMode": "extend",
+          "maxAttempts": 2
+        },
+        "position": { "x": 720, "y": 200 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Last candidate",
+        "data": {},
+        "position": { "x": 1060, "y": 200 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "draft1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "draft1", "portId": "result" },
+        "target": { "nodeId": "grader1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "revise" },
+        "target": { "nodeId": "draft1", "portId": "feedback" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "pass" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mockup: first visit</title>
+<style>
+:root{--ink:#1f2328;--muted:#6b7280;--ground:#f7f8fa;--surface:#fff;--line:#d9dde3;--accent:#2f6fed;font-family:-apple-system,Inter,system-ui,sans-serif;font-size:13px;color:var(--ink)}
+body{margin:0;background:var(--ground)}
+.top{height:40px;border-bottom:1px solid var(--line);background:var(--surface);display:flex;align-items:center;padding:0 12px;gap:12px}
+.run{margin-left:auto;background:#1a7f37;color:#fff;border:0;border-radius:4px;padding:5px 12px;font-weight:600}
+.canvas{position:relative;height:520px;background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:20px 20px}
+.note{position:absolute;left:60px;top:40px;width:400px;background:#fffbe6;border:1px solid #e6d98a;border-radius:6px;padding:12px 14px;line-height:1.45}
+.note h3{margin:0 0 6px;font-size:14px}
+.node{position:absolute;top:290px;width:210px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.node b{display:block;margin-bottom:6px}.node .f{border:1px solid var(--line);border-radius:4px;padding:6px;color:var(--ink);background:#fff;min-height:34px}
+.edge{position:absolute;top:322px;height:2px;background:var(--muted)}
+.hint{color:var(--muted)}
+</style></head><body>
+<div class="top"><b>OpenStateGraph</b> <span class="hint">Untitled · Draft</span><button class="run">▶ Run</button></div>
+<div class="canvas">
+  <div class="note"><h3>Start here — press Run</h3>
+    The question is already typed into the <b>Input</b>. The <b>Agent</b> answers it with the model you have configured, and the <b>Output</b> shows the answer.<br><br>
+    After it runs, this note will say what happened and what to change next. Delete it whenever you like; the three nodes stay.</div>
+  <div class="node" style="left:60px"><b>Input</b><div class="f">In one paragraph, what is a state graph and why would I draw one instead of writing a script?</div></div>
+  <div class="edge" style="left:270px;width:60px"></div>
+  <div class="node" style="left:330px"><b>Agent</b><div class="f hint">Model: your default · Rules: answer plainly, cite nothing you did not read</div></div>
+  <div class="edge" style="left:540px;width:60px"></div>
+  <div class="node" style="left:600px"><b>Output</b><div class="f hint">The answer will appear here.</div></div>
+</div>
+</body></html>

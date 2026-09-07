@@ -1,0 +1,47 @@
+{
+  "version": 3,
+  "name": "{{name}}",
+  "settings": {},
+  "nodes": [
+    { "id": "in1", "type": "input.text", "data": {}, "position": { "x": 40, "y": 200 } },
+    {
+      "id": "agent1",
+      "type": "agent.llm",
+      "title": "Draft",
+      "data": {
+        "systemPrompt": "Answer the user's request directly and completely.\n\nWhen you are given feedback on a previous attempt, treat it as the specification: fix exactly what it names, keep what it did not object to, and do not start over."
+      },
+      "position": { "x": 380, "y": 200 }
+    },
+    {
+      "id": "grader1",
+      "type": "route.grader",
+      "title": "Review",
+      "data": {
+        "criteria": "- The answer must address the request that was actually made.\n- Every factual claim must carry a citation or be marked as uncertain — never invented.\n- Say what is wrong specifically enough that the next attempt can fix it.",
+        "rulesMode": "extend",
+        "maxAttempts": 2
+      },
+      "position": { "x": 740, "y": 200 }
+    },
+    { "id": "out1", "type": "output.formatted", "data": {}, "position": { "x": 1100, "y": 200 } }
+  ],
+  "edges": [
+    {
+      "source": { "nodeId": "in1", "portId": "text" },
+      "target": { "nodeId": "agent1", "portId": "prompt" }
+    },
+    {
+      "source": { "nodeId": "agent1", "portId": "result" },
+      "target": { "nodeId": "grader1", "portId": "candidate" }
+    },
+    {
+      "source": { "nodeId": "grader1", "portId": "pass" },
+      "target": { "nodeId": "out1", "portId": "result" }
+    },
+    {
+      "source": { "nodeId": "grader1", "portId": "revise" },
+      "target": { "nodeId": "agent1", "portId": "feedback" }
+    }
+  ]
+}

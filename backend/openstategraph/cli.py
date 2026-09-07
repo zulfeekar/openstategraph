@@ -1,0 +1,3461 @@
+"""`openstategraph` — the console script.
+
+**Tier 2, provisional** as a Python module; the *command line* is the actual
+contract and it follows the Tier 1 deprecation policy in `docs/stability.md`.
+Nobody should be importing this module; everybody may depend on the commands.
+
+**Why a CLI at all.** A framework is adopted in its first five minutes, and
+until now those five minutes required writing a Python file to find out whether
+a package even compiles. `openstategraph validate ./my-workflow` is the answer,
+and `openstategraph run ./my-workflow "…"` is the demo.
+
+**Two rules this module lives under, and a reviewer should enforce both:**
+
+1. **No new logic.** Every command wraps a seam that already exists —
+   `load_workflow`, `ValidateWorkflowTool`, `scaffold`, `run_build`,
+   `PackageKnowledge`, `api.main:app`, `mcp_server.main`. A command body longer
+   than argument handling plus a call is a bug: it means behaviour now exists
+   here that the library does not have, and the CLI has become a second
+   implementation of the framework.
+2. **argparse only.** `click` and `rich` are what the reference framework
+   spends half its dependency floor on. A project arguing for a four-dependency
+   core cannot then add two for colour and a decorator syntax.
+
+**Exit codes are the API for CI**, so they are fixed and few:
+
+| | |
+| --- | --- |
+| `0` | success |
+| `1` | the run failed, or validation found blocking findings |
+| `2` | usage error — bad arguments, unknown command (argparse's own code) |
+| `3` | a required extra is not installed; the message names the install line |
+
+Every command works from any working directory: paths come from the arguments
+and are resolved against the caller's cwd, and nothing is relative to a
+checkout. The commands that *create* packages — `new` and `examples copy` —
+write to `workflows_root()`, the same directory every reader resolves, with
+`--root` as the explicit override that rule already puts on top. They used to
+spell `Path.cwd() / "workflows"` themselves, which is the same answer only when
+the project happens to use the convention and you happen to be standing in it.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import textwrap
+import uuid
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence, TextIO, cast
+
+# The one import this module makes eagerly, and it is stdlib-only: `--template`
+# uses argparse `choices`, so the catalogue has to exist while the parser is
+# being built. Everything else is still imported inside its command.
+from openstategraph import templates
+
+#: Fixed, documented above, and referenced by name everywhere below so a
+#: reader never has to decode a bare integer.
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from openstategraph.kanban_store import Card, KanbanLocation
+    from openstategraph.providers import ProviderDefault, ProviderEnvironment
+    from openstategraph.results import RunResult
+
+EXIT_OK = 0
+EXIT_FAILURE = 1
+EXIT_USAGE = 2
+EXIT_MISSING_EXTRA = 3
+
+
+def _error(message: str) -> int:
+    print(message, file=sys.stderr)
+    return EXIT_FAILURE
+
+
+def _terminal_message(exc: Exception) -> str:
+    """What an uncaught exception says at the terminal — the message it was
+    raised with, never the name of the Python class that carries it.
+
+    Every exception this project raises on purpose already writes its own
+    sentence (`PackageNotFound`, `FileNotFoundError` from a missing eval
+    dataset, `ValueError` from a bad document) — that is the whole point of
+    `errors.py` existing. Prefixing it with `type(exc).__name__` does not add
+    information a reader can act on; it just makes half the CLI's errors open
+    in a different voice than the other half (ticket 83).
+    """
+    return str(exc)
+
+
+def _usage(message: str) -> int:
+    """A bad *invocation*, not a failed run — argparse's own code, so CI can
+    tell "you typed it wrong" from "it did not work"."""
+    print(message, file=sys.stderr)
+    return EXIT_USAGE
+
+
+def _ephemeral_state() -> dict[str, Any]:
+    """Durability for a command that compiles a graph and never runs it.
+
+    `organisms-first-class` 77. `load_workflow`'s defaults are the *run*
+    defaults, and they are right for a run: a sqlite saver and a sqlite store
+    under `state_dir()`, so a `human.approval` pause survives a restart. A
+    command that only compiles inherits them anyway, and the loader's
+    `WorkflowServices` is rooted at `directory.parent` — so `validate` on a
+    package created `.openstategraph/memory.sqlite` in whatever directory
+    happened to *contain* the package. A template data directory shipped in
+    the wheel, in the case that found this; a user's home or a checkout root
+    just as easily. **A command whose whole contract is "read this and tell me
+    what is wrong with it" must not write into the tree it was pointed at.**
+
+    Both handles, together, because the pair is the defect: `_compiler_findings`
+    already passed an `InMemorySaver` for exactly this reason and the Store —
+    the sibling default, added later — was simply not passed beside it, which
+    is what one of the two commands leaking one of the two files looked like.
+    Not `None` and not a skipped compile: `builder.compile(store=)` is handed
+    whatever this returns, so a compile-only command still exercises the same
+    assembly a run does, and an in-memory pair is what makes that free.
+    """
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.store.memory import InMemoryStore
+
+    return {"checkpointer": InMemorySaver(), "store": InMemoryStore()}
+
+
+def _load(args: argparse.Namespace, *, model: Any = None, ephemeral: bool = False) -> Any:
+    """The one `load_workflow` call the whole CLI shares.
+
+    `model` overrides what the arguments resolve to, for the commands that
+    compile a graph without ever calling one — see `_drawing_only_model`.
+    `ephemeral` is the same commands' answer to the same question about state:
+    see `_ephemeral_state`. Both default to the run's answer, so a command
+    opts *out* of durability by saying so rather than inheriting silence.
+    """
+    from openstategraph import load_workflow
+
+    return load_workflow(
+        args.package,
+        model=model if model is not None else getattr(args, "model", None),
+        trace_file=getattr(args, "trace_file", None),
+        knowledge_dir=getattr(args, "knowledge_dir", None),
+        **(_ephemeral_state() if ephemeral else {}),
+    )
+
+
+def _drawing_only_model() -> Any:
+    """A model for a command that compiles a graph and never calls one.
+
+    `graph` renders the compiled topology. It invokes nothing — but *building*
+    the graph built a chat model, so the command required the resolved
+    provider's integration package to be installed. In a venv holding only
+    `[ollama]`, a document that resolved to Anthropic could not be **drawn**.
+    Found by installing the wheel and using it.
+
+    Reuses the stand-in that already exists for an unconfigured provider, so
+    there is one thing in this codebase that means "a model nothing may call",
+    and it explains itself if anything ever does.
+    """
+    from openstategraph.chat_model import UnconfiguredProvider
+
+    return UnconfiguredProvider(
+        "`openstategraph graph` compiles the topology to draw it and builds no "
+        "model — nothing here should be calling one. Use `run` to execute the "
+        "workflow."
+    )
+
+
+# --------------------------------------------------------------------------
+# commands
+
+
+def split_context_flags(pairs: Sequence[str]) -> tuple[dict[str, str], str]:
+    """`--context key=value` occurrences as a mapping, or the usage error.
+
+    **Grammar only.** Whether `acme` is a legal value for `tenant` needs the
+    document, and that question is `coerce_context_flags`' — this one answers
+    only *did they type a `key=value` pair*, which is the same question
+    argparse answers for every other flag and gets the same exit code
+    (`EXIT_USAGE`). A run's exit codes are this CLI's API: a script must be
+    able to tell "you typed it wrong" from "the workflow refused it".
+
+    A value may contain `=` — `--context filter=a=b` is a filter of `a=b` —
+    because the split is on the *first* one. A key may not: there is nothing
+    before the first `=` to be one.
+    """
+    values: dict[str, str] = {}
+    for pair in pairs or ():
+        key, separator, value = pair.partition("=")
+        if not separator:
+            return {}, f"--context expects key=value, and got {pair!r}."
+        if not key.strip():
+            return {}, f"--context expects key=value, and got {pair!r} with no key before the '='."
+        values[key.strip()] = value
+    return values, ""
+
+
+def _ask(call: "Callable[[], RunResult]") -> "RunResult":
+    """One run, whichever way it ended — the report is the same either way.
+
+    `launch-readiness/171` made the library door **raise** when a run produced
+    no answer and something went wrong, because a blank line is a silent
+    failure for the reader who prints it. This command is the reader who does
+    not print it blindly: it has printed `error:` lines and exited 1 on exactly
+    that condition since `workflow-gallery` 53, and `run_exit_code` reads the
+    same predicate the raise does. So the terminal keeps the report it had, and
+    the exception is unwrapped rather than shown as a traceback — the run is on
+    the error, undamaged.
+    """
+    from openstategraph.errors import RunProducedNothing
+
+    try:
+        return call()
+    except RunProducedNothing as nothing:
+        return cast("RunResult", nothing.result)
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """`load_workflow(pkg).ask(question)`, and nothing else."""
+    workflow = _load(args)
+    # Grammar first and the document second, because the two failures are
+    # different exit codes: a pair with no `=` is a mistyped command line
+    # (2, argparse's own), and a value the *declaration* refuses is a run that
+    # cannot start (1). Both before the graph is invoked and before a single
+    # token is spent.
+    from openstategraph.compile.run_context import coerce_context_flags
+    from openstategraph.model_readiness import unmet_model_requirement
+
+    # Before the grammar and before the document, because it is cheaper than
+    # both and answers a different question: not *is this run well formed* but
+    # *has this machine anything to run it with* (`osg-agent-experience/48`).
+    # An `error:` line and exit 1, in the terminal's own shape, carrying the
+    # sentence `openstategraph providers` prints as its header — never a
+    # second wording of it.
+    unmet = unmet_model_requirement(no_model=workflow.needs_a_provider)
+    if unmet is not None:
+        return _error(unmet)
+
+    supplied, usage = split_context_flags(args.context or [])
+    if usage:
+        return _usage(usage)
+    context = coerce_context_flags(workflow.document, supplied, slug=workflow.slug)
+    # The thread id is minted HERE rather than left to `ask()` so that `--json`
+    # can report it: a caller who wants a follow-up turn needs the id of the
+    # conversation they just had, and an id generated inside the run and thrown
+    # away is an id they can never continue.
+    thread_id = args.thread_id or f"openstategraph-cli-{uuid.uuid4().hex}"
+    result = _ask(
+        lambda: workflow.ask(
+            args.question,
+            thread_id=thread_id,
+            context=context or None,
+            # `kanban-patrol/08`'s self-reference marker, carried into the run
+            # store's `session_id` so a later patrol can tell a run somebody
+            # *made while working the board* from ordinary traffic.
+            session_id=getattr(args, "session_id", None),
+        )
+    )
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "answer": result.answer,
+                    "decisions": result.decisions,
+                    # Every branch a parallel router matched, beside the one
+                    # it dispatched on (`launch-readiness/175`). A script
+                    # piping this must be able to tell a run that opened two
+                    # desks from one that opened one.
+                    "routes": result.routes,
+                    "outputs": result.outputs,
+                    "warnings": result.warnings,
+                    "attempts": result.attempts,
+                    # What the run spent, per model, and one total beside it
+                    # (`workflow-gallery` 35). `total_tokens` is `null` — never
+                    # `0` — when no provider reported: a script piping this
+                    # must be able to tell "free" from "nobody said".
+                    "usage": result.usage,
+                    "total_tokens": result.total_tokens,
+                    # `null` for a run that finished. A script piping this must
+                    # be able to tell an answer from a question it was asked
+                    # (`workflow-gallery` 24).
+                    "pause": result.pause,
+                    "thread_id": thread_id,
+                    "slug": workflow.slug,
+                },
+                indent=2,
+            )
+        )
+        return run_exit_code(result)
+
+    for line in run_report_lines(result):
+        # Degrade loud, never silent — on stderr, so `run … > answer.txt` still
+        # gives you only the answer while the degradation stays visible.
+        print(line, file=sys.stderr)
+    for line in pause_report_lines(result, package=args.package, thread_id=thread_id):
+        print(line, file=sys.stderr)
+    print(result)
+    return run_exit_code(result)
+
+
+def resume_command_line(package: str, thread_id: str) -> str:
+    """The one spelling of the command that finishes a paused run.
+
+    `run`'s pause report and `threads show`'s both name this verb, and a
+    paused thread has exactly one true resume command — so both build the
+    line here rather than each writing its own sentence. `ship-it` 52 and 53
+    each found a second, drifted spelling of a sentence that should have had
+    one home; this is that home for the resume line (`workflow-gallery` 76).
+    """
+    return f"openstategraph resume {package} {thread_id} --approve | --reject --feedback '…'"
+
+
+def mount_chain_line(pause: Mapping[str, Any] | None) -> str:
+    """The mounted packages a pause is waiting inside, as one readable phrase.
+
+    Empty for a gate in the document a person actually ran, which is where a
+    gate usually is. When it is not, the question on screen was written by a
+    package the top document merely *mounts*, and until this there was nothing
+    on any surface saying so — the reviewer answering a day later could read
+    the gate's sentence and still not know which document to open
+    (`organisms-first-class` 64).
+
+    One phrasing, built here and printed by both the run report and the resume
+    announcement, because a pause described two ways is a pause described
+    wrongly once.
+    """
+    chain = (pause or {}).get("mount") or []
+    if not isinstance(chain, (list, tuple)):
+        return ""
+    names = [
+        str((step or {}).get("workflow") or "").strip()
+        for step in chain
+        if isinstance(step, Mapping)
+    ]
+    named = [name for name in names if name]
+    if not named:
+        return ""
+    return " -> ".join(named) + (
+        " (a workflow this one mounts)"
+        if len(named) == 1
+        else " (workflows this one mounts, outermost first)"
+    )
+
+
+def pause_report_lines(result: "RunResult", *, package: str, thread_id: str) -> list[str]:
+    """What a run that stopped at a `human.approval` gate has to say for itself.
+
+    Empty for every run that finished, which is nearly all of them.
+
+    A paused run answered *nothing* and used to say so with an empty line and
+    exit 0 — the same silence the blocking HTTP endpoint refuses with a 409
+    naming the endpoint that can carry it. This is that refusal at the
+    terminal, and it goes one further: it names the exact command, because the
+    pause report is the only place a person learns the verb exists.
+    """
+    if not result.pause:
+        return []
+    pause = result.pause
+    lines = [f"paused: {pause.get('message') or 'a decision is needed'}"]
+    candidate = str(pause.get("candidate") or "").strip()
+    if candidate:
+        lines.append(f"  candidate: {candidate}")
+    asked_by = mount_chain_line(pause)
+    if asked_by:
+        lines.append(f"  asked by: {asked_by}")
+    lines.append(f"  thread: {thread_id}")
+    lines.append(f"  finish it: {resume_command_line(package, thread_id)}")
+    return lines
+
+
+def cmd_resume(args: argparse.Namespace) -> int:
+    """`CompiledWorkflow.resume` — the other half of `run`, and its own verb.
+
+    A person is the only thing a `human.approval` node is waiting for, and the
+    terminal is where a person is already sitting; until this, a run could be
+    *started* there and finished only over HTTP.
+
+    The decision is a **required** choice between two flags rather than a value
+    with a default, so the one thing this command cannot do is guess a verdict
+    nobody gave — argparse refuses with the usage code, before anything is
+    loaded or resumed.
+
+    It says what it is about to do first. A resume runs the rest of the graph
+    against a durable checkpoint — every tool downstream of the gate, for real
+    — and consumes the pause, so the announcement is the last moment a
+    `Ctrl-C` still means something. On stderr, so `resume … > answer.txt` is
+    still just the answer.
+    """
+    decision = "approve" if args.approve else "reject"
+    if args.feedback and decision == "approve":
+        return _usage(
+            "--feedback is a note on a rejection; an approval carries none. "
+            "Drop it, or say --reject."
+        )
+
+    workflow = _load(args)
+    pause = workflow.pause(args.thread_id)
+    if pause is None:
+        return _error(
+            f"thread {args.thread_id!r} is not paused — there is nothing waiting "
+            "for a decision. `openstategraph threads list` reports which threads are"
+        )
+    print(f"resuming {args.thread_id} with: {decision}", file=sys.stderr)
+    print(f"  gate: {pause.get('message') or ''}", file=sys.stderr)
+    print(f"  candidate: {str(pause.get('candidate') or '').strip()}", file=sys.stderr)
+    asked_by = mount_chain_line(pause)
+    if asked_by:
+        print(f"  asked by: {asked_by}", file=sys.stderr)
+    print("  this runs the rest of the workflow and cannot be undone", file=sys.stderr)
+
+    result = _ask(
+        lambda: workflow.resume(args.thread_id, decision=decision, feedback=args.feedback)
+    )
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "answer": result.answer,
+                    "decisions": result.decisions,
+                    # Every branch a parallel router matched, beside the one
+                    # it dispatched on (`launch-readiness/175`). A script
+                    # piping this must be able to tell a run that opened two
+                    # desks from one that opened one.
+                    "routes": result.routes,
+                    "outputs": result.outputs,
+                    "warnings": result.warnings,
+                    "attempts": result.attempts,
+                    "usage": result.usage,
+                    "total_tokens": result.total_tokens,
+                    "pause": result.pause,
+                    "thread_id": args.thread_id,
+                    "slug": workflow.slug,
+                },
+                indent=2,
+            )
+        )
+        return run_exit_code(result)
+
+    for line in run_report_lines(result):
+        print(line, file=sys.stderr)
+    # A rejection re-enters the drafter and stops at the same gate again, so a
+    # resumed run pauses exactly as a started one does — and reports it the
+    # same way, with the command to type next.
+    for line in pause_report_lines(result, package=args.package, thread_id=args.thread_id):
+        print(line, file=sys.stderr)
+    print(result)
+    return run_exit_code(result)
+
+
+def run_report_lines(result: "RunResult") -> list[str]:
+    """A run's health report, prefixed by what each line actually is.
+
+    Every line used to be `warning:` — including the one that ended the run
+    and produced the `1` this command exits with, so a reader grepping for
+    `error:` on a failed run found nothing and the prefix contradicted the
+    exit code beside it (`workflow-gallery` 44).
+
+    The split it needs already exists and is the same one `run_exit_code`
+    gates on: `failures` is the claim the run failed, `warnings` is the whole
+    report (`workflow-gallery` 49). So the prefix is derived from that
+    membership rather than decided here — one rule, one place, and a line
+    cannot be an `error:` on one surface and a `warning:` on the next.
+
+    Order is `warnings`' order, which puts compile findings before what
+    happened when it ran. Demoting nothing: a failure keeps its position.
+
+    A failure absent from `warnings` is still printed, at the end. `ask()`
+    builds the two so that `failures` is a subset — but a `RunResult` can be
+    assembled by hand, for a resumed run or a test, and a reason this function
+    silently dropped would be exactly the silence this ticket is about.
+    """
+    failures = set(result.failures)
+    lines = [
+        f"{'error' if warning in failures else 'warning'}: {warning}" for warning in result.warnings
+    ]
+    reported = set(result.warnings)
+    lines += [f"error: {failure}" for failure in result.failures if failure not in reported]
+    return lines
+
+
+def run_exit_code(result: "RunResult") -> int:
+    """`0` unless the run produced no answer *and* something went wrong.
+
+    **This is the one place the rule lives**, which ticket 53 asked for in as
+    many words: two failure modes were exiting with two different codes and
+    the rule was decided per call site, so nobody could say what a `1` meant.
+
+    Found by building the wheel and using it: a new user's first `run` after
+    `new` has no provider credential, and got back an empty line and a success
+    exit code. The diagnosis was in `outputs` and only `--json` showed it.
+
+    The condition is deliberately both halves, not either:
+
+    - **A step failed but there is still an answer** is a *degrade*, which this
+      project prefers to a crash — a workflow whose optional tool was missing
+      still answered, and failing the exit code there would make every partial
+      run look broken. The warning on stderr is the report.
+    - **An empty answer with nothing wrong** is legal too; a workflow may
+      answer with nothing.
+
+    Only the pair is a failed run, and a CLI that calls that success is a CLI
+    a script cannot gate on.
+
+    Both halves were being asked too narrowly, which is how a workflow
+    mounting `no-such-package-anywhere` exited 0 (ticket 53):
+
+    - *"produced no answer"* now includes `NO_ANSWER_PRODUCED`. The output
+      node substitutes that sentence when it has nothing, so the string was
+      never empty and the first test short-circuited every time.
+    - *"something went wrong"* now includes `result.warnings`. A failed node
+      leaves a marker in `outputs`; a mount that could not be loaded leaves
+      none — it is a **compile** finding, and it arrives on `warnings`, which
+      this function was not reading.
+
+    **It reads `result.failures`, not `result.warnings`, and that is the whole
+    reason the split exists.** `warnings` became the run's full health report
+    when the library door was joined to `run_health` (`workflow-gallery` 49),
+    and that report includes a node that produced nothing — which
+    `silent_node_warnings` says must never reach an exit code: *a silent node
+    is a report about how the answer was reached, not a claim that the run
+    failed*. Gating on `warnings` would have made every legally-empty answer
+    with a quiet node exit 1. `failures` carries both of the things this
+    function ever wanted, so `outputs` is now belt to its braces rather than
+    the only strap.
+    """
+    from openstategraph.results import produced_nothing
+
+    # **A pause is checked before the answer, and it is the one condition that
+    # does not need "and something went wrong"** (`workflow-gallery` 24). A run
+    # stopped at a `human.approval` gate has not failed and has not answered —
+    # it is waiting — and a CLI that calls that success is a CLI that reports a
+    # truncated run as a finished one. The blocking HTTP endpoint has refused
+    # the same document with a 409 since the node shipped; this is that
+    # refusal's exit code.
+    if result.pause:
+        return EXIT_FAILURE
+    # The rest of the rule moved to `results.produced_nothing` when the library
+    # door began raising on it (`launch-readiness/171`). It is the same
+    # condition, argued in the same words, read from one place so an exit code
+    # and a raise cannot disagree about what a failed run is. The pause line
+    # above stays here: a *command* that did not finish is not a success, while
+    # a library caller gets the pause on `.pause` and decides for itself.
+    return EXIT_FAILURE if produced_nothing(result) else EXIT_OK
+
+
+def cmd_eval(args: argparse.Namespace) -> int:
+    """`evaluation.evaluate_package` — the harness's one seam, printed.
+
+    Exits 1 below `--threshold` so a CI job can gate on it. The gate is
+    *overall* accuracy (answerable questions graded by execution accuracy,
+    unanswerable ones by whether the system declined): gating on execution
+    accuracy alone would let a system score well by inventing an answer to
+    every question it cannot possibly know.
+
+    **This costs money and calls a model.** It is not in the default test run;
+    see `docs/evaluation.md`. `--repeat N` multiplies that cost by N and buys
+    the agreement rate — whether the same question gives the same answer —
+    which is **reported and never gated**, for the reason
+    `launch-readiness/126` names: a flaky check allowed to stay red teaches
+    everyone to ignore it.
+    """
+    from openstategraph.evaluation import evaluate_package
+
+    scorecard = evaluate_package(
+        args.package,
+        dataset_path=args.dataset,
+        model=args.model,
+        limit=args.limit,
+        # `launch-readiness/126`. The first repetition is the one that scores;
+        # the rest only answer "did the same question give the same answer",
+        # and no exit code reads it.
+        repeat=getattr(args, "repeat", 1),
+        # Progress on stderr, so `eval --json > card.json` still pipes cleanly
+        # and a thirty-question run is not thirty minutes of silence.
+        on_item=None
+        if args.json
+        else lambda item: print(f"  {item.case_id:<6} {item.verdict}", file=sys.stderr, flush=True),
+    )
+    print(json.dumps(scorecard.to_json(), indent=2) if args.json else scorecard.render())
+    return EXIT_OK if scorecard.meets(args.threshold) else EXIT_FAILURE
+
+
+def _compiler_findings(package: Path) -> tuple[list[str], list[str]]:
+    """What the compiler noticed while building this package: (problems, notes).
+
+    `organisms-first-class` 66. This docstring used to be a lie by omission —
+    the command said "the compiler's own plan **and findings**" while reading
+    `plan.warnings` and nothing else, so not one of the twelve `Finding` kinds
+    had ever reached it. A document whose second Output bypassed the guardrail
+    the rest of it kept printed `VALID`; `run`, one command later, printed the
+    sentence twice. The command a person uses *before* shipping was the one
+    that could not see them.
+
+    The findings are recorded while the graph is **built**, not while it is
+    run, so collecting them costs a compile and no model — the same
+    drawing-only stand-in `graph` uses, so this stays the zero-token gate a
+    script runs before a run costs anything, on a machine with no credential.
+    (One recording site is genuinely run-time — the injection-screening gap
+    inside `_agent`'s per-skill `agent_for` closure — so that one cause of
+    `CAPABILITY_FAILED` cannot appear here. Its kind still can, from the
+    several build-time sites that record it.)
+
+    **The split is `REPORT_ONLY`'s, read at this surface rather than restated
+    at it.** A failure-classed finding is a claim that the graph cannot do
+    what it was drawn to do, which is exactly `validate`'s one question — is
+    this ready to run **here** — so it is a *problem* and moves the exit code,
+    the thing `failure_warnings()` was built for. A report is advice about the
+    drawing; `8bda508`'s rule is that it may never move an exit code, and
+    `support-triage` ships an unwired grader on purpose, so the rule has a
+    real package guarding it.
+
+    Measured before committing to that: of the 32 shipped packages (23
+    examples, 9 workflows) exactly one carries a finding at all, and it is a
+    report-only one — so **no shipped package's exit code moved**, measured
+    again when `workflow-gallery` 61 settled the two members `9729338` brought
+    to an exit code for the first time. 61 decided them apart on run evidence:
+    `UNENFORCED_OUTCOME` became a report (it is the same predicate
+    `UNWIRED_REVISE` reports one level down, and the run answers with nothing
+    skipped), and `UNGUARDED_EXIT` stayed a problem (the unguarded door emits
+    what the document's own policy redacts on the path beside it). This
+    command deliberately holds no opinion of its own, so moving a member in
+    `REPORT_ONLY` moves it here with no edit.
+
+    A package that will not load at all is a problem, not a crash: `run` would
+    meet the same wall, and saying so is this command's job.
+    """
+    from openstategraph import load_workflow
+
+    try:
+        # In-memory durability rather than the durable default: validating a
+        # package must not create a checkpoint file — or a memory database —
+        # for a run that never happens. See `_ephemeral_state`.
+        workflow = load_workflow(package, model=_drawing_only_model(), **_ephemeral_state())
+    except Exception as exc:  # noqa: BLE001 - reported, never raised at a user
+        return ([f"this package could not be compiled: {_terminal_message(exc)}"], [])
+    try:
+        failures = list(workflow.failure_warnings)
+        blame = set(failures)
+        return (failures, [w for w in workflow.warnings if w not in blame])
+    finally:
+        workflow.close()
+
+
+def _plan_advisories(document: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """`(advisories, unchecked)` for one document — the channels MCP's door reads.
+
+    Two lists rather than one because `cmd_validate` prints them under two
+    headings, and `osg-agent-experience/89` is why: *nothing is wired into this
+    node* is advice a developer acts on, and *this build has no field schema
+    for that type* is a statement about what the checker did not read. While
+    they shared `Notes:`, the entry sheet's closing gate — no `PROBLEMS FOUND:`
+    and no `Notes:` — was unreachable for every package holding a function
+    node, which is two of the shipped ones.
+
+    Derived here the way `validation.validate_document` derives it, rather than
+    scraped out of `ValidateWorkflowTool`'s printed report: that report's `- `
+    lines are read by `cmd_validate` as *problems*, so an advisory riding that
+    text would move an exit code the channel is defined never to move.
+
+    Best-effort, and deliberately silent on failure. A plan that raises here
+    has already been reported by `ValidateWorkflowTool` or by
+    `_compiler_findings`; a traceback out of an advisory would replace a
+    working command's answer with a crash over advice.
+    """
+    from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+    inner = document.get("document", document) if isinstance(document, dict) else document
+    try:
+        plan = WorkflowCompiler().plan(inner)
+    except Exception:  # noqa: BLE001 - advice, never the command's verdict
+        return ([], [])
+    return (list(plan.advisories), list(plan.unchecked))
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    """The compiler's own plan and findings, via the seam MCP already uses.
+
+    `prebuilt_architect.ValidateWorkflowTool` — not a second validator. Two
+    validators is how a document passes one gate and fails the other. The
+    findings that seam cannot see, because they are recorded by a *build*
+    rather than by a plan, come from `_compiler_findings` below.
+
+    A developer surface, and the sentences say so — they name node ids, tool
+    types and package slugs. `api/audience.py` redacts those for a customer
+    reading a run; nobody reaches this command except by having the package on
+    their disk.
+    """
+    from openstategraph.document_checks import document_findings
+    from openstategraph.prebuilt_architect import ValidateWorkflowTool
+    from openstategraph.schema import normalize_document
+    from openstategraph.validation import (
+        uncallable_functions,
+        unresolved_mounts,
+        unresolved_tool_bindings,
+    )
+    from openstategraph.workflows_root import has_project_root, resolve_package
+
+    # A bare slug resolves against `workflows_root()` — the same directory
+    # `new <slug>` (no `--root`) writes into — so the two commands can never
+    # disagree about where one package lives (launch-readiness 29). An
+    # explicit path, relative or absolute, is unchanged: resolved against cwd.
+    target = resolve_package(args.target)
+    manifest = target if target.is_file() else target / "workflow.json"
+    if not manifest.is_file():
+        hint = (
+            ""
+            if has_project_root()
+            else " — no OpenStateGraph project here; run `openstategraph init` first"
+        )
+        return _error(f"no workflow document at {manifest} — is that a workflow package?{hint}")
+
+    try:
+        document = normalize_document(json.loads(manifest.read_text()))
+    except Exception as exc:
+        return _error(_terminal_message(exc))
+
+    verdict = ValidateWorkflowTool().run(document=json.dumps(document))
+    report = verdict.content if verdict.ok else str(verdict.error)
+
+    # The one check the in-memory plan cannot make (ticket 53). A mount is the
+    # only reference a document holds to something outside itself, resolving
+    # it is a filesystem lookup, and until this `validate` answered VALID for
+    # a package mounting a slug that does not exist — the likeliest way there
+    # is to break composition, and the cheapest one to catch.
+    #
+    # The root is where this package's *siblings* live, which is the same
+    # directory the loader will search at run time. Taken from the package's
+    # own location rather than from `workflows_root()`, so validating a
+    # package by path answers about that path.
+    # `slug=` is the package's own folder name, so a mount naming it closes a
+    # cycle *here* and is refused by the same sentence the build raises rather
+    # than by a later, more expensive surface (ticket 27).
+    mounts = unresolved_mounts(document, manifest.parent.parent, slug=manifest.parent.name)
+    # The second thing an in-memory plan cannot answer (ticket 79), and the
+    # same shape as the first: a bound tool's implementation lives in this
+    # installation — built-in, an installed plugin, or the package's own
+    # `tools/` — and a document that travelled without its package binds tools
+    # nothing here can supply. `validate` answered VALID for exactly that, and
+    # printed `Tool bindings:` beneath it, while the run three warnings later
+    # was the only surface telling the truth.
+    #
+    # It is a PROBLEM rather than a note, deliberately, and the exit code is
+    # the reason: `validate` is the zero-token gate a script runs before a run
+    # costs anything, and its one answer is "is this ready to run **here**".
+    # An agent drawn with three tools and bound to none is not. Priced and
+    # rejected: putting it on `plan.warnings` (that channel is the compiler's,
+    # is asserted empty by every shipped example's own document test, and
+    # carries no root, so it cannot see a package's `tools/` at all), and
+    # reporting it under a VALID heading (which is the shape ticket 53 removed
+    # from this command one paragraph above).
+    tools = unresolved_tool_bindings(document, manifest.parent)
+    # The same shape once more, one layer in (`osg-agent-experience/59`): the
+    # implementation is here, and the question is whether this node type can
+    # *call* it. `guard.check` picks between `fn(text)` and `fn(text, summary)`
+    # by inspecting the signature, so a parameter list is a protocol — and a
+    # mismatch was a run-time `TypeError`, reported as a review's last reason
+    # after the model had been paid. It costs the import this command already
+    # pays for `UNRESOLVED_FUNCTION` and no model call.
+    functions = uncallable_functions(document, manifest.parent)
+    # The third thing the in-memory plan cannot answer, and the largest of them
+    # (`organisms-first-class` 66): everything the compiler noticed while
+    # actually building the graph. Only for a real package — `validate` also
+    # takes a bare document file, and there is nothing to compile without the
+    # `tools/`, `functions/` and sibling packages a folder carries.
+    findings, notes = (
+        _compiler_findings(manifest.parent) if manifest.name == "workflow.json" else ([], [])
+    )
+    # The document read against what its own node types declare
+    # (`osg-agent-experience/32`) — a `data` key nothing on that type reads, a
+    # value of the wrong shape or outside its own list, a *Database file*
+    # naming no file, a classifier wired onward with nothing to route on, an
+    # edge on a port the type does not have. None of it is visible to a plan:
+    # the plan is built *from* these values and never asks whether they are the
+    # ones the node reads, which is how nineteen nodes of confident nonsense
+    # printed VALID.
+    #
+    # The root is the package's siblings — the same one `unresolved_mounts`
+    # above searches and the same one a run will resolve a path-valued field
+    # against, so `examples/sql-qa` answers about `examples/`.
+    schema = [f.message for f in document_findings(document, workflows_root=manifest.parent.parent)]
+    # The fourth channel, and the one the canvas draws in red while this
+    # command was silent (`osg-agent-experience/81`). `plan.advisories` names
+    # every node the entry preference declines to start — a mount or an exit
+    # with nothing wired into it, which never runs (`80`) — and the *other*
+    # door onto validation, `validation.validate_document`, has appended them
+    # since that ticket while this one built its own report and never read the
+    # channel. Two doors of one product answering differently about one
+    # document is exactly what a closing gate cannot be written against.
+    #
+    # A **note**, never a problem: `80` ruled this channel one that can never
+    # move VALID to INVALID, and this command holds no opinion of its own
+    # about a channel's class (see `_compiler_findings`). A `validate` that
+    # failed CI over an advisory would have the advisory suppressed instead.
+    advisories, unchecked = _plan_advisories(document)
+    found = [line[2:] for line in report.splitlines() if line.startswith("- ")]
+    # `plan.warnings` reaches this command twice — through the seam above and
+    # again on `failure_warnings` — and one problem said once is the point.
+    findings = [f for f in findings if f not in found]
+    problems = [*found, *mounts, *tools, *functions, *findings, *schema]
+    topology = report.split("\n\n", 1)[1] if "\n\n" in report else ""
+    if problems:
+        # Folded into the verdict rather than printed after it: one command,
+        # one answer. A VALID followed by a list of problems is the shape
+        # ticket 53 removed from this command.
+        report = "\n".join(["PROBLEMS FOUND:", *(f"- {p}" for p in problems), "", topology])
+    if unchecked:
+        # **Its own heading, and that is the whole of `osg-agent-experience/89`.**
+        # A note is advice about the document; this is a statement about what
+        # this build could not read — a `tool.*`/`function.*` type a package's
+        # own Python mints, which has no static field schema to check `data`
+        # against. There is nothing for a reader to act on, and while it rode
+        # `Notes:` the sheet's closing gate (no `PROBLEMS FOUND:` and no
+        # `Notes:`) could not be passed by any package holding a function node.
+        #
+        # The gate's sentence is unchanged and nobody is asked to judge which
+        # notes count — weakening it was the alternative, and `81` is the
+        # record of what teaching an agent to discount a diagnostic costs.
+        # A function node's real contract is checked harder one call above:
+        # `uncallable_functions` reads the Python signature.
+        report = "\n".join([report, "Not checked:", *(f"- {u}" for u in unchecked), ""])
+    notes = [*notes, *(a for a in advisories if a not in notes)]
+    if notes:
+        # Under their own heading, below the verdict, because that is what a
+        # note *is*: a report cannot move the exit code, so printing one among
+        # the problems would mean a reader could not tell from the page which
+        # line failed their CI.
+        report = "\n".join([report, "Notes:", *(f"- {n}" for n in notes), ""])
+
+    print(report)
+    return EXIT_FAILURE if problems or not verdict.ok else EXIT_OK
+
+
+def cmd_graph(args: argparse.Namespace) -> int:
+    """Mermaid **text**, on stdout. Never `draw_mermaid_png()`, which would post
+    the user's graph to a third-party API.
+
+    Drawing-only in both senses: no model is built (`_drawing_only_model`) and
+    no state file is opened (`_ephemeral_state`). It compiles a graph it will
+    never invoke, so it wrote both a checkpoint database and a memory database
+    beside the package it was asked to draw — `organisms-first-class` 77."""
+    print(_load(args, model=_drawing_only_model(), ephemeral=True).mermaid(xray=args.xray))
+    return EXIT_OK
+
+
+def cmd_export_plugin(args: argparse.Namespace) -> int:
+    """`export_plugin` + `write_export` — the pair `GET /api/workflows/{slug}/
+    plugin-export` already calls, with the write the GET deliberately does not do.
+
+    The positional is a **package path**, as it is for every other command here,
+    not the slug the two hosted doors take. Both are the same identity — the
+    slug *is* the directory name, and `export_plugin` reads it from there — and
+    a slug is a name the user never chose, so the CLI keeps asking for the one
+    thing they did choose: where the package is.
+
+    The two refusals are argument checks, not behaviour: a directory with no
+    `workflow.json` is not a package (the seam would happily render a
+    convincing bundle of nothing), and a destination that already holds files
+    is somebody else's directory (`write_export` merges into what it finds,
+    which is right for a library call and wrong for a command).
+    """
+    from openstategraph.plugin_interop import export_plugin, write_export
+
+    package = Path(args.package).expanduser().resolve()
+    if not (package / "workflow.json").is_file():
+        return _error(f"no workflow.json in {package} — is that a workflow package?")
+    destination = (
+        Path(args.out).expanduser().resolve() if args.out else Path.cwd().resolve() / package.name
+    )
+    if destination.exists() and any(destination.iterdir()):
+        return _error(f"{destination} already has files in it — name an empty --out")
+
+    export = export_plugin(package)
+    written = write_export(export, destination)
+    for note in export.notes:
+        print(f"note: {note}", file=sys.stderr)
+    print(f"plugin exported: {written}")
+    return EXIT_OK
+
+
+def cmd_export_toolkit(args: argparse.Namespace) -> int:
+    """`export_toolkit` + `write_export` — the same pair, about this install.
+
+    `osg-agent-experience/28`. The leaf beside it exports a *package*; this one
+    exports the toolkit — the wheel's skills and the MCP server `init` writes
+    into four agent config files — for a developer whose agent installs Agent
+    Plugins and reads none of those four.
+
+    No positional: there is nothing to name. The bundle's content is decided by
+    which version of this wheel is running, which is the point of it.
+    """
+    from openstategraph.plugin_interop import TOOLKIT_PLUGIN_NAME, export_toolkit, write_export
+
+    destination = (
+        Path(args.out).expanduser().resolve()
+        if args.out
+        else Path.cwd().resolve() / TOOLKIT_PLUGIN_NAME
+    )
+    if destination.exists() and any(destination.iterdir()):
+        return _error(f"{destination} already has files in it — name an empty --out")
+
+    export = export_toolkit()
+    written = write_export(export, destination)
+    for note in export.notes:
+        print(f"note: {note}", file=sys.stderr)
+    print(f"plugin exported: {written}")
+    return EXIT_OK
+
+
+def _write_root(args: argparse.Namespace) -> Path:
+    """Where a command that *creates* a package puts it (install-experience T5).
+
+    `--root` first, because it is the explicit argument the project-wide
+    precedence rule already puts at the top; otherwise the same question every
+    reader asks, answered by the same function — `workflows_root()`.
+
+    Until this, `new` and `examples copy` each spelled
+    `Path.cwd() / "workflows"` instead. So in a project with `workflows_dir:`
+    set, or with `OPENSTATEGRAPH_WORKFLOWS_ROOT` exported, the first thing an
+    adopter scaffolded landed where `serve` does not look, and the product
+    answered *"No workflows exist yet."* with their package right there — the
+    exact failure `workflows_root.py` exists to have ended, reintroduced by the
+    two commands that create things.
+    """
+    from openstategraph.workflows_root import workflows_root
+
+    if getattr(args, "root", None):
+        return Path(args.root).expanduser().resolve()
+    return workflows_root()
+
+
+def cmd_new(args: argparse.Namespace) -> int:
+    """`openstategraph.scaffold` — the same function `scripts/new_workflow.py`
+    calls, so the two can never produce different packages.
+
+    `--template` is validated by argparse's `choices` (exit 2, valid names in
+    the message), so nothing here re-checks it. `--team` predates templates and
+    keeps working as an alias with a one-line notice; removing it would break
+    every script and README line that already uses it, for a flag whose whole
+    cost is this branch.
+    """
+    from openstategraph.scaffold import ScaffoldError, new_package
+
+    if args.list_templates:
+        width = max(len(name) for name in templates.names())
+        for entry in templates.catalogue():
+            default = "  (default)" if entry.name == templates.DEFAULT_TEMPLATE else ""
+            print(f"{entry.name.ljust(width)}  {entry.summary}{default}")
+        return EXIT_OK
+
+    if not args.slug:
+        return _usage("new needs a slug: openstategraph new my-flow [--template NAME]")
+    if args.team and args.template not in (None, "team"):
+        return _usage(f"--team and --template {args.template} ask for different templates")
+    if args.team:
+        print("note: --team is deprecated; use --template team", file=sys.stderr)
+
+    template = args.template or ("team" if args.team else templates.DEFAULT_TEMPLATE)
+    root = _write_root(args)
+    try:
+        target = new_package(root, args.slug, template=template, name=args.name)
+    except ScaffoldError as exc:
+        return _error(str(exc))
+    print(f"{template} package created: {target}")
+    return EXIT_OK
+
+
+#: What `init` says about the brief it just delivered. Four states, because
+#: "we wrote the file", "we added our block to yours", "we replaced a stale
+#: block" and "it was already right" are four different things to have done
+#: to a file somebody else may own (install-experience/25).
+#: One sentence per state for the four agent config files
+#: (`osg-agent-experience/25`), in the voice the `AGENTS.md` line above uses —
+#: a report that says what happened to a file, not a status word.
+_AGENT_FILE_STATE = {
+    "created": "created — your agent can reach this project's MCP server",
+    "merged": "merged — your other servers and keys were left exactly as they were",
+    "current": "current — already points here, left alone",
+    "kept": "kept — left alone",
+}
+
+_AGENTS_MD_STATE = {
+    "created": "how to build here, for your coding agent",
+    "added": "our block added to yours — nothing else touched",
+    "refreshed": "our block refreshed — nothing else touched",
+    "current": "already current — left alone",
+}
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    """`openstategraph init [dir]` — the one command that creates a project.
+
+    install-experience T6. `pip install openstategraph[directory:'my_demo']`
+    is not a thing pip can parse, so the directory a user wants to name is
+    named here. Nothing creates a project implicitly: `serve` in an
+    unconfigured directory prints what to run rather than scattering a
+    `workflows/` folder somewhere nobody chose.
+
+    It is also where story one is first *shown* — the extra chose the vendor,
+    the key is the only thing left, and the message names it.
+    """
+    from openstategraph.bundled_skills import BUNDLED_SKILLS
+    from openstategraph.config_file import reset_active_config
+    from openstategraph.providers import provider_catalogue
+    from openstategraph.agent_config import command_note, missing_server_note
+    from openstategraph.scaffold import (
+        NEXT_SENTENCE,
+        RESTART_SENTENCE,
+        ScaffoldError,
+        agent_surface_changed,
+        init_project,
+    )
+
+    label = args.directory or "."
+    try:
+        result = init_project(
+            label,
+            label=label,
+            workflows_dir=args.workflows_dir,
+            force=args.force,
+            starter=not args.empty,
+            adopt=args.adopt,
+        )
+    except ScaffoldError as exc:
+        return _error(str(exc))
+
+    if result.reused_empty:
+        print(f"{label}/ exists and is empty — using it")
+    if result.existing_project_warning is not None:
+        print(result.existing_project_warning)
+    if result.adopted:
+        # The same review the refusal prints, printed again as a report — this
+        # is now what the project reads, and a reader should see the list they
+        # consented to rather than take the word `--adopt` on trust.
+        from openstategraph.scaffold import review_lines
+
+        count = len(result.adopted)
+        noun = "package" if count == 1 else "packages"
+        print(f"adopted {args.workflows_dir}/ — {count} {noun} already in it:")
+        for line in review_lines(result.adopted):
+            print(line)
+        print("  no starter was written into it — those packages are yours")
+
+    def state(path: Path) -> str:
+        return "" if path in result.created else "   (already there — left alone)"
+
+    print(f"created {result.directory}{os.sep}")
+    print(f"  {result.config.name:<22}  workflows_dir: {args.workflows_dir}{state(result.config)}")
+    if result.gitignore_gaps:
+        # launch-readiness/191: the branch that declined to write is the one
+        # that used to claim the rule was there. Print the lines instead of a
+        # claim — the same honesty the `.env` block below already practises,
+        # which prints variable names it will not write. Nothing is appended:
+        # the fix is the sentence, not the file.
+        gap = " and ".join(result.gitignore_gaps)
+        one = len(result.gitignore_gaps) == 1
+        print(f"  {'.gitignore':<22}  left alone (yours) — it does not ignore {gap}.")
+        print(f"  {'':<22}  Add {'this line' if one else 'these lines'} before you make one:")
+        for pattern in result.gitignore_gaps:
+            print(f"  {'':<22}    {pattern}")
+    else:
+        print(f"  {'.gitignore':<22}  .env, .openstategraph/{state(result.gitignore)}")
+    if result.starter is not None:
+        where = f"{args.workflows_dir}/{result.starter.name}/"
+        print(f"  {where:<22}  the smallest workflow that runs{state(result.starter)}")
+    # install-experience/25: `docs/` and the architecture principles are
+    # repository files, so a stranger's coding agent never saw them. The
+    # distribution carries the brief and this is where it lands — inside
+    # markers, so the four states below are all truthful and none of them
+    # touches a word the user wrote.
+    print(f"  {'AGENTS.md':<22}  {_AGENTS_MD_STATE[result.agents_md_action]}")
+    # kanban-patrol/24: OpenStateGraph's own skills, installed the same way —
+    # project-local, in both directories a coding agent might scan. One line
+    # per root so a reader sees both rather than inferring the second.
+    skill_names = ", ".join(sorted(BUNDLED_SKILLS))
+    for root in dict.fromkeys(r for r, _ in result.skills_installed):
+        states = {
+            state for (where, _relative), state in result.skills_installed.items() if where == root
+        }
+        summary = states.pop() if len(states) == 1 else "mixed"
+        print(f"  {root + '/':<22}  {skill_names} — {summary}")
+    # osg-agent-experience/25: four agents, four files, one command line. The
+    # note is printed only when there is one, which is exactly the `kept`
+    # cases — a file we declined to write has to say why.
+    for action in result.agent_files:
+        relative = action.path.relative_to(result.directory).as_posix()
+        sentence = _AGENT_FILE_STATE[action.state.value]
+        print(f"  {relative:<22}  {sentence}")
+        if action.note:
+            print(f"  {'':<22}  {action.note}")
+    # osg-agent-experience/24: the two things the block above could not say.
+    # Every entry it just wrote runs `openstategraph mcp`, so an installation
+    # without the extra has four files naming a command that exits non-zero
+    # inside the agent's own start-up log — named here, where the install line
+    # is one keystroke away, rather than there. And all of it is read at
+    # start-up by an agent this command was very likely typed inside.
+    indent = " " * 26  # the block's own second column, `  {name:<22}  `
+    # docs-onramp/10: which command those four entries actually name. A bare
+    # `openstategraph` is right for a `uv tool` install and dead for a venv
+    # one, and the report said nothing either way — so an agent that could not
+    # start the server showed no tools and no reason.
+    if result.agent_server is not None:
+        print(
+            textwrap.fill(
+                command_note(result.agent_server),
+                width=88,
+                initial_indent=indent,
+                subsequent_indent=indent,
+                # A path is one word and a broken path is not a path — this is
+                # the one sentence in the report that can carry a token wider
+                # than the column. `break_on_hyphens` too: the default splits
+                # `.../pytest-of-.../venv/bin/...` at every hyphen, which is
+                # the same defect one character at a time.
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+        )
+    absent = missing_server_note()
+    if absent:
+        print(f"{indent}{absent}")
+    if agent_surface_changed(result):
+        # Wrapped like the model line below, and for the same reason: this is
+        # the widest sentence the report prints and the block is already
+        # indented 26 columns into an 88-column page.
+        print(textwrap.fill(RESTART_SENTENCE, width=88, initial_indent=indent, subsequent_indent=indent))
+    print()
+
+    # The generated config was written before this process had any chance to
+    # read one; the project it just made is the project the rest of this
+    # command should be describing.
+    reset_active_config()
+    catalogue = provider_catalogue()
+    default = catalogue.elected_default()
+    _print_default_reason("default model: ", default)
+    print()
+    print("no .env was written — a generated credential file is a committed one waiting")
+    if ".env" in result.gitignore_gaps:
+        print(f"to happen. Create {label}/.env yourself — and add the .gitignore line above")
+        print("first, because right now your ignore file does not cover it:")
+    else:
+        print(f"to happen. Create {label}/.env yourself; .gitignore already covers it:")
+    for spec in provider_catalogue().list():
+        for variable in spec.env_vars:
+            print(f"  {variable}=")
+    print("  (openstategraph env-example prints the full block, names only)")
+    # The half this message did not say, and its absence is what
+    # `osg-agent-experience/47` was filed over: a stranger followed this
+    # instruction exactly and the first model node still refused, because
+    # nothing in the message says the file is ever read. It is — by the
+    # installed command, at startup, from beside the config file, with an
+    # already-exported variable always winning.
+    print("  it is read at startup; a variable your shell already exports wins")
+    print()
+    print("next:")
+    if label != ".":
+        print(f"  cd {label}")
+    # The one verb, not `serve --open`: `init`'s last line is where a reader
+    # learns which command they will type every day (install-experience/26).
+    print("  openstategraph .")
+    if result.starter is not None:
+        print(f'  openstategraph run {args.workflows_dir}/{result.starter.name} "hello"')
+    print()
+    # Unwrapped, unlike the model line above: this is the one line a reader
+    # copies, and a wrapped sentence loses a word to the newline on paste.
+    print(NEXT_SENTENCE)
+    return EXIT_OK
+
+
+def cmd_examples_list(args: argparse.Namespace) -> int:
+    """The shipped gallery — `openstategraph.examples`, printed.
+
+    The same catalogue the editor's Examples shelf reads over
+    `GET /api/examples`, so the two can never offer different galleries.
+    """
+    from openstategraph import examples
+
+    width = max(len(slug) for slug in examples.slugs())
+    for example in examples.catalogue():
+        extra = len(example.requires()) - 1
+        also = f"  [+{extra} mounted]" if extra else ""
+        print(f"{example.slug.ljust(width)}  {example.pattern}{also}")
+        print(f"{' ' * width}  {example.summary}")
+        # The claim and the contents, together (`every-workflow-green` 03).
+        # `summary` is `settings.purpose` — prose a person wrote once, which
+        # nothing reads back against the graph, and which was found advertising
+        # a classifier, a grader and a human gate on a document that had none.
+        # The owner's decision was to show the shape beside the sentence rather
+        # than police it: the reader sees both and judges.
+        if example.shape:
+            print(f"{' ' * width}  {example.shape}")
+    return EXIT_OK
+
+
+#: Said after every copy, because every shipped example carries
+#: `published: false` (production-ready 55.2).
+#:
+#: The flag is not a mistake to fix in the gallery: publishing is a decision
+#: about *your* package on *your* deployment, and a copy that published itself
+#: would put a stranger's workflow on a customer surface without anybody
+#: choosing it. What was wrong was the silence — `Workflows.published()` and the
+#: `/chat` picker skip the fresh copy, and nothing said why.
+_DRAFT_AFTER_COPY = (
+    "a copy arrives as a draft: `published: false`, so `Workflows.published()` and "
+    "the /chat picker skip it until you publish it — the editor's Workflows panel, "
+    'or `"published": true` in its workflow.json. `Workflows.list()` shows it either way.'
+)
+
+
+def _say_it_is_a_draft() -> None:
+    print(textwrap.fill(_DRAFT_AFTER_COPY, width=88, break_on_hyphens=False))
+
+
+def cmd_examples_copy(args: argparse.Namespace) -> int:
+    """`scaffold.copy_example` — the copy that severs it.
+
+    An example is not mounted where it lies (it lies in `site-packages`); it is
+    copied into the caller's own workflows directory and is theirs from then
+    on. `openstategraph.examples` explains why that is the only honest option.
+    """
+    from openstategraph import examples
+    from openstategraph.scaffold import ScaffoldError, copy_example
+
+    if args.all and args.slug:
+        return _usage(f"copy {args.slug} or copy --all, not both — they ask for different things")
+    if not args.all and not args.slug:
+        return _usage("examples copy needs a slug, or --all (see `openstategraph examples list`)")
+    if args.all:
+        return _copy_every_example(args)
+
+    root = _write_root(args)
+    try:
+        written = copy_example(root, args.slug)
+    except examples.UnknownExampleError as exc:
+        return _usage(str(exc))
+    except ScaffoldError as exc:
+        return _error(str(exc))
+
+    if written[0] in written.kept:
+        print(f"{args.slug} already yours, unchanged — kept: {written[0]}")
+    else:
+        print(f"{args.slug} copied: {written[0]}")
+    for path in written[1:]:
+        if path in written.kept:
+            print(f"  already yours, unchanged — kept: {path.name}")
+        else:
+            print(f"  also copied (it is mounted): {path.name}")
+    _say_it_is_a_draft()
+    print(f'next: openstategraph run {written[0]} "your question"')
+    return EXIT_OK
+
+
+def _copy_every_example(args: argparse.Namespace) -> int:
+    """`examples copy --all` — install-experience T8.
+
+    There is no `eject` verb, and there will not be one: `examples copy` is
+    already eject semantics — take a finished package out of the wheel into
+    your project, severed — and a second word for one act is the defect
+    CLAUDE.md carries two worked cases of. What the story genuinely asked for
+    and did not exist is the *plural*, and this is it.
+
+    The size and count preamble prints **before** the writer is called, so a
+    1 MB database is announced rather than discovered.
+    """
+    from openstategraph.scaffold import ScaffoldError, copy_all_examples, gallery_footprint
+
+    root = _write_root(args)
+    footprint = gallery_footprint()
+    print(
+        textwrap.fill(
+            f"this copies all {footprint.packages} examples into {root} — about "
+            f"{footprint.human}, of which {footprint.largest_name} is "
+            f"{footprint.largest_human}.",
+            width=88,
+            break_on_hyphens=False,
+        )
+    )
+
+    try:
+        written = copy_all_examples(root)
+    except ScaffoldError as exc:
+        return _error(str(exc))
+
+    print(f"copied {len(written)} examples into {root}")
+    print(
+        textwrap.fill(
+            ", ".join(path.name for path in written),
+            width=88,
+            initial_indent="  ",
+            subsequent_indent="  ",
+            break_on_hyphens=False,
+        )
+    )
+    _say_it_is_a_draft()
+    print(f'next: openstategraph run {written[0]} "your question"')
+    return EXIT_OK
+
+
+def cmd_knowledge_build(args: argparse.Namespace) -> int:
+    """`api.knowledge_build.run_build` — the same path the editor's button uses."""
+    from openstategraph.api.knowledge_build import (
+        UnknownSourceError,
+        resolve_build_model,
+        run_build,
+    )
+    from openstategraph.schema import normalize_document
+
+    package = Path(args.package).expanduser().resolve()
+    manifest = package / "workflow.json"
+    if not manifest.is_file():
+        return _error(f"no workflow.json in {package} — is that a workflow package?")
+
+    document = normalize_document(json.loads(manifest.read_text()))
+    try:
+        report = run_build(
+            package,
+            document,
+            # A terminal on this machine is the operator, so there is no
+            # shared deployment to refuse for — and no credentials either.
+            resolve_build_model(args.model, None, refused_because=None),
+            package.parent,
+            source=args.source,
+            instruction=args.instruction,
+        )
+    except UnknownSourceError as exc:
+        return _error(str(exc))
+
+    for label in ("written", "skipped", "collisions", "warnings"):
+        values = report.get(label) or []
+        print(f"{label}: {', '.join(values) if values else 'none'}")
+    return EXIT_OK
+
+
+def cmd_knowledge_list(args: argparse.Namespace) -> int:
+    """The free index tier: every topic, the hint that IS its first line, and
+    who owns it.
+
+    Two lines per store were previously invisible from a terminal: **who wrote
+    a doc** and **whether its source has moved since**. Both are recorded on
+    disk — the generated marker names the owning builder and stamps a hash of
+    the brief, and a claimed doc keeps that hash in a trailing comment — and
+    both were only ever surfaced by the editor's curation panel. A developer
+    checking their second brain is right does it from a terminal, so this
+    reads the same `knowledge_curation.list_topics` the panel does.
+
+    `--knowledge-dir` falls back to the plain index: a store outside the
+    package has no `workflow.json` to recompute briefs from, so ownership is
+    still readable but staleness is genuinely unknowable — and unknown is not
+    stale.
+
+    **An absent store is not an empty one.** Every path below that cannot
+    exist says so and fails, because the alternative — the shared "no
+    knowledge topics — build them with…" line — answers a typo'd path with
+    advice to rebuild into a directory that is not there. Three distinct
+    answers, three distinct messages: no such package, not a workflow package,
+    and a real store that happens to be empty.
+    """
+    package = Path(args.package).expanduser().resolve()
+    override = getattr(args, "knowledge_dir", None)
+    if override is not None:
+        store = Path(override).expanduser().resolve()
+        if not store.is_dir():
+            return _error(f"no such knowledge directory: {store}")
+    elif not package.is_dir():
+        return _error(f"no such package: {package}")
+    elif not (package / "workflow.json").is_file() and not (package / "knowledge").is_dir():
+        # `knowledge build`'s wording, because it is the same question.
+        return _error(f"no workflow.json in {package} — is that a workflow package?")
+    if override is not None or not (package / "workflow.json").is_file():
+        from openstategraph.knowledge import PackageKnowledge
+
+        entries = [
+            (e.name, e.hint, "") for e in PackageKnowledge(package, knowledge_dir=override).topics()
+        ]
+    else:
+        from openstategraph.api import knowledge_curation
+        from openstategraph.schema import normalize_document
+
+        document = normalize_document(json.loads((package / "workflow.json").read_text()))
+        entries = [
+            (
+                s.name,
+                s.hint,
+                (f"generated: {s.source}" if s.generated else "yours")
+                + (", STALE" if s.stale else ""),
+            )
+            for s in knowledge_curation.list_topics(package, document, package.parent)
+        ]
+    if not entries:
+        print("no knowledge topics — build them with: openstategraph knowledge build <package>")
+        return EXIT_OK
+    for name, hint, badge in entries:
+        line = f"- {name} — {hint}" if hint else f"- {name}"
+        print(f"{line}  [{badge}]" if badge else line)
+    return EXIT_OK
+
+
+def _thread_savers(args: argparse.Namespace) -> tuple[Any, Any]:
+    """`(services, savers)` — the same assembly the HTTP transport uses.
+
+    No new logic here, per the rules at the top of this file: the CLI opens
+    the checkpointer the server would have opened and asks
+    `api.threads` the same two questions the endpoints ask it.
+    """
+    from openstategraph.api.services import WorkflowServices
+    from openstategraph.api import threads as thread_queries
+
+    services = WorkflowServices(getattr(args, "workflows_root", None))
+    return services, thread_queries.savers_for(services, getattr(args, "workflow", None))
+
+
+def cmd_runs_list(args: argparse.Namespace) -> int:
+    """What this machine has run, out of the local run store.
+
+    **The complement of `threads list`, not a replacement for it**, and the
+    difference is worth stating because two commands over "past runs" is
+    exactly the kind of pair that becomes one confusing thing:
+
+    - `threads list` reads the **checkpointer**, which holds the conversation —
+      every superstep, resumable, and the authority on what a run *said*.
+    - `runs list` reads the **run store**, one row per finished turn, which
+      holds what a run *cost* and what it *executed*. That is the shape the
+      checkpointer cannot answer without rebuilding a graph and scanning every
+      checkpoint of every thread, and it is the shape `guardrails/07` needs
+      before a cost ceiling can be argued for at all.
+
+    Both are local files under `state_dir()`, and neither sends anything
+    anywhere (`memory-and-replay` 43).
+    """
+    from openstategraph.run_sinks import read_runs, run_store_path
+
+    path = run_store_path(getattr(args, "workflows_root", None))
+    rows = read_runs(
+        path,
+        workflow_slug=args.workflow,
+        thread_id=args.thread,
+        session_id=args.session,
+        limit=args.limit,
+    )
+
+    if args.json:
+        # The same rows a developer just queried, for a model or a script —
+        # which is what makes "teach the model to identify gaps" mechanisable
+        # rather than aspirational.
+        print(json.dumps([row.model_dump() for row in rows], indent=2))
+        return EXIT_OK
+    if path is None:
+        print("the run store is in memory for this process — nothing is kept")
+        return EXIT_OK
+    if not rows:
+        print(f"no runs recorded yet in {path}")
+        return EXIT_OK
+    for row in rows:
+        tokens = row.total_tokens()
+        # `-` rather than `0`: an empty `usage` means nobody reported, and
+        # that is *unknown*, never a claim that the run was free.
+        spent = str(tokens) if row.usage else "-"
+        label = "failed" if row.failed else row.kind
+        print(
+            f"{row.at}  {row.thread_id:24}  {row.workflow_slug or '-':20}  "
+            f"{label:8}  {row.seconds:6.2f}s  {spent:>8} tok  {row.question[:48]}"
+        )
+    print(f"\n{len(rows)} row(s) from {path} — query it directly with sqlite3")
+    return EXIT_OK
+
+
+def cmd_runs_export(args: argparse.Namespace) -> int:
+    """The store as a JSON array — the answer to *"or JSON"*, as a file.
+
+    **SQLite is the store and JSON is the export, and that split is the whole
+    argument.** The owner asked for "SQLite or JSON"; taken as an exclusive
+    choice, each answer loses something the other has. A JSON file is greppable
+    and diffable and needs no migration, and it is also rewritten whole on every
+    append, unsafe when two processes run at once, and unable to answer *what
+    has this workflow spent* without a program. Sqlite is queryable, concurrent
+    and indexed, and is what `checkpoints.sqlite` already is — one storage
+    technology under `state_dir()` rather than two.
+
+    So neither is dropped: the rows live in sqlite, and this command hands them
+    to anything that wants a file. Same rows, no second store.
+
+    **It carries the cadence too.** A run's burst rows are the other half of
+    what the store holds (`memory-and-replay` 47), and they are in the JSON —
+    the per-chunk offsets base64'd, because that is what makes a `RunRecord`
+    survive `json.dumps` at all.
+
+    **This is also the honest half of an unbounded default.** The store keeps
+    every run for as long as the file exists, deliberately — see
+    `run_sinks.SqliteRunSink` for why age alone never drops a conversation. What
+    a person does when it grows large is export it and then truncate, and this
+    is the export. **Nothing in this CLI deletes a run**: truncation is
+    `sqlite3 "$(openstategraph runs path)" "DELETE FROM runs WHERE at < '2026-01-01'"`
+    — and its `run_bursts` rows go with `DELETE FROM run_bursts WHERE run_rowid
+    NOT IN (SELECT rowid FROM runs)` — or deleting the file — both of which a person does on purpose, to their own
+    machine, having already got the rows out.
+    """
+    from openstategraph.run_sinks import (
+        RunCadenceUnavailable,
+        read_runs,
+        run_store_path,
+    )
+
+    path = run_store_path(getattr(args, "workflows_root", None))
+    # **With the cadence** (`memory-and-replay` 47), because this is what a
+    # person runs before truncating: an export that carried the answer but not
+    # how it arrived would let somebody delete a recording on the strength of a
+    # file that had not saved it. `runs list` deliberately does not ask — a
+    # table prints one line per run, and 6 to 30 burst objects a row would make
+    # the cheap question expensive.
+    #
+    # **And it refuses rather than under-delivers** (`the-cost-of-one-more/08`).
+    # Past 32,766 runs the cadence read was refused by sqlite, logged at
+    # `debug`, and this command wrote a file with `bursts: []` on every row and
+    # exited 0 — aimed squarely at the one operator who had been told to run it
+    # before truncating. A partial export is the failure this command exists to
+    # prevent, so it is not a file.
+    try:
+        # `audience="developer"` because this is an operator exporting their
+        # own machine's store from that machine's own terminal, and an export
+        # that silently dropped half the cadence is the partial file this
+        # command refuses to write (`memory-and-replay` 71).
+        rows = read_runs(path, limit=args.limit, with_bursts=True, audience="developer")
+    except RunCadenceUnavailable as exc:
+        return _error(
+            f"could not read the run cadence out of {path}: {exc}. Nothing was "
+            "written: an export missing how its answers arrived is not a copy "
+            "of the store and must not be truncated against."
+        )
+
+    if not args.to:
+        _write_runs(sys.stdout, rows)
+        return EXIT_OK
+    destination = Path(args.to)
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open("w", encoding="utf-8") as handle:
+            _write_runs(handle, rows)
+    except OSError as exc:
+        return _error(f"could not write {destination}: {exc}")
+    print(f"wrote {len(rows)} run(s) to {destination}")
+    return EXIT_OK
+
+
+def _write_runs(handle: TextIO, rows: list[Any]) -> None:
+    """The same JSON array, one record at a time.
+
+    `json.dumps([row.model_dump() for row in rows], indent=2)` held the whole
+    export as a second copy in memory before a byte of it reached the disk, on
+    a store whose only guarantee is that it grows (`the-cost-of-one-more/08`).
+    The output is byte-for-byte what that produced — a two-space-indented
+    array — because an export is a file people diff.
+    """
+    if not rows:
+        handle.write("[]\n")
+        return
+    handle.write("[\n")
+    for index, row in enumerate(rows):
+        body = json.dumps(row.model_dump(), indent=2)
+        handle.write(textwrap.indent(body, "  "))
+        handle.write(",\n" if index < len(rows) - 1 else "\n")
+    handle.write("]\n")
+
+
+def cmd_runs_path(args: argparse.Namespace) -> int:
+    """Where the local run store is, so a person can point `sqlite3` at it.
+
+    A command rather than a documented path, because the answer genuinely
+    varies: `state_dir()` resolves differently inside a checkout, on an
+    installed wheel, and under `OPENSTATEGRAPH_STATE_DIR`, and telling somebody
+    a path that is right for our checkout and wrong for their install is how a
+    query nobody can run gets written into a document.
+    """
+    from openstategraph.run_sinks import run_store_path
+
+    path = run_store_path(getattr(args, "workflows_root", None))
+    if path is None:
+        print("memory")
+        return EXIT_OK
+    print(path)
+    return EXIT_OK
+
+
+def cmd_kanban_attend(args: argparse.Namespace) -> int:
+    """The first-wins claim. Exits nonzero and prints who already has it
+    rather than silently overwriting — `kanban-patrol/19`."""
+    from openstategraph.kanban_store import Stage, open_kanban_store
+
+    store = open_kanban_store(getattr(args, "workflows_root", None))
+    result = store.set_stage(args.task_id, Stage.ATTENDED, actor=args.actor)
+    if not result.ok:
+        return _error(result.reason)
+    print(f"attended {args.task_id} as {args.actor}")
+    # `kanban-patrol/08`. From here on this actor produces runs, and an
+    # unmarked run is read back by the next patrol as a fresh finding — so
+    # the board would file a card about the work done on this card. This is
+    # the last place anything speaks to the agent, so the marker is printed
+    # here rather than left in a skill file it may not have installed.
+    from openstategraph.patrol import card_session_id
+
+    print(
+        f"  mark every run you make while working this card:"
+        f" --session-id {card_session_id(args.task_id)}"
+    )
+    return EXIT_OK
+
+
+def cmd_kanban_stage(args: argparse.Namespace) -> int:
+    """Advance one stage. `kanban-patrol/19`: only the actor already holding
+    the card calls this, so a skipped or backward stage is this caller's own
+    mistake, reported and refused, never silently recorded.
+
+    `kanban-patrol/17`+`21`: the evidence gate. `--test-id`/`--reason`/
+    `--commit` are the CLI's only way to write the evidence a `red`/`green`/
+    `finished` transition requires — a caller with none of these words to
+    say gets `MissingEvidenceError`, reported the same clean non-zero-exit
+    way `StageOrderError` already is, never a stack trace.
+    """
+    from openstategraph.kanban_store import (
+        MissingEvidenceError,
+        Stage,
+        StageOrderError,
+        open_kanban_store,
+    )
+
+    store = open_kanban_store(getattr(args, "workflows_root", None))
+    try:
+        target = Stage(args.stage)
+    except ValueError:
+        return _usage(f"stage must be one of {', '.join(s.value for s in Stage)}")
+    try:
+        result = store.set_stage(
+            args.task_id,
+            target,
+            actor=args.actor,
+            test_id=getattr(args, "test_id", "") or "",
+            reason=getattr(args, "reason", "") or "",
+            commit=getattr(args, "commit", "") or "",
+        )
+    except (StageOrderError, MissingEvidenceError) as exc:
+        return _error(str(exc))
+    if not result.ok:
+        return _error(result.reason)
+    print(f"{args.task_id} -> {target.value}")
+    return EXIT_OK
+
+
+def cmd_kanban_release(args: argparse.Namespace) -> int:
+    """The human half of "flag, never auto-release" — `kanban-patrol/19`.
+    Refuses (nonzero, plain reason) unless the card is already flagged by
+    `flagged_stale`; never releases a card by mere request."""
+    from openstategraph.kanban_store import open_kanban_store
+
+    store = open_kanban_store(getattr(args, "workflows_root", None))
+    result = store.release_card(args.task_id, threshold_seconds=args.threshold_seconds)
+    if not result.ok:
+        return _error(result.reason)
+    print(f"released {args.task_id}")
+    return EXIT_OK
+
+
+def cmd_kanban_answer(args: argparse.Namespace) -> int:
+    """Record the decision on a Needs You card — `kanban-patrol/15`.
+
+    A thin door onto `kanban_store.answer_card`, which owns every rule: the
+    card goes back to Detected (never to Resolved), an answer is written
+    once, and a blank one or a card that was never in question is refused.
+    Both refusal shapes reach the shell the same clean non-zero way `stage`
+    already reports a failed evidence gate — never a stack trace.
+    """
+    from openstategraph.kanban_store import (
+        MissingEvidenceError,
+        StageOrderError,
+        kanban_store_location,
+        open_kanban_store,
+    )
+
+    root = getattr(args, "workflows_root", None)
+    try:
+        result = open_kanban_store(root).answer_card(
+            args.task_id, actor=args.actor, answer=args.answer
+        )
+    except KeyError:
+        return _error(f"no card {args.task_id!r} in {kanban_store_location(root).path}")
+    except (StageOrderError, MissingEvidenceError) as exc:
+        return _error(str(exc))
+    if not result.ok:
+        return _error(result.reason)
+    print(f"answered {args.task_id} as {args.actor} — back in Detected")
+    return EXIT_OK
+
+
+def cmd_kanban_file(args: argparse.Namespace) -> int:
+    """File a card from a conversation — `osg-agent-experience/25`.
+
+    A thin door onto `kanban_store.file_idea_card`, which owns every rule:
+    which kinds this door files, that the brief cannot be blank, and that two
+    ideas cannot share one title. The identity a card is keyed to comes from
+    the project's own config, adopted if it predates the field and never
+    invented per-call, exactly as `patrol run` resolves it — one function, so
+    two doors cannot file into two different boards.
+    """
+    from openstategraph.kanban_store import (
+        column_for,
+        open_kanban_store,
+        unresolved_blockers,
+    )
+    from openstategraph.project_identity import ProjectIdentityError, project_id_for_board
+
+    try:
+        project_id = project_id_for_board()
+    except (ProjectIdentityError, OSError) as exc:
+        return _error(str(exc))
+
+    store = open_kanban_store(getattr(args, "workflows_root", None))
+    try:
+        task_id = store.file_idea_card(
+            project_id=project_id,
+            kind=args.kind,
+            title=args.title,
+            story=args.story,
+            done_when=args.done_when,
+            priority=args.priority,
+            priority_reason=args.reason,
+            area=args.area,
+            actor=args.actor,
+            blocked_by=tuple(args.blocked_by or ()),
+            agent_model=args.agent_model,
+            agent_effort=args.agent_effort,
+        )
+    except ValueError as exc:
+        return _error(str(exc))
+    card = store.read_card(task_id)
+    print(f"filed {task_id} in {column_for(card)}")
+    # `osg-agent-experience/30`: a blocker nothing carries is a real ordering
+    # (the card it waits on may not be filed yet) and also the exact shape of
+    # a typo, so it is said out loud rather than refused or swallowed.
+    for blocker in unresolved_blockers(store, card):
+        print(f"  waiting on {blocker} — no card carries that id yet")
+    return EXIT_OK
+
+
+def cmd_kanban_show(args: argparse.Namespace) -> int:
+    """The self-contained instruction — `kanban-patrol/19`'s "Copy
+    instruction" affordance, from the CLI door: a coding agent (or a human
+    pasting on its behalf) reads the same row the board's Copy buttons read."""
+    from openstategraph.kanban_store import kanban_store_location, open_kanban_store
+
+    location = kanban_store_location(getattr(args, "workflows_root", None))
+    try:
+        card = open_kanban_store(getattr(args, "workflows_root", None)).read_card(
+            args.task_id
+        )
+    except KeyError:
+        return _error(f"no card {args.task_id!r} in {location.path}")
+    print(f"task_id: {card.task_id}")
+    print(f"title: {card.title}")
+    print(f"kind: {card.kind}   category: {card.category}   stage: {card.stage.value}")
+    print(f"priority: {card.priority}")
+    if card.priority_reason:
+        print(f"  why: {card.priority_reason}")
+    if card.actor:
+        print(f"actor: {card.actor}")
+    # `kanban-patrol/15`: the decision, once one has been made. An agent
+    # reading this instead of the board and not being shown the answer is an
+    # agent sent back to ask a question somebody already settled.
+    if card.answer:
+        print(f"decision: {card.answer}")
+        print(f"  answered by: {card.answered_by} at {card.answered_at}")
+    # `osg-agent-experience/85`: what the closing checks said, on the card
+    # rather than only in the shell that ran them. An agent picking a resolved
+    # card up to build on reads the gate's own words here.
+    if card.finished_reason:
+        print(f"finished: {card.finished_reason}")
+    return EXIT_OK
+
+
+def cmd_kanban_where(args: argparse.Namespace) -> int:
+    """Where this project's board is — `osg-agent-experience/65`.
+
+    The door the ticket was filed for the absence of. Three sources decide the
+    address (`state_dir.resolve_state_dir`) and they are indistinguishable
+    from inside the result, so a board written by a checkout and read by an
+    installed wheel is two files and one silence. Read-only, creates nothing,
+    and it is the one command that answers on a project that has never filed a
+    card — which is exactly when somebody needs it.
+    """
+    from openstategraph.kanban_store import kanban_store_location, open_kanban_store
+
+    location = kanban_store_location(getattr(args, "workflows_root", None))
+    store = open_kanban_store(getattr(args, "workflows_root", None))
+    print(f"board  {location.path}")
+    print(f"       {location.why}")
+    for line in _board_state_lines(location, store.list_cards()):
+        print(line)
+    return EXIT_OK
+
+
+def _board_state_lines(location: "KanbanLocation", cards: list["Card"]) -> list[str]:
+    """The two sentences a reader has to be able to tell apart, in one place.
+
+    `osg-agent-experience/65`: *no board here yet* and *the board is empty*
+    were the same four words at every door, which is how six filed cards read
+    as a project that had never had any. `list_cards` returns `[]` for both
+    on purpose — right for a library, and the reason a door must not just
+    print what it gets back.
+    """
+    if not location.exists:
+        return [
+            "       no board here yet — nothing has been filed against this "
+            "address, which is not the same as an empty board",
+        ]
+    if not cards:
+        return ["       the board is here and empty"]
+    plural = "card" if len(cards) == 1 else "cards"
+    return [f"       {len(cards)} {plural}"]
+
+
+def cmd_kanban_triage(args: argparse.Namespace) -> int:
+    """Which card to pick up next, and why — `osg-agent-experience/25` slice
+    4. Read-only, the CLI half of `kanban_triage`: same `kanban_store.triage`
+    function, so the two doors can never argue about the order.
+
+    `osg-agent-experience/65`: an empty result names the file it read. The old
+    `nothing to triage` was true of an empty board and a lie about a board
+    that was never at this address, and a reader could not tell which they
+    had been handed.
+    """
+    from openstategraph.kanban_store import (
+        kanban_store_location,
+        open_kanban_store,
+        triage,
+    )
+
+    location = kanban_store_location(getattr(args, "workflows_root", None))
+    store = open_kanban_store(getattr(args, "workflows_root", None))
+    board = getattr(args, "board", "") or ""
+    folded = board.strip().casefold()
+    all_cards = store.list_cards()
+    cards = [c for c in all_cards if not folded or c.board.casefold() == folded]
+    rows = triage(cards)
+    if not rows:
+        print(f"board  {location.path}")
+        for line in _board_state_lines(location, all_cards):
+            print(line)
+        if location.exists and all_cards:
+            print("       nothing to triage — no card here is waiting to be picked up")
+        return EXIT_OK
+    for row in rows:
+        print(f"{row.rank}. {row.card.task_id}  {row.card.title}")
+        print(f"   {row.why_here}")
+    return EXIT_OK
+
+
+def cmd_patrol_run(args: argparse.Namespace) -> int:
+    """Read every recorded finding, file what's new, skip what's already
+    claimed — kanban-patrol/07's synchronous door. No model, deterministic:
+    `05`'s richer classifier, if it lands, replaces the judgement inside
+    `patrol.classify_finding`, never this command.
+
+    `project_id` comes from the project's own committed config — the same
+    identity every card is keyed to. A project whose config predates the
+    field gets the line **appended and printed** rather than an error
+    (kanban-patrol/23); it is still never invented per-run.
+    """
+    from openstategraph.config_file import active_config
+    from openstategraph.patrol import run_patrol
+    from openstategraph.project_identity import (
+        ProjectIdentityError,
+        adopt_for_active_config,
+        project_id_line,
+    )
+    from openstategraph.workflows_root import workflows_root as resolve_workflows_root
+
+    root = Path(getattr(args, "workflows_root", None) or resolve_workflows_root())
+    config = active_config()
+    project_id = config.project_id if config else None
+    if not project_id:
+        # A project made before this field existed is adopted rather than
+        # refused (kanban-patrol/23): the line is appended to its own config
+        # and printed, because refusing left the board dead until a hand edit.
+        try:
+            adopted = adopt_for_active_config()
+        except (ProjectIdentityError, OSError) as exc:
+            return _error(str(exc))
+        if adopted is None or not adopted.project_id:
+            return _error(
+                "no project_id and no config file to put one in — run `openstategraph init` here."
+            )
+        project_id = adopted.project_id
+        print(project_id_line(project_id))
+
+    result = run_patrol(project_id=project_id, workflows_root=root)
+    print(f"{result.total_findings} finding(s) read")
+    print(f"{len(result.filed)} card(s) filed")
+    for task_id in result.filed:
+        print(f"  + {task_id}")
+    if result.skipped:
+        print(f"{len(result.skipped)} already filed, left untouched")
+    return EXIT_OK
+
+
+def _report_for(args: argparse.Namespace, *, project_hash: str) -> Any:
+    """The report for whichever of the two subjects was named.
+
+    A card id carries the project it belongs to and a colon
+    (`<project>:<thread>`); a type id cannot hold one, which is the same rule
+    `gap_report_door.build_report` already refuses on. So the split is the
+    subject's own shape and there is no flag to get wrong.
+
+    `team-board-and-gap-reports/15`: the card branch reads the board this
+    project already has, and hands the door the `Card` itself — the door
+    re-validates every field of it through `GapReport`, so a row somebody
+    edited is refused rather than sent.
+    """
+    from openstategraph.gap_report import GapDoor
+    from openstategraph.gap_report_door import build_report, report_for_card
+
+    door = GapDoor(args.door)
+    if ":" not in args.subject.strip():
+        return build_report(args.subject, project_hash=project_hash, door=door)
+    from openstategraph.kanban_store import open_kanban_store
+
+    store = open_kanban_store(getattr(args, "workflows_root", None))
+    return report_for_card(
+        store.read_card(args.subject.strip()), project_hash=project_hash, door=door
+    )
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    """Tell the maintainers about a gap this install refused —
+    `team-board-and-gap-reports/08`.
+
+    The whole report is printed first, every time, and nothing leaves this
+    machine that the person did not confirm in the same run: no `--yes`, no
+    subprocess. There is no setting to turn on and no stored consent, which is
+    the owner's decision and `docs/reporting-a-platform-gap.md`'s promise.
+
+    No logic of its own, per this module's own rule: `gap_report_door` builds
+    the report, renders the issue and shells out to the user's `gh`; this
+    prints what it produced and turns a refusal into an exit code.
+    """
+    from pydantic import ValidationError
+
+    from openstategraph.config_file import active_config
+    from openstategraph.gap_report import GapDoor, hashed_project_id
+    from openstategraph.gap_report_door import (
+        DoorClosed,
+        UnreportableSubject,
+        file_issue,
+        preview,
+    )
+
+    config = active_config()
+    project_id = config.project_id if config else None
+    if not project_id:
+        # Never minted here. `patrol run` adopts one because a board with no
+        # tenancy key is dead; a report is a courtesy, and writing to somebody's
+        # config as a side effect of one would be a surprise nobody asked for.
+        return _error(
+            "this project has no project_id, and a report carries a hash of it so "
+            "that forty runs of one refusal are one card rather than forty. Run "
+            "`openstategraph init` here (or `openstategraph patrol run`, which "
+            "adopts one) and try again."
+        )
+    doors = [member.value for member in GapDoor]
+    if args.door not in doors:
+        return _usage(f"--door is one of {', '.join(doors)} — not {args.door!r}")
+    try:
+        report = _report_for(args, project_hash=hashed_project_id(project_id))
+    except UnreportableSubject as exc:
+        return _error(str(exc))
+    except KeyError:
+        return _error(
+            f"no card {args.subject!r} on this board. `openstategraph kanban list` "
+            "prints the ids, or pass the type id the refusal named instead."
+        )
+    except ValidationError:
+        return _error(
+            f"{args.subject!r} is not a node or tool type id. A report names the "
+            "type that refused — `tool.reddit-search`, `my-package/tools.QueryTool` "
+            "— and never a value: your question, a table name and a path are not "
+            "things a report carries."
+        )
+    print(preview(report))
+    if not args.yes:
+        print()
+        print(
+            "Nothing has been sent. Run the same command with --yes to file it, or "
+            "do not — there is no stored consent either way."
+        )
+        return EXIT_OK
+    try:
+        url = file_issue(report)
+    except DoorClosed as exc:
+        print()
+        print(str(exc))
+        return EXIT_FAILURE
+    print()
+    print(f"Filed: {url}" if url else "Filed.")
+    return EXIT_OK
+
+
+def cmd_threads_list(args: argparse.Namespace) -> int:
+    """Past runs this deployment stored — read from the checkpointer, not a log."""
+    from openstategraph.api import threads as thread_queries
+
+    services, savers = _thread_savers(args)
+    try:
+        rows = thread_queries.list_threads(
+            savers,
+            workflow_slug=args.workflow,
+            user_email=args.user,
+            session_id=args.session,
+            limit=args.limit,
+        )
+    finally:
+        services.close()
+
+    if args.json:
+        print(json.dumps([row.model_dump() for row in rows], indent=2))
+        return EXIT_OK
+    if not rows:
+        print("no stored runs — the checkpointer has no threads yet")
+        return EXIT_OK
+    for row in rows:
+        who = row.user_email or "anonymous"
+        # `status` says whether the run is waiting on the user; `failed` is a
+        # separate fact — a node wrote the failure sentinel into `outputs` —
+        # and it is shown alongside status rather than folded into it, so a
+        # run that failed but finished still reads "finished" and additionally
+        # "failed" (production-ready/78).
+        label = f"{row.status} failed" if row.failed else row.status
+        print(
+            f"{row.thread_id}  {row.updated_at}  {label:15}  "
+            f"{row.workflow_slug or '-'}  {who}  {row.question[:60]}"
+        )
+    # A footer, not a column: `list` is read by scanning, and a resume line
+    # per row would turn a table into a wall of text. `threads show
+    # <thread-id>` is where the actual payload and the copy-pasteable command
+    # live — this only says that a next step exists (`workflow-gallery` 76).
+    paused = [row.thread_id for row in rows if row.status == "paused"]
+    if paused:
+        plural = "s" if len(paused) != 1 else ""
+        print(
+            f"\n{len(paused)} thread{plural} paused — "
+            "`openstategraph threads show <thread-id>` says what each is waiting for"
+        )
+    return EXIT_OK
+
+
+def cmd_threads_show(args: argparse.Namespace) -> int:
+    """One past run, read back. A **view**: nothing is executed again.
+
+    Continuing a paused run is a different act with a different name —
+    `openstategraph resume`, or `POST /api/runs/resume` — and it does call
+    models and tools. Printing what already happened does not. (`run
+    --thread-id` is a third thing again: it starts a *new* turn on the same
+    conversation, and it has never been able to answer an `interrupt()`.)
+    """
+    from openstategraph.api import threads as thread_queries
+    from openstategraph.api.audience import Audience, resolve
+
+    services, savers = _thread_savers(args)
+    try:
+        # A terminal on the machine that holds the checkpoints is a developer
+        # surface — the same person who could open the sqlite file. So it asks
+        # for the developer view rather than inheriting the door's closed
+        # default, and still through `resolve()`, so a deployment that capped
+        # itself to `customer` caps this too
+        # (`the-boundary-nobody-checked/02`).
+        history = thread_queries.read_thread(
+            savers, args.thread_id, audience=resolve(Audience.DEVELOPER)
+        )
+    finally:
+        services.close()
+
+    if history is None:
+        return _error(f"no stored run for thread {args.thread_id!r}")
+    if args.json:
+        print(json.dumps(history.model_dump(), indent=2))
+        return EXIT_OK
+
+    thread = history.thread
+    status_line = f"{thread.status} — failed" if thread.failed else thread.status
+    print(f"thread {thread.thread_id} — {status_line}")
+    print(f"  workflow: {thread.workflow_slug or '-'}")
+    print(f"  user:     {thread.user_email or 'anonymous'}")
+    print(f"  session:  {thread.session_id or '-'}")
+    print(f"  updated:  {thread.updated_at}")
+    print("  (a recording, not a re-run — no model or tool was called to show this)")
+    if thread.status == "paused":
+        for line in _thread_pause_lines(services, thread):
+            print(f"  {line}")
+    if history.truncation is not None:
+        # A terminal is a surface too, and the whole of `the-cost-of-one-more/06`
+        # is that a cap nobody can see is two runs printing as one.
+        print(f"  truncated: {history.truncation.message}")
+    for step in history.steps:
+        print(f"\nstep {step.step} ({step.source}) {step.at}")
+        for key, value in step.values.items():
+            if not value:
+                continue
+            print(f"  {key}: {value}")
+    return EXIT_OK
+
+
+def _thread_pause_lines(services: Any, thread: Any) -> list[str]:
+    """What a paused thread read back from `threads show` has to say.
+
+    `thread.pause` is the payload `_pause_payload` read off the checkpoint's
+    pending `__interrupt__` write — the same fact `run`'s own pause report
+    prints, from the same field a live run leaves behind. This is the surface
+    that answers `workflow-gallery` 76: a reviewer who did not start the run
+    reads `threads show` a day later and this is where they learn what the
+    gate is asking and the exact command that answers it.
+
+    The resume line names a package, a thread and a decision, and `threads
+    show` only ever knew the *slug* — so before promising a copy-pasteable
+    line this resolves the slug to the package directory the same way the
+    store resolves any slug, and says plainly when it cannot: an unset or
+    invalid slug is not a package path, and `CLAUDE.md`'s law is not to
+    promise which is not possible.
+    """
+    lines: list[str] = []
+    pause = thread.pause or {}
+    message = str(pause.get("message") or "").strip()
+    lines.append(f"waiting: {message or 'a decision is needed'}")
+    candidate = str(pause.get("candidate") or "").strip()
+    if candidate:
+        lines.append(f"candidate: {candidate}")
+    package = _package_directory(services, thread.workflow_slug)
+    if package is not None:
+        lines.append(f"finish it: {resume_command_line(str(package), thread.thread_id)}")
+    else:
+        lines.append(
+            "finish it: openstategraph resume <package> "
+            f"{thread.thread_id} --approve | --reject --feedback '…'  "
+            "(this thread's workflow slug is unknown, so the exact package "
+            "path above is a placeholder — point it at the package yourself)"
+        )
+    return lines
+
+
+def _package_directory(services: Any, slug: str) -> Any:
+    """The package directory a stored thread's slug names, or `None`.
+
+    `None` covers both an empty slug (an older or unlabelled thread) and one
+    the store refuses — `WorkflowStore.directory_for` validates the slug
+    shape before resolving it, which is the same check `resume`'s own loader
+    ultimately relies on, so a slug this rejects would not have loaded either.
+    """
+    from openstategraph.api.workflow_store import InvalidSlugError
+
+    if not slug:
+        return None
+    try:
+        return services.store.directory_for(slug)
+    except InvalidSlugError:
+        return None
+
+
+def _print_default_reason(label: str, default: "ProviderDefault") -> None:
+    """`{label}{model} — {reason}`, wrapped — except the shell command inside it.
+
+    `osg-agent-experience/83`. On a bare install, `default.reason` is
+    `no_provider_message()`, which quotes a real `pip`/`uv tool install`
+    command — carried alongside it as `default.command`, since
+    `textwrap.fill` breaks that command at its own spaces and hyphens, and a
+    command split across two printed lines is not one a reader can paste. So
+    the command, when there is one, is pulled out and printed alone on its
+    own unwrapped line under the wrapped prose that names it. Every other
+    reason has no command and prints exactly as it did before this ticket.
+    """
+    indent = " " * len(label)
+    reason = default.reason
+    command = default.command
+    if not command or command not in reason:
+        print(
+            textwrap.fill(
+                f"{label}{default.model or '(none)'} — {reason}",
+                width=88,
+                subsequent_indent=indent,
+            )
+        )
+        return
+    before, _, after = reason.partition(command)
+    print(
+        textwrap.fill(
+            f"{label}{default.model or '(none)'} — {before}",
+            width=88,
+            subsequent_indent=indent,
+        )
+    )
+    print(f"{indent}{command}")
+    after = after.strip()
+    if after:
+        print(textwrap.fill(f"{indent}{after}", width=88, subsequent_indent=indent))
+
+
+def no_provider_warning() -> str | None:
+    """One line when this install can serve the product and run none of it.
+
+    Workflow-gallery ticket 37: `[server]` is fastapi, uvicorn and sqlite, and
+    contains no provider integration — a defensible boundary (folding one in
+    would choose a vendor for everyone) that was, until this, **invisible
+    until the first Run button**. The knowledge to say so already existed:
+    `openstategraph providers` prints the extra per provider, so this asks the
+    same catalogue rather than hard-coding a list.
+
+    `None` when *any* provider integration is importable. The threshold is
+    deliberately "none at all" rather than "not the one this document names":
+    a serve command has no document in front of it, and a warning that fired
+    for an Anthropic-only install serving an Ollama example would fire on
+    every correct install too.
+
+    The sentence itself belongs to the catalogue
+    (`ProviderCatalogue.no_provider_message`), because three surfaces print it
+    — this warning, the `default:` line of `openstategraph providers`, and
+    `resolve_model`'s `NoProviderInstalled` — and three copies of a sentence
+    is three chances to fix two of them.
+    """
+    from openstategraph.providers import ProviderEnvironment, provider_catalogue
+
+    catalogue = provider_catalogue()
+    specs = catalogue.list()
+    if not specs or any(ProviderEnvironment(spec).is_installed() for spec in specs):
+        return None
+    return catalogue.no_provider_message()
+
+
+def startup_facts() -> list[str]:
+    """What Run will actually do, before anything is bound.
+
+    The two questions a reader has when a server they just started shows them
+    an editor: *which model will this call*, and *where are my workflows*. Both
+    were answerable only by reading source or by pressing Run and finding out
+    (install-experience T3).
+
+    A function rather than four `print`s inside `cmd_serve`, for the reason the
+    header of this file gives: a command is argument handling plus a call, and
+    a block of formatting inside one is a block of formatting no test reaches
+    without binding a socket.
+
+    Never raises. `resolve_model` refuses an install with no provider, which is
+    correct for a run and wrong here — `serve` is expected to start on a bare
+    install and say what will happen, and `no_provider_warning` has already
+    said the rest.
+    """
+    from openstategraph.dotenv import environment_line
+    from openstategraph.providers import provider_catalogue
+    from openstategraph.workflows_root import resolve_workflows_root
+
+    default = provider_catalogue().elected_default()
+    # Three lines, not two: *where* was already answered and *what chose it*
+    # was not, and four sources decide it (install-experience/26). A reader
+    # surprised by the directory could previously only find out by reading
+    # source. This is the one place it is printed, which is why `open` does
+    # not print it a second time.
+    root = resolve_workflows_root()
+    # A fourth line, and the one `osg-agent-experience/47` was filed over: the
+    # question *did my key reach this process* had no answer short of pressing
+    # Run and reading a node failure. The count and never the names — see
+    # `dotenv.environment_line`.
+    return [
+        f"default model  {default.model or '(none)'}",
+        f"workflows      {root.path}",
+        f"               {root.why}",
+        environment_line(),
+    ]
+
+
+def adopted_project_id_note() -> str | None:
+    """kanban-patrol/23's third door: `openstategraph .` / `serve`.
+
+    A project whose committed config predates `project_id` gets the line
+    appended and **printed here**, before anything is bound — the same rule
+    `startup_facts` is written to, that a message printed after a server is
+    listening is a message somebody scrolls past.
+
+    A function rather than a block inside `cmd_serve` for that function's own
+    stated reason: formatting inside a command is formatting no test reaches
+    without binding a socket. Separate from `startup_facts` because this one
+    *writes*, and a function called `facts` must not.
+
+    Never raises: a carrier this cannot append to, or no config at all, is a
+    project that simply has no identity yet, and `serve` is expected to start
+    anyway and say what it can — the board's own door reports the reason.
+    """
+    from openstategraph.config_file import ConfigError, active_config
+    from openstategraph.project_identity import (
+        ProjectIdentityError,
+        ProjectIdentityState,
+        adopt_for_active_config,
+        project_id_line,
+    )
+
+    try:
+        config = active_config()
+        if config is not None and config.project_id:
+            return None
+        adopted = adopt_for_active_config()
+    except (ProjectIdentityError, ConfigError, OSError):
+        return None
+    if adopted is None or adopted.project_id is None:
+        return None
+    if adopted.state is not ProjectIdentityState.MINTED:
+        return None
+    return project_id_line(adopted.project_id)
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """The whole product on one origin: editor at `/`, chat at `/chat`, API
+    under `/api`. Requires the `[server]` extra.
+
+    Two collaborators do the work — `api.listening` decides the port and binds
+    it, `api.editor_assets` decides where the built editor comes from — so this
+    stays argument handling plus a call, per the rules at the top of the file.
+
+    The socket is bound here and handed to uvicorn rather than passing it a
+    number, because that is the only way `--port 0` can print the URL it landed
+    on *before* the server starts talking.
+
+    Five things are said before anything is bound (scale-and-adopt ticket 06,
+    workflow-gallery tickets 37 and 40, production-ready 60), because a message
+    printed after a server is listening is a message someone scrolls past: more
+    than one worker is refused outright, a second process pointed at a state
+    directory another server already holds is refused by name, an
+    unauthenticated bind to a non-loopback address is warned about by name, an
+    install with no provider integration is told that every run will fail, and
+    — in a checkout only — an editor built before the last `src/` change says
+    so, because this process serves `dist/` and the dev server on 5273 does
+    not.
+
+    **The state-directory lock is checked twice, on purpose.** The
+    authoritative lock still lives in the FastAPI lifespan
+    (`api/main.py:single_server_lifespan`) — it has to, because the resources
+    it guards (the checkpointer, the memory store, the `/api/events`
+    fan-out) are constructed there, and hoisting *that* setup ahead of the
+    socket bind would be a much larger, riskier change for a message-ordering
+    fix. What moves here is only the cheap part: `SingleServerLock.acquire()`
+    is a non-blocking `flock` on a small file, with no sqlite or FastAPI
+    involved, so it costs nothing to ask early and release immediately if it
+    succeeds. A `serve` that fails this early check never reaches
+    `bind_listener` and never prints a URL it cannot honour (workflow-gallery
+    40). A `serve` that passes it can still be refused by the lifespan's own
+    acquire a moment later — another process could win the race in between —
+    and that refusal still reaches `AnotherServerIsRunning`'s full message on
+    stderr; it is simply no longer the *only* place the check happens, so the
+    common case (a second `serve` started well after the first) is caught
+    before the URLs print instead of after.
+    """
+    from openstategraph import deployment
+
+    refusal = deployment.check_worker_count(explicit=getattr(args, "workers", None))
+    if refusal is not None:
+        return _error(refusal)
+
+    try:
+        import uvicorn
+    except ImportError:
+        return _missing("uvicorn", "server", "the HTTP API")
+
+    from openstategraph.state_dir import state_dir
+    from openstategraph.workflows_root import workflows_root
+
+    lock = deployment.SingleServerLock(state_dir(workflows_root()))
+    try:
+        lock.acquire()
+    except deployment.AnotherServerIsRunning as exc:
+        return _error(str(exc))
+    else:
+        # Only a fast fail-early check: release immediately so the lifespan's
+        # own acquire (the one that actually owns the resource for the life of
+        # the process) is the sole long-lived holder.
+        lock.release()
+
+    from openstategraph.api import auth
+    from openstategraph.api.listening import PortUnavailable, bind_listener, listen_urls
+
+    exposure = auth.exposure_warning(args.host)
+    if exposure is not None:
+        print(exposure, file=sys.stderr, flush=True)
+
+    # A fourth thing, and it is said here for the reason the other three are:
+    # a message printed after a server is listening is a message somebody
+    # scrolls past. This one is silent for every installed user, because
+    # `editor_is_stale` returns `None` when there is no `src/` to compare
+    # against (production-ready 60).
+    from openstategraph.editor_freshness import warn_if_stale
+
+    stale = warn_if_stale()
+    if stale is not None:
+        print(stale, file=sys.stderr, flush=True)
+
+    # The third thing said before anything is bound, and the same rule: the
+    # documented install carries a provider extra, and an install that lost it
+    # must not discover that fact one Run button at a time (ticket 37).
+    providers = no_provider_warning()
+    if providers is not None:
+        print(providers, file=sys.stderr, flush=True)
+
+    # A fifth, printed at most once in a project's life: the identity a
+    # config that predates the field just gained (kanban-patrol/23).
+    adopted = adopted_project_id_note()
+    if adopted is not None:
+        print(adopted, flush=True)
+
+    # …and the two facts that answer "what will Run actually do". Not a
+    # warning, so stdout; `flush` for the reason the URLs below flush.
+    for fact in startup_facts():
+        print(fact, flush=True)
+
+    try:
+        listener = bind_listener(args.host, args.port)
+    except PortUnavailable as exc:
+        return _error(str(exc))
+
+    # `serve` means "open the product", so the editor is served. `setdefault`
+    # rather than assignment: OPENSTATEGRAPH_SERVE_STATIC=0 in the environment
+    # is somebody deliberately asking for an API-only process, and that is
+    # theirs to ask for.
+    os.environ.setdefault("OPENSTATEGRAPH_SERVE_STATIC", "1")
+
+    port = int(listener.getsockname()[1])
+    urls = listen_urls(args.host, port)
+    # The last thing printed before uvicorn's own output, and the reason
+    # anyone ran the command: where to click.
+    #
+    # `flush=True` is load-bearing, not decoration. stdout is block-buffered
+    # whenever it is not a terminal — a log file, a pipe, a supervisor — and
+    # `Server.run` then blocks forever with these lines still in the buffer.
+    # The one thing a script waits for is the URL, and it never arrived.
+    for label, url in urls.items():
+        print(f"{label:<7} {url}", flush=True)
+
+    if args.open:
+        import webbrowser
+
+        # Safe before the loop starts: the socket is already listening, so the
+        # browser's connection queues rather than being refused.
+        webbrowser.open(urls["editor"])
+
+    uvicorn.Server(uvicorn.Config("openstategraph.api.main:app", host=args.host, port=port)).run(
+        sockets=[listener]
+    )
+    return EXIT_OK
+
+
+def cmd_open(args: argparse.Namespace) -> int:
+    """`openstategraph open [dir]` — the developer's one verb.
+
+    install-experience/26. Everything it decides is
+    `openstategraph.opening.plan`, and everything it serves is `cmd_serve`;
+    what lives here is the three things a decision cannot do for itself —
+    stand in the directory, ask the question, make the folder.
+
+    **`chdir` is the whole of what the argument does, and that is deliberate.**
+    The path could have been threaded into `workflows_root()` as a sixth
+    source, and that would have been a second precedence chain answering a
+    question one already answers. Standing in the directory instead means the
+    existing chain — environment, config file, checkout, convention — runs
+    unchanged and merely *reports* which of the four won. So a project's own
+    committed `workflows_dir:` still beats the folder you pointed at, and you
+    are told that it did, which is the failure this verb was filed over rather
+    than a new one.
+
+    **Not `serve` with an argument.** `serve` is what a deployment runs: no
+    browser, no questions, no directory. This one opens a browser by default
+    and can ask to create a folder, and a container must not be able to reach
+    either by accident.
+    """
+    from openstategraph import opening
+    from openstategraph.config_file import reset_active_config
+
+    target = Path(args.directory or ".").expanduser()
+    if not target.is_dir():
+        return _usage(f"{target} is not a directory.")
+    os.chdir(target)
+    # The config file that was active belonged to wherever this process
+    # started; the project it was just pointed at is the one to describe.
+    reset_active_config()
+
+    can_ask = not args.no_input and sys.stdin.isatty()
+    plan = opening.plan(Path.cwd(), create=args.create, can_ask=can_ask)
+    if plan.refusal is not None:
+        return _usage(plan.refusal)
+    for line in plan.lines:
+        print(line)
+    print()
+
+    if plan.consent_needed:
+        try:
+            answer = input(opening.prompt_line(plan.workflows_root))
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in {"y", "yes"}:
+            return _usage(f"Nothing was written. {plan.workflows_root} does not exist.")
+    if plan.consent_needed or plan.will_create:
+        plan.workflows_root.mkdir(parents=True, exist_ok=True)
+        print(f"created {plan.workflows_root}{os.sep}")
+
+    return cmd_serve(args)
+
+
+def cmd_mcp(args: argparse.Namespace) -> int:
+    """The MCP transport. Requires the `[mcp]` extra.
+
+    `--transport` sets `OPENSTATEGRAPH_MCP_TRANSPORT` rather than replacing it:
+    the environment variable is the shipped interface and keeps working.
+    """
+    try:
+        import mcp  # noqa: F401
+    except ImportError:
+        return _missing("mcp", "mcp", "the MCP transport")
+
+    if args.transport:
+        os.environ["OPENSTATEGRAPH_MCP_TRANSPORT"] = args.transport
+    from openstategraph.mcp_server import main as mcp_main
+
+    mcp_main()
+    return EXIT_OK
+
+
+def _missing(module: str, extra: str, why: str) -> int:
+    from openstategraph._extras import install_hint
+
+    print(f"{module} is required for {why} — {install_hint(extra)}", file=sys.stderr)
+    return EXIT_MISSING_EXTRA
+
+
+# --------------------------------------------------------------------------
+# parsing
+
+
+def build_parser() -> argparse.ArgumentParser:
+    from openstategraph import __version__
+
+    parser = argparse.ArgumentParser(
+        prog="openstategraph",
+        description="Compile and run OpenStateGraph workflow packages.",
+    )
+    parser.add_argument("--version", action="version", version=__version__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    run = subparsers.add_parser("run", help="ask a workflow package a question")
+    run.add_argument("package", help="the folder holding workflow.json")
+    run.add_argument("question")
+    run.add_argument("--model", help="a model string, e.g. ollama:gpt-oss:120b-cloud")
+    run.add_argument("--trace-file", dest="trace_file", help="append one JSON line per run")
+    run.add_argument("--thread-id", dest="thread_id", help="continue an earlier conversation")
+    # `kanban-patrol/08`. Not a browser tab: the sitting a run belongs to. An
+    # agent working board card `<id>` passes `card:<id>` here, and the patrol
+    # then never files a card about the work done on that card.
+    run.add_argument(
+        "--session-id",
+        dest="session_id",
+        help="the sitting this run belongs to, e.g. card:<task_id> while working a board card",
+    )
+    run.add_argument("--knowledge-dir", dest="knowledge_dir", help="override <package>/knowledge")
+    # Repeatable, and typed by the document rather than guessed from the
+    # literal: a command line carries strings, and guessing would make
+    # `caseId=00123` a number for one workflow and a string for the next.
+    run.add_argument(
+        "--context",
+        action="append",
+        metavar="KEY=VALUE",
+        help="a run context value the workflow declares; repeat for more than one",
+    )
+    run.add_argument("--json", action="store_true", help="print the whole result, not the answer")
+    run.set_defaults(handler=cmd_run)
+
+    resume = subparsers.add_parser(
+        "resume", help="answer an approval a run is paused on, and let it finish"
+    )
+    resume.add_argument("package", help="the folder holding workflow.json")
+    resume.add_argument("thread_id", help="the paused thread — `threads list` names it")
+    # Required and mutually exclusive: argparse refuses "neither" and "both"
+    # with exit 2 on its own, which is the contract, and no code path here can
+    # ever assume a decision nobody typed.
+    verdict = resume.add_mutually_exclusive_group(required=True)
+    verdict.add_argument("--approve", action="store_true", help="let it through")
+    verdict.add_argument("--reject", action="store_true", help="send it back")
+    resume.add_argument(
+        "--feedback", help="what to change — a note on a rejection, read as the spec"
+    )
+    resume.add_argument("--model", help="a model string, e.g. ollama:gpt-oss:120b-cloud")
+    resume.add_argument("--trace-file", dest="trace_file", help="append one JSON line per run")
+    resume.add_argument(
+        "--knowledge-dir", dest="knowledge_dir", help="override <package>/knowledge"
+    )
+    resume.add_argument(
+        "--json", action="store_true", help="print the whole result, not the answer"
+    )
+    resume.set_defaults(handler=cmd_resume)
+
+    evaluate = subparsers.add_parser(
+        "eval", help="grade a package against its golden dataset (runs a model)"
+    )
+    evaluate.add_argument("package", help="the folder holding workflow.json")
+    evaluate.add_argument(
+        "--dataset", help="a *.eval.json file (default: the one in <package>/evals)"
+    )
+    evaluate.add_argument("--limit", type=int, help="grade only the first N cases")
+    evaluate.add_argument("--model", help="a model string, e.g. ollama:gpt-oss:120b-cloud")
+    evaluate.add_argument(
+        "--threshold",
+        type=float,
+        default=0.0,
+        help=(
+            "exit 1 when overall accuracy is below this (0..1). Default 0, i.e. "
+            "report but do not gate; set it in CI to the number you will defend."
+        ),
+    )
+    evaluate.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help=(
+            "ask each case N times and report whether the answers agreed. "
+            "Each repetition runs on its own thread, so a repeat is the "
+            "question asked again rather than a follow-up. Reported, never "
+            "gated — --threshold still reads overall accuracy alone. Costs N "
+            "model turns per case."
+        ),
+    )
+    evaluate.add_argument("--json", action="store_true", help="print the scorecard as JSON")
+    evaluate.set_defaults(handler=cmd_eval)
+
+    validate = subparsers.add_parser("validate", help="compile-check a package or a document")
+    validate.add_argument("target", help="a workflow package folder, or a workflow.json file")
+    validate.set_defaults(handler=cmd_validate)
+
+    graph = subparsers.add_parser("graph", help="print the compiled topology as Mermaid text")
+    graph.add_argument("package")
+    graph.add_argument("--model")
+    graph.add_argument(
+        "--xray",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "expand LangGraph subgraph internals (default: on). A no-op today "
+            "— nothing this compiler emits is one; see CompiledWorkflow.mermaid"
+        ),
+    )
+    graph.set_defaults(handler=cmd_graph)
+
+    # The only command that creates a project, and the substitute for the one
+    # thing the install line cannot carry — see `cmd_init`.
+    init = subparsers.add_parser(
+        "init", help="make a directory an OpenStateGraph project (default: this one)"
+    )
+    init.add_argument(
+        "directory",
+        nargs="?",
+        help="the project directory, yours to name (default: the current one)",
+    )
+    init.add_argument(
+        "--workflows-dir",
+        dest="workflows_dir",
+        default="workflows",
+        help="what to call the packages folder inside it (default: workflows)",
+    )
+    init.add_argument(
+        "--empty",
+        action="store_true",
+        help="skip workflows/starter/, for a repository that already has packages",
+    )
+    # A flag, not a prompt: exit codes are this CLI's API for CI, and a command
+    # that blocks on stdin hangs a CI job. It is named inside the refusal it
+    # answers, so it is never something to go and look up.
+    init.add_argument(
+        "--force",
+        action="store_true",
+        help="use a directory that already has things in it; overwrites nothing",
+    )
+    # The second consent, and it is a different one: `--force` says the
+    # project directory may have things in it, `--adopt` says the *workflows
+    # root* is already full of packages and they are yours to read. The
+    # refusal that names it prints the review first, so nobody adopts a
+    # directory they have not seen.
+    init.add_argument(
+        "--adopt",
+        action="store_true",
+        help="take over an existing workflows/ directory as this project's root",
+    )
+    init.set_defaults(handler=cmd_init)
+
+    new = subparsers.add_parser("new", help="scaffold a workflow package from a template")
+    # Optional so `--list-templates` can stand alone; `cmd_new` supplies the
+    # usage error argparse would otherwise give, with the same exit code.
+    new.add_argument("slug", nargs="?", help="lowercase letters, digits and hyphens")
+    new.add_argument("name", nargs="?", help="display name (default: derived from the slug)")
+    # `choices` on purpose: argparse then rejects an unknown template with exit
+    # 2 and the valid names, which is exactly the contract, without this module
+    # growing a second copy of the catalogue to validate against.
+    new.add_argument(
+        "--template",
+        choices=templates.names(),
+        help=f"starting point (default: {templates.DEFAULT_TEMPLATE}); see --list-templates",
+    )
+    new.add_argument(
+        "--list-templates",
+        action="store_true",
+        help="print the templates and what each is for, then exit",
+    )
+    new.add_argument(
+        "--team",
+        action="store_true",
+        help="deprecated alias for --template team",
+    )
+    new.add_argument("--root", help="where to create it (default: the project's workflows root)")
+    new.set_defaults(handler=cmd_new)
+
+    # The gallery ships in the wheel as package data (gallery ticket 07) and is
+    # deliberately NOT under the workflows root, so it needs a command of its
+    # own rather than another `--template`: a template is rendered, an example
+    # is copied whole — tests, knowledge, database and all.
+    example_group = subparsers.add_parser(
+        "examples", help="the worked examples that ship with OpenStateGraph"
+    )
+    # Not `required=True`: the bare verb lists (production-ready 55.1). The
+    # top-level help offers `examples` as "the worked examples that ship with
+    # OpenStateGraph", so the bare word is what a newcomer types first, and an
+    # argparse usage error is a poor answer in a product whose complaint is
+    # that nobody knows the examples exist. Listing costs nothing and writes
+    # nothing, so it is the only subcommand safe to assume.
+    example_group.set_defaults(handler=cmd_examples_list)
+    example_commands = example_group.add_subparsers(dest="examples_command")
+
+    example_list = example_commands.add_parser(
+        "list", help="print the examples and what each one demonstrates"
+    )
+    example_list.set_defaults(handler=cmd_examples_list)
+
+    example_copy = example_commands.add_parser(
+        "copy", help="copy one into your workflows directory, mounts included"
+    )
+    # No `choices`: the gallery has more entries than argparse should print on
+    # every usage error, and it grows. `examples.get` raises with the list.
+    # (This comment said "twenty-one" for as long as there were twenty-three.)
+    # Optional so `--all` can stand alone; `cmd_examples_copy` supplies the
+    # usage error argparse would otherwise give, with the same exit code.
+    example_copy.add_argument("slug", nargs="?", help="see `openstategraph examples list`")
+    example_copy.add_argument(
+        "--all",
+        action="store_true",
+        help="copy every example, all-or-nothing; prints the size first",
+    )
+    example_copy.add_argument(
+        "--root", help="where to copy it (default: the project's workflows root)"
+    )
+    example_copy.set_defaults(handler=cmd_examples_copy)
+
+    export_group = subparsers.add_parser(
+        "export", help="write this package out in somebody else's format"
+    )
+    # `required=True`, unlike `examples`: every leaf here writes a directory,
+    # so there is no safe thing for the bare verb to assume.
+    export_commands = export_group.add_subparsers(dest="export_command", required=True)
+
+    export_plugin_cmd = export_commands.add_parser(
+        "plugin", help="write an Agent Plugins v1 bundle (what the HTTP door previews)"
+    )
+    export_plugin_cmd.add_argument("package", help="the folder holding workflow.json")
+    export_plugin_cmd.add_argument(
+        "--out", help="where to write the bundle (default: ./<the package's folder name>)"
+    )
+    export_plugin_cmd.set_defaults(handler=cmd_export_plugin)
+
+    export_toolkit_cmd = export_commands.add_parser(
+        "toolkit",
+        help="write this installation's skills and MCP server as one Agent Plugins v1 bundle",
+    )
+    export_toolkit_cmd.add_argument(
+        "--out", help="where to write the bundle (default: ./openstategraph)"
+    )
+    export_toolkit_cmd.set_defaults(handler=cmd_export_toolkit)
+
+    # `kanban-patrol/19`. The provenance stays here, in the tree, and off the
+    # terminal: a ticket id names a file under `.scratch/`, which ships in no
+    # wheel, so a user who reads one in `--help` cannot resolve it
+    # (`docs-onramp/08`). The same applies to every reference moved into a
+    # comment below.
+    kanban = subparsers.add_parser(
+        "kanban",
+        help="attend and advance a kanban-board card — the CLI door, "
+        "beside the MCP one, for a coding agent that is not attached to this project's server",
+    )
+    kanban_commands = kanban.add_subparsers(dest="kanban_command", required=True)
+
+    kanban_attend = kanban_commands.add_parser(
+        "attend", help="claim a card, exclusively — first caller wins, the second is told who has it"
+    )
+    kanban_attend.add_argument("task_id")
+    # `kanban-patrol/20`: an actor is required, so a claim names somebody.
+    kanban_attend.add_argument("--actor", required=True, help="who is attending")
+    kanban_attend.add_argument("--workflows-root", dest="workflows_root")
+    kanban_attend.set_defaults(handler=cmd_kanban_attend)
+
+    kanban_stage = kanban_commands.add_parser(
+        "stage", help="advance a claimed card one stage — red, green, or finished"
+    )
+    kanban_stage.add_argument("task_id")
+    kanban_stage.add_argument("stage", choices=["red", "green", "finished"])
+    kanban_stage.add_argument("--actor", required=True)
+    # `kanban-patrol/17`+`21`: the evidence gate. The three flags below are
+    # what a stage transition must carry.
+    kanban_stage.add_argument("--test-id", dest="test_id", default="", help="evidence: the test identifier")
+    # `osg-agent-experience/85` — the provenance of the two-stage reason rule.
+    # It stays here, where a contributor reads it, and out of the help string,
+    # where a user who cannot resolve a gitignored ticket id would (`docs-onramp/08`).
+    kanban_stage.add_argument(
+        "--reason",
+        default="",
+        help=(
+            "evidence, read at two stages and refused at the others: at red it "
+            "is why the test fails and is required; at finished it is what the "
+            "closing checks said"
+        ),
+    )
+    kanban_stage.add_argument("--commit", default="", help="evidence: the commit/diff carrying the work — required at finished")
+    kanban_stage.add_argument("--workflows-root", dest="workflows_root")
+    kanban_stage.set_defaults(handler=cmd_kanban_stage)
+
+    kanban_show = kanban_commands.add_parser(
+        "show", help="print a card's instruction — the self-contained text to paste into a coding agent"
+    )
+    kanban_show.add_argument("task_id")
+    kanban_show.add_argument("--workflows-root", dest="workflows_root")
+    kanban_show.set_defaults(handler=cmd_kanban_show)
+
+    kanban_answer = kanban_commands.add_parser(
+        "answer",
+        # `kanban-patrol/15`.
+        help="record the decision on a Needs You card — it returns to Detected, "
+        "carrying the answer",
+    )
+    kanban_answer.add_argument("task_id")
+    kanban_answer.add_argument("--actor", required=True, help="who decided")  # kanban-patrol/20
+    kanban_answer.add_argument(
+        "--answer", required=True, help="the decision itself, in your own words"
+    )
+    kanban_answer.add_argument("--workflows-root", dest="workflows_root")
+    kanban_answer.set_defaults(handler=cmd_kanban_answer)
+
+    kanban_file = kanban_commands.add_parser(
+        "file",
+        # `osg-agent-experience/25`.
+        help="file a card from a conversation, brief and all",
+    )
+    kanban_file.add_argument(
+        "--kind", required=True, choices=["task", "bug", "grilling"],
+        help="a grilling ends in a judgement and lands in Needs You; the other two land in Detected",
+    )
+    kanban_file.add_argument("--title", required=True, help="the id is a slug of this")
+    kanban_file.add_argument("--story", required=True, help="the plain-English want")
+    kanban_file.add_argument(
+        "--done-when", dest="done_when", required=True, help="the check that settles it"
+    )
+    kanban_file.add_argument("--priority", required=True, choices=["high", "med", "low"])
+    kanban_file.add_argument("--reason", required=True, help="why it is that urgent")
+    kanban_file.add_argument(
+        "--area", default="backend", choices=["ui", "ux", "frontend", "backend", "test", "docs"]
+    )
+    kanban_file.add_argument(
+        "--blocked-by", dest="blocked_by", action="append", default=[],
+        help="a card id this one waits on; repeat for several",
+    )
+    kanban_file.add_argument(
+        "--agent-model", dest="agent_model", default="",
+        help="advisory: the model to give a subagent that takes this card",
+    )
+    kanban_file.add_argument(
+        "--agent-effort", dest="agent_effort", default="",
+        help="advisory: the reasoning effort to give that subagent",
+    )
+    kanban_file.add_argument("--actor", required=True, help="who filed it")  # kanban-patrol/20
+    kanban_file.add_argument("--workflows-root", dest="workflows_root")
+    kanban_file.set_defaults(handler=cmd_kanban_file)
+
+    kanban_release = kanban_commands.add_parser(
+        "release",
+        # `kanban-patrol/19`: flag, never auto-release.
+        help="press the explicit Release on a card the system has already flagged stale",
+    )
+    kanban_release.add_argument("task_id")
+    kanban_release.add_argument(
+        "--threshold-seconds", dest="threshold_seconds", type=int, default=3600,
+        help="how old a heartbeat must be to count as stale (default: 3600, one hour)",
+    )
+    kanban_release.add_argument("--workflows-root", dest="workflows_root")
+    kanban_release.set_defaults(handler=cmd_kanban_release)
+
+    kanban_triage = kanban_commands.add_parser(
+        "triage",
+        # `osg-agent-experience/25`.
+        help="which card to pick up next, and why — "
+        "the same order kanban_triage answers over MCP",
+    )
+    kanban_triage.add_argument(
+        "--board", default="workflows", help="board to triage (default: workflows)"
+    )
+    kanban_triage.add_argument("--workflows-root", dest="workflows_root")
+    kanban_triage.set_defaults(handler=cmd_kanban_triage)
+
+    kanban_where = kanban_commands.add_parser(
+        "where",
+        # `osg-agent-experience/65`.
+        help="where this project's board is, and whether it is there yet",
+    )
+    kanban_where.add_argument("--workflows-root", dest="workflows_root")
+    kanban_where.set_defaults(handler=cmd_kanban_where)
+
+    patrol = subparsers.add_parser(
+        "patrol",
+        # `kanban-patrol/07`.
+        help="the in-built patrol — read findings, file new kanban cards",
+    )
+    patrol_commands = patrol.add_subparsers(dest="patrol_command", required=True)
+
+    patrol_run = patrol_commands.add_parser(
+        "run", help="one pass: read every finding, file what's new, skip what's already claimed"
+    )
+    patrol_run.add_argument("--workflows-root", dest="workflows_root")
+    patrol_run.set_defaults(handler=cmd_patrol_run)
+
+    report = subparsers.add_parser(
+        "report",
+        # `team-board-and-gap-reports/08`.
+        help="tell the maintainers about a gap this install refused — shows the "
+        "whole report, sends nothing without --yes",
+    )
+    report.add_argument(
+        "subject",
+        help="the node or tool type id the refusal named, e.g. tool.reddit-search",
+    )
+    # No `choices=` here, and that is the four-dependency core rather than an
+    # oversight: the legal values are `gap_report.GapDoor`, whose module pulls
+    # the compiler in behind it, and `build_parser` runs on every invocation
+    # including `--help`. The value is checked against the enum itself inside
+    # the command, where the import is already paid for, and a wrong one is
+    # refused with the enum's own list — one source, one answer.
+    report.add_argument(
+        "--door",
+        default="cli",
+        help="which surface refused — the report schema's own list (default: cli)",
+    )
+    report.add_argument(
+        "--yes",
+        action="store_true",
+        help="file the issue printed above, under your own gh login",
+    )
+    # Only the card subject reads it, and a subject is one argument
+    # (`team-board-and-gap-reports/15`) rather than two verbs.
+    report.add_argument("--workflows-root", dest="workflows_root")
+    report.set_defaults(handler=cmd_report)
+
+    threads = subparsers.add_parser("threads", help="past runs stored by the checkpointer")
+    thread_commands = threads.add_subparsers(dest="threads_command", required=True)
+
+    thread_list = thread_commands.add_parser("list", help="list past runs, newest first")
+    thread_list.add_argument("--workflow", help="only this workflow slug")
+    thread_list.add_argument("--user", help="only this user_email (case-insensitive)")
+    thread_list.add_argument("--session", help="only this session_id")
+    thread_list.add_argument("--limit", type=int, default=25)
+    thread_list.add_argument("--workflows-root", dest="workflows_root")
+    thread_list.add_argument("--json", action="store_true")
+    thread_list.set_defaults(handler=cmd_threads_list)
+
+    thread_show = thread_commands.add_parser(
+        "show", help="print one past run, checkpoint by checkpoint (does not re-run it)"
+    )
+    thread_show.add_argument("thread_id")
+    thread_show.add_argument("--workflow", help="the slug, if it keeps its own checkpoint file")
+    thread_show.add_argument("--workflows-root", dest="workflows_root")
+    thread_show.add_argument("--json", action="store_true")
+    thread_show.set_defaults(handler=cmd_threads_show)
+
+    runs = subparsers.add_parser(
+        "runs", help="what this machine has run — the local run store, with what it cost"
+    )
+    run_store_commands = runs.add_subparsers(dest="runs_command", required=True)
+
+    runs_list = run_store_commands.add_parser(
+        "list", help="one row per finished turn, newest first"
+    )
+    runs_list.add_argument("--workflow", help="only this workflow slug")
+    runs_list.add_argument("--thread", help="only this thread_id (one conversation)")
+    runs_list.add_argument("--session", help="only this session_id (spans threads)")
+    runs_list.add_argument("--limit", type=int, default=25)
+    runs_list.add_argument("--workflows-root", dest="workflows_root")
+    runs_list.add_argument("--json", action="store_true")
+    runs_list.set_defaults(handler=cmd_runs_list)
+
+    runs_export = run_store_commands.add_parser(
+        "export", help="the same rows as JSON — run this before truncating a large store"
+    )
+    runs_export.add_argument("--to", help="write to this file instead of stdout")
+    runs_export.add_argument("--limit", type=int, default=100000)
+    runs_export.add_argument("--workflows-root", dest="workflows_root")
+    runs_export.set_defaults(handler=cmd_runs_export)
+
+    runs_path = run_store_commands.add_parser(
+        "path", help="print the run store's path, for sqlite3"
+    )
+    runs_path.add_argument("--workflows-root", dest="workflows_root")
+    runs_path.set_defaults(handler=cmd_runs_path)
+
+    knowledge = subparsers.add_parser("knowledge", help="the package's second brain")
+    knowledge_commands = knowledge.add_subparsers(dest="knowledge_command", required=True)
+
+    build = knowledge_commands.add_parser("build", help="generate knowledge docs")
+    build.add_argument("package")
+    build.add_argument("--source", help="one builder's source_kind (default: every one that finds)")
+    build.add_argument("--instruction", help="steering text for the agentic builder")
+    build.add_argument("--model")
+    build.set_defaults(handler=cmd_knowledge_build)
+
+    listing = knowledge_commands.add_parser("list", help="topics and their index hints")
+    listing.add_argument("package")
+    listing.add_argument("--knowledge-dir", dest="knowledge_dir")
+    listing.set_defaults(handler=cmd_knowledge_list)
+
+    # The verb the owner asked for, and it is a verb rather than an argument
+    # on `serve` for the reason `cmd_open` gives. `openstategraph .` reaches
+    # it through `expand_bare_path`.
+    open_parser = subparsers.add_parser(
+        "open",
+        help="open the editor on a project directory (default: this one)",
+    )
+    open_parser.add_argument(
+        "directory",
+        nargs="?",
+        help="the project directory (default: the current one)",
+    )
+    open_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="bind address (default: 127.0.0.1, this machine only) — see `serve`",
+    )
+    open_parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="exactly this port, failing if it is taken. Omit for the first free one.",
+    )
+    # `serve` defaults to off and opts in; this one defaults to on and opts
+    # out, because a tool that steals focus in CI is a bug and a developer verb
+    # that does not open what you asked it to open is a chore.
+    open_parser.add_argument(
+        "--no-open",
+        dest="open",
+        action="store_false",
+        default=True,
+        help="do not launch a browser (default: it does)",
+    )
+    open_parser.add_argument(
+        "--create",
+        action="store_true",
+        help="create the workflows directory if it is missing, without asking",
+    )
+    open_parser.add_argument(
+        "--no-input",
+        dest="no_input",
+        action="store_true",
+        help="never ask — refuse and name the flag instead (automatic when not a terminal)",
+    )
+    open_parser.set_defaults(handler=cmd_open, workers=None)
+
+    serve = subparsers.add_parser(
+        "serve",
+        help="run the editor, the chat surface and the API (needs [server] plus a provider extra)",
+    )
+    serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help=(
+            "bind address (default: 127.0.0.1, this machine only). Not 0.0.0.0: "
+            "this process holds your provider API keys and has no authentication, "
+            "so exposing it to the network exposes those. Use 0.0.0.0 only behind "
+            "something that authenticates."
+        ),
+    )
+    serve.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help=(
+            "exactly this port, failing if it is taken. Omit to take 8000, or the "
+            "next free port if 8000 is busy. Use 0 to let the OS choose."
+        ),
+    )
+    serve.add_argument(
+        "--open",
+        action="store_true",
+        help="open the editor in your browser once it is listening (default: off)",
+    )
+    # Accepted only so it can be REFUSED by name. Without the flag, argparse
+    # answers `--workers 4` with "unrecognized arguments", which reads like a
+    # version skew and sends the deployer to `uvicorn --workers 4` — the one
+    # path that skips every check we have. See `openstategraph.deployment`.
+    serve.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="must be 1. More than one worker is refused — see docs/deploying.md.",
+    )
+    serve.set_defaults(handler=cmd_serve)
+
+    mcp_parser = subparsers.add_parser("mcp", help="run the MCP server (needs [mcp])")
+    mcp_parser.add_argument("--transport", choices=("stdio", "streamable-http"))
+    mcp_parser.set_defaults(handler=cmd_mcp)
+
+    providers_parser = subparsers.add_parser(
+        "providers", help="what model providers are registered, and are they configured"
+    )
+    providers_parser.add_argument(
+        "--check",
+        action="store_true",
+        help=(
+            "make one real, BILLABLE request per configured provider and report "
+            "which answered. Off by default: a status command must not spend money."
+        ),
+    )
+    providers_parser.set_defaults(handler=cmd_providers)
+
+    nodes_parser = subparsers.add_parser(
+        "nodes", help="what node types exist, and what fields and ports each one has"
+    )
+    nodes_parser.add_argument(
+        "type",
+        nargs="?",
+        help="a node type id, e.g. route.classifier. Omit it to list every type.",
+    )
+    nodes_parser.set_defaults(handler=cmd_nodes)
+
+    env_example = subparsers.add_parser(
+        "env-example", help="print the provider block of .env.example (names only)"
+    )
+    env_example.set_defaults(handler=cmd_env_example)
+
+    return parser
+
+
+def cmd_nodes(args: argparse.Namespace) -> int:
+    """The vocabulary, through the door that had none.
+
+    `osg-agent-experience/33`. An MCP client calls `get_node_vocabulary` before
+    it composes anything; a client on the command line had no verb at all, so
+    the sheet sent it to read the installed `compile/port_specs.json` — and the
+    agent that did not read it invented a `systemPrompt` on a classifier whose
+    fields are `rules`, `branches`, `fallback` and `matchMode`.
+
+    It is a **wrapper**, like everything else here: `NodeVocabulary.describe()`
+    supplies the payload and `node_report` formats it. Nothing in this path
+    opens `port_specs.json`, because a second reader is a second place a node
+    type added in the editor has to reach.
+
+    An unknown id exits `EXIT_USAGE` rather than `EXIT_FAILURE`: nothing ran
+    and nothing failed — the word typed is not one of ours, which is the same
+    class of mistake as a flag that does not exist.
+    """
+    from openstategraph.mcp_server import NodeVocabulary
+    from openstategraph.node_report import nearest_types, node_detail_lines, node_list_lines
+
+    vocabulary = NodeVocabulary().describe()
+    if args.type is None:
+        for line in node_list_lines(vocabulary):
+            print(line)
+        return EXIT_OK
+
+    lines = node_detail_lines(vocabulary, args.type)
+    if lines is None:
+        near = nearest_types(args.type, [node["type"] for node in vocabulary["node_types"]])
+        suggestion = f" Did you mean: {', '.join(near)}?" if near else ""
+        return _usage(
+            f"no node type {args.type!r}.{suggestion} "
+            "Run `openstategraph nodes` for every type this installation has."
+        )
+    for line in lines:
+        print(line)
+    return EXIT_OK
+
+
+def cmd_providers(args: argparse.Namespace) -> int:
+    """Which providers exist, where their keys come from, and what was measured.
+
+    The question "why is it not using my key" has one honest answer and it is
+    a list: what is registered, what each one reads, which variable actually
+    supplied a credential — and, said out loud, that none of this was verified
+    by a request.
+
+    **Five states, three of them knowable from here** (providers-and-credentials
+    12). The extra is installed; a credential is present; which variable
+    supplied it — all three are `find_spec` and the environment. *The endpoint
+    is reachable* and *a request will be answered* are neither, and this
+    command used to answer them anyway, in one word: `ready`. A supervisor
+    session read that word, concluded three live credentials, and sent a
+    correction into a running session telling it to call a model.
+
+    So the row says `configured`, which is exactly the question
+    `ProviderEnvironment.is_configured` asks, the footer defines the word
+    rather than leaving a reader to, and `--check` is the only thing here that
+    makes a claim about running — because it is the only thing here that calls
+    anybody. `/api/providers` and its `verify` route already drew this line;
+    this is the terminal catching up with the vocabulary the HTTP surface
+    shipped.
+
+    **Exit codes are deliberate and they differ between the two modes.** Plain
+    `providers` is a *status* command: it exits 0 whenever it could report,
+    including on a machine where nothing at all is configured, because it is
+    the command you run precisely when things are broken and a non-zero exit
+    would make it useless inside `set -e`. `--check` is an *assertion* — "can
+    this machine run a workflow" — so it exits 1 when any configured provider
+    failed to answer, and 1 when there was nothing to check at all, which is
+    the same answer to the same question.
+    """
+    from openstategraph.config_file import find_config_file
+    from openstategraph.dotenv import environment_source_note
+    from openstategraph.providers import ProviderEnvironment, provider_catalogue
+
+    catalogue = provider_catalogue()
+    config = find_config_file()
+    default = catalogue.elected_default()
+    print(f"config file: {config if config else '(none)'}")
+    # The line providers-and-credentials/13 was filed over: this command reads
+    # `.env` (`console_main` loaded it before this ran) and a server does not,
+    # unless it too was started through `openstategraph providers`/`serve`.
+    print(environment_source_note(loaded=True))
+    # The line the list was missing: which provider won, and why. Everything
+    # else here answers "what could work"; only this answers the question the
+    # reader actually arrived with (install-experience T3).
+    _print_default_reason("default:     ", default)
+    print()
+    environments = [ProviderEnvironment(spec) for spec in catalogue.list()]
+    for here in environments:
+        spec = here.spec
+        # Three states, not two. "needs a key" on a provider whose integration
+        # is absent sent a reader to fix the wrong thing, and then round again
+        # for the real one — the round trip workflow-gallery ticket 38 exists
+        # to end, in the surface it named as already doing this correctly.
+        gap = here.readiness()
+        if gap is None:
+            state = "configured"
+        elif gap.missing_package:
+            state = "needs its extra"
+        elif gap.missing_key:
+            state = "needs a key"
+        else:
+            # Four states now, and the fourth is the one a reader could not
+            # otherwise tell from the third: the key is present, correct, and
+            # not what is missing. Saying "needs a key" here sends somebody to
+            # rotate a credential that works (providers-and-credentials/18).
+            state = "needs a setting"
+        elected = "   (default)" if spec is default.spec else ""
+        # 13 and 15: the widest name and the widest state, so a fourth
+        # provider does not silently shunt the model column out of line.
+        print(f"{spec.name:<13}{state:<16}{here.model_string()}{elected}")
+        print(f"{'':<13}{_credential_line(here)}")
+        # Named, never merely counted. A row saying "needs a setting" and not
+        # which one is the shape of the 500 this ticket came from: a reader who
+        # cannot see the variable goes and checks the key instead.
+        if gap is not None and gap.missing_arguments:
+            print(f"{'':<13}unset: {gap.argument_clause}")
+        print(f"{'':<13}extra 'openstategraph[{spec.extra}]'")
+    for warning in catalogue.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+
+    if not args.check:
+        print()
+        print(
+            textwrap.fill(
+                'No provider was called. "configured" means a credential is present '
+                "in this environment, and every setting the provider's own client "
+                "cannot be built without — not that the endpoint is reachable, and "
+                "not that a request will be answered. Run `openstategraph providers "
+                "--check` to make one real (billable) request per configured "
+                "provider and find out.",
+                width=88,
+            )
+        )
+        return EXIT_OK
+    return _check_providers(environments)
+
+
+def _credential_line(here: "ProviderEnvironment") -> str:
+    """What this provider reads, and which of it actually answered.
+
+    Naming the winning variable is the state a reader could not previously
+    see, and it is the one that settles Ollama: `env_vars` is two, `any` of
+    them configures it, and *which* one tells a developer whether they are on
+    the cloud key or on a daemon of their own. The value is a
+    `credential_source` glance — a secret masked to a fixed width, an address
+    shown whole, since masking a URL hides the only readable thing about it.
+    """
+    variables = ", ".join(here.spec.env_vars)
+    if not variables:
+        return "needs no credential"
+    source = here.credential_source()
+    if source is None:
+        absent = "it is not set" if len(here.spec.env_vars) == 1 else "none of them is set"
+        return f"reads {variables}; {absent}"
+    name, hint = source
+    # `reads X; X is set` says the name twice for the two single-variable
+    # providers and is worth the branch: the name is *information* only where
+    # there was a choice, which is Ollama, which is the whole reason the
+    # winning variable is printed at all.
+    which = "it is set" if len(here.spec.env_vars) == 1 else f"{name} is set"
+    return f"reads {variables}; {which} ({hint})"
+
+
+def _check_providers(environments: "list[ProviderEnvironment]") -> int:
+    """One real request per configured provider. The only certain answer.
+
+    Deliberately skips a provider that has no credential rather than calling
+    it: the answer is already known and the failure would be ours, not the
+    vendor's. With nothing configured at all there is nothing to check, and
+    that is a failed check rather than a vacuous pass — the question `--check`
+    asks is "can this machine run a workflow", and the answer is no.
+
+    The call is `chat_model.verify_provider`, the same function
+    `POST /api/providers/{name}/verify` uses, so the editor and the terminal
+    cannot come to different conclusions about one key.
+    """
+    from openstategraph import chat_model
+
+    checkable = [here for here in environments if here.readiness() is None]
+    print()
+    if not checkable:
+        print("--check: nothing to check — no provider has both its extra and a credential.")
+        return EXIT_FAILURE
+    print(
+        f"--check: making one real, billable request to each of {len(checkable)} "
+        "configured providers."
+    )
+    failures = 0
+    for here in checkable:
+        failure = chat_model.verify_provider(here)
+        if failure is None:
+            print(f"{here.spec.name:<12} answered      {here.model_string()}")
+            continue
+        failures += 1
+        print(f"{here.spec.name:<12} did not answer {here.model_string()}")
+        print(textwrap.fill(failure, width=88, initial_indent=" " * 13, subsequent_indent=" " * 13))
+    return EXIT_FAILURE if failures else EXIT_OK
+
+
+def cmd_env_example(_args: argparse.Namespace) -> int:
+    """The provider block of `.env.example`, generated from the registry.
+
+    Names only, never values — see `providers.env_example_section`.
+    """
+    from openstategraph.providers import env_example_section
+
+    print(env_example_section())
+    return EXIT_OK
+
+
+from openstategraph.dotenv import load_env_file
+
+
+def expand_bare_path(argv: Sequence[str]) -> list[str]:
+    """`openstategraph .` → `openstategraph open .`, and nothing else.
+
+    The shape the owner asked for, and the one place this CLI reads an
+    argument tolerantly. So it is strict about what it trusts, per the rule in
+    `CLAUDE.md`: the first token is resolved against the parser's **own set of
+    verbs** first, so a real command is never a path even when a directory of
+    that name exists beside you, and a token that is neither a verb nor an
+    existing directory is handed back for argparse to report as the typo it
+    probably is.
+
+    `.` and `..` are taken without asking the filesystem, because they are the
+    two spellings a person types when they mean *here*.
+    """
+    if not argv:
+        return list(argv)
+    first = argv[0]
+    if first.startswith("-"):
+        return list(argv)
+    for action in build_parser()._actions:
+        if isinstance(action, argparse._SubParsersAction) and first in action.choices:
+            return list(argv)
+    if first in {".", ".."} or Path(first).expanduser().is_dir():
+        return ["open", *argv]
+    return list(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """The entry point. Returns the exit code rather than calling `sys.exit`,
+    so a test can invoke it directly instead of shelling out to a subprocess
+    — which is how a CLI ends up with untested commands."""
+    raw = list(argv) if argv is not None else sys.argv[1:]
+    args = build_parser().parse_args(expand_bare_path(raw))
+    try:
+        return int(args.handler(args))
+    except ImportError as exc:
+        # A missing provider integration already carries our install line
+        # (`_extras.provider_extra_hint`); everything else is a genuine failure.
+        print(str(exc), file=sys.stderr)
+        return EXIT_MISSING_EXTRA if "pip install" in str(exc) else EXIT_FAILURE
+    except KeyboardInterrupt:
+        return EXIT_FAILURE
+    except Exception as exc:
+        return _error(_terminal_message(exc))
+
+
+def console_main() -> int:
+    """The installed `openstategraph` command — the **process** entry point.
+
+    `.env` is read here and not in `main()`, and the distinction is the whole
+    design. `main()` is a function: this project's own tests call it in-process
+    (its docstring says so, deliberately, so a CLI does not end up with
+    untested commands), and a function that rewrites `os.environ` from a file on
+    disk poisons every test that runs after it — which is exactly what happened
+    when this lived one level down.
+
+    So: a **process** the user launched may populate their environment from
+    their file; a **function** anyone can call may not. Same boundary
+    `load_workflow` observes for a library consumer, one layer in.
+
+    Already-exported variables always win — see `openstategraph/dotenv.py`.
+
+    **`prepend_sys_path` is the second thing on that same side of the line**
+    (`launch-readiness/195`), and it is there for the identical reason. A
+    package's `tools/*.py` that imports the host project's own module resolved
+    from `python script.py` and failed from the installed command, because the
+    invocation directory is on `sys.path` in the first case and not in the
+    second — so the pre-flight check and the run disagreed about one package.
+    Rewriting `sys.path` from a file on disk is exactly as unrepeatable inside
+    a test process as rewriting `os.environ` is; the argument for reading it
+    here and only here is already written above, and the argument for it being
+    an explicit, committed opt-in rather than an implicit injection is in
+    `docs/decisions/importing-the-projects-own-code.md`.
+
+    No new logic (rule 1 of this module): `apply_prepend_sys_path` is
+    `config_file`'s, beside the `workflows_dir` resolution that follows the
+    same relative-to-the-file rule.
+    """
+    from openstategraph.config_file import apply_prepend_sys_path
+
+    load_env_file()
+    apply_prepend_sys_path()
+    return main()
+
+
+if __name__ == "__main__":  # pragma: no cover
+    # **`console_main`, not `main`** — `python3 -m openstategraph.cli` is a
+    # process the user launched, which is the whole basis of the split above,
+    # and it was calling the function that deliberately does not read `.env`.
+    #
+    # The symptom is not an error. Every provider reads "needs key", the editor
+    # reports "no provider is configured on this server", and workflows run
+    # against mock data — so a wiring gap and a missing credential become the
+    # same thing, which is the failure mode `CLAUDE.md` writes a whole standing
+    # instruction about.
+    #
+    # Found from the other end on 2026-08-18: `.claude/launch.json` starts the
+    # backend with `python3 -m uvicorn openstategraph.api.main:app`, the same
+    # bypass one layer out. `scripts/dev.sh` has always known — it loads `.env`
+    # into the shell itself before launching uvicorn, in a block whose comment
+    # explains why.
+    raise SystemExit(console_main())

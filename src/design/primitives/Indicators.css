@@ -1,0 +1,159 @@
+/* ---------- Status dot ---------- */
+.status-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-status-idle);
+}
+
+.status-dot--ready {
+  background: var(--color-status-ready);
+}
+.status-dot--running {
+  background: var(--color-status-running);
+  animation: status-pulse 1.1s var(--ease-in-out) infinite;
+}
+/* Paused: the same amber as a warning, and pointedly *not* animated. A run
+   waiting on a human decision is not working, so the dot must not pulse —
+   that pulse is the whole reason the canvas used to claim a paused run was
+   still running. */
+.status-dot--paused {
+  background: var(--color-status-warning);
+}
+.status-dot--success {
+  background: var(--color-status-success);
+}
+.status-dot--warning {
+  background: var(--color-status-warning);
+}
+.status-dot--error {
+  background: var(--color-status-error);
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-status-running) 45%, transparent);
+  }
+  50% {
+    opacity: 0.65;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-status-running) 0%, transparent);
+  }
+}
+
+/* ---------- Badge ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 18px;
+  padding-inline: var(--space-1-5);
+  border-radius: var(--radius-sm);
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wide);
+  background: var(--color-bg-muted);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  /* A badge labels the thing beside it; it must not be squeezed by it. */
+  flex: none;
+}
+
+.badge svg,
+.icon-tile svg {
+  flex: none;
+  pointer-events: none;
+}
+
+.badge > svg:not([data-icon-size]) {
+  width: 12px;
+  height: 12px;
+}
+
+.badge--accent {
+  background: var(--accent-tint);
+  color: var(--accent-on-tint);
+}
+
+.badge--success {
+  background: var(--color-primary-subtle);
+  /* `kanban-patrol/04`: was `--color-primary` — the same token tuned as a
+     *fill* under white text (the Run button), reused here as this badge's
+     own *ink* and never measured that way: 2.38:1 in dark mode against a
+     4.5:1 floor, on `--color-primary-subtle`'s dark tint. `--color-text-success`
+     already exists for exactly this fill-vs-ink split (see its own comment
+     in `theme.css`) and is `--green-600` in light mode — the same value
+     `--color-primary` already is there — so light is unchanged (4.93:1
+     still) and dark moves to `--color-status-success`'s bright end. */
+  color: var(--color-text-success);
+}
+
+.badge--danger {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
+.badge--numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Icon tile — the coloured square in a node header ---------- */
+.icon-tile {
+  --icon-tile-size: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--icon-tile-size);
+  height: var(--icon-tile-size);
+  border-radius: var(--radius-md);
+  background: var(--accent-tint);
+  color: var(--accent-on-tint);
+}
+
+.icon-tile--sm {
+  --icon-tile-size: 22px;
+  border-radius: var(--radius-sm);
+}
+
+.icon-tile--lg {
+  --icon-tile-size: 30px;
+  border-radius: var(--radius-lg);
+}
+
+/* ---------- Kbd ---------- */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--color-bg-subtle);
+  border: var(--border-width-hairline) solid var(--color-border);
+  font: var(--type-label);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-normal);
+  color: var(--color-text-secondary);
+}
+
+.kbd-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* An explained badge is focusable, so it needs a focus ring and a cursor that
+ * says "there is something here" (`say-it-on-the-surface` 05). A hover-only
+ * explanation is the same defect one input device along, so this state is not
+ * decoration — it is the keyboard half of the affordance. */
+.badge--explained {
+  cursor: help;
+}
+
+.badge--explained:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: 2px;
+}

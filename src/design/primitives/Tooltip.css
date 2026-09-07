@@ -1,0 +1,54 @@
+.tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-tooltip);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 260px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-inverse);
+  color: var(--color-text-inverse);
+  font: var(--type-body-sm);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-tight);
+  pointer-events: none;
+  animation: tooltip-in var(--duration-fast) var(--ease-out);
+}
+
+.tooltip--multiline {
+  display: block;
+  white-space: normal;
+  line-height: var(--line-height-snug);
+}
+
+/* A multiline tooltip is `display: block`, which drops the flex `gap` the
+ * single-line layout used to separate the sentence from its shortcut — so the
+ * two ran together as "…in the address bar.Mod+S". Found while verifying the
+ * toolbar's Save (`say-it-on-the-surface` 01) in a browser, which is the only
+ * place it is visible: the markup was correct the whole time. */
+.tooltip--multiline .tooltip__kbd {
+  display: block;
+  margin-block-start: var(--space-1);
+}
+
+/* Shortcut hint riding along inside the tooltip. */
+.tooltip__kbd {
+  display: inline-flex;
+  gap: var(--space-0-5);
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

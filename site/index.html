@@ -1,0 +1,1507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenStateGraph — visual workflows that compile to real LangGraph</title>
+<meta name="description" content="Draw the flow, ship the graph. OpenStateGraph is a visual AI workflow builder that compiles a canvas to a portable LangGraph StateGraph — files in git, testable with pytest, deployable without the editor." />
+<meta name="color-scheme" content="light dark" />
+<meta property="og:title" content="OpenStateGraph — draw the flow, ship the graph" />
+<meta property="og:description" content="A visual AI workflow builder that compiles, rather than interprets. Your workflow is a file in git and runs anywhere Python runs." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2318181b'/%3E%3Cg fill='none' stroke='%23fafafa' stroke-width='1.8'%3E%3Cpath d='M10 10h4M10 22h4M18 16h4'/%3E%3C/g%3E%3Cg fill='%23fafafa'%3E%3Ccircle cx='9' cy='10' r='2.4'/%3E%3Ccircle cx='9' cy='22' r='2.4'/%3E%3Ccircle cx='23' cy='16' r='2.4'/%3E%3C/g%3E%3C/svg%3E" />
+<style>
+/* ── shadcn zinc tokens, hand-rolled ─────────────────────────────── */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --border: 240 5.9% 90%;
+  --primary: 240 5.9% 10%;
+  --primary-foreground: 0 0% 98%;
+  --accent: 240 4.8% 95.9%;
+  --ring: 240 5% 64.9%;
+  --radius: 0.5rem;
+  --shadow: 0 1px 2px 0 hsl(240 6% 10% / 0.05);
+  --shadow-md: 0 4px 16px -4px hsl(240 6% 10% / 0.08), 0 1px 2px hsl(240 6% 10% / 0.04);
+  --grid: 240 5.9% 92%;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 6% 6%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --border: 240 3.7% 15.9%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --accent: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+    --shadow: 0 1px 2px 0 hsl(0 0% 0% / 0.4);
+    --shadow-md: 0 4px 20px -4px hsl(0 0% 0% / 0.5);
+    --grid: 240 4% 13%;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+h1, h2, h3 { line-height: 1.15; letter-spacing: -0.022em; margin: 0; font-weight: 600; }
+p { margin: 0; }
+a { color: inherit; }
+code, pre { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+  "Liberation Mono", monospace; font-size: 0.8125rem; }
+/* Inline code may carry an unbreakable URL; only <pre> is allowed to scroll. */
+:not(pre) > code { overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; border-radius: 4px; }
+
+.wrap { max-width: 68rem; margin: 0 auto; padding: 0 1.5rem; }
+.muted { color: hsl(var(--muted-foreground)); }
+.eyebrow {
+  font-size: 0.75rem; font-weight: 500; letter-spacing: 0.06em;
+  text-transform: uppercase; color: hsl(var(--muted-foreground));
+}
+
+/* ── header ─────────────────────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 20;
+  backdrop-filter: saturate(180%) blur(12px);
+  background: hsl(var(--background) / 0.8);
+  border-bottom: 1px solid hsl(var(--border));
+}
+.nav { display: flex; align-items: center; gap: 1.5rem; height: 3.5rem; }
+.brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; letter-spacing: -0.01em; text-decoration: none; }
+.brand svg { display: block; }
+.nav nav { margin-left: auto; display: flex; gap: 1.5rem; font-size: 0.875rem; }
+.nav nav a { color: hsl(var(--muted-foreground)); text-decoration: none; white-space: nowrap; }
+.nav nav a:hover, .nav nav a[aria-current="page"] { color: hsl(var(--foreground)); }
+/* At 390 the six links were `display: none` with nothing in their place, so a
+   visitor landing on the gallery from a link had 50 543px to scroll before the
+   footer offered another page (workflow-gallery ticket 47). They scroll inside
+   their own strip instead — the same answer this page already gives for wide
+   code and diagrams, so the body still never scrolls sideways. */
+@media (max-width: 860px) {
+  .nav { height: auto; gap: 0.75rem; padding: 0.6rem 0; flex-wrap: wrap; }
+  .nav nav {
+    margin-left: 0; width: 100%; gap: 1.1rem;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; padding-bottom: 0.1rem;
+  }
+  .nav nav::-webkit-scrollbar { display: none; }
+}
+
+/* ── buttons ────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  height: 2.5rem; padding: 0 1rem; border-radius: var(--radius);
+  font-size: 0.875rem; font-weight: 500; text-decoration: none;
+  border: 1px solid transparent; white-space: nowrap;
+  transition: background-color .15s ease, border-color .15s ease, opacity .15s ease;
+}
+.btn-primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+.btn-primary:hover { opacity: 0.9; }
+.btn-outline { border-color: hsl(var(--border)); background: hsl(var(--background)); }
+.btn-outline:hover { background: hsl(var(--accent)); }
+
+/* ── badge ──────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  border: 1px solid hsl(var(--border)); border-radius: 999px;
+  padding: 0.25rem 0.75rem; font-size: 0.75rem; color: hsl(var(--muted-foreground));
+  background: hsl(var(--card)); box-shadow: var(--shadow);
+}
+.dot { width: 6px; height: 6px; border-radius: 999px; background: hsl(142 71% 45%); }
+
+/* ── hero ───────────────────────────────────────────────────────── */
+.hero { padding: 6rem 0 4rem; text-align: center; position: relative; overflow: hidden; }
+.hero::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background-image:
+    linear-gradient(to right, hsl(var(--grid)) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--grid)) 1px, transparent 1px);
+  background-size: 3rem 3rem;
+  -webkit-mask-image: radial-gradient(ellipse 60% 50% at 50% 0%, #000 40%, transparent 100%);
+  mask-image: radial-gradient(ellipse 60% 50% at 50% 0%, #000 40%, transparent 100%);
+}
+.hero h1 {
+  margin: 1.5rem auto 0; max-width: 20ch;
+  font-size: clamp(2.25rem, 6vw, 3.75rem); letter-spacing: -0.035em;
+}
+.hero h1 .fade { color: hsl(var(--muted-foreground)); }
+.hero p.lede {
+  margin: 1.5rem auto 0; max-width: 46rem; font-size: 1.0625rem;
+  color: hsl(var(--muted-foreground));
+}
+.cta { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; }
+
+/* ── sections ───────────────────────────────────────────────────── */
+section { padding: 5rem 0; border-top: 1px solid hsl(var(--border)); }
+section.plain { border-top: 0; }
+.head { max-width: 42rem; margin-bottom: 2.5rem; }
+.head h2 { font-size: clamp(1.5rem, 3.2vw, 2rem); margin-top: 0.75rem; }
+.head p { margin-top: 0.75rem; color: hsl(var(--muted-foreground)); }
+
+/* ── cards ──────────────────────────────────────────────────────── */
+.grid { display: grid; gap: 1rem; }
+.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.span-all { grid-column: 1 / -1; }
+@media (max-width: 900px) { .cols-3, .cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) { .cols-3, .cols-4, .cols-2 { grid-template-columns: minmax(0, 1fr); } }
+.card {
+  border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  background: hsl(var(--card)); padding: 1.5rem; box-shadow: var(--shadow);
+}
+.card h3 { font-size: 0.9375rem; margin-bottom: 0.5rem; }
+.card p { font-size: 0.875rem; color: hsl(var(--muted-foreground)); }
+.card .ico {
+  width: 2rem; height: 2rem; border-radius: 0.375rem; display: grid; place-items: center;
+  background: hsl(var(--muted)); margin-bottom: 1rem;
+}
+.card .ico svg { width: 1rem; height: 1rem; stroke: hsl(var(--foreground)); fill: none;
+  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── compare table ──────────────────────────────────────────────── */
+.compare { overflow-x: auto; border: 1px solid hsl(var(--border)); border-radius: var(--radius); background: hsl(var(--card)); }
+table { border-collapse: collapse; width: 100%; font-size: 0.875rem; min-width: 34rem; }
+th, td { text-align: left; padding: 0.875rem 1.25rem; border-bottom: 1px solid hsl(var(--border)); }
+thead th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: hsl(var(--muted-foreground)); font-weight: 500; }
+tbody tr:last-child td { border-bottom: 0; }
+td strong { font-weight: 600; }
+
+/* ── code moment ────────────────────────────────────────────────── */
+.moment { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: stretch; }
+@media (max-width: 860px) { .moment { grid-template-columns: minmax(0, 1fr); } }
+.pane {
+  border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  background: hsl(var(--card)); box-shadow: var(--shadow-md); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.pane-bar {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.625rem 0.875rem; border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.75rem; color: hsl(var(--muted-foreground)); background: hsl(var(--muted) / 0.4);
+}
+.pane-bar .fname { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pane svg.canvas { width: 100%; height: auto; display: block; background:
+  radial-gradient(hsl(var(--grid)) 1px, transparent 1px) 0 0 / 16px 16px; flex: 1; }
+pre { margin: 0; padding: 1.25rem; overflow-x: auto; line-height: 1.7; flex: 1; }
+.k { color: hsl(262 60% 55%); } .s { color: hsl(142 45% 38%); }
+.c { color: hsl(var(--muted-foreground)); } .f { color: hsl(217 70% 48%); }
+@media (prefers-color-scheme: dark) {
+  .k { color: hsl(265 80% 78%); } .s { color: hsl(142 55% 65%); } .f { color: hsl(213 85% 74%); }
+}
+
+/* ── examples ───────────────────────────────────────────────────── */
+.ex-tags { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 1rem; }
+.tag {
+  font-size: 0.6875rem; padding: 0.125rem 0.5rem; border-radius: 999px;
+  border: 1px solid hsl(var(--border)); color: hsl(var(--muted-foreground));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ── list ───────────────────────────────────────────────────────── */
+ul.clean { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
+ul.clean li { display: flex; gap: 0.75rem; font-size: 0.875rem; color: hsl(var(--muted-foreground)); }
+ul.clean li svg { flex: none; width: 1rem; height: 1rem; margin-top: 0.28rem;
+  stroke: hsl(var(--foreground)); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+ul.clean li b { color: hsl(var(--foreground)); font-weight: 500; }
+
+.note {
+  margin-top: 1.5rem; padding: 0.75rem 1rem; font-size: 0.8125rem;
+  border: 1px dashed hsl(var(--border)); border-radius: var(--radius);
+  color: hsl(var(--muted-foreground)); background: hsl(var(--muted) / 0.35);
+}
+
+/* ── journey strip ──────────────────────────────────────────────── */
+.journey {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem;
+  counter-reset: jstep;
+}
+@media (max-width: 1000px) { .journey { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .journey { grid-template-columns: minmax(0, 1fr); } }
+.journey a {
+  display: block; text-decoration: none; counter-increment: jstep;
+  border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  background: hsl(var(--card)); padding: 1.25rem 1.5rem; box-shadow: var(--shadow);
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.journey a:hover { background: hsl(var(--accent)); border-color: hsl(var(--ring) / .6); }
+.journey a::before {
+  content: counter(jstep); display: grid; place-items: center;
+  width: 1.5rem; height: 1.5rem; border-radius: 999px; margin-bottom: .75rem;
+  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+  font-size: .75rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.journey h3 { font-size: .9375rem; }
+.journey p { font-size: .875rem; color: hsl(var(--muted-foreground)); margin-top: .375rem; }
+.journey .go { display: inline-block; margin-top: .75rem; font-size: .8125rem; font-weight: 500; }
+
+/* ── steps (quickstart) ─────────────────────────────────────────── */
+ol.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; }
+ol.steps > li {
+  counter-increment: step; position: relative;
+  padding: 0 0 2rem 3rem; border-left: 1px solid hsl(var(--border)); margin-left: .75rem;
+}
+ol.steps > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+ol.steps > li::before {
+  content: counter(step); position: absolute; left: -0.8125rem; top: -0.125rem;
+  width: 1.625rem; height: 1.625rem; border-radius: 999px; display: grid; place-items: center;
+  background: hsl(var(--background)); border: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground)); font-size: .75rem; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+ol.steps h3 { font-size: .9375rem; }
+ol.steps > li > p { font-size: .875rem; color: hsl(var(--muted-foreground)); margin-top: .375rem; }
+@media (max-width: 680px) { ol.steps > li { padding-left: 2rem; } }
+
+.codeblock {
+  margin-top: .875rem; border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  background: hsl(var(--card)); overflow: hidden; box-shadow: var(--shadow);
+}
+.codeblock .pane-bar { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.codeblock pre { padding: 1rem 1.25rem; }
+.codeblock pre .p { color: hsl(var(--muted-foreground)); }
+
+/* ── callouts ───────────────────────────────────────────────────── */
+.callout {
+  display: flex; gap: .75rem; margin-top: 1rem; padding: .875rem 1rem;
+  border: 1px solid hsl(var(--border)); border-left-width: 3px;
+  border-radius: var(--radius); background: hsl(var(--muted) / .4);
+  font-size: .8125rem; color: hsl(var(--muted-foreground));
+}
+.callout b { color: hsl(var(--foreground)); font-weight: 600; }
+.callout svg { flex: none; width: 1rem; height: 1rem; margin-top: .22rem;
+  stroke: hsl(var(--foreground)); fill: none; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; }
+.callout-tip { border-left-color: hsl(142 60% 45%); }
+.callout-info { border-left-color: hsl(217 70% 55%); }
+
+/* ── personas ───────────────────────────────────────────────────── */
+.persona-steps { list-style: none; padding: 0; margin: 1rem 0 0; display: grid; gap: .625rem; }
+.persona-steps li { display: flex; gap: .625rem; font-size: .875rem; color: hsl(var(--muted-foreground)); }
+.persona-steps li b { color: hsl(var(--foreground)); font-weight: 500; }
+.persona-steps .num {
+  flex: none; width: 1.25rem; height: 1.25rem; margin-top: .18rem; border-radius: 999px;
+  display: grid; place-items: center; background: hsl(var(--muted));
+  color: hsl(var(--foreground)); font-size: .6875rem; font-weight: 600;
+}
+
+/* ── FAQ accordion (native <details>, no JS) ────────────────────── */
+.accordion { border-top: 1px solid hsl(var(--border)); max-width: 52rem; }
+.accordion details { border-bottom: 1px solid hsl(var(--border)); }
+.accordion summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 1.125rem 0.25rem; cursor: pointer; list-style: none;
+  font-size: .9375rem; font-weight: 500; line-height: 1.4;
+}
+.accordion summary::-webkit-details-marker { display: none; }
+.accordion summary:hover { text-decoration: underline; text-underline-offset: 4px; }
+.accordion summary .chev {
+  flex: none; width: 1rem; height: 1rem; stroke: hsl(var(--muted-foreground));
+  fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  transition: transform .2s ease;
+}
+.accordion details[open] summary .chev { transform: rotate(180deg); }
+.accordion .answer { padding: 0 0.25rem 1.25rem; font-size: .875rem; color: hsl(var(--muted-foreground)); }
+.accordion .answer p + p { margin-top: .75rem; }
+
+/* Smooth open/close where the browser supports animating disclosure content. */
+@supports selector(details::details-content) {
+  :root { interpolate-size: allow-keywords; }
+  .accordion details::details-content {
+    block-size: 0; overflow: clip;
+    transition: block-size .22s ease, content-visibility .22s allow-discrete;
+  }
+  .accordion details[open]::details-content { block-size: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .accordion summary .chev { transition: none; }
+  @supports selector(details::details-content) {
+    .accordion details::details-content { transition: none; }
+  }
+}
+
+@media (max-width: 680px) {
+  .wrap { padding: 0 1.25rem; }
+  .hero { padding: 3.5rem 0 2.5rem; }
+  section { padding: 3.5rem 0; }
+  .head { margin-bottom: 1.75rem; }
+  .cta .btn { flex: 1 1 100%; }
+}
+
+/* ── footer ─────────────────────────────────────────────────────── */
+footer { border-top: 1px solid hsl(var(--border)); padding: 3rem 0; font-size: 0.875rem; }
+.foot-grid { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 2rem; }
+@media (max-width: 780px) { .foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+footer h4 { font-size: 0.8125rem; font-weight: 600; margin: 0 0 0.75rem; }
+footer ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+footer a { color: hsl(var(--muted-foreground)); text-decoration: none; }
+footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; text-underline-offset: 3px; }
+.colophon {
+  margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid hsl(var(--border));
+  display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between;
+  color: hsl(var(--muted-foreground)); font-size: 0.8125rem;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top">
+      <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="7" fill="hsl(var(--primary))"/>
+        <g fill="none" stroke="hsl(var(--primary-foreground))" stroke-width="1.8">
+          <path d="M11 10h3M11 22h3M18 16h4"/><path d="M14 10c3 0 3 6 4 6M14 22c3 0 3-6 4-6"/>
+        </g>
+        <g fill="hsl(var(--primary-foreground))">
+          <circle cx="9" cy="10" r="2.2"/><circle cx="9" cy="22" r="2.2"/><circle cx="23" cy="16" r="2.2"/>
+        </g>
+      </svg>
+      OpenStateGraph
+    </a>
+    <nav>
+      <a href="index.html#how">How it works</a>
+      <a href="index.html#examples">Examples</a>
+      <a href="gallery.html">Gallery</a>
+      <a href="behind-the-scenes.html">Behind the scenes</a>
+      <a href="index.html#quickstart">Quickstart</a>
+      <a href="index.html#use">Using a workflow</a>
+      <a href="index.html#docs">Docs</a>
+      <a href="index.html#faq">FAQ</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ── HERO ─────────────────────────────────────────────────── -->
+  <div class="hero">
+    <div class="wrap">
+      <span class="badge"><span class="dot"></span> MIT licensed · compiles to LangGraph</span>
+      <h1>Draw the flow.<br /><span class="fade">Ship the graph.</span></h1>
+      <p class="lede">
+        OpenStateGraph is a <strong>framework built on top of LangGraph and LangChain</strong>: a
+        document format, a compiler for it, and the node semantics it emits — organised by
+        <strong>atomic design</strong>. It <strong>compiles</strong> rather than interprets, so what
+        you draw becomes a plain LangGraph <code>StateGraph</code> — real Python that runs anywhere
+        Python runs, with or without this editor.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#quickstart">
+          Get started in 15 minutes
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+        <a class="btn btn-outline" href="#how">See the compile seam</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── THESIS ───────────────────────────────────────────────── -->
+  <section class="plain" id="why">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Why it matters</span>
+        <h2>A workflow platform you can walk away from</h2>
+        <p>
+          The closest-looking tools own their execution engine: a flow runs inside their
+          platform, through their runtime, or it does not run at all. Your logic lives as a blob
+          in someone else's database. OpenStateGraph has a single job — turn a canvas into
+          <code>workflow.json</code>, and turn <code>workflow.json</code> into a StateGraph.
+        </p>
+      </div>
+
+      <div class="compare">
+        <table>
+          <thead>
+            <tr><th>Approach</th><th>Who executes your flow</th><th>Where your work lives</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="muted">Own your executor<br /><span style="font-size:.8125rem">n8n, Dify, Langflow, Flowise</span></td>
+              <td class="muted">Their engine, their platform</td>
+              <td class="muted">A record in their database</td>
+            </tr>
+            <tr>
+              <td class="muted">Multi-runtime abstraction</td>
+              <td class="muted">A lowest-common-denominator layer</td>
+              <td class="muted">A spec no runtime fully honours</td>
+            </tr>
+            <tr>
+              <td><strong>Single-target compiler</strong><br /><span style="font-size:.8125rem" class="muted">OpenStateGraph → LangGraph</span></td>
+              <td><strong>LangGraph, directly</strong></td>
+              <td><strong>Files in your git repository</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid cols-2" style="margin-top:1rem">
+        <div class="card">
+          <h3>Your workflow is a file in git</h3>
+          <p>
+            <code>workflow.json</code> plus the package's own <code>tools/</code>,
+            <code>skills/</code>, <code>knowledge/</code>, <code>functions/</code> and
+            <code>tests/</code>. Reviewable in a pull request. Diffable. Yours.
+          </p>
+        </div>
+        <div class="card">
+          <h3>The output runs without the editor</h3>
+          <p>
+            The compiled graph is an ordinary Python object: import it from a script, exercise it
+            with <code>pytest</code>, deploy it wherever Python runs. Delete this repository and
+            your workflow still runs.
+          </p>
+        </div>
+      </div>
+
+      <p class="muted" style="margin-top:1.5rem; font-size:.875rem">
+        Checkpointing, time travel, <code>interrupt()</code> for human-in-the-loop,
+        <code>Send</code> fan-out, reducer merging and token streaming are inherited from
+        LangGraph — never reimplemented. <strong>The compiler is not portable; the output is.</strong>
+      </p>
+
+      <div class="grid cols-2" style="margin-top:1.5rem">
+        <div class="card">
+          <h3>It is a framework, not just an editor</h3>
+          <p>
+            One wheel: a document format, a compiler for it, and the node semantics the compiler
+            emits. The canvas, the HTTP API and the MCP layer are <em>optional surfaces</em> over
+            those three — none of them is on the path of a workflow running in your service.
+          </p>
+          <div class="codeblock" style="margin-top:.75rem">
+            <div class="pane-bar">terminal</div>
+<pre><code><!--site:install--><span class="p">$</span> uv tool install "openstategraph[server,ollama]==0.3.0rc18"<!--/site:install-->
+<span class="p">$</span> openstategraph run ./my-workflow <span class="s">"How many invoices are there?"</span></code></pre>
+          </div>
+          <p class="muted" style="margin-top:.75rem; font-size:.875rem">
+            <b>On PyPI, as a pre-release</b> — the wheel is built and CI installs it into an
+            empty virtualenv outside the repository on every pull request. The version is named
+            in full because pip and <code>uv</code> skip pre-releases in an unpinned
+            requirement; there is no index to name, and the pin goes away with the first final
+            release.
+          </p>
+        </div>
+        <div class="card">
+          <h3>A dependency list short enough to read</h3>
+          <p>
+            The core is four declared packages — <code>langgraph</code>, <code>langchain</code>,
+            <code>langchain-core</code>, <code>pydantic</code> — resolving to <b>36
+            distributions</b>, measured in a clean virtualenv. Everything else is an extra you ask
+            for by name: a provider, <code>[deep]</code>, <code>[sqlite]</code>,
+            <code>[server]</code>, <code>[mcp]</code>.
+          </p>
+          <p>
+            You never install a web server to run a graph in your own process. A test asserts
+            <code>load_workflow</code> leaves <code>fastapi</code>, <code>uvicorn</code>,
+            <code>deepagents</code> and <code>mcp</code> out of <code>sys.modules</code>
+            entirely.
+          </p>
+          <p style="margin-top:.75rem">
+            <a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/what-is-this.md">What this is, in full →</a>
+          </p>
+        </div>
+      </div>
+
+      <div class="grid cols-3" style="margin-top:1.5rem">
+        <div class="card">
+          <h3>Atoms</h3>
+          <p>
+            <b>Inputs · Tools · Output.</b> One thing, made of nothing else: a source with no
+            logic, one capability bound to an agent, a sink with one input and no decision.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Molecules</h3>
+          <p>
+            <b>Reasoning &amp; control.</b> One decision step each — agent, router, grader,
+            approval, supervisor, worker, format-report. A supervisor alone is a molecule;
+            supervisor + workers + join is an organism you draw, not one you drag.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Organisms</h3>
+          <p>
+            <b>Composition.</b> A whole workflow — its own nodes, state and loop — mounted as one
+            step. The same ladder runs through the code: Interface → Abstract → Base → Concrete.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── THE MOMENT ───────────────────────────────────────────── -->
+  <section id="how">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">How it works</span>
+        <h2>One direction: canvas → <code>workflow.json</code> → StateGraph</h2>
+        <p>
+          The seam is deliberately one-way. Nothing reads runtime objects back into the model,
+          expressions are a serialisable JSON AST rather than host-language lambdas, and LangGraph
+          type names never leak into your document. That is what keeps <code>workflow.json</code>
+          the vendor-neutral layer.
+        </p>
+      </div>
+
+      <div class="moment">
+        <div class="pane">
+          <div class="pane-bar"><span class="fname">canvas</span> <span>· what you draw</span></div>
+          <svg class="canvas" viewBox="0 0 420 300" role="img" aria-label="A canvas with a question input feeding a router, which fans out to a SQL agent and a search agent, joining into a grader and a human approval step.">
+            <defs>
+              <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="hsl(var(--muted-foreground))"/>
+              </marker>
+              <style>
+                .n { fill: hsl(var(--card)); stroke: hsl(var(--border)); }
+                .t { fill: hsl(var(--foreground)); font: 500 9px Inter, system-ui, sans-serif; }
+                .st { fill: hsl(var(--muted-foreground)); font: 7.5px Inter, system-ui, sans-serif; }
+                .e { stroke: hsl(var(--muted-foreground)); fill: none; stroke-width: 1.2; marker-end: url(#arw); }
+                .p { fill: hsl(var(--muted-foreground)); }
+              </style>
+            </defs>
+            <path class="e" d="M96 46 C120 46 116 78 138 78"/>
+            <path class="e" d="M222 70 C250 70 250 40 276 40"/>
+            <path class="e" d="M222 86 C250 86 250 116 276 116"/>
+            <path class="e" d="M348 52 C372 52 380 150 200 152 C120 154 118 186 138 186"/>
+            <path class="e" d="M348 128 C372 128 380 150 200 152"/>
+            <path class="e" d="M222 194 C250 194 250 232 276 232"/>
+            <path class="e" d="M276 250 C240 268 200 262 180 240" stroke-dasharray="3 3"/>
+
+            <g><rect class="n" x="24" y="30" width="72" height="32" rx="6"/>
+              <text class="t" x="34" y="45">Question</text><text class="st" x="34" y="55">input.text</text>
+              <circle class="p" cx="96" cy="46" r="2.6"/></g>
+
+            <g><rect class="n" x="138" y="60" width="84" height="36" rx="6"/>
+              <text class="t" x="148" y="76">Router</text><text class="st" x="148" y="87">route.classifier</text>
+              <circle class="p" cx="138" cy="78" r="2.6"/><circle class="p" cx="222" cy="70" r="2.6"/><circle class="p" cx="222" cy="86" r="2.6"/></g>
+
+            <g><rect class="n" x="276" y="24" width="72" height="32" rx="6"/>
+              <text class="t" x="286" y="39">SQL Agent</text><text class="st" x="286" y="49">agent.llm</text>
+              <circle class="p" cx="276" cy="40" r="2.6"/><circle class="p" cx="348" cy="52" r="2.6"/></g>
+
+            <g><rect class="n" x="276" y="100" width="72" height="32" rx="6"/>
+              <text class="t" x="286" y="115">Research</text><text class="st" x="286" y="125">agent.llm</text>
+              <circle class="p" cx="276" cy="116" r="2.6"/><circle class="p" cx="348" cy="128" r="2.6"/></g>
+
+            <g><rect class="n" x="138" y="170" width="84" height="34" rx="6"/>
+              <text class="t" x="148" y="186">Grader</text><text class="st" x="148" y="197">route.grader</text>
+              <circle class="p" cx="138" cy="186" r="2.6"/><circle class="p" cx="222" cy="194" r="2.6"/></g>
+
+            <g><rect class="n" x="276" y="216" width="84" height="34" rx="6"/>
+              <text class="t" x="286" y="232">Approval</text><text class="st" x="286" y="243">human.approval</text>
+              <circle class="p" cx="276" cy="232" r="2.6"/></g>
+
+            <text class="st" x="186" y="272">revision loop</text>
+          </svg>
+        </div>
+
+        <div class="pane">
+          <div class="pane-bar"><span class="fname">run.py</span> <span>· what you ship</span></div>
+<pre><code><span class="c"># No editor. No platform. No runtime of ours.</span>
+<span class="k">from</span> openstategraph <span class="k">import</span> <span class="f">load_workflow</span>
+
+workflow = <span class="f">load_workflow</span>(<span class="s">"workflows/chinook-assistant"</span>)
+<span class="k">if</span> workflow.warnings:          <span class="c"># what did not wire, never silence</span>
+    <span class="k">print</span>(<span class="s">"degraded:"</span>, workflow.warnings)
+
+answer = workflow.<span class="f">ask</span>(<span class="s">"Top 5 genres by revenue?"</span>, thread_id=<span class="s">"t1"</span>)
+<span class="k">print</span>(answer)                   <span class="c"># it IS the answer string</span>
+<span class="k">print</span>(answer.decisions)         <span class="c"># …and which branch each router took</span>
+
+<span class="c"># .graph is an ordinary LangGraph object — the escape hatch:</span>
+<span class="k">print</span>(workflow.graph.<span class="f">get_graph</span>(xray=<span class="k">True</span>).<span class="f">draw_mermaid</span>())
+</code></pre>
+        </div>
+      </div>
+
+      <p class="muted" style="margin-top:1rem; font-size:.8125rem">
+        The same document drives the editor's canvas and the Python compiler, and the two agree
+        because the contract between them is a generated, committed artifact rather than a
+        convention: the port table comes from the TypeScript node catalogue, the OpenAPI document
+        comes from the Python app, and CI regenerates both and fails on a diff.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── FEATURES ─────────────────────────────────────────────── -->
+  <section id="features">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">What it achieves</span>
+        <h2>Five things that only work because it compiles</h2>
+      </div>
+      <div class="grid cols-4">
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 16 4-4-4-4M6 8l-4 4 4 4M14.5 4l-5 16"/></svg></div>
+          <h3>A real compiler</h3>
+          <p>
+            Canvas to <code>StateGraph</code>: agents become <code>create_agent</code> loops,
+            routers become conditional edges, teams become subgraphs, fan-out becomes
+            <code>Send</code>. Retry, timeout and cache policies compile to graph assembly, where
+            LangGraph actually puts them.
+          </p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5v1a3 3 0 0 0 6 0v-1a3 3 0 0 0 2-5 3 3 0 0 0-2-5V6a3 3 0 0 0-3-3Z"/></svg></div>
+          <h3>A second brain per workflow</h3>
+          <p>
+            Knowledge is built from your real sources, then chunked: one index line per topic,
+            free to carry — the full doc fetched only when an agent commits to that direction.
+            Generated, then owned by you: the first keystroke claims a doc, and a stale badge
+            tells you when the source behind it moved.
+          </p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><circle cx="17" cy="17" r="3"/><path d="M3 20a6 6 0 0 1 9-5M17 3v3M14 20h6"/></svg></div>
+          <h3>Teams you can drill into</h3>
+          <p>
+            A team node is a whole workflow behind one card — supervisor plus workers, composed as
+            a subgraph. Open it and you are editing <em>this mount</em>: the package is the class,
+            the mount is the instance, and your change is stored as an override on the parent — the
+            child package's bytes never move, and other mounts of it are untouched. Subagents stay
+            isolated by design: they receive a task and report a result, never the parent's history.
+          </p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></div>
+          <h3>Humans in the loop</h3>
+          <p>
+            Approval nodes compile to LangGraph's <code>interrupt()</code>, so a paused run is a
+            checkpoint you can resume — not a thread parked in memory. Runs stream back token by
+            token, and every spawned worker or subgraph announces itself as it starts.
+            <b>Stop</b> really stops the server, not just your tab: no further supersteps are
+            scheduled, though work already dispatched still finishes.
+          </p>
+        </div>
+        <div class="card span-all">
+          <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a3 3 0 0 1 3-3M20 7v10a3 3 0 0 1-3 3"/><circle cx="12" cy="12" r="2"/><path d="M12 4v6M12 14v6"/></svg></div>
+          <h3>Your own LLM can compose the graph — over MCP</h3>
+          <p>
+            A workflow is data, and a compiler validates data without running anything. So the whole
+            surface is exposed over the Model Context Protocol: your client calls
+            <code>get_node_vocabulary()</code> for the exact node types and port contracts, composes
+            a document with <em>your</em> model, and calls <code>compile_workflow()</code> for a
+            deterministic verdict. Invalid documents come back as <code>findings</code> and no
+            artifacts — that verdict → revision loop is the product. It is stateless, calls no model
+            of ours, and a deployment needs <b>no provider key at all</b>.
+          </p>
+          <p>
+            Valid documents come back as a committable <code>workflow.json</code> envelope, a run
+            snippet, the package layout, and the Mermaid the compiler <em>actually produced</em> —
+            which clients like Claude render as a diagram on your machine. Drafts in, humans
+            publish: there is no publish tool and no delete tool over MCP, by design.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/mcp.md">The MCP layer, with a worked example →</a></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── EXAMPLES ─────────────────────────────────────────────── -->
+  <section id="examples">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">The example in the repo</span>
+        <h2>One example, small enough to read in a glance</h2>
+        <p>
+          It ships as a real package under <code>workflows/</code>, with its own tools, tests,
+          evals and data. Five intents, three destinations, one answer — all in one document.
+        </p>
+      </div>
+      <div class="grid cols-2">
+        <div class="card">
+          <span class="eyebrow">The one you see first</span>
+          <h3 style="margin-top:.5rem; font-size:1.0625rem">Chinook Assistant <span class="muted" style="font-weight:400">· <code>chinook-assistant</code></span></h3>
+          <p>
+            A question, a <b>Router</b> that sorts it into five intents, and three places it can
+            land: a <b>Data Analyst</b> for anything the Chinook database can answer, a
+            tool-less <b>Front Desk</b> for greetings, off-topic asks and general knowledge, and a
+            <b>Web Researcher</b> holding web search and web fetch. Thirteen nodes, left to right,
+            nothing to untangle and nothing hidden in another file.
+          </p>
+          <div class="ex-tags">
+            <span class="tag">route.classifier</span><span class="tag">route.grader</span>
+            <span class="tag">agent.llm</span><span class="tag">web tools</span>
+          </div>
+        </div>
+        <div class="card">
+          <span class="eyebrow">The data branch, in the same file</span>
+          <h3 style="margin-top:.5rem; font-size:1.0625rem">Data Analyst <span class="muted" style="font-weight:400">· the <code>data_query</code> branch</span></h3>
+          <p>
+            Natural language to SQL over the Chinook music store. One agent bound to three
+            read-only tools (list tables → table schema → run query), behind a <b>grader</b> that
+            sends a bad answer back for another attempt — up to three — and a per-table second
+            brain of eleven knowledge docs, so the model learns what <code>InvoiceLine</code>
+            means before it writes a join instead of guessing from a schema dump. Its prompt field
+            is empty: its rules arrive over the <code>skill</code> port from a Markdown file wired
+            in beside it, which is how you customise a prebuilt node without editing it.
+          </p>
+          <div class="ex-tags">
+            <span class="tag">agent.llm</span><span class="tag">sql tool</span>
+            <span class="tag">route.grader</span><span class="tag">input.markdown</span>
+          </div>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:1.25rem; font-size:.8125rem">
+        There is exactly <b>one</b> sample database, redistributed with the repo, and exactly
+        <b>one</b> visible example evaluated against it — so every figure it produces is checkable
+        against the same file. The backend defaults to a hosted model, so it needs no API key to
+        try.
+      </p>
+      <div class="callout callout-tip" style="max-width:52rem">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/></svg>
+        <span>
+          <b>Twenty-three more ship inside the wheel.</b> Every pattern the node catalogue can express —
+          a straight line, three kinds of loop, a mount three documents deep, a two-provider
+          flagship — each with the diagram its compiler produced, what that drawing became in
+          LangGraph, and the question it was actually asked.
+          <a href="gallery.html">See the gallery →</a>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── VALUE JOURNEY STRIP ──────────────────────────────────── -->
+  <section id="now-what">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">You cloned it — now what</span>
+        <h2>Three steps to a workflow that is yours</h2>
+        <p>
+          Nothing here needs an account, a hosted control plane or a credit card. Fifteen minutes
+          from clone to a run streaming across the canvas.
+        </p>
+      </div>
+      <div class="journey">
+        <a href="#quickstart">
+          <h3>Run it</h3>
+          <p>One command brings up the editor and the Python runtime, seeded with working examples.</p>
+          <span class="go">Quickstart →</span>
+        </a>
+        <a href="#examples">
+          <h3>Read a real one</h3>
+          <p>Open the Chinook Assistant, follow an intent from router to grader, then change a rule and re-run.</p>
+          <span class="go">Examples →</span>
+        </a>
+        <a href="behind-the-scenes.html">
+          <h3>See what it becomes</h3>
+          <p>One workflow followed all the way down: the file, the plan, the compiled graph, the prompt a model receives.</p>
+          <span class="go">Behind the scenes →</span>
+        </a>
+        <a href="#docs">
+          <h3>Add your own</h3>
+          <p>Register a node type or a tool, keep <code>core/</code> untouched, ship the compiled graph.</p>
+          <span class="go">Docs →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── QUICKSTART ───────────────────────────────────────────── -->
+  <section id="quickstart">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Quickstart</span>
+        <h2>From clone to a streaming run</h2>
+        <p>
+          <b>Prerequisites:</b> Node 20+ (developed against 22), Python 3.11+ (developed against
+          3.12), and a model to call — an Ollama <em>cloud</em> account by default, or an
+          <code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> if you have one. Nothing runs
+          locally on your GPU; nothing is required to open the editor.
+        </p>
+        <p>
+          <b>Only want to use it?</b> Then you do not need the clone at all: the wheel carries
+          the built editor, so <code>pip install</code> plus <code>openstategraph serve</code> is
+          the whole thing — step&nbsp;0. The clone is for working on OpenStateGraph itself.
+        </p>
+      </div>
+
+      <ol class="steps">
+        <li>
+          <h3>Step 0 — or skip the clone entirely</h3>
+          <p>
+            <b>The wheel carries the canvas.</b> The built editor ships as package data, so one
+            install and one command give you the whole product from a single origin: the canvas at
+            <code>/</code>, the customer chat at <code>/chat</code>, the API under
+            <code>/api</code>. No clone, no Docker, no Node.
+          </p>
+          <div class="codeblock">
+            <div class="pane-bar">terminal</div>
+<pre><code><!--site:install--><span class="p">$</span> uv tool install "openstategraph[server,ollama]==0.3.0rc18"<!--/site:install-->
+<span class="p">$</span> openstategraph serve --open   <span class="c"># prints the URLs it landed on</span></code></pre>
+          </div>
+          <p>
+            No <code>--port</code> takes 8000, or the next free port if 8000 is busy;
+            <code>--port N</code> means exactly N and says so if it is taken;
+            <code>--port 0</code> lets the OS choose. It binds <code>127.0.0.1</code> by default —
+            this process holds your API keys and has no authentication.
+          </p>
+          <p>
+            <b>Only want to run a graph?</b> Then you need none of the web layer. A workflow package
+            is a folder with a <code>workflow.json</code> in it, and exit codes are fixed
+            (<code>0</code> ok, <code>1</code> failure, <code>2</code> usage, <code>3</code> a
+            missing extra), so <code>validate</code> works as a CI gate.
+          </p>
+          <div class="codeblock">
+            <div class="pane-bar">terminal</div>
+<pre><code><!--site:install--><span class="p">$</span> uv tool install "openstategraph[server,ollama]==0.3.0rc18"<!--/site:install-->
+<span class="p">$</span> openstategraph new my-workflow
+<span class="p">$</span> openstategraph validate ./workflows/my-workflow
+<span class="p">$</span> openstategraph run ./workflows/my-workflow <span class="s">"Say hello."</span>   <span class="c"># a fresh scaffold knows nothing yet</span></code></pre>
+          </div>
+          <div class="callout callout-info">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <span>
+              <b>This is a pre-release, and that is the whole reason for the
+              <code>==</code>.</b> The wheel is built and verified — CI installs it into an empty
+              virtualenv outside the repository and runs a workflow there on every pull request —
+              and it is on PyPI, so the command above names no index. Until <code>0.3.0rc18</code>
+              it named three: the build lived on TestPyPI, its dependencies on PyPI, and
+              <code>uv</code> had to be told it could mix them. Those are gone. The exact version
+              stays until a final release exists, because pip and <code>uv</code> skip
+              pre-releases in an unpinned requirement — and everything below is unchanged either
+              way.
+            </span>
+          </div>
+        </li>
+
+        <li>
+          <h3>Clone the repository</h3>
+          <p>Everything — editor, runtime, example workflows and their sample database — is in this one tree.</p>
+          <div class="codeblock">
+            <div class="pane-bar">terminal</div>
+<pre><code><span class="p">$</span> git clone https://github.com/zulfeekar/openstategraph.git
+<span class="p">$</span> cd openstategraph</code></pre>
+          </div>
+          <div class="callout callout-info">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <span>
+              <b>The repository is private right now.</b> This clone, and every
+              <code>github.com/zulfeekar/openstategraph</code> link on this page — docs, Contributing
+              guide, Changelog, issues — 404s for anyone who is not a collaborator. Nothing on this page
+              will change that quietly; it changes when the repository opens up, and this line goes with it.
+            </span>
+          </div>
+        </li>
+
+        <li>
+          <h3>Start both stacks</h3>
+          <p>
+            One entry point. <code>./start dev</code> runs Vite and <code>uvicorn</code> with hot
+            reload; plain <code>./start</code> builds the production Docker stack instead and serves
+            everything from port 8000.
+          </p>
+          <div class="codeblock">
+            <div class="pane-bar">terminal</div>
+<pre><code><span class="p">$</span> npm install
+<span class="p">$</span> ./start dev        <span class="c"># editor :5273 · runtime :8000 · ./start stop</span></code></pre>
+          </div>
+          <div class="callout callout-info">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <span>
+              <b>Two processes on purpose.</b> A Vite dev server and a Python ASGI server have
+              little in common to unify. The editor opens read-only without the backend — saving
+              workflows and running them need the runtime up.
+            </span>
+          </div>
+        </li>
+
+        <li>
+          <h3>Open the editor</h3>
+          <p>
+            <code>http://localhost:5273</code> opens on a blank canvas that offers the
+            workflows this project holds. Set one provider credential before you press
+            <strong>Run</strong> — a run reaches the backend, and it is refused without one.
+          </p>
+        </li>
+
+        <li>
+          <h3>Run the Chinook Assistant</h3>
+          <p>
+            Open <b>Chinook Assistant</b> from the workflow picker (the package is
+            <code>workflows/chinook-assistant</code>) and press Run. It sorts the question into one
+            of five intents and takes exactly one of three branches: the Data Analyst, the
+            tool-less Front Desk, or the Web Researcher. Tokens and active nodes stream back onto
+            the canvas as it goes.
+          </p>
+          <div class="codeblock">
+            <div class="pane-bar">terminal · or run the same graph without the editor</div>
+<pre><code><span class="p">$</span> python -m pytest workflows/chinook-assistant
+<span class="p">$</span> openstategraph graph ./workflows/chinook-assistant   <span class="c"># Mermaid text, no network call</span>
+<span class="p">$</span> openstategraph run ./workflows/chinook-assistant <span class="s">"Revenue by genre?"</span></code></pre>
+          </div>
+          <div class="callout callout-tip">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/></svg>
+            <span>
+              <b>Then follow the data branch.</b> <code>data_query</code> leads to the analyst —
+              one agent, three read-only Chinook tools and a grader that makes it try again. Small
+              enough to hold in your head, and every number it produces is checkable against the
+              one sample database.
+            </span>
+          </div>
+        </li>
+
+        <li>
+          <h3>Open the chat</h3>
+          <p>
+            <code>http://localhost:8000/chat</code> is the end-user surface: no canvas, no node
+            inspector, just a conversation that dispatches to your published workflows. It is the
+            same process and the same workflows directory as the editor — <b>Publish</b> is the one
+            human action that makes a workflow visible there, and a saved draft never is.
+          </p>
+        </li>
+      </ol>
+
+      <p class="note">
+        <strong>One name, one place:</strong> the clone URL above and every
+        <code>github.com</code> link on this site are written by
+        <code>scripts/build_site.py</code> from <code>[project.urls]</code> in
+        <code>backend/pyproject.toml</code>. Renaming the repository is one line there and
+        <code>--write</code>; CI fails if the two disagree.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── USING A WORKFLOW ─────────────────────────────────────── -->
+  <section id="use">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Using a workflow</span>
+        <h2>Two people, two surfaces, one document</h2>
+        <p>
+          The person who builds a workflow and the person who uses one want opposite things. They
+          get different windows onto the same <code>workflow.json</code> — the canvas is not a
+          demo of the chat, and the chat is not a stripped-down canvas.
+        </p>
+      </div>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <span class="eyebrow">Developer</span>
+          <h3 style="margin-top:.5rem; font-size:1.0625rem">The editor at <code>:5273</code></h3>
+          <ul class="persona-steps">
+            <li><span class="num">1</span><span><b>Edit.</b> Drop nodes, wire typed ports, write the rules half of a prompt — the machinery half stays read-only beside it.</span></li>
+            <li><span class="num">2</span><span><b>Run.</b> Press Run and watch the real graph execute: active node highlighting, streamed tokens, a checkpoint at every approval node.</span></li>
+            <li><span class="num">3</span><span><b>Publish.</b> A workflow is a <b>draft</b> until you publish it; publishing is what puts it in front of end users.</span></li>
+          </ul>
+          <p style="margin-top:1rem">
+            Then commit the package. It reviews like code because it is code.
+          </p>
+        </div>
+
+        <div class="card">
+          <span class="eyebrow">End user</span>
+          <h3 style="margin-top:.5rem; font-size:1.0625rem">The chat at <code>:8000/chat</code></h3>
+          <ul class="persona-steps">
+            <li><span class="num">1</span><span><b>Pick a workflow</b> — the picker lists the published ones only, so a half-built draft can never answer a customer.</span></li>
+            <li><span class="num">2</span><span><b>Or leave it on Auto</b>, and a concierge routes the question to whichever published workflow claims it.</span></li>
+            <li><span class="num">3</span><span><b>Watch it work.</b> The run streams back with a live diagram of the graph, and approvals surface as a prompt in the conversation.</span></li>
+          </ul>
+          <p style="margin-top:1rem">
+            No canvas, no node types, no vocabulary to learn. Just the answer, and the ability to
+            see how it was reached.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout callout-info" style="max-width:52rem">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <span>
+          <b>Publishing is one deliberate human action.</b> Saving writes
+          <code>published: false</code>; the chat only ever lists published workflows, so a draft
+          cannot answer a customer. There is no publish tool over MCP and no way to automate it —
+          a machine may compose and propose, a human looks at the graph and decides it may talk to
+          people.
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CONTRIBUTE ───────────────────────────────────────────── -->
+  <section id="contribute">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">How to collaborate</span>
+        <h2>You extend by registering, never by editing the engine</h2>
+        <p>
+          Every extension point is a registry. Adding a capability is a registration — a new node
+          type, tool, model provider, connection rule, validation check or canvas behaviour lands
+          without touching <code>core/</code>. That is the rule that makes contributions reviewable
+          and merges boring.
+        </p>
+      </div>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <h3>The contribution shape</h3>
+          <ul class="clean" style="margin-top:1rem">
+            <li><svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg><span><b>A node type</b> is one file — model, field schema, ports, executor — plus its registry entry.</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg><span><b>A workflow</b> is a directory: <code>workflow.json</code> and <code>AGENTS.md</code> required; <code>tools/</code>, <code>functions/</code>, <code>tests/</code>, <code>data/</code> discovered by convention.</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg><span><b>Configuration is declared once</b> as a field schema; the card, inspector, defaults and validation all derive from it.</span></li>
+            <li><svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg><span><b>Docs land with the code.</b> CI fails a pull request that changes source without touching documentation.</span></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Before you open a pull request</h3>
+<pre style="padding:1rem 0 0"><code>npm run verify      <span class="c"># tsc + eslint + prettier + vitest</span>
+python -m pytest    <span class="c"># backend + workflow tests</span></code></pre>
+          <p style="margin-top:1rem">
+            TDD is the house style, and <code>core/</code> is pure TypeScript with no excuse for
+            untested logic. The architecture contract is written down: most rejected proposals are
+            rejected by a rule that already exists in <code>CLAUDE.md</code>. Read the
+            non-negotiables before designing anything.
+          </p>
+          <div class="cta" style="justify-content:flex-start; margin-top:1.25rem">
+            <a class="btn btn-outline" href="https://github.com/zulfeekar/openstategraph/blob/main/CONTRIBUTING.md">Contributing guide</a>
+            <a class="btn btn-outline" href="https://github.com/zulfeekar/openstategraph/blob/main/CODE_OF_CONDUCT.md">Code of conduct</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── DOCS ─────────────────────────────────────────────────── -->
+  <section id="docs">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Documentation</span>
+        <h2>Ten questions, ten places to look</h2>
+        <p>
+          The deep material lives in the repository, next to the code it describes — so it is
+          reviewed like code and cannot quietly drift. These are the entry points.
+        </p>
+      </div>
+      <div class="grid cols-3">
+        <div class="card">
+          <h3>What this actually is</h3>
+          <p>
+            Start here if you are deciding. The framework sentence, the atomic-design tiers, how
+            the adoption interface compares to other Lang* frameworks, what it refuses to own, and
+            when <em>not</em> to use it.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/what-is-this.md">docs/what-is-this.md &rarr;</a></p>
+        </div>
+        <div class="card">
+          <h3>How to start</h3>
+          <p>
+            Clone, <code>./start dev</code>, open the Chinook Assistant, ask it something in
+            <code>/chat</code>. Prerequisites, the two model paths, and why no API key is needed for
+            a first answer.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/getting-started.md">docs/getting-started.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>How to use it in your project</h3>
+          <p>
+            The three consumption modes — fork/checkout, artifact, MCP — with exact commands, the
+            upgrade friction stated honestly, what artifacts you own, and the draft → Publish →
+            <code>/chat</code> story.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/adoption.md">docs/adoption.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>What can be taken away from me</h3>
+          <p>
+            The stability contract: three tiers of surface, a signature-snapshot test, the
+            <code>workflow.json</code> version policy, the CLI's fixed exit codes, and the
+            deprecation rules that apply before and after 1.0.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/stability.md">docs/stability.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>What to build, and how to arrange it</h3>
+          <p>
+            The seven agentic patterns — augmented LLM, prompt chaining, routing, parallelization,
+            orchestrator-worker, evaluator-optimizer, agent — each mapped to our node vocabulary,
+            with the one question that separates the pairs people confuse.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/patterns.md">docs/patterns.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>How to build your own UI</h3>
+          <p>
+            Both shipped surfaces are ordinary HTTP clients, so a third one is supported rather
+            than reverse-engineered. The committed OpenAPI document, the three SSE streams it
+            structurally cannot express, the five calls a custom chat needs — and a complete
+            client in forty lines.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/api.md">docs/api.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>How to let an LLM build it</h3>
+          <p>
+            The MCP layer, worked end to end: the client config JSON, a document that genuinely
+            validates, the <code>compile_workflow</code> response shape, and the trust boundary.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/mcp.md">docs/mcp.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>How to add a module</h3>
+          <p>
+            Find the registry for the thing you are adding, write the definition, register it. The
+            engine does not change. A complete tool node, both halves, in about sixty lines.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/building-an-atom.md">docs/building-an-atom.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>How it works</h3>
+          <p>
+            The layering rule, the one-way compile seam, and the architecture non-negotiables —
+            including why we compile instead of interpreting, and why there is no second runtime.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/zulfeekar/openstategraph/blob/main/CLAUDE.md">CLAUDE.md →</a></p>
+        </div>
+        <div class="card">
+          <h3>Why it works that way</h3>
+          <p>
+            Decision records for the choices that were argued out — the knowledge architecture,
+            rejected frameworks, and the trade-offs each one accepted.
+          </p>
+          <p style="margin-top:.75rem"><a href="https://github.com/zulfeekar/openstategraph/tree/main/docs/decisions">docs/decisions →</a></p>
+        </div>
+      </div>
+      <p class="note">
+        <strong>Beta:</strong> documentation links on this page point into the beta
+        repository, <code>https://github.com/zulfeekar/openstategraph</code>, which is
+        <strong>private today</strong> — every link above 404s for anyone who is not a
+        collaborator. They move to the stable home together with the code, and open up when it
+        does — <code>python3 scripts/build_site.py --check</code> says whether the links travel.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── FAQ ──────────────────────────────────────────────────── -->
+  <section id="faq">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">FAQ</span>
+        <h2>The ten questions people actually ask</h2>
+        <p>
+          Short answers, with the long version in the repository. If one of these is wrong or
+          missing, that is a documentation bug — open an issue.
+        </p>
+      </div>
+
+      <div class="accordion">
+        <details name="faq" open>
+          <summary>
+            Is this just another workflow runtime?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              No — and the distinction is the whole project. Tools like n8n, Dify, Langflow and
+              Flowise <em>own their executor</em>: your flow runs inside their engine or not at all.
+              OpenStateGraph is a <b>compiler</b> with a single target. It turns the canvas into
+              <code>workflow.json</code>, and <code>workflow.json</code> into a LangGraph
+              <code>StateGraph</code>. There is no engine of ours in the loop at runtime.
+            </p>
+            <p>
+              The practical consequence: checkpointing, time travel, <code>interrupt()</code>,
+              <code>Send</code> fan-out and streaming are LangGraph's, not reimplementations that
+              lag behind it.
+            </p>
+          </div>
+        </details>
+
+        <details name="faq">
+          <summary>
+            Do I need the editor running in production?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              No. The compiled graph is an ordinary Python object. Import it from a script, test it
+              with <code>pytest</code>, wrap it in your own FastAPI app, deploy it wherever Python
+              runs. The editor is an authoring tool, not a dependency of the thing you author.
+            </p>
+            <p>
+              Delete this repository and your workflow package still runs. That is the test we hold
+              ourselves to: <b>the compiler is not portable; the output is.</b>
+            </p>
+            <p>
+              The three ways to consume it — fork/checkout, artifact, MCP — are written up with
+              exact commands in <a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/adoption.md">docs/adoption.md</a>.
+            </p>
+          </div>
+        </details>
+
+        <details name="faq">
+          <summary>
+            Do I need OpenStateGraph installed to run my workflow?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              <b>Yes, and the honest answer has three parts</b> — because people test this claim,
+              and one slogan would be wrong in at least one of them.
+            </p>
+            <p>
+              <b><code>workflow.json</code> needs us.</b> It is our format; nothing else reads it.
+              <b>A <em>package</em> needs us</b> too, because <code>tools/</code>,
+              <code>functions/</code>, <code>middlewares/</code>, <code>skills/</code> and
+              <code>knowledge/</code> are wired by our discovery conventions — and that wiring is
+              the difference between a workflow that answers and one that only looks like it does.
+              Compile the document by hand and the agent is drawn with three tools, bound to none,
+              and answers confidently from memory instead of from your database.
+              <code>load_workflow</code> exists because of exactly that failure, and it reports
+              whatever it could not resolve on <code>.warnings</code>.
+            </p>
+            <p>
+              <b>The compiled graph does not need us.</b> <code>workflow.graph</code> is a plain
+              LangGraph <code>StateGraph</code> — <code>.stream()</code>,
+              <code>.astream_events()</code>, <code>.get_state()</code>, interrupt and resume, your
+              own checkpointer — with nothing of ours in the call stack. So the dependency buys you
+              the format, the compiler and the package conventions; it is not a runtime tax, and
+              there is a full escape hatch with no proprietary object in the way.
+            </p>
+            <p>
+              Footprint, measured in a clean virtualenv rather than estimated: <b>36
+              distributions</b> for the core, 38 with a provider — essentially all of them
+              LangChain's and LangGraph's own closure, which you would install anyway to write the
+              <code>StateGraph</code> by hand. The long version, including what we deliberately do
+              <em>not</em> own and when not to use us at all, is in
+              <a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/what-is-this.md">docs/what-is-this.md</a>.
+            </p>
+          </div>
+        </details>
+
+        <details name="faq">
+          <summary>
+            Can my own LLM generate workflows?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              Yes — that is what the MCP layer is for, and the inversion is deliberate. <b>Your</b>
+              model composes; this server is the ground truth and the artifact factory. A client
+              calls <code>get_node_vocabulary()</code> for the exact node types, port ids and
+              binding rules, composes a document, then calls <code>compile_workflow()</code>. The
+              verdict is deterministic and calls no model of ours: an invalid document returns
+              <code>findings</code> and no artifacts, so the client iterates against compiler
+              evidence rather than its own confidence.
+            </p>
+            <p>
+              A valid one returns the <code>workflow.json</code> envelope to commit to
+              <em>your</em> repository, the compiled Mermaid topology, a run snippet and the package
+              layout. Clients like Claude render that Mermaid as a diagram locally, so asking for a
+              workflow in a chat window gives you a picture of the compiled
+              <code>StateGraph</code> — with the graph never leaving your machine.
+            </p>
+            <p>
+              The trust boundary holds: no publish tool, no delete tool, no credentials over the
+              wire, writes validated server-side and always as drafts. A human clicks Publish.
+              Worked example in <a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/mcp.md">docs/mcp.md</a>; the honest limits —
+              starting with <b>no authentication layer</b> — in
+              <a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/decisions/mcp-layer.md">docs/decisions/mcp-layer.md</a>.
+            </p>
+          </div>
+        </details>
+
+        <details name="faq">
+          <summary>
+            Which models can I use, and where do my keys live?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              Anything LangChain's <code>init_chat_model</code> can resolve — Anthropic, OpenAI,
+              Google, Bedrock, Ollama cloud and the rest. A model is a string on a node, so
+              switching provider is an edit, not a migration.
+            </p>
+            <p>
+              Keys stay <b>server-side</b>, read from the backend's environment
+              (<code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>); with none set, the
+              backend defaults to Ollama cloud with no configuration. Keys are never baked into
+              <code>workflow.json</code>, so the document is safe to commit.
+            </p>
+          </div>
+        </details>
+
+        <details name="faq">
+          <summary>
+            How do I add a node type or a tool?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              You register it; you never edit the engine. Every extension point is a registry —
+              node types, executors, model providers, connection rules, validation rules, canvas
+              features, card bodies — so a new capability lands without touching <code>core/</code>.
+            </p>
+            <p>
+              A node type is one file (model, field schema, ports, executor) plus its registry
+              entry; a tool is a <code>BaseTool</code> subclass discovered by convention inside a
+              workflow's <code>tools/</code> directory. You can also skip this repository
+              altogether: publish your own distribution declaring
+              <code>[project.entry-points."openstategraph.tools"]</code> and your tool registers in
+              every workflow the moment someone <code>pip install</code>s it — no fork, no merge to
+              carry. See <a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/building-an-atom.md">docs/building-an-atom.md →</a>
+            </p>
+          </div>
+        </details>
+
+        <details name="faq">
+          <summary>
+            What is the “second brain”?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              Per-workflow knowledge, built from your real sources and stored as markdown in the
+              package's <code>knowledge/</code> directory. It is chunked deliberately: one index
+              line per topic is cheap enough to carry in every prompt, and the full document is
+              fetched only once an agent commits to that direction.
+            </p>
+            <p>
+              It is generated, then owned by you — the first keystroke claims a document, and a
+              stale badge tells you when the source behind it moved. In
+              <code>chinook-assistant</code> it is eleven docs, one per table, so the model knows
+              what <code>InvoiceLine</code> means before it writes a join.
+            </p>
+          </div>
+        </details>
+
+        <details name="faq">
+          <summary>
+            What is the licence, and can I use it commercially?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              MIT, for the whole project. Use it commercially, fork it, embed it in a product, keep
+              your changes private — no contributor licence agreement, no open-core tier, no
+              feature held back for a paid edition. Third-party notices are listed in
+              <a href="https://github.com/zulfeekar/openstategraph/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES.md</a>;
+              the models you call keep their own terms.
+            </p>
+          </div>
+        </details>
+
+        <details name="faq">
+          <summary>
+            How is my data handled?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              Local-first. Workflows are files on your disk, runs execute on your machine, and
+              there is no OpenStateGraph service to phone home to — the page you are reading makes
+              no network requests either. The only traffic leaving your machine is the model call
+              you configured.
+            </p>
+            <p>
+              One deliberate consequence: graph previews use LangGraph's <code>draw_mermaid()</code>,
+              which returns text, rather than <code>draw_mermaid_png()</code>, which would post your
+              graph to a third-party rendering API. We never send a user's graph to a stranger.
+            </p>
+          </div>
+        </details>
+
+        <details name="faq">
+          <summary>
+            Why LangGraph, and why only LangGraph?
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="answer">
+            <p>
+              Because it is the one runtime whose primitives a canvas maps onto honestly: nodes and
+              conditional edges, subgraphs, typed shared state with reducers, <code>Send</code>
+              fan-out, durable checkpoints. Drawing a box on a canvas means something exact there.
+            </p>
+            <p>
+              And only LangGraph because a multi-runtime abstraction would be unbindable, not merely
+              leaky — no competing framework accepts a serialisable graph, so the interface would
+              have nothing to bind to. Portability is preserved where it is cheap instead:
+              <code>workflow.json</code> stays vendor-neutral, expressions are a JSON AST rather
+              than host-language lambdas, reducers are a named enum, and no LangGraph type name
+              leaks into the document.
+            </p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a class="brand" href="#top" style="margin-bottom:.75rem">
+          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="hsl(var(--primary))"/>
+            <g fill="hsl(var(--primary-foreground))">
+              <circle cx="9" cy="10" r="2.2"/><circle cx="9" cy="22" r="2.2"/><circle cx="23" cy="16" r="2.2"/>
+            </g>
+            <g fill="none" stroke="hsl(var(--primary-foreground))" stroke-width="1.8">
+              <path d="M11 10h3M11 22h3M18 16h4"/>
+            </g>
+          </svg>
+          OpenStateGraph
+        </a>
+        <p class="muted" style="max-width:24rem">
+          A visual AI workflow builder that compiles to LangGraph. MIT licensed,
+          local-first — the repository is a private beta today, see above.
+        </p>
+      </div>
+      <div>
+        <h4>Project</h4>
+        <ul>
+          <li><a href="https://github.com/zulfeekar/openstategraph">GitHub</a></li>
+          <li><a href="https://github.com/zulfeekar/openstategraph/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/zulfeekar/openstategraph/blob/main/SECURITY.md">Security</a></li>
+          <li><a href="https://github.com/zulfeekar/openstategraph/blob/main/LICENSE">MIT licence</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Learn</h4>
+        <ul>
+          <li><a href="#quickstart">Quickstart</a></li>
+          <li><a href="gallery.html">Example gallery</a></li>
+          <li><a href="behind-the-scenes.html">Behind the scenes</a></li>
+          <li><a href="#use">Using a workflow</a></li>
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="#contribute">Contribute</a></li>
+          <li><a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/adoption.md">Using it in your project</a></li>
+          <li><a href="https://github.com/zulfeekar/openstategraph/blob/main/docs/mcp.md">The MCP layer</a></li>
+          <li><a href="https://github.com/zulfeekar/openstategraph/tree/main/docs/decisions">Decisions</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Built with</h4>
+        <ul>
+          <li><a href="https://langchain-ai.github.io/langgraph/">LangGraph</a> &amp; <a href="https://www.langchain.com/">LangChain</a></li>
+          <li><a href="https://fastapi.tiangolo.com/">FastAPI</a> &amp; <a href="https://docs.pydantic.dev/">Pydantic</a></li>
+          <li><a href="https://react.dev/">React</a> &amp; <a href="https://vite.dev/">Vite</a></li>
+          <li><a href="https://www.jointjs.com/opensource">JointJS</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>© 2026 OpenStateGraph — released under the MIT licence.</span>
+      <span>Built by <a href="https://zulfeekar.com">zulfeekar.com</a></span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

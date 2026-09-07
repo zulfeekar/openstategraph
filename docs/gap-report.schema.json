@@ -1,0 +1,147 @@
+{
+  "$defs": {
+    "GapDoor": {
+      "description": "Which surface the user was standing at when it refused.\n\nThe four blocking doors `run_doors.py` names, plus the editor \u2014 the same\nlist, because a report that invents a fifth name for `POST /api/runs`\nmakes two boards disagree about where something happens.",
+      "enum": [
+        "api",
+        "mcp",
+        "cli",
+        "library",
+        "editor"
+      ],
+      "title": "GapDoor",
+      "type": "string"
+    },
+    "GapKind": {
+      "description": "What kind of gap this is, in the vocabulary that already exists.\n\nThree of the five are imported rather than coined: a gap report about a\nnode type with no implementation is the same fact `FindingClass.NO_BACKEND`\nnames, and one vocabulary is the whole reason this model is a projection\nof the finding shapes rather than a fourth spelling of them.",
+      "enum": [
+        "no-backend",
+        "node-failure",
+        "every-tool-call-failed",
+        "provider-not-configured",
+        "door-refused"
+      ],
+      "title": "GapKind",
+      "type": "string"
+    },
+    "Refusal": {
+      "additionalProperties": false,
+      "description": "The sentence that refused, and which seam of ours wrote it.\n\n**Ours, not theirs.** There is no constructor here that takes a bare\nstring: the three classmethods take a type id, a `ProviderSpec` and an\nexception this package defines, and validation re-checks the text against\nwhat those seams can produce, so a round trip cannot widen it either. A\nmodel's answer is a `str` and has no way in \u2014 which matters because this\nproduct prints prose constantly and a refusal field is exactly where a\ndoor would be tempted to put \"what the agent said\".",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/RefusalSource"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "text"
+      ],
+      "title": "Refusal",
+      "type": "object"
+    },
+    "RefusalSource": {
+      "description": "Where a refusal sentence was written. Not *what refused* \u2014 that is\n`GapDoor` \u2014 but which of this codebase's three sentence-writing seams\nproduced the words, because each is validated differently.",
+      "enum": [
+        "runtime",
+        "provider",
+        "exception",
+        "finding"
+      ],
+      "title": "RefusalSource",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Everything a gap report may carry, and nothing else. Generated from openstategraph.gap_report.GapReport by scripts/generate_gap_report_schema.py; never hand-edited.",
+  "properties": {
+    "aad_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Aad Code"
+    },
+    "check": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Check"
+    },
+    "door": {
+      "$ref": "#/$defs/GapDoor"
+    },
+    "finding_hash": {
+      "description": "The dedup key, from what the finding *is*.\n\nDeliberately **not** over the version, the OS or the Python: the same\ngap on the same install after an upgrade is the same gap, and a key\nthat moved on every release would file a fresh card each time. Not a\nfield either, so a door cannot hand one in.",
+      "readOnly": true,
+      "title": "Finding Hash",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/GapKind"
+    },
+    "os": {
+      "title": "Os",
+      "type": "string"
+    },
+    "project_hash": {
+      "title": "Project Hash",
+      "type": "string"
+    },
+    "python": {
+      "title": "Python",
+      "type": "string"
+    },
+    "refusal": {
+      "$ref": "#/$defs/Refusal"
+    },
+    "traceback_line": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Traceback Line"
+    },
+    "type_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Type Ids",
+      "type": "array"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "door",
+    "refusal",
+    "project_hash",
+    "finding_hash"
+  ],
+  "title": "OpenStateGraph gap report",
+  "type": "object"
+}

@@ -1,0 +1,556 @@
+/* ================================================================== *
+ * Node card.
+ *
+ * Rendered inside a foreignObject, so this is ordinary CSS laying out
+ * ordinary HTML — which is the whole reason for that indirection: real
+ * type rendering, real form controls, real Markdown.
+ * ================================================================== */
+
+.node-mount {
+  width: 100%;
+  height: 100%;
+}
+
+.node {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  /* `stable-beta-public/02`: the card's edge is a border, not a ring painted
+   * by a shadow that also carried a 1px offset lift. Depth on this canvas is
+   * layering and ground tone; blur and offset are gone from the product. */
+  border: var(--border-width-hairline) solid var(--color-border);
+  /* The card is measured to derive the element's height, so its own box must
+   * be content-sized rather than stretched to the SVG element's height. */
+  height: max-content;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+  /* Rendering hint: a card being dragged is composited rather than repainted. */
+  contain: layout style;
+}
+
+.joint-element:hover .node {
+  border-color: var(--color-border-emphasis);
+}
+
+.joint-element.is-selected .node {
+  border-color: var(--color-border-focus);
+}
+
+/* ---------- Header ---------- */
+
+.node__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2-5) var(--space-3) var(--space-2);
+}
+
+.node__heading {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.node__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.node__title {
+  font: var(--type-title-node);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node__subtitle {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node__menu {
+  flex: none;
+  margin-top: -2px;
+  margin-right: -4px;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/* The kebab appears on hover, focus or selection — always reachable by
+ * keyboard, never adding noise to a canvas at rest. */
+.joint-element:hover .node__menu,
+.joint-element.is-selected .node__menu,
+.node__menu:focus-within {
+  opacity: 1;
+}
+
+/* ---------- Body ---------- */
+
+.node__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.node__body:empty {
+  display: none;
+}
+
+/* ---------- Port footer ----------
+ * A two-column grid: inputs left, outputs right. One row can hold both,
+ * which is what puts "prompt" and "result" on the same line the way the
+ * reference layout does.
+ *
+ * The *row* each port occupies is set inline from `planPortLayout`, never left
+ * to auto-placement. Sparse auto-placement advances one cursor for the whole
+ * grid and never moves it backwards, so with the column declared and the row
+ * implicit the first output landed on the row of the *last* input — an agent's
+ * `result` sat three rows down beside `feedback`, with row one's right-hand
+ * cell empty. Since the dot's `y` is measured from its row's rect, that was a
+ * misplaced dot and not merely a misplaced label. */
+
+.node__ports {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 var(--space-2);
+  padding: var(--space-1-5) var(--space-3) var(--space-2);
+  border-top: var(--border-width-hairline) solid var(--color-border);
+}
+
+.node__ports:empty {
+  display: none;
+}
+
+.node__port {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: var(--space-6);
+  min-width: 0;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  user-select: none;
+}
+
+.node__port--in {
+  grid-column: 1;
+  justify-content: flex-start;
+}
+
+.node__port--out {
+  grid-column: 2;
+  justify-content: flex-end;
+}
+
+/* A binding — a tool's `tool`, an agent's `skill` — keeps its line in the
+ * footer, because the footer is the card's legend and names every port. Its
+ * dot, though, is on a card edge rather than on the flank beside this row, so
+ * it is drawn back a little: the flank stack above it is the part a reader can
+ * trace a wire to. `planPortLayout` also sinks these to the foot of their own
+ * column, so the dotted rows stay contiguous. */
+.node__port--offside {
+  opacity: 0.65;
+}
+
+.node__port-icon {
+  display: flex;
+  flex: none;
+  color: var(--accent-on-tint);
+}
+
+.node__port-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node__port--required .node__port-label::after {
+  content: '*';
+  margin-left: 2px;
+  color: var(--color-status-warning);
+}
+
+/* ---------- Tool bus pill ----------
+ * Straddles the card's bottom edge, centred, so several tools can converge
+ * on one obvious point instead of crowding the footer with rows. */
+
+.node__pill {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, 50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-0-5) var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.node--has-pill {
+  /* Room for the pill to overhang without the next node overlapping it. */
+  margin-bottom: 10px;
+}
+
+/* ---------- Status ---------- */
+
+.node[data-status='running'] {
+  border-color: var(--color-status-running);
+}
+
+.node[data-status='error'] {
+  border-color: var(--color-status-error);
+}
+
+.node__error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1-5);
+  margin: 0 var(--space-3) var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+  font: var(--type-caption);
+  line-height: var(--line-height-snug);
+}
+
+.node__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-2-5);
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Output card ---------- */
+
+.node--output .node__body {
+  gap: var(--space-2);
+}
+
+.node__result {
+  position: relative;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--space-2-5);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+}
+
+.node__result-empty {
+  padding: var(--space-5) var(--space-3);
+  text-align: center;
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+  border-radius: var(--radius-md);
+  border: var(--border-width-hairline) dashed var(--color-border);
+}
+
+/* The question the run is carrying, when the saved field says something else
+   (ticket 34). Accented rather than styled like a field, because it is the one
+   thing on this card that is not editable and not saved — see `LiveInputBody`. */
+.node__live-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--box-inset-dense);
+  border-radius: var(--radius-md);
+  border: var(--border-width-hairline) solid var(--color-border);
+  background: var(--color-bg-surface-sunken);
+}
+
+.node__live-input-label {
+  font: var(--type-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  /* The card's own accent, so "this came from the run" reads as part of this
+     node rather than as a warning about it. */
+  color: var(--accent-solid);
+}
+
+.node__live-input-value {
+  font: var(--type-body-sm);
+  color: var(--color-text-primary);
+  /* Clamped, not scrolled: the card is a summary and a long question must not
+     push the editable field off it. The Inspector holds the full value. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.node__expand {
+  position: absolute;
+  top: var(--space-1-5);
+  right: var(--space-1-5);
+  z-index: 1;
+}
+
+/* ---------- Container (group) ---------- */
+
+.node--container {
+  height: 100%;
+  border-radius: var(--radius-xl);
+  background: var(--color-group-fill);
+  border-color: var(--color-group-border);
+  padding: var(--space-4);
+  gap: var(--space-2);
+}
+
+.joint-element.is-selected .node--container {
+  border-color: var(--color-border-focus);
+}
+
+.node--container .node__group-title {
+  font: var(--type-heading-sm);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-group-text);
+}
+
+.node--container .prose,
+.node--container .prose p,
+.node--container .prose li {
+  color: var(--color-group-text);
+}
+
+.node--container .prose li::marker {
+  color: color-mix(in srgb, var(--color-group-text) 55%, transparent);
+}
+
+/* Bottom-right resize grip. Containers are sized by hand — see
+ * DragCommitFeature for why they don't auto-fit.
+ *
+ * `the-look-has-an-author-now/15`. The one thing on this card a user
+ * actually takes hold of, so it carries the darker of the product's two
+ * border weights — `--color-rule`, full ink — rather than the group's own
+ * identity tint. It used to draw in `--color-group-border`, which reads as
+ * "this glyph belongs to the container's colour family" when what it needs
+ * to say is "grab here", a message every container shares regardless of
+ * which family it is. */
+.node__resize {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  border-right: var(--border-width-rule) solid var(--color-rule);
+  border-bottom: var(--border-width-rule) solid var(--color-rule);
+  border-bottom-right-radius: 4px;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.joint-element:hover .node__resize,
+.joint-element.is-selected .node__resize {
+  opacity: 1;
+}
+
+/* ---------- Note ---------- */
+
+.node--annotation {
+  background: var(--color-note-fill);
+  border-color: var(--color-note-border);
+  padding: var(--space-3);
+}
+
+.node--annotation .node__body {
+  padding: 0;
+}
+
+.node__note-placeholder {
+  font: var(--type-caption);
+  font-style: italic;
+  color: var(--color-text-quaternary);
+}
+
+/* ========== Repeatable group field ========== */
+.repeatable-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Wraps, since ticket 26. A row of three controls divided evenly by `flex: 1`
+ * is fine for two and unusable for three: the Guardrail's rules put an entity,
+ * a strategy and a regular expression on one card-width line, and the pattern
+ * ended up a box about wide enough for `on`. A control has a width below which
+ * it stops being a control, so `min-width` states it and the row takes another
+ * line rather than shrinking past it. */
+.repeatable-group__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+}
+
+.repeatable-group__field {
+  flex: 1 1 9rem;
+  min-width: 9rem;
+}
+
+/* The same micro-label the inspector uses, at row scale — see
+ * `FieldRenderer`: unlabelled controls side by side name nothing. */
+.repeatable-group__label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.repeatable-group__field input,
+.repeatable-group__field textarea,
+.repeatable-group__field select {
+  width: 100%;
+  font: var(--type-caption);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: var(--border-width-hairline) solid var(--color-border);
+  background: var(--color-bg-surface);
+}
+
+.repeatable-group__field input:focus,
+.repeatable-group__field textarea:focus,
+.repeatable-group__field select:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring-soft);
+}
+
+/* A row's own validator, said where the row is. The flat field shows this
+ * under the control through `Field`; a row has no `Field`, so it says it
+ * itself rather than refusing silently. */
+.repeatable-group__error {
+  display: block;
+  margin-top: var(--space-1);
+  font: var(--type-caption);
+  color: var(--color-danger);
+}
+
+/* The per-row probe (mcp-connect ticket 04): a button and the verdict it
+ * earned. Takes its own line at the end of the row rather than a column,
+ * because a badge is not a control and should not be sized like one. */
+.repeatable-group__probe {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The runtime's own sentence, full width under the row's controls. */
+.repeatable-group__detail {
+  flex: 1 0 100%;
+  margin: 0;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.repeatable-group__remove {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  border: var(--border-width-hairline) solid var(--color-border);
+  background: var(--color-bg-surface);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-16);
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.repeatable-group__remove:hover {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.repeatable-group__add {
+  padding: var(--space-1-5) var(--space-3);
+  border-radius: var(--radius-md);
+  border: var(--border-width-hairline) dashed var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: var(--type-caption);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.repeatable-group__add:hover {
+  border-color: var(--color-border-emphasis);
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+/* Subtitle chips — ONE badge vocabulary, not two.
+ *
+ * `workflow` (scope) marks a node type that will not exist in other
+ * workflows; `graph` (mount) marks a card that stands for a whole workflow
+ * rather than one step. They sit in the same line, at the same size, in the
+ * same lowercase-uppercased voice, because a second badge system on one card
+ * would be worse than no badge at all. */
+.node__chip {
+  display: inline-block;
+  margin-right: var(--space-1);
+  padding: 0 var(--space-1);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font: var(--type-caption);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-tertiary);
+  vertical-align: middle;
+}
+
+/* The mount chip carries the card's own accent, so it reads as a statement
+   about *what this card is* rather than as another muted annotation. Both
+   slots are theme-aware by construction (`theme.css` rebuilds the tints from
+   alpha on dark), so no colour is invented here. */
+.node__chip--mount {
+  border-color: transparent;
+  background: var(--accent-tint);
+  color: var(--accent-on-tint);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The wordless half of the signal.
+ *
+ * A chip is only legible up close; the canvas is read at zoom levels where no
+ * caption survives. A tinted header band does survive, and it costs no space
+ * at all — so at a glance a mount is a differently-shaped card, and up close
+ * it says which kind. */
+.node--mount .node__header {
+  background: var(--accent-tint);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
+  margin-bottom: var(--space-2);
+}

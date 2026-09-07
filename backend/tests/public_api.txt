@@ -1,0 +1,123 @@
+openstategraph.CompiledWorkflow = dataclass(object) fields(graph,warnings,slug,package_dir,document,trace_file,failure_warnings,_owned,_mounts,needs_a_provider,_loop)
+openstategraph.DEFAULT_RECURSION_LIMIT = int
+openstategraph.DocumentError = class(OpenStateGraphError,ValueError)(...)
+openstategraph.InvalidPackageName = class(WorkflowPackageError,ValueError)(...)
+openstategraph.LiveWorkflows = class(object)(root: 'str | Path | None' = None, *, catalogue: "'Workflows | None'" = None, checkpointer: "'BaseCheckpointSaver[Any] | None'" = None, store: "'BaseStore | None'" = None, **defaults: 'Any') -> 'None'
+openstategraph.OpenStateGraphError = class(Exception)(...)
+openstategraph.PackageNotFound = class(WorkflowPackageError,FileNotFoundError)(...)
+openstategraph.RunProducedNothing = class(OpenStateGraphError)(message: 'str', result: 'Any' = None) -> 'None'
+openstategraph.RunResult = class(str)(answer: 'str' = '', *, decisions: 'dict[str, str] | None' = None, routes: 'dict[str, list[str]] | None' = None, outputs: 'dict[str, str] | None' = None, warnings: 'list[str] | None' = None, failures: 'list[str] | None' = None, attempts: 'int' = 0, usage: 'dict[str, dict[str, Any]] | None' = None, pause: 'dict[str, Any] | None' = None, statements: 'list[dict[str, Any]] | None' = None) -> "'RunResult'"
+openstategraph.SchemaVersionError = class(DocumentError)(...)
+openstategraph.StepBudgetExhausted = class(OpenStateGraphError)(...)
+openstategraph.ThreadNotResumable = class(OpenStateGraphError,ValueError)(...)
+openstategraph.WorkflowInfo = dataclass(object) fields(slug,name,published,node_count,edge_count,saved_at,error)
+openstategraph.WorkflowPackageError = class(OpenStateGraphError)(...)
+openstategraph.Workflows = class(object)(root: 'str | Path | None' = None, *, model: 'Any' = None, checkpointer: 'BaseCheckpointSaver[Any] | None' = None, store: 'BaseStore | None' = None, tools: 'dict[str, Any] | None' = None, functions: 'dict[str, Any] | None' = None, middleware: 'dict[str, Any] | None' = None, knowledge_dir: 'str | Path | None' = None, trace_file: 'str | Path | None' = None) -> 'None'
+openstategraph.__version__ = str
+openstategraph.load_workflow = def(package_dir: 'str | Path', *, model: 'Any' = None, checkpointer: 'BaseCheckpointSaver[Any] | None' = None, store: 'BaseStore | None' = None, tools: 'dict[str, Any] | None' = None, functions: 'dict[str, Any] | None' = None, middleware: 'dict[str, Any] | None' = None, knowledge_dir: 'str | Path | None' = None, trace_file: 'str | Path | None' = None) -> 'CompiledWorkflow'
+openstategraph.package_stamp = def(directory: 'Path') -> 'str'
+openstategraph.run_context = def() -> 'dict[str, Any]'
+openstategraph.abc.AbstractAgentNode = class(ABC)(*, name: 'str', model: 'Any' = None, tools: 'Any' = (), middleware: 'dict[str, Any] | None' = None, narrate: 'bool' = True) -> 'None'
+openstategraph.abc.Archetype = class(BaseModel)(*, key: str, name: str, description: str = '') -> None
+openstategraph.abc.BaseAgentNode = class(AbstractAgentNode)(*, default_rules: 'str' = '', rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, context: 'str' = '', **kwargs: 'Any') -> 'None'
+openstategraph.abc.BaseGrader = class(ABC)(*, criteria: 'str' = '', rubric: 'list[dict[str, Any]] | None' = None, skill: 'str' = '', replace_defaults: 'bool' = False, model: 'Any' = None, context: 'str' = '') -> 'None'
+openstategraph.abc.BaseGuardrail = class(ABC)(*, rules: 'Sequence[GuardrailRule | Mapping[str, Any]]' = (), refusal: 'str' = '') -> 'None'
+openstategraph.abc.BaseNodeFamily = class(ABC)()
+openstategraph.abc.BaseOrchestrator = class(ABC)(*, max_subtasks: 'int' = 8, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None, context: 'str' = '') -> 'None'
+openstategraph.abc.BaseRouter = class(ABC)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None, match_mode: 'str' = 'best', context: 'str' = '') -> 'None'
+openstategraph.abc.BaseTool = class(ABC)()
+openstategraph.abc.Classification = class(BaseModel)(*, branch: str, branches: list[str] = <factory>, fell_back: bool = False, reason: str = '') -> None
+openstategraph.abc.Correction = class(BaseModel)(*, kind: Literal['next_step'] = 'next_step', text: str) -> None
+openstategraph.abc.CustomGraphNode = class(AbstractAgentNode)(*, name: 'str', runnable: 'Any') -> 'None'
+openstategraph.abc.DeclaredUnit = class(BaseModel)(*, kind: Literal['declared_unit'] = 'declared_unit', axis: str, unit: str = '', convertible_to: tuple[str, ...] = ()) -> None
+openstategraph.abc.DeepAgentNode = class(BaseAgentNode)(*, subagents: 'list[dict[str, Any]] | None' = None, backend: 'Any' = None, **kwargs: 'Any') -> 'None'
+openstategraph.abc.Field = re-export of pydantic.fields.Field
+openstategraph.abc.Grader = class(BaseGrader)(*, criteria: 'str' = '', rubric: 'list[dict[str, Any]] | None' = None, skill: 'str' = '', replace_defaults: 'bool' = False, model: 'Any' = None, context: 'str' = '') -> 'None'
+openstategraph.abc.Guardrail = class(BaseGuardrail)(*, rules: 'Sequence[GuardrailRule | Mapping[str, Any]]' = (), refusal: 'str' = '') -> 'None'
+openstategraph.abc.GuardrailRule = dataclass(object) fields(entity,strategy,detector)
+openstategraph.abc.IAgent = class(Protocol)(*args, **kwargs)
+openstategraph.abc.IGrader = class(Protocol)(*args, **kwargs)
+openstategraph.abc.IGuardrail = class(Protocol)(*args, **kwargs)
+openstategraph.abc.INodeFamily = class(Protocol)(*args, **kwargs)
+openstategraph.abc.IOrchestrator = class(Protocol)(*args, **kwargs)
+openstategraph.abc.IRouter = class(Protocol)(*args, **kwargs)
+openstategraph.abc.ITool = class(Protocol)(*args, **kwargs)
+openstategraph.abc.MiddlewareSlotTable = class(object)(order: 'Sequence[str]' = ()) -> 'None'
+openstategraph.abc.NoArgs = class(BaseModel)() -> None
+openstategraph.abc.NodeBuildContext = dataclass(object) fields(node_id,node,plan,capabilities,diagnostics,upstream_text,resolve_model)
+openstategraph.abc.NodeCapabilities = dataclass(object) fields(tools,functions,memory_store)
+openstategraph.abc.Orchestrator = class(BaseOrchestrator)(*, max_subtasks: 'int' = 8, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None, context: 'str' = '') -> 'None'
+openstategraph.abc.Progress = class(BaseModel)(*, message: str, current: Annotated[int | None, Ge(ge=0)] = None, total: Annotated[int | None, Ge(ge=0)] = None, node: str = '', detail: str | None = None) -> None
+openstategraph.abc.ReactAgentNode = class(BaseAgentNode)(*, default_rules: 'str' = '', rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, context: 'str' = '', **kwargs: 'Any') -> 'None'
+openstategraph.abc.Redaction = dataclass(object) fields(entity,strategy,count)
+openstategraph.abc.Router = class(BaseRouter)(branches: "'list[str | dict[str, Any] | Branch]'", *, fallback: 'str | None' = None, rules: 'str' = '', skill: 'str' = '', replace_rules: 'bool' = False, model: 'Any' = None, match_mode: 'str' = 'best', context: 'str' = '', destinations: 'dict[str, str] | None' = None) -> 'None'
+openstategraph.abc.Screening = dataclass(object) fields(text,blocked,blocked_entity,redactions)
+openstategraph.abc.SourceChoice = class(BaseModel)(*, kind: Literal['source_choice'] = 'source_choice', quantity: str, chosen: str, alternatives: tuple[str, ...] = (), how_chosen: Literal['named_in_question', 'declared_default', 'only_source']) -> None
+openstategraph.abc.Substitution = class(BaseModel)(*, kind: Literal['substitution'] = 'substitution', user_term: str, axis: str, canonical_value: str, how_matched: Literal['exact', 'declared_synonym', 'model_inference'], confidence: Annotated[float | None, Ge(ge=0.0), Le(le=1.0)] = None) -> None
+openstategraph.abc.Subtask = class(BaseModel)(*, id: str, instruction: str, archetype: str = '') -> None
+openstategraph.abc.SystemPrompt = dataclass(object) fields(preamble,output_contract,context,default_rules,rules,replace_defaults,skill)
+openstategraph.abc.ToolFailure = class(BaseModel)(*, kind: Literal['tool_failure'] = 'tool_failure', tool: str = '', detail: str = '', looked_like_authorisation: bool = False) -> None
+openstategraph.abc.ToolField = dataclass(object) fields(key,label,kind,default_value,placeholder,hint,options)
+openstategraph.abc.ToolResult = class(BaseModel)(*, ok: bool = True, content: str = '', error: str | None = None, notes: tuple[typing.Union[openstategraph.abc.tool_notes.Correction, openstategraph.abc.tool_notes.Substitution, openstategraph.abc.tool_notes.SourceChoice, openstategraph.abc.tool_notes.DeclaredUnit, openstategraph.abc.tool_notes.ToolFailure, openstategraph.abc.tool_notes.UncoveredWindow, openstategraph.abc.tool_notes.UnverifiedAnswer], ...] = ()) -> None
+openstategraph.abc.UncoveredWindow = class(BaseModel)(*, kind: Literal['uncovered_window'] = 'uncovered_window', subject: str = '', table: str = '', declared_max: str = '') -> None
+openstategraph.abc.UnverifiedAnswer = class(BaseModel)(*, kind: Literal['unverified_answer'] = 'unverified_answer', check: str = '', starved: bool = False) -> None
+openstategraph.abc.Verdict = class(BaseModel)(*, passed: bool, reason: str = '', feedback: str = '', failed_check: str = '') -> None
+openstategraph.abc.agent_node_for_tier = def(tier: 'str') -> 'type[BaseAgentNode]'
+openstategraph.abc.report_progress = def(message: 'str', *, current: 'int | None' = None, total: 'int | None' = None, detail: 'str | None' = None) -> 'bool'
+openstategraph.errors.CredentialError = class(OpenStateGraphError,RuntimeError)(...)
+openstategraph.errors.DocumentError = class(OpenStateGraphError,ValueError)(...)
+openstategraph.errors.GENERIC_FAILURE_MESSAGE = str
+openstategraph.errors.InvalidPackageName = class(WorkflowPackageError,ValueError)(...)
+openstategraph.errors.MissingProviderKey = class(CredentialError)(...)
+openstategraph.errors.MissingProviderPackage = class(OpenStateGraphError,ImportError)(...)
+openstategraph.errors.MissingProviderSetting = class(OpenStateGraphError,RuntimeError)(...)
+openstategraph.errors.NoProviderInstalled = class(OpenStateGraphError,ImportError)(...)
+openstategraph.errors.OpenStateGraphError = class(Exception)(...)
+openstategraph.errors.PackageNotFound = class(WorkflowPackageError,FileNotFoundError)(...)
+openstategraph.errors.ProviderRefusedCredential = class(CredentialError)(...)
+openstategraph.errors.ProviderUnreachable = class(OpenStateGraphError)(...)
+openstategraph.errors.RunContextError = class(OpenStateGraphError,ValueError)(...)
+openstategraph.errors.RunProducedNothing = class(OpenStateGraphError)(message: 'str', result: 'Any' = None) -> 'None'
+openstategraph.errors.SchemaVersionError = class(DocumentError)(...)
+openstategraph.errors.StepBudgetExhausted = class(OpenStateGraphError)(...)
+openstategraph.errors.ThreadNotResumable = class(OpenStateGraphError,ValueError)(...)
+openstategraph.errors.UnknownProvider = class(OpenStateGraphError,ValueError)(...)
+openstategraph.errors.WorkflowPackageError = class(OpenStateGraphError)(...)
+openstategraph.extensions.DISABLE_PLUGINS_ENV = str
+openstategraph.extensions.Discovered = dataclass(object) fields(values,warnings,sources)
+openstategraph.extensions.ENTRY_POINT_GROUPS = tuple
+openstategraph.extensions.KNOWLEDGE_BUILDERS_GROUP = str
+openstategraph.extensions.NODE_FAMILIES_GROUP = str
+openstategraph.extensions.PROVIDERS_GROUP = str
+openstategraph.extensions.TOOLS_GROUP = str
+openstategraph.extensions.entry_point_knowledge_builders = def() -> 'Discovered'
+openstategraph.extensions.entry_point_node_families = def() -> 'Discovered'
+openstategraph.extensions.entry_point_providers = def() -> 'Discovered'
+openstategraph.extensions.entry_point_tools = def() -> 'Discovered'
+openstategraph.extensions.plugins_enabled = def() -> 'bool'
+openstategraph.extensions.reset_entry_point_cache = def() -> 'None'
+openstategraph.providers.ENV_EXAMPLE_BEGIN = str
+openstategraph.providers.ENV_EXAMPLE_END = str
+openstategraph.providers.OPTIONAL_ENV_VARS = dict
+openstategraph.providers.PROVIDERS_GROUP = str
+openstategraph.providers.ProviderArgument = dataclass(object) fields(keyword,env_vars,required)
+openstategraph.providers.ProviderCatalogue = dataclass(object) fields(_specs,warnings)
+openstategraph.providers.ProviderDefault = dataclass(object) fields(spec,model,reason,configured,command)
+openstategraph.providers.ProviderEnvironment = dataclass(object) fields(spec,env)
+openstategraph.providers.ProviderGap = dataclass(object) fields(spec,missing_package,missing_key,missing_arguments)
+openstategraph.providers.ProviderSpec = dataclass(object) fields(name,default_model,extra,env_vars,aliases,endpoint_env,default_endpoint,label,integration_module,constructor_args,constructor_defaults)
+openstategraph.providers.builtin_specs = def() -> 'tuple[ProviderSpec, ...]'
+openstategraph.providers.credential_env_vars = def(catalogue: "'ProviderCatalogue | None'" = None) -> 'frozenset[str]'
+openstategraph.providers.env_example_section = def(catalogue: "'ProviderCatalogue | None'" = None) -> 'str'
+openstategraph.providers.load_provider_catalogue = def() -> 'ProviderCatalogue'
+openstategraph.providers.missing_key_diagnosis = def(model_string: 'str') -> 'str | None'
+openstategraph.providers.provider_catalogue = def() -> 'ProviderCatalogue'
+openstategraph.providers.provider_readiness = def(model_string: 'str') -> 'ProviderGap | None'
+openstategraph.providers.reset_provider_catalogue = def() -> 'None'
+openstategraph.schema.MIGRATIONS = dict
+openstategraph.schema.MIN_SUPPORTED_VERSION = int
+openstategraph.schema.Migration = re-export of typing.Callable
+openstategraph.schema.SCHEMA_VERSION = int
+openstategraph.schema.document_version = def(document: 'dict[str, Any]') -> 'int'
+openstategraph.schema.migrate_document = def(document: 'dict[str, Any]') -> 'dict[str, Any]'
+openstategraph.schema.normalize_document = def(payload: 'Any') -> 'dict[str, Any]'

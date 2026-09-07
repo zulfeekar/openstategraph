@@ -1,0 +1,105 @@
+# Pull-request triage: label by path, and greet a first-time contributor with
+# something they can act on. Two actions, both chosen because they replace work
+# a maintainer would otherwise do by hand — not because they are available.
+#
+# WHY `pull_request_target`, AND WHY IT IS SAFE HERE
+#
+# Labelling a pull request from a fork needs `pull-requests: write`, which
+# `pull_request` does not grant to a fork. `pull_request_target` does, because
+# it runs the workflow definition from the BASE branch — but it also runs it
+# with a privileged token in a context where `github.event.pull_request.head`
+# is a stranger's code. The rule that makes that safe is simple and absolute:
+#
+#   THIS WORKFLOW NEVER CHECKS OUT, BUILDS, OR EXECUTES THE PULL REQUEST'S CODE.
+#
+# There is no `actions/checkout`, no `npm ci`, no `pip install`, and no `run:`
+# step that interpolates attacker-controlled text into a shell. Both actions
+# below read the diff's file *list* through the API and write labels or a
+# comment. Adding a checkout step here would turn a labelling convenience into
+# a repository-takeover primitive; if you ever need one, use
+# `ref: ${{ github.event.pull_request.merge_commit_sha }}` and drop the write
+# permissions — or better, put the work in `ci.yml` where it belongs.
+#
+# The tests themselves live in `ci.yml` on the plain `pull_request` trigger and
+# have no secrets at all. Nothing here gates a merge.
+name: Triage
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # read .github/labeler.yml from the base branch
+      pull-requests: write # apply the labels
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          configuration-path: .github/labeler.yml
+          # Labels a maintainer removed by hand stay removed. Re-adding them on
+          # every push would make the label bar a fight rather than a signal.
+          sync-labels: false
+
+  greeting:
+    # Only on the first push of a pull request; a greeting repeated on every
+    # `synchronize` is exactly the noise this file is trying not to be.
+    if: github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/first-interaction@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          # No "thanks for your contribution!". Everything below is something
+          # the author will otherwise discover from a red X twenty minutes from
+          # now — the two CI gates that surprise people, and the two commands
+          # that reproduce the whole suite locally.
+          issue-message: |
+            Thanks for the report — two things that make it actionable fast:
+
+            * the **version** (`openstategraph --version`, or the commit SHA if
+              you are on a checkout), and
+            * the `workflow.json` that reproduces it, or the smallest edit to a
+              package under `workflows/` that does.
+
+            Model behaviour varies by provider, so please say which one. Note
+            that `ollama:` means Ollama **cloud** here; a local model is not a
+            supported reproduction (see `CLAUDE.md`).
+          pr-message: |
+            Thanks for the pull request — welcome. Three things worth knowing
+            before CI reports back, because they are what usually surprises a
+            first contribution here:
+
+            **1. Docs land with the code.** The `docs-freshness` check fails a
+            pull request that touches `src/` or `backend/` without touching
+            `README.md`, `docs/` or `openwiki/`. If the change genuinely needs
+            no documentation, say so in a commit message and the check passes:
+
+            ```bash
+            git commit --allow-empty -m "docs: not-needed — internal refactor only"
+            ```
+
+            **2. `backend/openstategraph/compile/port_specs.json` is generated,
+            never hand-edited.** If you changed a node type or a port, run
+            `npm run generate:ports` and commit the result, or the
+            `generated-port-specs` check will fail.
+
+            **3. Reproduce the whole gate locally:**
+
+            ```bash
+            npm run verify                            # tsc + eslint + prettier + vitest
+            python -m pytest -q                       # live-API tests are opt-in: -m live
+            cd backend && python -m ruff check . && python -m mypy
+            ```
+
+            `CONTRIBUTING.md` has the rest, and `CLAUDE.md` is the architecture
+            contract the review will actually be against — the checklist in the
+            pull-request template is drawn from it. No secrets are exposed to a
+            fork's build, so every check here runs on your branch as-is.

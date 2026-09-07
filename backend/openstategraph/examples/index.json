@@ -1,0 +1,194 @@
+{
+  "_comment": [
+    "The gallery's running order \u2014 workflow-gallery ticket 07.",
+    "",
+    "This file carries the two things a package cannot say about itself: the",
+    "order the twenty should be read in, and the pattern each one demonstrates.",
+    "Everything else \u2014 display name, one-line purpose, which packages it mounts",
+    "\u2014 is read from the package's own workflow.json, because it is already",
+    "written there and two copies of a summary are two things to keep true.",
+    "",
+    "Order is a TEACHING order, not alphabetical: the straight line first, then",
+    "routing, then loops, then composition, then the real-world ones that spend",
+    "the most tokens. It is the order `openstategraph examples list` prints and",
+    "the order the editor's Examples shelf shows.",
+    "",
+    "`nested-mounts-mid` is row 11's middle level rather than a row of its own:",
+    "it exists to be mounted by `nested-mounts` and mounts `chained-summarizer`",
+    "in turn, which is what makes the chain three deep.",
+    "",
+    "An example is COPIED, never mounted where it lies. These files are inside",
+    "site-packages: a mount is by reference, so mounting one would put a user's",
+    "running workflow at the mercy of their next `pip install -U`, and the",
+    "reference would point at a directory they cannot edit. `openstategraph",
+    "examples copy <slug>` writes it into their own workflows root, dependencies",
+    "and all, and from that moment the link is severed \u2014 the same bargain a",
+    "template makes.",
+    "",
+    "Four of the twenty-three declare `expectedFindings` for",
+    "`undeclared_fallback` (launch-readiness 151): they are the web-research",
+    "examples, and each one binds a capability that answers from outside the",
+    "run's own data to the step that writes the answer, with no gate between.",
+    "That is what those examples are FOR, and the finding is correct about",
+    "every one of them \u2014 a number in their output can be the model's own.",
+    "The nineteen that stay silent are the narrowness: an agent bound to the",
+    "store's own tools is the ordinary case and is never reported."
+  ],
+  "examples": [
+    {
+      "slug": "chained-summarizer",
+      "pattern": "prompt chaining"
+    },
+    {
+      "slug": "parallel-workers-join",
+      "pattern": "parallelization"
+    },
+    {
+      "slug": "classifier-router-qa",
+      "pattern": "routing"
+    },
+    {
+      "slug": "evaluator-optimizer",
+      "pattern": "revision loop"
+    },
+    {
+      "slug": "archetype-orchestrator-report",
+      "pattern": "orchestrator-worker"
+    },
+    {
+      "slug": "two-stage-double-loop",
+      "pattern": "two loops, two rubrics"
+    },
+    {
+      "slug": "budget-exhaustion",
+      "pattern": "a loop that stops without passing"
+    },
+    {
+      "slug": "agentic-rag-rewrite",
+      "pattern": "grade the context, rewrite the question"
+    },
+    {
+      "slug": "fanout-in-a-loop",
+      "pattern": "a lap that costs several supersteps"
+    },
+    {
+      "slug": "approval-in-the-loop",
+      "pattern": "the human closes the cycle"
+    },
+    {
+      "slug": "nested-mounts",
+      "pattern": "composition depth"
+    },
+    {
+      "slug": "nested-mounts-mid",
+      "pattern": "composition depth (middle level)"
+    },
+    {
+      "slug": "same-package-twice",
+      "pattern": "one definition, two instances",
+      "expectedFindings": [
+        {
+          "finding": "override_applied",
+          "subjects": [
+            "\"mount-terse\" -> \"chained-summarizer#shorten1.systemPrompt\""
+          ]
+        },
+        {
+          "finding": "override_applied",
+          "subjects": [
+            "\"mount-analogy\" -> \"chained-summarizer#shorten1.systemPrompt\""
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "delegate-by-mount",
+      "pattern": "delegation",
+      "expectedFindings": [
+        {
+          "finding": "undeclared_fallback",
+          "subjects": [
+            "out1",
+            "digest1",
+            "tool.web-search, tool.web-fetch"
+          ],
+          "mountPath": "web-research-digest"
+        }
+      ]
+    },
+    {
+      "slug": "skill-driven-rubric",
+      "pattern": "rules from a file"
+    },
+    {
+      "slug": "knowledge-lookup-qa",
+      "pattern": "retrieval, no loop"
+    },
+    {
+      "slug": "youtube-trend-digest",
+      "pattern": "trend, transcript, synthesis",
+      "expectedFindings": [
+        {
+          "finding": "undeclared_fallback",
+          "subjects": [
+            "out1",
+            "read1",
+            "tool.web-search"
+          ]
+        },
+        {
+          "finding": "undeclared_fallback",
+          "subjects": [
+            "out1",
+            "trend1",
+            "tool.web-search, tool.web-fetch"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "sql-qa",
+      "pattern": "text-to-SQL over a real database"
+    },
+    {
+      "slug": "web-research-digest",
+      "pattern": "search, fetch, report",
+      "expectedFindings": [
+        {
+          "finding": "undeclared_fallback",
+          "subjects": [
+            "out1",
+            "digest1",
+            "tool.web-search, tool.web-fetch"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "support-triage",
+      "pattern": "the long control chain"
+    },
+    {
+      "slug": "morning-brief",
+      "pattern": "many sources, one report",
+      "expectedFindings": [
+        {
+          "finding": "undeclared_fallback",
+          "subjects": [
+            "out1",
+            "worker-web",
+            "tool.web-search"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "guarded-lookup",
+      "pattern": "one policy, two directions"
+    },
+    {
+      "slug": "remembers-across-runs",
+      "pattern": "one ledger, many runs"
+    }
+  ]
+}

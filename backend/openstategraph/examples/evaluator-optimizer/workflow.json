@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "name": "Evaluator Optimizer",
+  "published": false,
+  "savedAt": "2026-08-14T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Evaluator Optimizer",
+    "settings": {
+      "purpose": "The canonical revision loop: a drafter, a grader, and the one feedback edge that makes it a cycle."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Request",
+        "data": {},
+        "position": { "x": 40, "y": 200 }
+      },
+      {
+        "id": "draft1",
+        "type": "agent.llm",
+        "title": "Draft",
+        "data": {
+          "systemPrompt": "Write the release note the user asks for: exactly two sentences, past tense, plain language.\n\nSentence one names what was broken. Sentence two names what now happens instead. No marketing words, no exclamation marks, no bullet points, no heading.\n\nWhen you are given feedback on a previous attempt, treat it as the specification: fix exactly what it names, keep what it did not object to, and do not start over."
+        },
+        "position": { "x": 380, "y": 200 }
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "title": "Review",
+        "data": {
+          "criteria": "- The note must be exactly two sentences — count them.\n- The first sentence must name the defect; the second must name the fixed behaviour.\n- No marketing language ('exciting', 'seamless', 'delighted') and no exclamation marks.\n- If it falls short, say which of these rules it broke and how, specifically enough that the next attempt can fix it without guessing.",
+          "rulesMode": "extend",
+          "maxAttempts": 2
+        },
+        "position": { "x": 720, "y": 200 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Release note",
+        "data": {},
+        "position": { "x": 1060, "y": 200 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "draft1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "draft1", "portId": "result" },
+        "target": { "nodeId": "grader1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "pass" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "revise" },
+        "target": { "nodeId": "draft1", "portId": "feedback" }
+      }
+    ]
+  }
+}

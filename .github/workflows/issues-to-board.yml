@@ -1,0 +1,70 @@
+# Copy an issue onto the maintainers' board, and say on the issue what shipped.
+# `team-board-and-gap-reports/05`.
+#
+# WHY THIS WORKFLOW HAS NO CHECKOUT
+#
+# It reads none of the repository. The bridge is a released module, installed
+# from PyPI, and everything it acts on is the event GitHub already wrote to
+# disk. A checkout would be the first half of every workflow that later grows a
+# build step, and this one runs with an Actions secret in its environment —
+# `tests/test_an_issue_a_user_files_reaches_the_board.py` asserts that no
+# workflow on `issues` carries `actions/checkout`, so growing one is a red test
+# rather than a decision nobody reviews.
+#
+# WHY IT IS SAFE OVER ATTACKER-CONTROLLED TEXT
+#
+# An issue's title and body are written by strangers. They are never
+# interpolated into a `run:` — no step below contains a `${{ github.event.issue
+# ... }}` expression at all. Python reads the event file itself, and the title
+# and body reach the database as bound parameters. The comment posted back is
+# written by us to a file and passed with `--body-file`, never as an argument.
+#
+# `issues` events do not fire for pull requests, so a fork's pull request never
+# reaches this workflow. `issue_comment` DOES fire for pull-request comments —
+# and the bridge exits without writing when the payload's issue is one.
+name: Issues to board
+
+on:
+  issues:
+    types: [opened, edited, closed, reopened]
+  issue_comment:
+    types: [created]
+
+# Read-only by default, the posture `ci.yml` and `triage.yml` already state.
+permissions:
+  contents: read
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The one write, and only for the one thing that needs it: saying on the
+      # issue what shipped, when the board says something did.
+      issues: write
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install the bridge
+        run: pip install --disable-pip-version-check "openstategraph[postgres]"
+
+      - name: Copy the issue onto the board
+        id: bridge
+        env:
+          # Named, never a literal. An empty value fails with the name of this
+          # secret rather than a stack trace — the `openwiki-update.yml`
+          # failure mode this repository already has one of.
+          OPENSTATEGRAPH_KANBAN_URL: ${{ secrets.OPENSTATEGRAPH_KANBAN_URL }}
+          OPENSTATEGRAPH_BRIDGE_COMMENT_FILE: ${{ runner.temp }}/issue-comment.md
+        run: python -m openstategraph.github_issue_bridge
+
+      - name: Say on the issue what shipped
+        if: steps.bridge.outputs.comment == 'written'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_FILE: ${{ runner.temp }}/issue-comment.md
+        run: gh issue comment "$ISSUE_NUMBER" --body-file "$COMMENT_FILE"

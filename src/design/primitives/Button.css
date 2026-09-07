@@ -1,0 +1,173 @@
+.btn {
+  --btn-height: var(--control-height-md);
+  --btn-padding-x: var(--space-3);
+  --btn-gap: var(--space-1-5);
+  --btn-radius: var(--radius-md);
+  --btn-font: var(--type-body-md);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--btn-gap);
+  height: var(--btn-height);
+  padding-inline: var(--btn-padding-x);
+  border-radius: var(--btn-radius);
+  font: var(--btn-font);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-tight);
+  white-space: nowrap;
+  user-select: none;
+  transition: var(--transition-colors);
+}
+
+.btn:disabled {
+  opacity: var(--disabled-opacity);
+}
+
+/* Glyphs inside a control never intercept the click that was aimed at the
+ * control, and never absorb the flex squeeze meant for the label. */
+.btn svg,
+.icon-btn svg {
+  flex: none;
+  pointer-events: none;
+}
+
+/* A default icon size that *yields* to an explicit one. `Icon` stamps
+ * `data-icon-size` only when the caller named a size, so a small control
+ * scales its glyphs down automatically while every deliberate choice
+ * survives untouched. (shadcn spells this `:not([class*='size-'])`.) */
+.btn--sm svg:not([data-icon-size]),
+.icon-btn--sm svg:not([data-icon-size]) {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-btn--xs svg:not([data-icon-size]) {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---------- Sizes ---------- */
+.btn--sm {
+  --btn-height: var(--control-height-sm);
+  --btn-padding-x: var(--space-2);
+  --btn-gap: var(--space-1);
+  --btn-radius: var(--radius-sm);
+  --btn-font: var(--type-body-sm);
+}
+
+.btn--lg {
+  --btn-height: var(--control-height-lg);
+  --btn-padding-x: var(--space-3-5);
+}
+
+/* ---------- Variants ---------- */
+.btn--primary {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+}
+.btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+.btn--primary:active:not(:disabled) {
+  background: var(--color-primary-active);
+}
+
+.btn--secondary {
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  border: var(--border-width-hairline) solid var(--color-border);
+}
+.btn--secondary:hover:not(:disabled) {
+  background: var(--color-bg-subtle);
+  border-color: var(--color-border-emphasis);
+}
+.btn--secondary:active:not(:disabled) {
+  background: var(--color-bg-muted);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+.btn--ghost:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+.btn--ghost:active:not(:disabled) {
+  background: var(--color-bg-active);
+}
+
+.btn--danger {
+  background: transparent;
+  color: var(--color-danger);
+}
+.btn--danger:hover:not(:disabled) {
+  background: var(--color-danger-subtle);
+}
+
+/* Filled danger — `primary`'s weight in the danger hue. The hover/active
+ * steps are mixed from the same token rather than added as new colours, so
+ * the palette still has exactly one red and both themes follow it. */
+.btn--danger-solid {
+  background: var(--color-danger);
+  color: var(--color-primary-text);
+}
+.btn--danger-solid:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 88%, black);
+}
+.btn--danger-solid:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 78%, black);
+}
+
+/* Toggled-on state for buttons that represent a persistent mode
+ * (grid visibility, panel open, theme). */
+.btn[data-state='on'] {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+}
+
+/* ---------- Icon-only ---------- */
+.icon-btn {
+  --icon-btn-size: var(--control-height-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--icon-btn-size);
+  height: var(--icon-btn-size);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  transition: var(--transition-colors);
+}
+
+.icon-btn--xs {
+  --icon-btn-size: 20px;
+  border-radius: var(--radius-sm);
+}
+.icon-btn--sm {
+  --icon-btn-size: var(--control-height-sm);
+  border-radius: var(--radius-sm);
+}
+.icon-btn--lg {
+  --icon-btn-size: var(--control-height-lg);
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+.icon-btn:active:not(:disabled) {
+  background: var(--color-bg-active);
+}
+.icon-btn:disabled {
+  opacity: var(--disabled-opacity);
+}
+.icon-btn[data-state='on'] {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+}
+.icon-btn--accent[data-state='on'] {
+  background: var(--accent-tint);
+  color: var(--accent-on-tint);
+}

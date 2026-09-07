@@ -1,0 +1,70 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "editor",
+      "url": "http://localhost:5273",
+      "autoPort": false,
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5273
+    },
+    {
+      "name": "backend",
+      "url": "http://localhost:8000",
+      "autoPort": false,
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "openstategraph.cli",
+        "serve",
+        "--port",
+        "8000"
+      ],
+      "cwd": "backend",
+      "port": 8000
+    },
+    {
+      "name": "chat",
+      "url": "http://localhost:8000",
+      "autoPort": false
+    },
+    {
+      "name": "preview",
+      "url": "http://localhost:8123",
+      "autoPort": false,
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "openstategraph.cli",
+        "serve",
+        "--port",
+        "8123"
+      ],
+      "cwd": "backend",
+      "port": 8123
+    },
+    {
+      "name": "preview-agent",
+      "url": "http://localhost:8124",
+      "autoPort": false,
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "openstategraph.cli",
+        "serve",
+        "--port",
+        "8124"
+      ],
+      "cwd": "backend",
+      "port": 8124,
+      "env": {
+        "OPENSTATEGRAPH_STATE_DIR": "/private/tmp/osg-agent-state",
+        "OPENSTATEGRAPH_KANBAN_URL": ""
+      }
+    }
+  ]
+}

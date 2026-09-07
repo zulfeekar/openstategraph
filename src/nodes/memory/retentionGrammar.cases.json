@@ -1,0 +1,71 @@
+{
+  "note": "The one grammar for a memory segment's retention field, as a table of inputs and the bound each must produce. Read by src/nodes/memory/MemorySegmentNode.test.ts and by backend/tests/test_retention_grammar_contract.py, which is the only thing that stops the TypeScript card and the Python ledger drifting again (memory-hardening/10). `retention` null means unbounded; the card must refuse any non-blank input whose retention is null, and must display exactly the number the ledger will keep.",
+  "grammar": "trimmed; ASCII digits only; greater than zero; no larger than Number.MAX_SAFE_INTEGER",
+  "cases": [
+    { "input": "20", "retention": 20, "why": "the ordinary case, and the field's default" },
+    { "input": " 7 ", "retention": 7, "why": "surrounding whitespace is trimmed on both sides" },
+    { "input": "1", "retention": 1, "why": "the smallest bound anybody can express" },
+    {
+      "input": "9007199254740991",
+      "retention": 9007199254740991,
+      "why": "Number.MAX_SAFE_INTEGER — the last value both languages hold exactly"
+    },
+    {
+      "input": "",
+      "retention": null,
+      "why": "blank is how unbounded is said; accepted, and the card says it keeps everything"
+    },
+    { "input": "   ", "retention": null, "why": "whitespace only is blank" },
+    {
+      "input": "0",
+      "retention": null,
+      "why": "a ledger keeping zero entries is a card that is untrue"
+    },
+    { "input": "-3", "retention": null, "why": "negative is not a bound" },
+    {
+      "input": "20.0",
+      "retention": null,
+      "why": "Number() reads this as 20; str.isdigit() does not. Refused by both rather than legal on one"
+    },
+    {
+      "input": "1e3",
+      "retention": null,
+      "why": "exponent notation: a bound is typed, not computed"
+    },
+    { "input": "+5", "retention": null, "why": "a leading sign" },
+    {
+      "input": "0x14",
+      "retention": null,
+      "why": "hex — Number() reads 20, and nobody types a retention limit in hex"
+    },
+    {
+      "input": "1_0",
+      "retention": null,
+      "why": "Python's numeric underscore is not in this grammar either"
+    },
+    {
+      "input": "١٠",
+      "retention": null,
+      "why": "Arabic-Indic digits: str.isdigit() accepted these and int() read 10, while Number() gave NaN. The divergence ran the other way and is closed the same way"
+    },
+    { "input": "٣", "retention": null, "why": "the single-digit form of the same" },
+    {
+      "input": "9007199254740992",
+      "retention": null,
+      "why": "one past MAX_SAFE_INTEGER: Python holds it exactly, JavaScript cannot, so no bound above it is expressible without the two reporting different numbers"
+    },
+    {
+      "input": "999999999999999999999",
+      "retention": null,
+      "why": "Number() gives 1e+21, which the card would have printed as the bound"
+    },
+    { "input": "Infinity", "retention": null, "why": "not representable in JSON, and not a bound" },
+    { "input": "1e400", "retention": null, "why": "Number() gives Infinity" },
+    {
+      "input": "twenty",
+      "retention": null,
+      "why": "a typo in a text box is not a decision to build a zero-entry ledger"
+    },
+    { "input": "20 entries", "retention": null, "why": "trailing prose" }
+  ]
+}

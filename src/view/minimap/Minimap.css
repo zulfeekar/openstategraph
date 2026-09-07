@@ -1,0 +1,103 @@
+.minimap {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--z-floating);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+}
+
+/* A card dropped in the bottom-right lands *under* this panel, which is opaque
+ * — so it vanished, and the only remedy on offer was "Hide minimap"
+ * (production-ready 55.8). The map yields while it is covering something:
+ * enough transparency to see the card through it, full strength the moment
+ * you reach for it. Moving the map instead would trade a card that hides for
+ * a control that wanders. */
+.minimap[data-covering] {
+  opacity: 0.4;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+.minimap[data-covering]:hover,
+.minimap[data-covering]:focus-within {
+  opacity: 1;
+}
+
+.minimap__surface {
+  position: relative;
+  margin: var(--space-2) var(--space-2) 0;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-canvas);
+  border: var(--border-width-hairline) solid var(--color-border);
+  cursor: crosshair;
+  overflow: hidden;
+}
+
+.minimap__node {
+  position: absolute;
+  border-radius: var(--radius-xs);
+  background: var(--accent-solid);
+  opacity: 0.7;
+}
+
+.minimap__node--container {
+  background: transparent;
+  border: var(--border-width-hairline) solid var(--color-group-border);
+  opacity: 1;
+}
+
+.minimap__node--annotation {
+  opacity: 0.4;
+}
+
+/* The current viewport. Outline only — a filled box would hide the nodes
+ * it is supposed to be locating. */
+.minimap__viewport {
+  position: absolute;
+  border: 1.5px solid var(--color-border-focus);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-border-focus) 8%, transparent);
+  pointer-events: none;
+}
+
+.minimap__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  padding: var(--space-1);
+}
+
+.minimap__divider {
+  width: 1px;
+  height: 16px;
+  margin-inline: var(--space-1);
+  background: var(--color-border);
+}
+
+.minimap__zoom {
+  min-width: 44px;
+  padding: 0 var(--space-1);
+  font: var(--type-body-sm);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-colors);
+}
+
+.minimap__zoom:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.minimap[data-collapsed] .minimap__controls {
+  padding: var(--space-1);
+}
+
+.is-flipped {
+  transform: rotate(180deg);
+}

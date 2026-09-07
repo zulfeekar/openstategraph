@@ -1,0 +1,381 @@
+{
+  "version": 1,
+  "name": "Morning Brief",
+  "savedAt": "2026-08-20T11:42:01.149589+00:00",
+  "document": {
+    "version": 3,
+    "name": "Morning Brief",
+    "settings": {
+      "purpose": "Many sources, one report: three workers fan out in parallel, each holding a different tool — the open web, the team handbook, and this platform's own workflow list — and the join assembles their answers into one brief."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "position": {
+          "x": 42,
+          "y": 825
+        },
+        "size": {
+          "width": 252,
+          "height": 195
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "prompt": "get me chcklists\n",
+          "timeoutSeconds": ""
+        },
+        "title": "Brief request"
+      },
+      {
+        "id": "join1",
+        "type": "function.format_report",
+        "position": {
+          "x": 1373,
+          "y": 1273
+        },
+        "size": {
+          "width": 260,
+          "height": 90
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "reportTitle": "Morning brief",
+          "timeoutSeconds": ""
+        },
+        "title": "Assemble"
+      },
+      {
+        "id": "lead1",
+        "type": "orchestrate.supervisor",
+        "position": {
+          "x": 483,
+          "y": 760
+        },
+        "size": {
+          "width": 260,
+          "height": 324
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "maxSubtasks": 3,
+          "model": "",
+          "reasoningEffort": "",
+          "rules": "Each numbered item is one question for one source. Label it with the worker that owns that source: anything about the open world goes to the web researcher, anything about how this team works goes to the handbook reader, and anything about what exists on this platform goes to the platform inspector. Keep each subtask's wording as it was asked.",
+          "rulesMode": "extend",
+          "timeoutSeconds": ""
+        },
+        "title": "Editor"
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "position": {
+          "x": 1822,
+          "y": 1238
+        },
+        "size": {
+          "width": 320,
+          "height": 159
+        },
+        "parentId": null,
+        "data": {
+          "format": "markdown",
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Brief"
+      },
+      {
+        "id": "skill1",
+        "type": "input.skill",
+        "position": {
+          "x": 487,
+          "y": 1253
+        },
+        "size": {
+          "width": 252,
+          "height": 802
+        },
+        "parentId": null,
+        "data": {
+          "instruction": "You are writing one section of a morning brief, and you have exactly one tool. Use it. It is the only thing you know that the reader does not.\n\nAt most three sentences. Name where the answer came from — the search you ran, the handbook topic you read, the list you fetched — so the reader can go and look.\n\nGive the exact figures your source gives: counts, days, minutes, names. Round nothing.\n\n**A tool that refuses is not a tool that found nothing.** A rate limit, a challenge page, an error — each of those means the question is unanswered, not that the answer is empty. Say so, quote what the tool said, and stop. A brief with a hole in it is honest; a brief that quietly became a recollection is not, and the reader cannot tell the difference from the outside.\n\nNever answer from memory. What you remember is either older than your source or about somebody else's organisation.",
+          "maxRetries": "",
+          "skillDescription": "How one section of a morning brief is written: use the tool you were given, name where the answer came from, and never fill a gap from memory.",
+          "skillName": "sourced-brief",
+          "timeoutSeconds": ""
+        },
+        "title": "How a brief is sourced"
+      },
+      {
+        "id": "t-knowledge",
+        "type": "tool.knowledge-lookup",
+        "position": {
+          "x": 932,
+          "y": 525
+        },
+        "size": {
+          "width": 252,
+          "height": 396
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Handbook"
+      },
+      {
+        "id": "t-platform",
+        "type": "tool.platform-list-workflows",
+        "position": {
+          "x": 1000,
+          "y": 1568
+        },
+        "size": {
+          "width": 252,
+          "height": 90
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Workflow list"
+      },
+      {
+        "id": "t-search",
+        "type": "tool.web-search",
+        "position": {
+          "x": 932,
+          "y": 2196
+        },
+        "size": {
+          "width": 252,
+          "height": 90
+        },
+        "parentId": null,
+        "data": {
+          "maxRetries": "",
+          "timeoutSeconds": ""
+        },
+        "title": "Search"
+      },
+      {
+        "id": "worker-handbook",
+        "type": "orchestrate.worker",
+        "position": {
+          "x": 932,
+          "y": 42
+        },
+        "size": {
+          "width": 252,
+          "height": 399
+        },
+        "parentId": null,
+        "data": {
+          "default": false,
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "role": "Anything about how this team works — its checklists, its rota, its desks. Holds knowledge_lookup, which reads this package's own handbook: call it with no topic to see the index, then again with the topic you need.",
+          "rulesMode": "extend",
+          "timeoutSeconds": ""
+        },
+        "title": "Handbook reader"
+      },
+      {
+        "id": "worker-platform",
+        "type": "orchestrate.worker",
+        "position": {
+          "x": 932,
+          "y": 1031
+        },
+        "size": {
+          "width": 252,
+          "height": 399
+        },
+        "parentId": null,
+        "data": {
+          "default": false,
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "role": "Anything about what exists on this platform itself — which workflows are installed, how many, what they are called. Holds list_workflows.",
+          "rulesMode": "extend",
+          "timeoutSeconds": ""
+        },
+        "title": "Platform inspector"
+      },
+      {
+        "id": "worker-web",
+        "type": "orchestrate.worker",
+        "position": {
+          "x": 932,
+          "y": 1713
+        },
+        "size": {
+          "width": 252,
+          "height": 399
+        },
+        "parentId": null,
+        "data": {
+          "default": true,
+          "maxRetries": "",
+          "model": "",
+          "reasoningEffort": "",
+          "role": "Anything about the open world — a release, a news item, a fact that lives outside this organisation. Holds web_search. Also the fallback for any subtask the editor left unlabelled.",
+          "rulesMode": "extend",
+          "timeoutSeconds": ""
+        },
+        "title": "Web researcher"
+      }
+    ],
+    "edges": [
+      {
+        "source": {
+          "nodeId": "in1",
+          "portId": "text"
+        },
+        "target": {
+          "nodeId": "lead1",
+          "portId": "instruction"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "join1",
+          "portId": "report"
+        },
+        "target": {
+          "nodeId": "out1",
+          "portId": "result"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lead1",
+          "portId": "workers"
+        },
+        "target": {
+          "nodeId": "worker-handbook",
+          "portId": "dispatch"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lead1",
+          "portId": "workers"
+        },
+        "target": {
+          "nodeId": "worker-platform",
+          "portId": "dispatch"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "lead1",
+          "portId": "workers"
+        },
+        "target": {
+          "nodeId": "worker-web",
+          "portId": "dispatch"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "skill1",
+          "portId": "skill"
+        },
+        "target": {
+          "nodeId": "worker-handbook",
+          "portId": "skill"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "skill1",
+          "portId": "skill"
+        },
+        "target": {
+          "nodeId": "worker-platform",
+          "portId": "skill"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "skill1",
+          "portId": "skill"
+        },
+        "target": {
+          "nodeId": "worker-web",
+          "portId": "skill"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-knowledge",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "worker-handbook",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-platform",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "worker-platform",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "t-search",
+          "portId": "tool"
+        },
+        "target": {
+          "nodeId": "worker-web",
+          "portId": "tools"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "worker-handbook",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "join1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "worker-platform",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "join1",
+          "portId": "candidate"
+        }
+      },
+      {
+        "source": {
+          "nodeId": "worker-web",
+          "portId": "result"
+        },
+        "target": {
+          "nodeId": "join1",
+          "portId": "candidate"
+        }
+      }
+    ]
+  },
+  "published": false
+}

@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "name": "Guarded Lookup",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Guarded Lookup",
+    "settings": {
+      "purpose": "One entity, two answers: the email you type passes inbound so the lookup can use it, and every address in the reply is redacted before you read it. A card number never gets past the door at all."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Question",
+        "data": {},
+        "position": { "x": 80, "y": 300 }
+      },
+      {
+        "id": "guard-in",
+        "type": "guard.policy",
+        "title": "At the door",
+        "data": {
+          "policy": [
+            { "id": "gi1", "entity": "email", "strategy": "pass", "detector": "" },
+            { "id": "gi2", "entity": "credit_card", "strategy": "block", "detector": "" }
+          ],
+          "blockedMessage": ""
+        },
+        "position": { "x": 360, "y": 300 }
+      },
+      {
+        "id": "lookup",
+        "type": "tool.customer-lookup",
+        "title": "Customer directory",
+        "data": {},
+        "position": { "x": 660, "y": 480 }
+      },
+      {
+        "id": "agent1",
+        "type": "agent.llm",
+        "title": "Support desk",
+        "data": {
+          "systemPrompt": "You answer questions about customers using the customer_lookup tool, which finds one record by exact email address.\n\nAlways call the tool before answering. Never answer from memory, and never invent a phone number, a city or a ticket link.\n\nAnswer in two or three short sentences, including the customer's name, city, plan, phone number and support link exactly as the tool returned them. If the tool found no customer, say so and stop."
+        },
+        "position": { "x": 660, "y": 260 }
+      },
+      {
+        "id": "guard-out",
+        "type": "guard.policy",
+        "title": "On the way out",
+        "data": {
+          "policy": [
+            { "id": "go1", "entity": "email", "strategy": "redact", "detector": "" },
+            { "id": "go2", "entity": "url", "strategy": "redact", "detector": "" },
+            {
+              "id": "go3",
+              "entity": "phone",
+              "strategy": "mask",
+              "detector": "\\+\\d[\\d\\s()\\-]{6,}\\d"
+            }
+          ],
+          "blockedMessage": ""
+        },
+        "position": { "x": 980, "y": 260 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Answer",
+        "data": {},
+        "position": { "x": 1280, "y": 260 }
+      },
+      {
+        "id": "refused",
+        "type": "output.formatted",
+        "title": "Refusal",
+        "data": {},
+        "position": { "x": 660, "y": 640 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "guard-in", "portId": "content" }
+      },
+      {
+        "source": { "nodeId": "guard-in", "portId": "allowed" },
+        "target": { "nodeId": "agent1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "guard-in", "portId": "blocked" },
+        "target": { "nodeId": "refused", "portId": "result" }
+      },
+      {
+        "source": { "nodeId": "lookup", "portId": "tool" },
+        "target": { "nodeId": "agent1", "portId": "tools" }
+      },
+      {
+        "source": { "nodeId": "agent1", "portId": "result" },
+        "target": { "nodeId": "guard-out", "portId": "content" }
+      },
+      {
+        "source": { "nodeId": "guard-out", "portId": "allowed" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      },
+      {
+        "source": { "nodeId": "guard-out", "portId": "blocked" },
+        "target": { "nodeId": "refused", "portId": "result" }
+      }
+    ]
+  }
+}

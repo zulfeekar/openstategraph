@@ -1,0 +1,340 @@
+"""Prebuilt platform-introspection tools — read-only, for the concierge.
+
+The gateway's spec (ticket 67, user): the top workflow should be able to
+*explore* the platform — list what exists, describe what a workflow does —
+without any ability to write. These are that, as tools rather than raw
+`ls`/`grep`: the jail is structural (they can only read what the
+WorkflowStore exposes plus each package's own AGENTS.md), so there is no
+path argument to escape with and nothing to sandbox.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from openstategraph.abc.tool import BaseTool, NoArgs, ToolResult
+from openstategraph.readable_tree import admitted_files
+from openstategraph.workflows_root import content_root, workflows_root
+
+# Both roots are resolved **per call**, never frozen at import: a constant
+# computed from `__file__` is the repository only while this file is inside
+# one, and inside an installed wheel it is `<venv>/lib/.../workflows`. That is
+# what made `platform_list_workflows` answer "No workflows exist yet." in a
+# clean venv with the adopter's packages sitting right there (ticket 06).
+
+
+def _packages() -> list[Path]:
+    root = workflows_root()
+    if not root.is_dir():
+        return []
+    return sorted(entry for entry in root.iterdir() if (entry / "workflow.json").is_file())
+
+
+def _envelope(package: Path) -> dict[str, Any]:
+    try:
+        envelope: dict[str, Any] = json.loads((package / "workflow.json").read_text())
+        return envelope
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def visible_to_platform_tools(payload: dict[str, Any]) -> bool:
+    """Customer-surface visibility (ticket 04): hidden trumps everything,
+    and a draft (`"published": false`) is as invisible here as a hidden
+    workflow — these tools speak to /chat users. A missing `published`
+    field counts as published (pre-lifecycle envelopes stay visible).
+
+    Public, and named for its *consumer* rather than for the concept, because
+    a second reader now depends on it: `ProjectKnowledgeBuilder` writes a
+    catalogue doc for exactly the packages these tools will show, so the two
+    must never be able to disagree. Ticket 16's lesson is that a knowledge
+    doc's topic set belongs to the mechanism that reaches the destination —
+    a mount ignores these flags, a platform tool enforces them — and the only
+    way to keep that honest is to read the gate off the tool rather than
+    restate it.
+    """
+    if payload.get("hidden") is True:
+        return False
+    return payload.get("published") is not False
+
+
+class ListWorkflowsTool(BaseTool):
+    """What exists — the same list the workflow picker shows (hidden ones stay hidden)."""
+
+    name = "platform_list_workflows"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
+    node_type = "tool.platform-list-workflows"
+    # Says whose list this is, because the filter below is narrower than the
+    # obvious reading of "what exists". `visible_to_platform_tools` withholds
+    # hidden and unpublished packages, and on a real board that was five of
+    # six — so a description promising "every workflow available on this
+    # platform" led an agent to report "it is the only workflow installed"
+    # (`every-workflow-green` 12). It was not hallucinating; it was quoting.
+    #
+    # The filter is right and stays: these tools speak to /chat users. The
+    # words are what had to change, and they must not swing the other way and
+    # advertise a withheld count on a customer surface.
+    description = (
+        "List the workflows people can use in the chat app, with each one's "
+        "name and what it is for. Call this when the user asks what this "
+        "system can do or which workflows they can run. This is the chat "
+        "app's list, not an inventory of everything installed."
+    )
+    Args = NoArgs
+
+    def _execute(self, args: BaseModel) -> ToolResult:
+        rows = []
+        for package in _packages():
+            payload = _envelope(package)
+            if not visible_to_platform_tools(payload):
+                continue
+            document = payload.get("document", payload)
+            name = str(payload.get("name") or document.get("name") or package.name)
+            # One-liner from the package's own docs, so "list the workflows
+            # and what they do" is ONE call — observed live: without this the
+            # model looped describe_workflow per entry, 20+ steps of theater.
+            summary = ""
+            agents_md = package / "AGENTS.md"
+            if agents_md.is_file():
+                try:
+                    for line in agents_md.read_text().splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            summary = line[:160]
+                            break
+                except OSError:
+                    pass
+            rows.append(
+                f"- **{package.name}** ({name}): {summary or 'no description yet'}"
+            )
+        if not rows:
+            return ToolResult(content="No workflows are available in the chat app yet.")
+        # "1 workflows are available" was the literal output whenever exactly
+        # one package was visible, which on the board that found this was
+        # every single run.
+        # The scope travels with the *result*, not only with the description.
+        # Narrowing the description alone was tried and watched to fail: the
+        # agent still answered "the only workflow currently installed on this
+        # platform", because what it summarises is this string.
+        count = (
+            "1 workflow is available in the chat app"
+            if len(rows) == 1
+            else f"{len(rows)} workflows are available in the chat app"
+        )
+        return ToolResult(content=f"{count}:\n" + "\n".join(rows))
+
+
+class DescribeWorkflowArgs(BaseModel):
+    model_config = {"extra": "forbid"}
+    slug: str = Field(description="The workflow's slug, e.g. 'chinook-assistant'.")
+
+
+class DescribeWorkflowTool(BaseTool):
+    """One workflow's own story: its AGENTS.md plus a structural summary."""
+
+    name = "platform_describe_workflow"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
+    node_type = "tool.platform-describe-workflow"
+    description = (
+        "Describe one workflow: what it is for (its own documentation) and "
+        "its structure. Use after platform_list_workflows when the user asks "
+        "about a specific capability."
+    )
+    Args = DescribeWorkflowArgs
+
+    def _execute(self, args: BaseModel) -> ToolResult:
+        assert isinstance(args, DescribeWorkflowArgs)
+        slug = args.slug.strip().strip("/")
+        root = workflows_root()
+        package = root / slug
+        # Resolve + containment check: the slug is model-supplied input.
+        if (
+            not package.resolve().is_relative_to(root)
+            or not (package / "workflow.json").is_file()
+        ):
+            known = ", ".join(p.name for p in _packages())
+            return ToolResult.failure(f"No workflow '{slug}'. Available: {known}")
+        payload = _envelope(package)
+        if not visible_to_platform_tools(payload):
+            return ToolResult.failure(f"No workflow '{slug}'.")
+        document = payload.get("document", payload)
+        node_types = sorted({str(n.get("type", "")) for n in document.get("nodes") or []})
+        parts = [
+            f"### {payload.get('name') or slug}",
+            f"Nodes: {len(document.get('nodes') or [])} · "
+            f"Edges: {len(document.get('edges') or [])} · "
+            f"Node types: {', '.join(node_types)}",
+        ]
+        agents_md = package / "AGENTS.md"
+        if agents_md.is_file():
+            try:
+                parts.append(agents_md.read_text()[:2000])
+            except OSError:
+                pass
+        return ToolResult(content="\n\n".join(parts))
+
+
+# --- read-only filesystem tools: everything readable, nothing writable ---- #
+
+#: The read jail: one level above the packages — the repository in a checkout,
+#: the adopter's own project directory in an installed wheel. Never the
+#: interpreter's `lib/`, which is what `WORKFLOWS_ROOT.parent` used to resolve
+#: to and would have handed an agent a grep over site-packages.
+#: Never descended into: bulk, caches, VCS internals — noise, not knowledge.
+EXCLUDED_DIRS = {".git", "node_modules", ".venv", "venv", ".dev", "__pycache__",
+                 "dist", "coverage", ".pytest_cache", "graphify-out"}
+MAX_READ_BYTES = 40_000
+MAX_MATCHES = 60
+
+
+def _inside_repo(path: Path) -> bool:
+    try:
+        return path.resolve().is_relative_to(content_root())
+    except OSError:
+        return False
+
+
+def _excluded(path: Path) -> bool:
+    # Hidden files and directories are out too — `.env` holds credentials,
+    # `.git` holds history; a read-only jail that reads secrets isn't one
+    # (found in self-review after shipping).
+    return any(part in EXCLUDED_DIRS or part.startswith(".") for part in path.parts)
+
+
+def _admitted_files(root: Path) -> list[Path]:
+    """Every readable file under `root`, sorted — see `readable_tree`.
+
+    `EXCLUDED_DIRS` stays this module's own policy; only the walk is shared.
+    """
+    return admitted_files(root, EXCLUDED_DIRS)
+
+
+class LsArgs(BaseModel):
+    model_config = {"extra": "forbid"}
+    path: str = Field(default=".", description="Directory relative to the repository root.")
+
+
+class PlatformLsTool(BaseTool):
+    """`ls`, jailed to the repository, read-only by construction."""
+
+    name = "platform_ls"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
+    node_type = "tool.platform-ls"
+    description = (
+        "List a directory inside this platform's repository (read-only). "
+        "Start at '.' to see the layout; 'workflows/<slug>' shows a package."
+    )
+    Args = LsArgs
+
+    def _execute(self, args: BaseModel) -> ToolResult:
+        assert isinstance(args, LsArgs)
+        repo_root = content_root()
+        target = (repo_root / args.path.strip().lstrip("/")).resolve()
+        if not _inside_repo(target) or _excluded(target.relative_to(repo_root)):
+            return ToolResult.failure(f"'{args.path}' is outside the readable area.")
+        if not target.is_dir():
+            return ToolResult.failure(f"'{args.path}' is not a directory.")
+        rows = []
+        for entry in sorted(target.iterdir()):
+            if entry.name.startswith(".") or entry.name in EXCLUDED_DIRS:
+                continue
+            rows.append(f"{entry.name}/" if entry.is_dir() else entry.name)
+        return ToolResult(content="\n".join(rows) or "(empty)")
+
+
+class ReadArgs(BaseModel):
+    model_config = {"extra": "forbid"}
+    path: str = Field(description="File path relative to the repository root.")
+
+
+class PlatformReadTool(BaseTool):
+    """`cat`, jailed and size-capped. There is no write counterpart on purpose."""
+
+    name = "platform_read_file"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
+    node_type = "tool.platform-read-file"
+    description = (
+        "Read one text file inside this platform's repository (read-only, "
+        "truncated at 40kB). Use for AGENTS.md, workflow.json, tool source."
+    )
+    Args = ReadArgs
+
+    def _execute(self, args: BaseModel) -> ToolResult:
+        assert isinstance(args, ReadArgs)
+        repo_root = content_root()
+        target = (repo_root / args.path.strip().lstrip("/")).resolve()
+        if not _inside_repo(target) or _excluded(target.relative_to(repo_root)):
+            return ToolResult.failure(f"'{args.path}' is outside the readable area.")
+        if not target.is_file():
+            return ToolResult.failure(f"'{args.path}' is not a file.")
+        try:
+            data = target.read_bytes()[:MAX_READ_BYTES]
+            text = data.decode("utf-8", errors="replace")
+        except OSError as exc:
+            return ToolResult.failure(f"Could not read '{args.path}': {exc}")
+        suffix = "\n\n_(truncated at 40kB)_" if target.stat().st_size > MAX_READ_BYTES else ""
+        return ToolResult(content=text + suffix)
+
+
+class GrepArgs(BaseModel):
+    model_config = {"extra": "forbid"}
+    pattern: str = Field(description="Case-insensitive substring to search for.")
+    path: str = Field(default=".", description="Directory to search, relative to the repo root.")
+
+
+class PlatformGrepTool(BaseTool):
+    """`grep -ri`, jailed, match-capped — exploration, not exfiltration."""
+
+    name = "platform_grep"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
+    node_type = "tool.platform-grep"
+    description = (
+        "Search text files inside this platform's repository for a "
+        "case-insensitive substring (read-only, first 60 matches). Use to "
+        "find where something is defined or mentioned."
+    )
+    Args = GrepArgs
+
+    def _execute(self, args: BaseModel) -> ToolResult:
+        assert isinstance(args, GrepArgs)
+        repo_root = content_root()
+        root = (repo_root / args.path.strip().lstrip("/")).resolve()
+        if not _inside_repo(root) or _excluded(root.relative_to(repo_root)):
+            return ToolResult.failure(f"'{args.path}' is outside the readable area.")
+        needle = args.pattern.strip().lower()
+        if not needle:
+            return ToolResult.failure("Give a non-empty pattern.")
+        matches: list[str] = []
+        for path in _admitted_files(root):
+            rel = path.relative_to(repo_root)
+            if path.stat().st_size > 400_000:
+                continue
+            if path.suffix in {".sqlite", ".png", ".pdf", ".ico", ".lock"}:
+                continue
+            try:
+                for i, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+                    if needle in line.lower():
+                        matches.append(f"{rel}:{i}: {line.strip()[:140]}")
+                        if len(matches) >= MAX_MATCHES:
+                            return ToolResult(content="\n".join(matches) + "\n\n_(capped at 60 matches)_")
+            except OSError:
+                continue
+        return ToolResult(content="\n".join(matches) or f"No matches for '{args.pattern}'.")
+
+
+PLATFORM_TOOLS = [
+    ListWorkflowsTool(),
+    DescribeWorkflowTool(),
+    PlatformLsTool(),
+    PlatformReadTool(),
+    PlatformGrepTool(),
+]

@@ -1,0 +1,603 @@
+/* ================================================================== *
+ * Canvas chrome: the paper surface, ports, links, and the overlays the
+ * feature plugins paint (rubber band, snaplines).
+ * ================================================================== */
+
+.canvas-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--color-bg-canvas);
+  /* The dot grid is drawn by JointJS; this is the flat base beneath it. */
+  cursor: default;
+  touch-action: none;
+}
+
+.canvas-stage[data-pan-ready='true'] {
+  cursor: grab;
+}
+
+.canvas-stage[data-panning='true'] {
+  cursor: grabbing;
+}
+
+.canvas-stage[data-drop-active='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* 2px as a literal, deliberately: `--border-width-rule` is the draggable
+   * weight and pinned to three declarations, `--border-width-marker` is a bar
+   * beside a block and pinned to its own eight, and this is neither — it is
+   * the drop target's own ring, at exactly the width it was written at when
+   * it was an inset shadow (`stable-beta-public/02`). `canvas.css` is the
+   * file `ruleAndDisplayFace.test.ts` exempts outright for this reason. */
+  border: 2px solid var(--color-border-focus);
+  background: color-mix(in srgb, var(--color-border-focus) 4%, transparent);
+}
+
+/* ---------- The stack inside `.canvas-stage` ----------
+ *
+ * Three absolutely-positioned layers share this box, and each one names its
+ * layer from the scale in `tokens.css` rather than relying on the order it
+ * happened to be inserted in:
+ *
+ *   `--z-canvas`          `.canvas-surface`  the JointJS paper
+ *   `--z-canvas-overlay`  `.canvas-empty`    the empty-state guidance and its
+ *                                            start panel
+ *                         `.selection-band`  the rubber band
+ *                         `.snapline-layer`  the alignment guides
+ *
+ * Declared rather than inherited because insertion order here is not stable
+ * (`install-experience` 29): React mounts `.canvas-empty`, `PaperController`
+ * appends `.canvas-surface` from an effect, and which arrives first depends on
+ * whether the canvas was empty when the editor opened or was emptied while it
+ * was open. It read one way on a reload and the other way after a delete, so
+ * the start panel was clickable or dead by accident. The three overlays share
+ * one layer on purpose: only the band and the guides can appear together, both
+ * are `pointer-events: none`, and neither has anything to steal.
+ *
+ * The paper's own mount node is created by PaperController rather than React
+ * so JointJS can remove it on teardown without touching the React tree. */
+.canvas-surface {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-canvas);
+}
+
+/* JointJS injects its own root; make it fill the stage. */
+.canvas-stage .joint-paper {
+  position: absolute;
+  inset: 0;
+}
+
+.canvas-stage svg {
+  display: block;
+  overflow: visible;
+}
+
+/* ---------- Nodes ---------- */
+
+.joint-element {
+  /* Cards carry their own shadow; the SVG group must not clip it. */
+  overflow: visible;
+}
+
+.joint-element foreignObject {
+  overflow: visible;
+}
+
+/* JointJS applies this while a cell is being dragged. */
+.joint-element.is-dragging .node,
+.joint-dragging .node {
+  border-color: var(--color-border-focus);
+  cursor: grabbing;
+}
+
+/* ---------- Ports ----------
+ *
+ * All port and link colour lives here rather than in the shape definitions:
+ * SVG presentation attributes don't support `var()`, so a themed colour has
+ * to arrive as a CSS property. The shapes carry geometry and data attributes;
+ * these rules turn those into the palette. */
+
+.joint-port {
+  cursor: crosshair;
+}
+
+[joint-selector='portHit'] {
+  fill: transparent;
+  stroke: none;
+}
+
+[joint-selector='portDot'] {
+  fill: var(--color-port);
+  stroke: var(--color-port-ring);
+  transition:
+    r var(--duration-fast) var(--ease-out),
+    fill var(--duration-fast) var(--ease-out);
+}
+
+/* Each port type gets its own hue, matching the icon beside its label. */
+[joint-selector='portDot'][data-accent='amber'] {
+  fill: var(--amber-500);
+}
+[joint-selector='portDot'][data-accent='orange'] {
+  fill: var(--orange-500);
+}
+[joint-selector='portDot'][data-accent='violet'] {
+  fill: var(--violet-500);
+}
+[joint-selector='portDot'][data-accent='green'] {
+  fill: var(--green-500);
+}
+[joint-selector='portDot'][data-accent='blue'] {
+  fill: var(--blue-500);
+}
+[joint-selector='portDot'][data-accent='teal'] {
+  fill: var(--teal-500);
+}
+[joint-selector='portDot'][data-accent='indigo'] {
+  fill: var(--indigo-500);
+}
+[joint-selector='portDot'][data-accent='red'] {
+  fill: var(--red-500);
+}
+
+.joint-port:hover [joint-selector='portDot'],
+.joint-port.is-dragging [joint-selector='portDot'] {
+  r: 6;
+  fill: var(--color-port-hover);
+}
+
+/* `ConnectionFeature` adds three classes while a link is being drawn:
+ * `is-connecting` on the paper, `is-available` on every port the link may
+ * legally land on, `is-dragging` on the one it left. Together they are the
+ * affordance that turns "guess and drop" into "aim at a target".
+ *
+ * They are ours, not JointJS's, and that is a correction rather than a
+ * preference: `markAvailable` was measured on the running editor and reaches
+ * no element in the document, and `.joint-temporary-link` is not a class
+ * JointJS 4.3.1 ever writes. `portAffordance.ts` records both measurements.
+ * Every selector below names a class the feature puts on the `.joint-port`
+ * group, where it can reach the visible dot *and* its halo — the previous
+ * rules addressed a class that, where it fired at all, landed on the hit
+ * circle, which cannot style its sibling. */
+.joint-port.is-available [joint-selector='portDot'] {
+  r: 6.5;
+  fill: var(--color-port-valid);
+}
+
+/* Motion, not just a colour: a static tint on twenty dots is a state, a ripple
+ * is an invitation. Only the halo breathes — pulsing the dot itself would move
+ * the thing the pointer is trying to hit. The origin ripples too, in the hover
+ * blue rather than the valid green, so the gesture reads end to end: here is
+ * where the wire comes from, there is where it may go. */
+.joint-port.is-available [joint-selector='portHit'],
+.joint-paper.is-connecting .joint-port.is-dragging [joint-selector='portHit'] {
+  animation: port-pulse 1.15s var(--ease-out) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+  stroke-width: 1.5;
+}
+
+.joint-port.is-available [joint-selector='portHit'] {
+  fill: color-mix(in srgb, var(--color-port-valid) 30%, transparent);
+  stroke: var(--color-port-valid);
+}
+
+.joint-paper.is-connecting .joint-port.is-dragging [joint-selector='portHit'] {
+  fill: color-mix(in srgb, var(--color-port-hover) 26%, transparent);
+  stroke: var(--color-port-hover);
+}
+
+@keyframes port-pulse {
+  0%,
+  100% {
+    transform: scale(0.55);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* The other half of "aim at a target": say what is *not* one. Only the legal
+ * magnets carry a class, so the illegal ones are addressed by their absence,
+ * and every port that did not light up recedes — the origin excepted, since it
+ * is the other half of what the user is being asked to look at. Without this a
+ * user reads the dim majority as "nothing is happening" rather than "not
+ * there". */
+.joint-paper.is-connecting .joint-port:not(.is-available):not(.is-dragging) {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ---------- Links ---------- */
+
+.joint-link [joint-selector='outline'] {
+  stroke: transparent;
+}
+
+/* The casing (ticket 07). Painted in the canvas colour so each link punches a
+ * small gap in whatever link was drawn before it — which is how a crossing
+ * reads as one line passing over another rather than as a junction. The
+ * geometry is on the shape; only the colour lives here, so it re-themes.
+ *
+ * Slightly wider than the line and butt-capped: a round cap would leave a
+ * visible nub past the endpoint where the line meets its port dot. */
+.joint-link [joint-selector='casing'] {
+  stroke: var(--color-bg-canvas);
+}
+
+/* A link being dragged, or one that is selected or carrying the run, must
+ * read as being *on top* — so it keeps its casing while the links it crosses
+ * lose the argument. Nothing to do here beyond letting z-order stand, but the
+ * temporary link has no casing at all: it is not part of the document yet and
+ * should not appear to cut through it. */
+.joint-link.joint-temporary-link [joint-selector='casing'] {
+  stroke: none;
+}
+
+.joint-link [joint-selector='line'] {
+  stroke: var(--color-canvas-link);
+  stroke-width: 2.25;
+  transition: stroke var(--duration-fast) var(--ease-out);
+}
+
+/* ---------- Edge semantics ----------
+ *
+ * A link is tinted by the type of the port it *lands on* — the adapter
+ * stamps `data-accent` / `data-port-type` from the target port descriptor,
+ * so this is registry-driven and no node type is named here. `--accent-solid`
+ * is the same variable the port dots resolve, which is why a link and its two
+ * endpoints agree, in either theme, with no second palette.
+ *
+ * Colour is never the only channel: each type also carries a dash signature,
+ * so the five families stay distinguishable in greyscale or with any form of
+ * colour blindness. Neutral (a plain data/control edge) is the solid default;
+ * the specialised buses are the ones that get a pattern. */
+.joint-link[data-accent] [joint-selector='line'] {
+  stroke: var(--accent-solid);
+}
+
+/* Tool bus — a dotted feed. */
+.joint-link[data-port-type='tool'] [joint-selector='line'] {
+  stroke-dasharray: 1.5 3.5;
+}
+
+/* Skill fan-out — a long dash. */
+.joint-link[data-port-type='skill'] [joint-selector='line'] {
+  stroke-dasharray: 7 3;
+}
+
+/* Feedback — a short, urgent dash; the only type that closes a cycle. */
+.joint-link[data-port-type='feedback'] [joint-selector='line'] {
+  stroke-dasharray: 3 3;
+  stroke-width: 2.5;
+}
+
+/* Worker dispatch — dash-dot, matching its "one lane, many tasks" meaning. */
+.joint-link[data-port-type='worker'] [joint-selector='line'] {
+  stroke-dasharray: 9 3 2 3;
+}
+
+.joint-link:hover [joint-selector='line'] {
+  stroke: var(--color-canvas-link-hover);
+  stroke-width: 2.75;
+}
+
+/* Hover deepens a typed link rather than washing it back to grey — losing
+ * the semantic colour on hover would hide exactly what the pointer is asking
+ * about. */
+.joint-link[data-accent]:hover [joint-selector='line'] {
+  stroke: var(--accent-strong);
+}
+
+.joint-link.is-selected [joint-selector='line'] {
+  stroke: var(--color-canvas-link-active);
+  stroke-width: 2;
+}
+
+/* Applied while a run is in flight so data visibly flows along the graph. */
+.joint-link.is-active [joint-selector='line'] {
+  stroke: var(--color-canvas-link-flow);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+  animation: link-flow 0.6s linear infinite;
+}
+
+/* The edge the run arrived *on*. Marked but not animated: only one direction
+ * should read as "moving", or the active node looks like it is both sending
+ * and receiving at once. */
+.joint-link.is-incoming [joint-selector='line'] {
+  stroke: var(--color-canvas-link-flow);
+  stroke-width: 2.5;
+  opacity: 0.85;
+}
+
+@keyframes link-flow {
+  to {
+    stroke-dashoffset: -9;
+  }
+}
+
+/* ---------- Run feedback on cards ----------
+ *
+ * Applied to the JointJS element's root group by `CanvasStage`, from the
+ * model's `node:runtime` channel — the canvas reads the model and never
+ * writes it, so this stays a projection. Both a local preview run and a
+ * backend-streamed one drive the identical channel.
+ *
+ * The card is HTML inside a `foreignObject` (which is `overflow: visible`),
+ * so this is a real CSS border-glow rather than an SVG filter: a conic
+ * gradient sweeping around the card's edge, plus a blurred twin behind it
+ * for the bloom. Both live on pseudo-elements of the card, so this layer
+ * still never reaches into `NodeCard`'s own markup or stylesheet.
+ *
+ * The sweep is driven by an animated `<angle>` custom property rather than
+ * by rotating an oversized square inside an overflow-hidden box: same
+ * visual, but it needs no extra element and cannot be clipped by the
+ * card's own layout containment. Browsers without `@property` simply hold
+ * the gradient still, which degrades to a static accent ring. */
+@property --run-glow-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* While a node is actively running, the glow owns the border: the selection
+ * edge is a solid accent stroke that visually dominates the gradient sweep
+ * (owner screenshot). Selection state itself is untouched — the accent edge
+ * returns the moment the run moves on.
+ *
+ * `stable-beta-public/02` changed the mechanism, not the rule: this used to
+ * be `box-shadow: none` cancelling `--shadow-node-selected`, and the card's
+ * edge is now a real `border`, so the cancellation is a colour rather than
+ * the absence of a shadow. */
+.joint-element.is-active.is-selected .node {
+  border-color: var(--color-border);
+}
+
+.joint-element.is-active .node {
+  --run-glow-width: var(--space-0-5);
+  --run-glow-blur: var(--space-2);
+  --run-glow-duration: var(--duration-glow-sweep);
+  /* Positioning context for the ring; deliberately no `z-index`, so the
+   * blurred twin below can sit behind the card's own background. */
+  position: relative;
+}
+
+.joint-element.is-active .node::before,
+.joint-element.is-active .node::after {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--run-glow-width));
+  border-radius: calc(var(--radius-lg) + var(--run-glow-width));
+  /* Two accent hues, not one solid colour: the segment blends from the
+   * running-status accent into its companion so the sweep reads as a
+   * gradient stroke travelling around the card. */
+  background: conic-gradient(
+    from var(--run-glow-angle),
+    transparent 0deg,
+    var(--color-run-glow-from) 30deg,
+    var(--color-run-glow-to) 70deg,
+    transparent 100deg
+  );
+  animation: run-glow-sweep var(--run-glow-duration) linear infinite;
+  pointer-events: none;
+}
+
+/* Mask the fill out of the middle so only the border ring survives. */
+.joint-element.is-active .node::before {
+  padding: var(--run-glow-width);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+/* The bloom: the same sweep, blurred and pushed behind the card.
+ *
+ * ALSO ring-masked (glitch found by the owner): the reference pen leaves
+ * its blurred twin as a full box, but its card background is opaque —
+ * ours is translucent, so an unmasked bloom washed the gradient across
+ * the card interior. Masked to the border first and blurred after, the
+ * blur spreads the ring into a halo and the interior stays clean. */
+.joint-element.is-active .node::after {
+  z-index: -1;
+  padding: var(--run-glow-width);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  filter: blur(var(--run-glow-blur));
+  opacity: 0.7;
+}
+
+@keyframes run-glow-sweep {
+  to {
+    --run-glow-angle: 1turn;
+  }
+}
+
+/* ---------- Paused on a human decision (UX-01) ----------
+ *
+ * The state the sweeping glow above used to be wrongly reused for. A run
+ * stopped at a `human.approval` node is waiting on the person looking at it,
+ * so the card is marked *distinctly and statically*: an amber ring in place
+ * of the gradient sweep, and a label saying who the run is waiting for.
+ * Nothing here animates, which is the entire point — motion is what claimed
+ * the run was still working.
+ *
+ * Same seam as `.is-active`: applied by `CanvasStage` to the JointJS element
+ * root from the model's `node:runtime` channel, styled on pseudo-elements, so
+ * this layer still never reaches into `NodeCard`'s markup or stylesheet. */
+.joint-element.is-paused .node {
+  position: relative;
+  border-color: var(--color-status-warning);
+}
+
+.joint-element.is-paused .node::after {
+  content: 'Waiting for you';
+  position: absolute;
+  inset-inline-start: 0;
+  bottom: calc(100% + var(--space-1));
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-status-warning) 18%, var(--color-bg-surface-raised));
+  color: color-mix(in srgb, var(--color-status-warning) 85%, var(--color-text-primary));
+  font: var(--type-label);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* The link being dragged out of a port, before it lands. */
+.joint-link.joint-temporary-link [joint-selector='line'] {
+  stroke: var(--color-canvas-link-active);
+  stroke-dasharray: 4 3;
+}
+
+/* ---------- Overlays ---------- */
+
+.selection-band {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: var(--z-canvas-overlay);
+  pointer-events: none;
+  border: 1px solid var(--color-selection-band-border);
+  border-radius: var(--radius-xs);
+  background: var(--color-selection-band);
+  transform-origin: top left;
+}
+
+.snapline-layer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-canvas-overlay);
+  pointer-events: none;
+}
+
+.snapline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--color-snapline);
+  transform-origin: top left;
+}
+
+.snapline--x {
+  width: 1px;
+}
+
+.snapline--y {
+  height: 1px;
+}
+
+/* ---------- Empty state ---------- */
+
+.canvas-empty {
+  position: absolute;
+  top: 0;
+  /* The overlaying palette (and Workflows drawer) sit on top of this element
+     rather than sharing its row when the row can't hold them (55.4), so the
+     canvas is still full width under them; without this the empty state
+     centred behind the palette instead of beside it (launch-readiness 39,
+     the left-edge twin of 76's right-edge fix below). `AppShell` sets this to
+     the width the left panels actually cover, 0 otherwise. */
+  left: var(--canvas-empty-inset-left, 0px);
+  bottom: 0;
+  /* The overlaying Ask/Inspector panels sit on top of this element rather
+     than sharing its row (55.4), so the canvas is still full width under
+     them; without this the empty state centred on the covered half too
+     (production-ready 76). `AppShell` sets this to the width the panels
+     actually cover, 0 otherwise. */
+  right: var(--canvas-empty-inset-right, 0px);
+  /* Over the paper, from the scale — see the stack note beside
+     `.canvas-surface`. Inert itself, so a drag still reaches the paper
+     underneath; the start panel on it takes `pointer-events: auto` back. */
+  z-index: var(--z-canvas-overlay);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  pointer-events: none;
+  color: var(--color-text-tertiary);
+}
+
+.canvas-empty__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 44px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
+  border: var(--border-width-hairline) solid var(--color-border);
+  color: var(--color-text-quaternary);
+}
+
+.canvas-empty__title {
+  font: var(--type-body-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+/* The line that teaches the pattern. Wider measure than the hint and centred:
+   it is a sentence to read, not a caption to glance at (ticket 22). */
+.canvas-empty__pattern {
+  font: var(--type-body-sm);
+  color: var(--color-text-tertiary);
+  max-width: 46ch;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.canvas-empty__hint {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  max-width: 52ch;
+  text-align: center;
+  text-wrap: balance;
+}
+
+/* A run's flowing-dash animation is a motion effect; honour the user's
+   reduced-motion preference — the colour change still marks the edge. */
+@media (prefers-reduced-motion: reduce) {
+  .joint-link.is-active [joint-selector='line'] {
+    animation: none;
+  }
+
+  /* The connection ripple loses its motion and keeps its meaning: the halos
+     stay at full size and tinted, and the dot keeps its grown radius and valid
+     colour, so the affordance — including the dimming of every illegal port —
+     survives intact. */
+  .joint-port.is-available [joint-selector='portHit'],
+  .joint-paper.is-connecting .joint-port.is-dragging [joint-selector='portHit'] {
+    animation: none;
+  }
+
+  /* Same bargain for the active card: keep the gradient ring and its bloom,
+     drop the sweep. The card stays unmistakably marked without motion. */
+  .joint-element.is-active .node::before,
+  .joint-element.is-active .node::after {
+    animation: none;
+    background: conic-gradient(
+      from 0deg,
+      var(--color-run-glow-from),
+      var(--color-run-glow-to),
+      var(--color-run-glow-from)
+    );
+  }
+}

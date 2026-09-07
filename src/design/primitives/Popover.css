@@ -1,0 +1,44 @@
+/* A floating panel anchored to the control that opened it.
+ *
+ * Positioned by `translate3d` from `useFloating`, so `top`/`left` stay at the
+ * origin and the transform is the only thing that moves — the same shape
+ * `Menu.css` uses, and the reason both are cheap to reposition per frame while
+ * the run dock is being dragged. */
+.popover {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  width: var(--layout-drawer-width);
+  max-width: calc(100vw - var(--space-4));
+  overflow: hidden;
+  padding: var(--box-inset);
+  background: var(--color-bg-surface-raised);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+/* A `Panel` used as a popover's content is no longer claiming a column: it
+ * gets its height from the popover's measured maximum rather than from a
+ * flow it is no longer in, and the popover has already painted the ground and
+ * the border underneath it. */
+.popover > .panel {
+  height: auto;
+  min-height: 0;
+  background: transparent;
+}
+
+/* The one escape from the inset above, and it is named rather than silent
+ * (`the-look-has-an-author-now/20`). A `Panel` brings its own header, body and
+ * footer, each carrying its own inset and the header drawing a rule that has
+ * to reach the popover's edge to read as a header. A second inset outside
+ * those would double every edge and inset the rule away from the corner it
+ * ends at, so the popover stands its content off instead of padding it.
+ *
+ * A child that is *not* a set of regions — the Stored runs list — gets the
+ * default, which is the whole point of there being one. */
+.popover:has(> .panel) {
+  padding: 0;
+}

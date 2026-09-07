@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mockup: token status bar</title>
+<style>
+  :root{--ink:#1f2328;--muted:#6b7280;--ground:#fafafa;--surface:#fff;--line:#d9dde3;--accent:#2f6fed;font-family:-apple-system,Inter,system-ui,sans-serif;font-size:13px;color:var(--ink)}
+  body{margin:0;background:var(--ground);height:100vh;display:flex;flex-direction:column}
+  .canvas{flex:1;display:grid;place-items:center;color:var(--muted)}
+  .bar{height:28px;border-top:1px solid var(--line);background:var(--surface);display:flex;align-items:center;gap:0;padding:0 12px;cursor:pointer}
+  .bar span{padding:0 12px;border-right:1px solid var(--line);white-space:nowrap}
+  .bar span:last-child{border-right:0}
+  .bar b{font-weight:600}
+  .bar .muted{color:var(--muted)}
+  .modal{position:absolute;inset:0;background:rgba(0,0,0,.25);display:grid;place-items:center}
+  .card{width:560px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px 20px}
+  .card h2{font-size:15px;margin:0 0 4px}.card p{margin:0 0 14px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;margin-bottom:14px}
+  th{text-align:left;color:var(--muted);font-weight:500;border-bottom:1px solid var(--line);padding:4px 0}
+  td{padding:5px 0;border-bottom:1px solid #eef0f3}td.n{text-align:right;font-variant-numeric:tabular-nums}
+  th.n{text-align:right}
+  .close{float:right;border:1px solid var(--line);background:none;border-radius:4px;padding:3px 10px;cursor:pointer}
+</style></head><body>
+<div class="canvas">canvas</div>
+<div class="bar" title="Tokens spent. Click for the breakdown.">
+  <span>Tokens <b>1,284,910</b> <span class="muted">grand total</span></span>
+  <span><b>312,400</b> <span class="muted">cached</span></span>
+  <span><b>48,210</b> <span class="muted">this session</span></span>
+  <span class="muted">gpt-oss:120b-cloud 41,900 · claude-sonnet 6,310</span>
+</div>
+
+<div class="modal">
+  <div class="card">
+    <button class="close">Close</button>
+    <h2>Tokens spent</h2>
+    <p>Counted from every recorded run in this project. A dash means the provider reported no figure.</p>
+    <table>
+      <tr><th>Grand total, by model</th><th class="n">Input</th><th class="n">Output</th><th class="n">Cached</th><th class="n">Total</th></tr>
+      <tr><td>gpt-oss:120b-cloud</td><td class="n">804,100</td><td class="n">210,300</td><td class="n">301,000</td><td class="n">1,014,400</td></tr>
+      <tr><td>claude-sonnet-5</td><td class="n">190,200</td><td class="n">80,310</td><td class="n">11,400</td><td class="n">270,510</td></tr>
+      <tr><td><b>All models</b></td><td class="n">994,300</td><td class="n">290,610</td><td class="n">312,400</td><td class="n"><b>1,284,910</b></td></tr>
+    </table>
+    <table>
+      <tr><th>This session, by model</th><th class="n">Runs</th><th class="n">Cached</th><th class="n">Total</th></tr>
+      <tr><td>gpt-oss:120b-cloud</td><td class="n">5</td><td class="n">12,000</td><td class="n">41,900</td></tr>
+      <tr><td>claude-sonnet-5</td><td class="n">1</td><td class="n">—</td><td class="n">6,310</td></tr>
+    </table>
+    <table>
+      <tr><th>Sessions</th><th class="n">Runs</th><th class="n">Total</th></tr>
+      <tr><td>Today 21:40 — now <span style="color:var(--accent)">(this tab)</span></td><td class="n">6</td><td class="n">48,210</td></tr>
+      <tr><td>Today 09:12 — 11:30</td><td class="n">14</td><td class="n">201,880</td></tr>
+      <tr><td>Sep 2, 16:05 — 18:40</td><td class="n">22</td><td class="n">390,140</td></tr>
+    </table>
+  </div>
+</div>
+</body></html>

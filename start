@@ -1,0 +1,82 @@
+#!/bin/sh
+# OpenStateGraph — one entry point.
+#
+#   ./start           production stack in Docker (build + run, one command)
+#   ./start dev       local dev with hot reload (Vite + uvicorn --reload)
+#   ./start stop      stop whichever of the two is running
+#   ./start logs      follow the container logs
+#
+# POSIX sh, no bash-isms: this file is also the thing a Windows user runs under
+# Git Bash / WSL, and it must behave identically there. Keep it LF-only —
+# a CRLF shebang line fails with a confusing "bad interpreter" error.
+set -eu
+
+# Resolve the repo root from this script's own location so `./start`,
+# `sh start` and `/some/path/start` all work. No hardcoded host paths.
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$ROOT"
+
+CMD=${1:-up}
+
+# `docker compose` (v2 plugin) with a fallback to legacy `docker-compose`.
+compose() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    docker-compose "$@"
+  else
+    echo "docker compose not found — install Docker Desktop, or use './start dev'" >&2
+    exit 1
+  fi
+}
+
+require_docker() {
+  command -v docker >/dev/null 2>&1 || {
+    echo "docker not found on PATH. For local development without Docker: ./start dev" >&2
+    exit 1
+  }
+  docker info >/dev/null 2>&1 || {
+    echo "docker is installed but the daemon is not running — start Docker Desktop." >&2
+    exit 1
+  }
+}
+
+case "$CMD" in
+  up)
+    require_docker
+    echo "building and starting the production stack…"
+    compose up --build -d
+    echo
+    echo "editor:  http://localhost:8000/"
+    echo "chat:    http://localhost:8000/chat"
+    echo "health:  http://localhost:8000/api/health"
+    echo "logs:    ./start logs   ·   stop: ./start stop"
+    ;;
+
+  dev)
+    # Local, not containerised, on purpose: hot reload wants the source tree on
+    # the host, and a bind-mounted node_modules across the Docker Desktop VM
+    # boundary is the slowest way to run Vite that exists.
+    # Invoked directly rather than via `sh`, so scripts/dev.sh's own `#!/usr/bin/env bash`
+    # shebang selects the interpreter it was written for.
+    exec "$ROOT/scripts/dev.sh"
+    ;;
+
+  stop)
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+      compose down --remove-orphans 2>/dev/null || true
+    fi
+    "$ROOT/scripts/dev.sh" stop 2>/dev/null || true
+    echo "stopped"
+    ;;
+
+  logs)
+    require_docker
+    compose logs -f
+    ;;
+
+  *)
+    echo "usage: ./start [dev|stop|logs]" >&2
+    exit 2
+    ;;
+esac

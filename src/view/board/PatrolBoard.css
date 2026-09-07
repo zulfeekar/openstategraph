@@ -1,0 +1,265 @@
+/* The patrol board — `kanban-patrol/06`.
+   Every colour, width and inset here is an existing role or token; this file
+   defines none of its own and names no palette ramp, which is the property
+   `tokensDoNotDriftBack` and `aColumnHasOneToneAndCardsDoNotResort` both
+   protect. The column's colour is not here at all: it is a tone handed to
+   `Badge` and `StatusDot`, from one table in `patrolBoard.ts`. */
+
+/* Columns across, one track each, generated rather than counted: a fifth
+   column would be a change to the table in `patrolBoard.ts` and nothing
+   here. */
+.patrol-board {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+/* Each column scrolls inside itself rather than the whole board scrolling
+   sideways: at 90% of the viewport the columns are all visible at once, and
+   the thing that overflows is one column's cards. */
+.patrol-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface-sunken);
+}
+
+/* Sticky, so the column's word and count survive its own scroll.
+
+   `z-index` here and on `.patrol-card` below are one declaration, not two —
+   `install-experience/29`. A sticky box is a *positioned* box, so the header
+   and the cards share a stack; today the cards are unpositioned and the header
+   wins by the paint order in the spec, which is luck rather than a decision.
+   The first card to take `position: relative` for a hover control or a menu
+   sits later in the DOM and paints straight over the header, and the symptom
+   would be intermittent and dependent on nothing a reader can see — which is
+   exactly how 29 presented. So both layers are named, from the scale
+   `tokens.css` publishes under "one ordered list, no magic numbers".
+
+   The names are from the absolute scale and this stack is local to the modal.
+   That is deliberate: `.dialog-backdrop` is `position: fixed` with
+   `z-index: var(--z-modal)`, so it is a stacking context and nothing in here
+   competes with anything outside it. A bare number is the thing the scale
+   exists to refuse. */
+.patrol-column__head {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-panel);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--box-inset-dense);
+  background: var(--color-bg-surface);
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
+}
+
+.patrol-column__label {
+  font: var(--type-body-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.patrol-column__cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--box-inset-dense);
+  list-style: none;
+}
+
+/* Positioned and named, which is the other half of the header's rule above.
+   `z-index` on a static box does nothing, so the card has to be positioned for
+   the declaration to be the answer — and a card is going to end up positioned
+   anyway the first time one carries a control of its own. */
+.patrol-card {
+  position: relative;
+  z-index: var(--z-canvas);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--box-inset);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  /* Only the two properties that change, and only at the fast duration: a
+     card list is the one place a transition on `all` gets expensive, because
+     every card arriving during a patrol would animate every property it has. */
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+/* Subtle on purpose. A card is not a button yet — attending one is
+   `kanban-patrol/15` — so the hover says *this row is a thing* and stops
+   short of promising a click target. The ground lifts to the same
+   `--color-bg-hover` every other hoverable surface in the product uses, and
+   the hairline goes to `--color-border-emphasis`; both are existing roles,
+   so a theme change moves this with everything else and no token is minted.
+
+   `:focus-within` rides along so the same affordance appears for a keyboard,
+   which is the half a hover-only rule always forgets. */
+.patrol-card:hover,
+.patrol-card:focus-within {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-emphasis);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .patrol-card {
+    transition: none;
+  }
+}
+
+.patrol-card__title {
+  font: var(--type-body-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  text-wrap: balance;
+}
+
+.patrol-card__secondary {
+  font: var(--type-caption);
+  font-family: var(--font-mono);
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Priority and area, on one row. The badge carries the urgency and the tag
+   carries the discipline; they are deliberately unequal in weight, because a
+   card with two marks of the same weight has no primary signal. */
+.patrol-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The area is a word, not a colour — there are six of them and four tones,
+   so any colouring would either collide with a column's meaning or mint a
+   token. Mono, to sit with `__secondary` as the machine-ish half of a card. */
+/* The kind sits between the priority badge and the area, in the same quiet
+   register as the area: it explains the column rather than competing with it. */
+.patrol-card__kind {
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+}
+
+.patrol-card__area {
+  font: var(--type-caption);
+  font-family: var(--font-mono);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+/* The status line: the dot, the column's own word, and how long ago. The word
+   is repeated from the header on purpose — a card dragged out of this dialog
+   into a screenshot has to still say which column it was in. */
+.patrol-card__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+}
+
+.patrol-card__when {
+  margin-left: auto;
+  color: var(--color-text-tertiary);
+}
+
+/* `kanban-patrol/17`+`21`'s evidence line — only a resolved card has one.
+   Mono, same register as `__secondary`/`__area`: this is the machine-ish
+   proof, not a human summary, so it reads as a fact rather than a claim. */
+.patrol-card__evidence {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `osg-agent-experience/25`'s idea brief — the want, the check that settles
+   it, and the advisory model line. Flat: no border, no panel, no second
+   background. A card already carries a badge, a kind, an area and a status
+   line, and boxing the brief would make the newest thing on the card the
+   loudest. Tone alone separates the three — secondary for the story, which is
+   read; tertiary for the two below it, which are consulted. Tokens only;
+   nothing is minted here. */
+.patrol-card__story {
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.patrol-card__done-when {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+.patrol-card__done-when-text {
+  color: var(--color-text-secondary);
+}
+
+.patrol-card__agent {
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+/* `team-board-and-gap-reports/17`'s repeat count. The same caption tone as
+   the evidence line above it and no weight of its own: it is a fact about a
+   card, not a second badge competing with the priority one. Tokens only;
+   nothing minted here. */
+.patrol-card__count {
+  font: var(--type-caption);
+  color: var(--color-text-secondary);
+}
+
+.patrol-card__evidence-test {
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+}
+
+/* `kanban-patrol/15`'s Answer control, and `19`'s two copy buttons before
+   it. A wrapping row so two or three small buttons sit side by side, and the
+   field — when one is open — takes the full width above them rather than
+   squeezing three lines into a button-height slot. Spacing tokens only;
+   nothing is minted here. */
+.patrol-card__action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.patrol-card__answer {
+  flex: 1 1 100%;
+}
+
+/* The blank board. Centred in the space the columns would have used, so the
+   dialog does not change size when the first card lands. */
+.patrol-board__empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+/* The one honest line about live patrol state — kanban-patrol/07. An
+   existing role and an existing size, same rule as the rest of this file:
+   nothing invented for this ticket, a secondary line of text same as the
+   column subtitle above it. */
+.patrol-board__status {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--type-body-sm);
+}

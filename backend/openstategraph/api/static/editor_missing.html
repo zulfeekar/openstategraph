@@ -1,0 +1,104 @@
+<!doctype html>
+<!--
+  Served at / (HTTP 503) when no built editor can be found — see
+  api/editor_assets.py. The only way to reach this page is to run
+  `openstategraph serve` from a source checkout that has never run
+  `npm run build`, because the wheel carries the build as package data.
+
+  Self-contained on purpose: no CDN, no bundle, no fonts to fetch. The one
+  situation this page exists for is "the static assets are missing", so it
+  cannot depend on any.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>OpenStateGraph — the editor has not been built</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --ink: #16181d;
+        --muted: #5c6472;
+        --line: #dfe3ea;
+        --paper: #ffffff;
+        --code-bg: #f4f6f9;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink: #e8ebf0;
+          --muted: #9aa4b4;
+          --line: #2a2f39;
+          --paper: #14161b;
+          --code-bg: #1c2027;
+        }
+      }
+      body {
+        margin: 0;
+        padding: 3rem 1.5rem;
+        background: var(--paper);
+        color: var(--ink);
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      main { max-width: 44rem; margin: 0 auto; }
+      h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+      p.lede { color: var(--muted); margin: 0 0 2rem; }
+      h2 { font-size: 1rem; margin: 2rem 0 0.5rem; }
+      pre {
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        overflow-x: auto;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      ul { padding-left: 1.2rem; }
+      li { margin: 0.35rem 0; }
+      footer { margin-top: 2.5rem; border-top: 1px solid var(--line); padding-top: 1rem; color: var(--muted); font-size: 0.9rem; }
+      a { color: inherit; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>The editor has not been built in this checkout.</h1>
+      <p class="lede">
+        The server is running fine — this is the one page it can serve without
+        the canvas. You are running from a source checkout, and the editor is a
+        compiled front end that has to be built once.
+      </p>
+
+      <h2>Build it, then reload this page</h2>
+      <pre>npm install
+npm run build</pre>
+      <p>
+        That writes <code>dist/</code> at the repository root, which this server
+        picks up on the next request. No restart needed.
+      </p>
+
+      <h2>Or run the dev stack instead</h2>
+      <pre>./start dev</pre>
+      <p>
+        Vite serves the editor on
+        <a href="http://localhost:5273/">http://localhost:5273</a> with hot
+        reload, talking to this API on port 8000.
+      </p>
+
+      <h2>What still works right now</h2>
+      <ul>
+        <li><a href="/chat">/chat</a> — the customer chat surface, over your published workflows</li>
+        <li><a href="/api/workflows">/api/workflows</a> — the workflow catalogue</li>
+        <li><a href="/api/health">/api/health</a> — liveness</li>
+        <li><a href="/docs">/docs</a> — the API reference</li>
+      </ul>
+
+      <footer>
+        Installing from PyPI instead? <code>pip install "openstategraph[server,ollama]"</code>
+        ships the built editor inside the wheel, so this page never appears there.
+        The provider extra is not decoration: <code>[server]</code> is the web
+        layer and carries no model integration, so without one the editor opens
+        and nothing it draws can run.
+      </footer>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,179 @@
+"""The Workflow Architect's instruments — ticket 69.
+
+Dynamic workflows rest on one fact this platform arranged deliberately: a
+workflow is *data*, and the compiler validates data without running anything.
+``validate_workflow`` exposes exactly that as a tool — the Architect composes
+a document, this tool compile-checks it, and the verdict (entry points,
+routes, bindings, warnings, unknown types) is the **evidence** its revise
+loop feeds on. Loop on evidence, never on the model's confidence — the
+platform's own adopted rule, applied to workflow creation itself.
+
+Read-only like everything the concierge reaches: validation plans a graph in
+memory and throws it away. Nothing here can save, run, or mutate.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from openstategraph.abc.tool import BaseTool, ToolResult
+from openstategraph.validation import MOUNT_NODE_TYPES
+
+#: Node types the runtime genuinely implements. Kept as data so the check
+#: below cannot drift from `NodeRuntime._builders` silently — the test pins
+#: them against each other.
+KNOWN_NODE_TYPES = frozenset({
+    "input.text", "input.markdown", "input.skill", "agent.llm", "route.classifier",
+    "route.grader", "route.check",
+    "human.approval", "guard.policy", "guard.check", "memory.segment",
+    "resolve.vocabulary", "resolve.source",
+    "orchestrate.supervisor",
+    "orchestrate.worker", "function.format_report", "output.formatted",
+    # The exit that speaks rather than reports (`osg-agent-experience/55`).
+    "output.static",
+    # Spread, not spelled (ticket 08): a third organism must reach the
+    # architect's own view of the platform without anybody remembering to
+    # come here — this was one of the two sites nobody thinks to check.
+    *MOUNT_NODE_TYPES,
+})
+
+KNOWN_PREFIXES = ("tool.", "function.")
+
+#: The shape `discover_tool_registry`/`discover_tools`/`discover_functions`
+#: (`api/capability_discovery.py`) actually mint: one path segment (a
+#: package slug — anything but `/`), then `/tools.` or `/functions.`, then a
+#: class or function name. `validate` has no `workflow_dir`/`slug` to run
+#: discovery against and resolve the id for real (that is `run`'s job, via
+#: `discover_tool_registry`), so this checks the *shape* is the sanctioned
+#: code->canvas channel CLAUDE.md documents ("There is a third direction") —
+#: a permissive pattern, not a fixed list, and pinned by
+#: `test_a_package_local_tool_type_is_not_reported_unknown` /
+#: `test_a_slash_type_that_is_not_tools_or_functions_still_reports_unknown`
+#: in `tests/test_architect.py` so a change to what discovery mints is a red
+#: test here rather than a silent false negative (launch-readiness 43).
+_PACKAGE_LOCAL_CAPABILITY = re.compile(r"^[^/]+/(tools|functions)\.[^.]+$")
+
+
+def known_node_types() -> frozenset[str]:
+    """The built-ins **plus whatever an installed distribution registered**.
+
+    The frozenset above is the compiler's own table, mirrored as data and
+    pinned against it. This function is the same question asked of the process
+    that is actually running: a node family contributed through the
+    `openstategraph.node_families` entry-point group compiles and runs
+    (install-experience ticket 08), and validation that still called its type
+    unknown would report a defect that no longer exists — which is the same
+    "extend by registering" failure one layer up, in the sentence a user reads.
+    """
+    from openstategraph.compile.node_families import discovered_node_families
+
+    registered, _warnings = discovered_node_families()
+    return KNOWN_NODE_TYPES | registered.types()
+
+
+class ValidateArgs(BaseModel):
+    model_config = {"extra": "forbid"}
+    #: Either the document itself or the same document encoded as JSON text.
+    #:
+    #: It was `str` alone, and that is what killed `workflow-architect`
+    #: (`every-workflow-green` 13). The agent is told to ALWAYS call this
+    #: before presenting a workflow, and it passes the document as an object —
+    #: the obvious move for a field named `document`. Every call came back
+    #: "document: Input should be a valid string", every retry re-appended the
+    #: whole document to the conversation, and the provider eventually answered
+    #: 500. The run died on a `str` where a `dict` would do.
+    #:
+    #: The string shape stays because it is a real caller's shape: `cli.py`
+    #: passes `json.dumps(document)`. But requiring it was never defensible for
+    #: a tool whose first act is `json.loads` — accepting the object removes a
+    #: step rather than adding one.
+    document: str | dict[str, Any] = Field(
+        description="The complete workflow document — either the JSON object "
+        "itself or the same thing as a JSON string: "
+        '{"version": 2, "name": ..., "nodes": [...], "edges": [...]}.'
+    )
+
+
+class ValidateWorkflowTool(BaseTool):
+    """Compile-checks a composed document; the verdict is revise evidence."""
+
+    name = "validate_workflow"
+    #: Reads only — `launch-readiness` 121. Running it twice changes nothing.
+    side_effecting = False
+    node_type = "tool.validate-workflow"
+    description = (
+        "Compile-check a workflow document you have composed. Returns the "
+        "planned topology (entries, exits, routes, tool bindings) plus every "
+        "warning and unknown node type. ALWAYS call this before presenting a "
+        "workflow — a document you have not validated is a guess."
+    )
+    Args = ValidateArgs
+
+    def _execute(self, args: BaseModel) -> ToolResult:
+        assert isinstance(args, ValidateArgs)
+        from openstategraph.compile.workflow_compiler import WorkflowCompiler
+
+        if isinstance(args.document, dict):
+            document: Any = args.document
+        else:
+            try:
+                document = json.loads(args.document)
+            except json.JSONDecodeError as exc:
+                return ToolResult.failure(f"Not valid JSON: {exc}")
+        if not isinstance(document, dict):
+            return ToolResult.failure("The document must be a JSON object.")
+        document = document.get("document", document)
+
+        problems: list[str] = []
+        nodes = document.get("nodes")
+        if not isinstance(nodes, list) or not nodes:
+            return ToolResult.failure("The document needs a non-empty 'nodes' list.")
+        known = known_node_types()
+        for node in nodes:
+            node_type = str(node.get("type", ""))
+            if (
+                node_type not in known
+                and not node_type.startswith(KNOWN_PREFIXES)
+                and not _PACKAGE_LOCAL_CAPABILITY.match(node_type)
+            ):
+                problems.append(f"unknown node type '{node_type}' on '{node.get('id')}'")
+
+        try:
+            plan = WorkflowCompiler().plan(document)
+        except Exception as exc:
+            return ToolResult.failure(f"Compile failed: {type(exc).__name__}: {exc}")
+
+        problems.extend(plan.warnings)
+        if not plan.entry:
+            problems.append("no entry point — some node must have no incoming control edge")
+        if not plan.exits:
+            problems.append("no exit — some node must flow toward the end")
+
+        # `plan.advisories` (launch-readiness/24 — an unrecognised `data` key,
+        # or a dynamically-discovered type this build has no field schema to
+        # check) is deliberately **not** rendered as a "- " bullet here.
+        # `cli.cmd_validate` and `validation.validate_document` both scrape
+        # every "- "-prefixed line out of this text as a *problem*, with no
+        # notion of section — the same shape `Finding.UNWIRED_REVISE` already
+        # has to route around one layer down. `validate_document` reads
+        # `plan.advisories` itself instead, so a report that must never move
+        # VALID to INVALID never rides a channel that cannot tell the
+        # difference.
+        report = [
+            "VALID" if not problems else "PROBLEMS FOUND:",
+            *(f"- {p}" for p in problems),
+            "",
+            f"Topology: {len(plan.nodes)} graph nodes · entry {plan.entry} · exits {plan.exits}",
+            f"Routes: { {k: list(v) for k, v in plan.conditional.items()} or 'none'}",
+            f"Tool bindings: {plan.tool_bindings or 'none'}",
+            f"Fan-out: {plan.fan_out or 'none'}",
+        ]
+        content = "\n".join(report)
+        return ToolResult(content=content) if not problems else ToolResult.failure(content)
+
+
+ARCHITECT_TOOLS: list[Any] = [ValidateWorkflowTool()]

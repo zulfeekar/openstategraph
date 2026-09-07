@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "name": "Parallel Workers Join",
+  "published": false,
+  "savedAt": "2026-08-14T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Parallel Workers Join",
+    "settings": {
+      "purpose": "Fan out one role across several subtasks, then join the results with no model in the join."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Request",
+        "data": {},
+        "position": { "x": 40, "y": 220 }
+      },
+      {
+        "id": "lead1",
+        "type": "orchestrate.supervisor",
+        "title": "Planner",
+        "data": {
+          "maxSubtasks": 3,
+          "rules": "Split the request into independent subtasks, each answerable on its own by a worker who sees only that one sentence and nothing else. Never cut a sentence in half: \"arguments for and against X\" is two subtasks, one per stance, and each names X in full."
+        },
+        "position": { "x": 380, "y": 220 }
+      },
+      {
+        "id": "worker1",
+        "type": "orchestrate.worker",
+        "title": "Analyst",
+        "data": {
+          "default": true,
+          "role": "Answers any one subtask on its own. The only archetype wired here, so it catches every subtask the split produces."
+        },
+        "position": { "x": 720, "y": 220 }
+      },
+      {
+        "id": "join1",
+        "type": "function.format_report",
+        "title": "Join",
+        "data": { "reportTitle": "Standup arguments" },
+        "position": { "x": 1060, "y": 220 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Report",
+        "data": {},
+        "position": { "x": 1400, "y": 220 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "lead1", "portId": "instruction" }
+      },
+      {
+        "source": { "nodeId": "lead1", "portId": "workers" },
+        "target": { "nodeId": "worker1", "portId": "dispatch" }
+      },
+      {
+        "source": { "nodeId": "worker1", "portId": "result" },
+        "target": { "nodeId": "join1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "join1", "portId": "report" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      }
+    ]
+  }
+}

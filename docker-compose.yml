@@ -1,0 +1,60 @@
+# The production stack: one service. `./start` brings it up.
+#
+# There is deliberately no second container for the frontend. The editor is a
+# static SPA that the Dockerfile builds and the backend serves (via the
+# env-guarded mount in api/editor_assets.py — the same one `openstategraph
+# serve` uses), so a separate nginx would add a container, a config file and a
+# CORS boundary to serve files that are already inside this one. Serving both
+# from one origin is also what lets the editor's API calls stay same-origin
+# relative (src/core/runtime/runtimeBaseUrl.ts) instead of naming a host.
+#
+# No `version:` key — obsolete since Compose v2 and warned about by the CLI.
+
+services:
+  openstategraph:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: openstategraph:local
+    # The left number is free to change now. It was not before scale-and-adopt
+    # ticket 01: the editor bundle called http://localhost:8000 absolutely, so
+    # any other host port produced a UI that loaded perfectly and could not
+    # reach its own API. The bundle is same-origin relative now, so it follows
+    # whatever port you publish here.
+    ports:
+      - "8000:8000"
+    env_file:
+      # Provider credentials (ANTHROPIC_API_KEY, OPENAI_API_KEY,
+      # OLLAMA_API_KEY / OLLAMA_HOST) and OPENSTATEGRAPH_OLLAMA_MODEL /
+      # OPENSTATEGRAPH_LOG_LEVEL. Copy .env.example to .env to use it; the
+      # stack starts without one, and a workflow that calls no model runs
+      # without one.
+      #
+      # Ollama cloud is the default provider and it needs OLLAMA_API_KEY here.
+      # This comment used to note that it authenticated from the local `ollama`
+      # CLI's own credentials, which do not exist inside this container, and
+      # left the fix vague. The fix is concrete now: put an ollama.com key in
+      # .env as OLLAMA_API_KEY. To reach a daemon on the host instead, set
+      # OLLAMA_HOST (for example http://host.docker.internal:11434) — that
+      # daemon owns its own auth and needs no key of ours. Either variable
+      # alone is enough; with neither, Ollama is not configured and a
+      # model-calling node fails with MissingProviderKey naming OLLAMA_API_KEY.
+      - path: .env
+        required: false
+    volumes:
+      # Authored workflows are user content with their own lifecycle, and the
+      # editor writes to this directory at runtime (WorkflowStore.save/delete).
+      # A bind mount rather than a named volume so edits made in the container
+      # show up in the repo — that is the point of the directory.
+      #
+      # Relative path on purpose: `./workflows` resolves against this file's
+      # directory on macOS, Windows and Linux alike. Never an absolute host path.
+      - ./workflows:/app/workflows
+    restart: unless-stopped
+    # Single replica, single worker — see the CMD comment in the Dockerfile.
+    # The in-process InMemorySaver checkpointer means a second instance would
+    # silently lose human-in-the-loop resumes, so this is a correctness
+    # constraint, not a capacity choice.
+    deploy:
+      replicas: 1

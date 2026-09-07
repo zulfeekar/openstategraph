@@ -1,0 +1,1192 @@
+{
+ "question": "Which music genre earned the most revenue?",
+ "workflow": "concierge",
+ "nodeIdsByName": {
+  "in1": "in1",
+  "router1": "router1",
+  "wf_music": "wf-music",
+  "agent_general": "agent-general",
+  "grader_general": "grader-general",
+  "out1": "out1",
+  "t_listwf": "t-listwf",
+  "t_descwf": "t-descwf",
+  "t_ls": "t-ls",
+  "t_read": "t-read",
+  "t_grep": "t-grep",
+  "t_websearch": "t-websearch",
+  "t_webfetch": "t-webfetch",
+  "t_knowledge": "t-knowledge",
+  "wf_architect": "wf-architect"
+ },
+ "chunks": [
+  {
+   "mode": "messages",
+   "ns": [],
+   "node": "in1",
+   "type": "human",
+   "name": "",
+   "content": "Which music genre earned the most revenue?"
+  },
+  {
+   "mode": "updates",
+   "ns": [],
+   "node": "in1"
+  },
+  {
+   "mode": "messages",
+   "ns": [],
+   "node": "router1",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "music"
+  },
+  {
+   "mode": "messages",
+   "ns": [],
+   "node": "router1",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "_store"
+  },
+  {
+   "mode": "updates",
+   "ns": [],
+   "node": "router1"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "in1"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "router1",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "data"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "router1",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "_query"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "router1"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "tools",
+   "type": "tool",
+   "name": "chinook_get_table_schema",
+   "content": "### InvoiceLine\n| Column | Type | PK |\n| --- | --- | --- |\n| InvoiceLineId | INTEGER | yes |\n| InvoiceId | INTEGER |  |\n| TrackId | INTEGER |  |\n| UnitPrice | NUMERIC(10,2) |  |\n| Quantity | INTEGER |  |\n\n**Foreign keys**\n| Column | References |\n| --- | --- |\n| TrackId | Track.TrackId |\n| InvoiceId | Invoice.InvoiceId |"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "tools"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "tools",
+   "type": "tool",
+   "name": "chinook_get_table_schema",
+   "content": "### Track\n| Column | Type | PK |\n| --- | --- | --- |\n| TrackId | INTEGER | yes |\n| Name | NVARCHAR(200) |  |\n| AlbumId | INTEGER |  |\n| MediaTypeId | INTEGER |  |\n| GenreId | INTEGER |  |\n| Composer | NVARCHAR(220) |  |\n| Milliseconds | INTEGER |  |\n| Bytes | INTEGER |  |\n| UnitPrice | NUMERIC(10,2) |  |\n\n**Foreign keys**\n| Column | References |\n| --- | --- |\n| MediaTypeId | MediaType.MediaTypeId |\n| GenreId | Genre.GenreId |\n| AlbumId | Album.AlbumId |"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "tools"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "tools",
+   "type": "tool",
+   "name": "chinook_get_table_schema",
+   "content": "### Genre\n| Column | Type | PK |\n| --- | --- | --- |\n| GenreId | INTEGER | yes |\n| Name | NVARCHAR(120) |  |"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "tools"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "tools",
+   "type": "tool",
+   "name": "chinook_execute_sql",
+   "content": "| Genre | Revenue |\n| --- | --- |\n| Rock | 826.65 |"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "tools"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "The"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " Rock"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " genre"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " generated"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " the"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " highest"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " revenue"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": ","
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " with"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " total"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " sales"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " of"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " **"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "$"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "826"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "."
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "65"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "**"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "."
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:b2d252a3-4443-398a-c575-6778b80b2c9e"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "agent_sql"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "FAIL"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "\n"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "Include"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " the"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " SQL"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " SELECT"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " statement"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " that"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " was"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " executed"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " to"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " obtain"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " the"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " result"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "."
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:7ccf9ddd-7684-ed08-536c-ab07ec892f75"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:7ccf9ddd-7684-ed08-536c-ab07ec892f75"
+   ],
+   "node": "tools",
+   "type": "tool",
+   "name": "chinook_list_tables",
+   "content": "| Table | Rows |\n| --- | --- |\n| Album | 347 |\n| Artist | 275 |\n| Customer | 59 |\n| Employee | 8 |\n| Genre | 25 |\n| Invoice | 412 |\n| InvoiceLine | 2240 |\n| MediaType | 5 |\n| Playlist | 18 |\n| PlaylistTrack | 8715 |\n| Track | 3503 |"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:7ccf9ddd-7684-ed08-536c-ab07ec892f75"
+   ],
+   "node": "tools"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:7ccf9ddd-7684-ed08-536c-ab07ec892f75"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:7ccf9ddd-7684-ed08-536c-ab07ec892f75"
+   ],
+   "node": "tools",
+   "type": "tool",
+   "name": "chinook_get_table_schema",
+   "content": "### Track\n| Column | Type | PK |\n| --- | --- | --- |\n| TrackId | INTEGER | yes |\n| Name | NVARCHAR(200) |  |\n| AlbumId | INTEGER |  |\n| MediaTypeId | INTEGER |  |\n| GenreId | INTEGER |  |\n| Composer | NVARCHAR(220) |  |\n| Milliseconds | INTEGER |  |\n| Bytes | INTEGER |  |\n| UnitPrice | NUMERIC(10,2) |  |\n\n**Foreign keys**\n| Column | References |\n| --- | --- |\n| MediaTypeId | MediaType.MediaTypeId |\n| GenreId | Genre.GenreId |\n| AlbumId | Album.AlbumId |"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:7ccf9ddd-7684-ed08-536c-ab07ec892f75"
+   ],
+   "node": "tools"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:7ccf9ddd-7684-ed08-536c-ab07ec892f75"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:7ccf9ddd-7684-ed08-536c-ab07ec892f75"
+   ],
+   "node": "tools",
+   "type": "tool",
+   "name": "chinook_get_table_schema",
+   "content": "### InvoiceLine\n| Column | Type | PK |\n| --- | --- | --- |\n| InvoiceLineId | INTEGER | yes |\n| InvoiceId | INTEGER |  |\n| TrackId | INTEGER |  |\n| UnitPrice | NUMERIC(10,2) |  |\n| Quantity | INTEGER |  |\n\n**Foreign keys**\n| Column | References |\n| --- | --- |\n| TrackId | Track.TrackId |\n| InvoiceId | Invoice.InvoiceId |"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:7ccf9ddd-7684-ed08-536c-ab07ec892f75"
+   ],
+   "node": "tools"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:7ccf9ddd-7684-ed08-536c-ab07ec892f75"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "agent_sql"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "FAIL"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "\n"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "Include"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " the"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " SQL"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " SELECT"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " statement"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " that"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " was"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " used"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " to"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " determine"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " the"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " genre"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " with"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " the"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " highest"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " revenue"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "."
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:ad9cd477-5261-4dd8-c99b-eac528f23193"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:ad9cd477-5261-4dd8-c99b-eac528f23193"
+   ],
+   "node": "tools",
+   "type": "tool",
+   "name": "chinook_list_tables",
+   "content": "| Table | Rows |\n| --- | --- |\n| Album | 347 |\n| Artist | 275 |\n| Customer | 59 |\n| Employee | 8 |\n| Genre | 25 |\n| Invoice | 412 |\n| InvoiceLine | 2240 |\n| MediaType | 5 |\n| Playlist | 18 |\n| PlaylistTrack | 8715 |\n| Track | 3503 |"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:ad9cd477-5261-4dd8-c99b-eac528f23193"
+   ],
+   "node": "tools"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:ad9cd477-5261-4dd8-c99b-eac528f23193"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:ad9cd477-5261-4dd8-c99b-eac528f23193"
+   ],
+   "node": "tools",
+   "type": "tool",
+   "name": "chinook_get_table_schema",
+   "content": "### InvoiceLine\n| Column | Type | PK |\n| --- | --- | --- |\n| InvoiceLineId | INTEGER | yes |\n| InvoiceId | INTEGER |  |\n| TrackId | INTEGER |  |\n| UnitPrice | NUMERIC(10,2) |  |\n| Quantity | INTEGER |  |\n\n**Foreign keys**\n| Column | References |\n| --- | --- |\n| TrackId | Track.TrackId |\n| InvoiceId | Invoice.InvoiceId |"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:ad9cd477-5261-4dd8-c99b-eac528f23193"
+   ],
+   "node": "tools"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:ad9cd477-5261-4dd8-c99b-eac528f23193"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:ad9cd477-5261-4dd8-c99b-eac528f23193"
+   ],
+   "node": "tools",
+   "type": "tool",
+   "name": "chinook_get_table_schema",
+   "content": "### Invoice\n| Column | Type | PK |\n| --- | --- | --- |\n| InvoiceId | INTEGER | yes |\n| CustomerId | INTEGER |  |\n| InvoiceDate | DATETIME |  |\n| BillingAddress | NVARCHAR(70) |  |\n| BillingCity | NVARCHAR(40) |  |\n| BillingState | NVARCHAR(40) |  |\n| BillingCountry | NVARCHAR(40) |  |\n| BillingPostalCode | NVARCHAR(10) |  |\n| Total | NUMERIC(10,2) |  |\n\n**Foreign keys**\n| Column | References |\n| --- | --- |\n| CustomerId | Customer.CustomerId |"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:ad9cd477-5261-4dd8-c99b-eac528f23193"
+   ],
+   "node": "tools"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370",
+    "agent_sql:ad9cd477-5261-4dd8-c99b-eac528f23193"
+   ],
+   "node": "model"
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "agent_sql"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "FAIL"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "\n"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "Include"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " the"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " SQL"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " SELECT"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " statement"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " that"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " was"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " used"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " to"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " determine"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " the"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " top"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "\u2011"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "earning"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": " genre"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql",
+   "type": "AIMessageChunk",
+   "name": "",
+   "content": "."
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "grader_sql"
+  },
+  {
+   "mode": "messages",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "out1",
+   "type": "ai",
+   "name": "",
+   "content": "The Rock genre generated the highest revenue, with total sales of **$826.65**."
+  },
+  {
+   "mode": "updates",
+   "ns": [
+    "wf_music:a72870bc-ea21-a107-654d-35c74515b370"
+   ],
+   "node": "out1"
+  },
+  {
+   "mode": "updates",
+   "ns": [],
+   "node": "wf-music"
+  },
+  {
+   "mode": "messages",
+   "ns": [],
+   "node": "out1",
+   "type": "ai",
+   "name": "",
+   "content": "The Rock genre generated the highest revenue, with total sales of **$826.65**."
+  },
+  {
+   "mode": "updates",
+   "ns": [],
+   "node": "out1"
+  }
+ ],
+ "capture_note": "`type` was restored 2026-08-19 (every-workflow-green 02). The original capture flattened every non-tool message to `ai`, including `in1`, which writes a HumanMessage \u2014 so the recording could not distinguish a streamed chunk from a transcript record. Corrected against a live frame tap of workflow-2026: a model-driven node emits AIMessageChunk, `in1` emits human, `out1` emits a settled ai record, tools emit tool."
+}

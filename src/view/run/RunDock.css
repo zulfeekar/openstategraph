@@ -1,0 +1,765 @@
+/* ------------------------------------------------------------------ *
+ * The run dock — a panel under the top bar that pushes the paper down
+ * rather than covering it. `memory-and-replay` 51, moved to this edge
+ * by `63`.
+ *
+ * A sibling of `.app-shell__stage`, not a child of it: the stage is the
+ * room left below the chrome and this stands above it, so the canvas is
+ * never overlaid — only shorter, and shorter from the edge the control
+ * that opened it sits on. Its height is inline, because a drag writes
+ * it, and clamped by `dockFit` before it ever reaches the style.
+ * ------------------------------------------------------------------ */
+
+.run-dock {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--color-bg-surface);
+  /* The fourth rule. The dock is a region of the shell rather than a thing
+     floating over the canvas, and the line is what says so. On its lower
+     edge, which is the edge it shares with the paper. */
+  border-bottom: var(--border-width-rule) solid var(--color-rule);
+  /* `stable-beta-public/24`: the dock's own row, one step above anything in
+     the stage. Not `--z-panel` — this element and `.panel` are what actually
+     compete, and while they tied the grip below lost its last pixel to
+     whichever came later in the document. See the token's own comment. */
+  z-index: var(--z-dock);
+
+  /* The owner's rule of thumb, which this dock now keeps with the rest of
+     the app rather than beside it. `memory-and-replay/64` minted a local
+     `--rtl-rule` here — `color-mix(in srgb, var(--color-rule) 60%,
+     transparent)` — because `design/` was being edited by a concurrent
+     session, and that session was minting `--color-border` from
+     `--osg-divider` at the same number in the same week. Two definitions of
+     one idea, from two base tokens, agreeing by coincidence rather than by
+     construction. `the-look-has-an-author-now/16` deleted the local one and
+     pointed every line in here at the shared token, which is what `64`'s
+     own comment asked for. There is still exactly one dark border in this
+     panel and it is still the edge below, because that is the edge the grip
+     drags. */
+}
+
+/* The draggable lower edge is drawn by the `Grip` primitive
+ * (`design/primitives/Grip.css`) — `stable-beta-public/21`. It used to be
+ * seven declarations here and seven more in `AppShell.css`, one control
+ * spelled twice, and the two came apart on weight: this edge measured 4px
+ * of ink under a pointer (the border below plus the grip's own line) and
+ * the column's measured 2px. The visible line at rest is still this
+ * panel's own `border-bottom`; the grip adds the bar and the stroke. */
+
+.run-dock__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  min-height: 36px;
+  padding: var(--space-1) var(--space-3);
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
+}
+
+.run-dock__title {
+  flex: none;
+  margin: 0;
+  font: var(--type-heading-sm);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+}
+
+/* The question, given every pixel the row has spare and truncated rather
+ * than wrapped: the head is one row tall by design, and a long brief must
+ * not push the bars down. */
+.run-dock__subject {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--type-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.run-dock__state {
+  flex: none;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  font: var(--type-label);
+  color: var(--color-text-secondary);
+}
+
+.run-dock__state[data-running] {
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
+}
+
+.run-dock__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.run-dock__close {
+  border: none;
+  background: none;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font: var(--type-label);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.run-dock__close:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+/* Bars on the left, the trace tree on the right. Side by side rather than
+ * behind a tab: the width is the whole reason a run's two readings are
+ * worth promoting out of a 300px chat panel. */
+.run-dock__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+}
+
+.run-dock__bars,
+.run-dock__detail {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* The chart is not a scrolling document: it owns its own scroller, and it is
+   the lanes. Left to scroll as a whole it took the transport and the axis
+   off the top the first time a run had more rows than fitted — which is the
+   moment a reader most needs the numbers the axis prints
+   (`memory-and-replay` 64). */
+.run-dock__bars {
+  flex: 3 1 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* `memory-and-replay` 67: a floor, and the chart is what gives against it.
+   Wide enough for the selected-step facts' longest term and a quoted payload —
+   the pane's own `dl` is one column, so this is a reading width rather than a
+   two-column grid's minimum. */
+.run-dock__detail {
+  flex: 2 1 0;
+  min-width: 240px;
+  border-left: var(--border-width-hairline) solid var(--color-border);
+  padding-left: var(--space-3);
+}
+
+.run-dock__idle {
+  margin: 0;
+  padding: var(--space-4) var(--space-3);
+  font: var(--type-body-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* There is deliberately no one-column fallback — `memory-and-replay` 67.
+ *
+ * There was one, at `max-width: 900px`, and it was correct for `51`'s bottom
+ * drawer: the alternative to stacking was a sliver. `63` docked this surface
+ * under the top bar and it is now a region with a **fixed height**, where the
+ * two behave nothing alike. A document that stacks gets longer and a reader
+ * scrolls the page; a dock that stacks gets two half-height scrollers and
+ * there is no page. Driven to 880 px the chart kept three of its five rows,
+ * the scrub rail landed on the lanes, and the selected-step facts, the payload
+ * and the trace were all under a fold with no scrollbar to reach them — which
+ * is the surface the owner photographed and called a missing component.
+ *
+ * So the columns stay columns at every width, the detail column has a floor
+ * above, and the chart is what narrows. */
+
+/* ------------------------------------------------------------------ *
+ * The run chart — `memory-and-replay` 58 and 52.
+ *
+ * Ported from the design prototype the owner authored (`osg-replay.html`)
+ * rather than re-derived from it. That stylesheet defines no token of its
+ * own: every rule consumes one, so the port is a rename of each `--osg-*`
+ * to the `--color-*` role that already resolves to it. The class names
+ * are kept because the class names are the design.
+ *
+ * The bar vocabulary is semantic, and this is the whole of it:
+ *
+ *   model    solid ink          the node doing the expensive thing
+ *   tool     hollow, ink ring   no model time was spent here
+ *   mount    hatched            another document, not this one
+ *   refusal  accent fill        the one place the accent is spent
+ *   pending  reduced opacity    the playhead has not reached it
+ *
+ * Two shapes are deliberately *not* bars, and they carry `58`'s honesty
+ * rules: an unmeasured bar is a short dashed notch, never a rectangle of
+ * some invented width; an open-ended one runs to the edge and is cut off
+ * there with no closing border, because a bar with no end must not look
+ * like a bar with one.
+ * ------------------------------------------------------------------ */
+
+.rtl {
+  /* The prototype's name column, to the pixel. It is measured off a real
+     `.rtl__track` when seeking, never read back out of here — which is the
+     reason it can stay a stylesheet number at all. */
+  --rtl-name: 148px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  /* The chart fills the room the dock gives it and shrinks below its content,
+     so the scroller is the lanes rather than the whole panel. */
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* ---- transport ---- */
+
+.rtl__transport {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  flex: none;
+  padding-bottom: var(--space-1);
+}
+
+.rtl__transport button {
+  font: var(--type-label);
+  border-radius: var(--radius-sm);
+  border: var(--border-width-hairline) solid var(--color-border);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+}
+
+.rtl__transport button:hover {
+  background: var(--color-bg-hover);
+}
+
+.rtl__transport button[aria-pressed='true'] {
+  background: var(--color-bg-inverse);
+  color: var(--color-text-inverse);
+  border-color: var(--color-bg-inverse);
+}
+
+.rtl__speeds {
+  display: flex;
+  gap: 2px;
+}
+
+.rtl__speeds button {
+  min-width: 32px;
+  font-family: var(--font-mono);
+}
+
+.rtl__clock {
+  margin-inline-start: auto;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
+}
+
+.rtl__clock b {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+/* ---- the profile strip: only once the dock has been dragged taller ---- */
+
+.rtl__kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0;
+  flex: none;
+  border-block: var(--border-width-hairline) solid var(--color-border);
+}
+
+/* The first cell's leading edge is the panel's own inset, not a divider, so
+   it alone stays flush. Every cell after it opens *past* a line the previous
+   cell drew, so it needs the same inset that line already has on its
+   trailing side — otherwise the text sits on the line rather than beside it.
+   One rule, so a seventh KPI inherits it rather than needing its own index. */
+.rtl__kpi {
+  padding: var(--space-1) var(--space-2);
+  border-inline-end: var(--border-width-hairline) solid var(--color-border);
+}
+
+.rtl__kpi:first-child {
+  padding-inline-start: 0;
+}
+
+.rtl__kpi:last-child {
+  border-inline-end: 0;
+}
+
+.rtl__kpi dt {
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.rtl__kpi dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.rtl__kpi[data-accent] dd {
+  color: var(--color-status-error);
+}
+
+/* ---- the chart ---- */
+
+.rtl__main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.rtl__axis,
+.rtl__lane,
+.rtl__scrubrow {
+  display: grid;
+  grid-template-columns: var(--rtl-name) minmax(0, 1fr);
+  align-items: center;
+}
+
+/* 26px, the design's own — `memory-and-replay` 68. The axis is the half of
+   this chart a reader cannot supply by looking, and at 16px its labels sat on
+   the first lane's hairline. */
+.rtl__ticks {
+  position: relative;
+  height: 26px;
+}
+
+.rtl__tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-inline-start: var(--border-width-hairline) solid var(--color-border);
+  padding-inline-start: 3px;
+  font: var(--type-label);
+  font-family: var(--font-mono);
+  color: var(--color-text-quaternary);
+}
+
+/* Axis and lanes together, so the playhead is a rule down the chart rather
+   than a rule down the lanes' scroll content. */
+.rtl__chart {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+/* The lane block ends with its last row — `memory-and-replay` 68.
+ *
+ * It grew (`flex: 1 1 auto`) and so reserved the dock's whole remaining height
+ * for however many rows a run had: five rows at 23px sat at the top of a 128px
+ * box inside a 144px chart inside a 206px pane, and roughly two thirds of the
+ * surface was empty below the last one. It may still shrink and scroll — a run
+ * with more rows than fit is the case the scroller exists for — but a chart
+ * that grows past its content is a chart claiming room it has nothing to put
+ * in. */
+.rtl__lanes {
+  position: relative;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 0 1 auto;
+  touch-action: none;
+}
+
+/* 34px, and it is 9 + 16 + 9 — `memory-and-replay` 68.
+ *
+ * The three numbers are one number: a 16px bar on a 9px offset sits on the
+ * row's centre **by construction**, which is the single baseline the owner
+ * asked for. At 22/14/4 the name and the bar were centred against different
+ * boxes and read as two lines that nearly agree, and no offset fixes that at
+ * that height. */
+.rtl__lane {
+  border-block-end: var(--border-width-hairline) solid var(--color-border);
+  min-height: 34px;
+}
+
+/* Depth is drawn, not indented: the gutter is a `│` per level, printed in
+   the same subdued ink the design uses, so a name that has to be ellipsised
+   still says how far in it sits. An indent alone loses that at the first
+   long node name. */
+.rtl__gutter {
+  color: var(--color-text-quaternary);
+  white-space: pre;
+}
+
+.rtl__lane[data-depth]:not([data-depth='0']) .rtl__name {
+  color: var(--color-text-tertiary);
+}
+
+.rtl__name {
+  font: var(--type-caption);
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+  padding-inline-end: var(--space-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rtl__track {
+  position: relative;
+  height: 34px;
+  cursor: ew-resize;
+}
+
+.rtl__bar {
+  position: absolute;
+  top: 9px;
+  height: 16px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: var(--border-width-hairline) solid var(--color-text-primary);
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.rtl__bar > span {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-10);
+  line-height: 1;
+  padding: 0 4px;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+
+/* Solid ink: the node doing the expensive thing. */
+.rtl__bar[data-kind='model'] {
+  background: var(--color-text-primary);
+}
+
+.rtl__bar[data-kind='model'] > span {
+  color: var(--color-bg-surface);
+}
+
+/* Hatched: another document, not this one. */
+.rtl__bar[data-kind='mount'] {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-border-emphasis) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+/* The one place the accent is spent. */
+.rtl__bar[data-kind='refusal'] {
+  background: var(--color-status-error);
+  border-color: var(--color-status-error);
+}
+
+.rtl__bar[data-kind='refusal'] > span {
+  color: var(--color-primary-text);
+}
+
+/* The playhead has not reached it. */
+.rtl__bar[data-pending='true'] {
+  opacity: 0.28;
+}
+
+.rtl__bar[aria-pressed='true'] {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+/* A bar the run never timed. Not a rectangle of some invented width: a
+   short dashed notch, so the eye reads "nothing was measured here" rather
+   than "this was very fast". `108` settled the label; this is the shape. */
+.rtl__bar[data-unmeasured='true'] {
+  width: 12px;
+  border-style: dashed;
+  background: none;
+}
+
+.rtl__bar[data-unmeasured='true'] > span {
+  display: none;
+}
+
+/* An open-ended lane: the run never said it ended, so the strip runs to the
+   right edge and is cut off there. No closing border, no end, and a fade — a
+   lane with no end must not look like a lane with one, which is the shape
+   `memory-and-replay` 50 asked for and a caption could never supply. */
+.rtl__open {
+  position: absolute;
+  top: 6px;
+  height: 10px;
+  inset-inline-end: 0;
+  border-block-start: var(--border-width-hairline) dashed var(--color-text-quaternary);
+  background: repeating-linear-gradient(
+    90deg,
+    var(--color-text-quaternary) 0 3px,
+    transparent 3px 9px
+  );
+  mask-image: linear-gradient(90deg, #000 30%, transparent 100%);
+}
+
+/* A run that reported no clock at all has no axis, so its bars are laid
+   out in sequence with no widths — there is nothing to be in scale with. */
+.rtl__bar[data-flow='true'] {
+  position: relative;
+  inset-inline-start: auto;
+  margin-inline-end: 3px;
+}
+
+.rtl[data-unclocked] .rtl__track {
+  display: flex;
+  align-items: center;
+  cursor: default;
+}
+
+/* `54`'s `settled` frame, made visible: where the run said a child closed. */
+.rtl__mark {
+  position: absolute;
+  top: 2px;
+  height: 18px;
+  width: 2px;
+  background: var(--color-primary);
+}
+
+.rtl__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-status-error);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.rtl__scrubrow {
+  flex: none;
+  padding-top: 2px;
+}
+
+.rtl__scrublabel {
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.rtl__scrub {
+  position: relative;
+  height: 14px;
+  cursor: ew-resize;
+  background: var(--color-bg-surface-sunken);
+  touch-action: none;
+}
+
+.rtl__scrubfill {
+  position: absolute;
+  inset-block: 3px;
+  inset-inline-start: 0;
+  background: var(--color-border-emphasis);
+}
+
+.rtl__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  flex: none;
+  padding-top: var(--space-1);
+  font: var(--type-label);
+  color: var(--color-text-tertiary);
+}
+
+.rtl__legend i {
+  display: inline-block;
+  width: 18px;
+  height: 8px;
+  margin-inline-end: var(--space-1);
+  border: var(--border-width-hairline) solid var(--color-text-primary);
+  vertical-align: -1px;
+}
+
+.rtl__legend i[data-kind='model'] {
+  background: var(--color-text-primary);
+}
+
+.rtl__legend i[data-kind='mount'] {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-border-emphasis) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+.rtl__legend i[data-kind='refusal'] {
+  background: var(--color-status-error);
+  border-color: var(--color-status-error);
+}
+
+.rtl__legend i[data-kind='settled'] {
+  width: 3px;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.rtl__caveat {
+  margin: var(--space-1) 0 0;
+  flex: none;
+  font: var(--type-caption);
+  color: var(--color-text-quaternary);
+}
+
+/* ---- the selected bar, at the head of the detail pane ---- */
+
+.rtl__detail dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1px var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+
+.rtl__detail dl > div {
+  display: contents;
+}
+
+.rtl__detail dt {
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.rtl__detail dd {
+  margin: 0;
+  font: var(--type-caption);
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  word-break: break-word;
+}
+
+.rtl__why {
+  margin: 0 0 var(--space-2);
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rtl__bar {
+    transition: none;
+  }
+}
+
+/* ---- which run this is, and what it cost (`memory-and-replay` 61) ----
+   Two facts the run reported, in the header rather than in the profile strip:
+   the strip is derived from the fold and is gated on the dock being dragged
+   tall, and an identity you check once must be readable at every height. */
+
+.run-dock__thread,
+.run-dock__cost {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.run-dock__thread-label,
+.run-dock__cost-label {
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.run-dock__thread code,
+.run-dock__cost code {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--type-caption);
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+}
+
+/* ---- what the selected step asked and produced (`memory-and-replay` 59) ---- */
+
+.rtl__payload {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+}
+
+.rtl__payload h4 {
+  margin: 0;
+  font: var(--type-label);
+  letter-spacing: var(--letter-spacing-wider);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.rtl__payload-caption {
+  margin: var(--space-1) 0 0;
+  font: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+/* A quotation, not prose: whitespace is preserved and nothing is rendered as
+   Markdown, for the reason `toolResults` gives — a payload that reflows its
+   own asterisks has stopped being evidence. Bounded and scrollable rather
+   than clipped, so a long answer costs a scroll instead of the pane. */
+.rtl__payload-text {
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2);
+  max-height: 12em;
+  overflow: auto;
+  /* The logical spelling, which is what this file already writes two selectors
+     up (`border-inline-end`, `border-inline-start`) and what the bar layout
+     writes for its offsets. `memory-and-replay/62`: it was authored this way,
+     changed to `border-left` because the marker pin read a physical property
+     name while its message talked about the token, and restored once the pin
+     was asking about the token it is named for. */
+  border-inline-start: var(--border-width-marker) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  font: var(--type-caption);
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The way back out of a recording — `memory-and-replay` 73. Styled as the
+ * export control beside it rather than as a primary action: leaving a
+ * recording is a navigation, not a commitment, and nothing is spent either
+ * way. */
+.run-dock__back {
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font: var(--type-caption);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+}
+
+.run-dock__back:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}

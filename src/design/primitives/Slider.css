@@ -1,0 +1,105 @@
+/* ------------------------------------------------------------------ *
+ * Slider — a thin rail with a filled progress segment and a small
+ * circular thumb. Built on <input type="range"> so keyboard, ARIA and
+ * touch behaviour come from the platform; `--slider-fill` is set by the
+ * component from the current value.
+ * ------------------------------------------------------------------ */
+
+.slider {
+  --slider-track-height: 2px;
+  --slider-thumb-size: 12px;
+  --slider-fill: 0%;
+
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 18px;
+  touch-action: none;
+}
+
+/* Rail + fill are one painted background on a pseudo-element so there is
+ * no second box to keep in sync with the thumb. */
+.slider::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  height: var(--slider-track-height);
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    to right,
+    var(--accent-solid) 0 var(--slider-fill),
+    var(--color-border) var(--slider-fill) 100%
+  );
+}
+
+.slider__control {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  cursor: grab;
+}
+
+.slider__control:active {
+  cursor: grabbing;
+}
+
+.slider__control:disabled {
+  cursor: default;
+}
+
+/* ---------- Thumb ---------- */
+.slider__control::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  border: 1.5px solid var(--accent-solid);
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.slider__control::-moz-range-thumb {
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  border: 1.5px solid var(--accent-solid);
+}
+
+.slider__control:hover:not(:disabled)::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+
+.slider__control:active:not(:disabled)::-webkit-slider-thumb {
+  transform: scale(1.04);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-solid) 16%, transparent);
+}
+
+.slider__control:focus-visible {
+  outline: none;
+}
+
+.slider__control:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus-ring) 30%, transparent);
+}
+
+.slider__control:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus-ring) 30%, transparent);
+}
+
+/* Hide the native rails — ours is painted by ::before. */
+.slider__control::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.slider__control::-moz-range-track {
+  background: transparent;
+}
+
+.slider[data-disabled='true'] {
+  opacity: 0.5;
+}

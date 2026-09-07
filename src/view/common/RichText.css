@@ -1,0 +1,207 @@
+/* Model-authored Markdown (ticket 46). Scoped under .rich-text so these
+   rules can never leak into app chrome. Sized for panel widths. */
+
+.rich-text {
+  font-size: var(--font-size-13);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-primary);
+  overflow-wrap: break-word;
+}
+
+.rich-text > :first-child {
+  margin-top: 0;
+}
+
+.rich-text > :last-child {
+  margin-bottom: 0;
+}
+
+.rich-text p,
+.rich-text ul,
+.rich-text ol,
+.rich-text table,
+.rich-text pre,
+.rich-text blockquote {
+  margin: 0 0 var(--space-2);
+}
+
+.rich-text h1,
+.rich-text h2,
+.rich-text h3,
+.rich-text h4 {
+  margin: var(--space-3) 0 var(--space-1-5);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-semibold);
+}
+
+.rich-text h1 {
+  font-size: var(--font-size-16);
+}
+
+.rich-text h2 {
+  font-size: var(--font-size-14);
+}
+
+.rich-text ul,
+.rich-text ol {
+  padding-left: var(--space-4);
+}
+
+.rich-text code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-12);
+  background: var(--color-bg-muted);
+  border-radius: var(--radius-sm);
+  padding: var(--space-px) var(--space-1);
+}
+
+.rich-text pre {
+  background: var(--color-bg-muted);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-2-5);
+  overflow-x: auto;
+}
+
+.rich-text pre code {
+  background: none;
+  padding: 0;
+}
+
+/* Tables scroll inside their own box; the panel never scrolls sideways. */
+.rich-text table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: var(--font-size-12);
+}
+
+.rich-text th,
+.rich-text td {
+  border: var(--border-width-hairline) solid var(--color-border);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.rich-text th {
+  font-weight: var(--font-weight-semibold);
+  background: var(--color-bg-subtle);
+}
+
+.rich-text blockquote {
+  border-left: var(--border-width-marker) solid var(--color-border);
+  padding-left: var(--space-2-5);
+  color: var(--color-text-secondary);
+}
+
+.rich-text a {
+  color: var(--color-text-link);
+}
+
+/* ------------------------------------------------------------------ *
+ * `rich-text--narrow` — a table in ~200px (`stable-beta-public/15`).
+ *
+ * The rule above is right where it was written: a 700px inspector shows a
+ * wide table by scrolling it inside its own box. In a chat bubble (187px of
+ * content) it showed 187px of an 838px table and cut every cell mid-word, and
+ * in a node card the `.prose` rules squeezed a five-row table into 212px-tall
+ * rows — a nowrap label column 170px wide of a 216px card, the explanation
+ * beside it a thread. Same table, two containers, one cause: a grid needs a
+ * width neither surface has.
+ *
+ * So the narrow surfaces — the chat bubble and the node result, and the
+ * customer page's bubble, which restates these rules in its own `<style>` —
+ * set this modifier and get a table that stacks. Two columns become rows: the
+ * first cell is the label, the second the text, both with the container's full
+ * width. Three or more columns keep the scroller, because stacking a wide
+ * table with no per-cell header would print unlabelled lines — but with a
+ * floor under each column so it scrolls instead of crushing to 30px.
+ *
+ * **The class is written twice in every selector on purpose.** `.prose
+ * td:first-child` (typography.css) is two classes to one element; a single
+ * `.rich-text--narrow td` loses to it whatever the file order is, and file
+ * order between a bundled stylesheet and a component-imported one is not
+ * something this rule should depend on. Doubling the modifier makes the
+ * specificity a stated intention rather than a build-output accident.
+ * ------------------------------------------------------------------ */
+
+/* Nothing narrow is ever one clipped line. */
+.rich-text--narrow.rich-text--narrow th,
+.rich-text--narrow.rich-text--narrow td {
+  white-space: normal;
+  word-break: normal;
+}
+
+/* `.prose` gives the first column `width: 1%` because a generated table's
+   first column is nearly always an index. In 216px it is the defect. */
+.rich-text--narrow.rich-text--narrow td:first-child {
+  width: auto;
+  white-space: normal;
+}
+
+/* Two columns: stack. `:has` reads the column count off the markup, which is
+   the only place it is written — a markdown table declares no arity. */
+.rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) {
+  display: block;
+  width: 100%;
+  overflow-x: visible;
+  border: none;
+}
+
+.rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) thead {
+  display: none;
+}
+
+/* The customer page's own markdown renderer emits every row as `<td>` with no
+   `<thead>` at all, so the rule above finds nothing there and the header
+   stacked as a bare `Reason` / `Explanation` pair above the first row. A
+   markdown table always has a header row, so where there is no `<thead>` the
+   first row is it. Written here as well as there because the two stylesheets
+   say the same things by name (`stable-beta-public/15`). */
+.rich-text--narrow.rich-text--narrow
+  table:not(:has(tr > :nth-child(3))):not(:has(thead))
+  > tbody
+  > tr:first-child {
+  display: none;
+}
+
+.rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) tbody,
+.rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) tr {
+  display: block;
+  width: auto;
+}
+
+.rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) tr {
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  margin: 0 0 var(--space-1);
+}
+
+.rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) td {
+  display: block;
+  width: auto;
+  border: none;
+  padding: 0;
+  background: none;
+}
+
+.rich-text--narrow.rich-text--narrow table:not(:has(tr > :nth-child(3))) td:first-child {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* Three or more columns: still a grid, still scrolled, but no column is
+   allowed below a width a word fits in. `em`, not a spacing token — the floor
+   is about the cell's own text size, which is what no spacing token says. */
+.rich-text--narrow.rich-text--narrow table:has(tr > :nth-child(3)) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.rich-text--narrow.rich-text--narrow table:has(tr > :nth-child(3)) th,
+.rich-text--narrow.rich-text--narrow table:has(tr > :nth-child(3)) td {
+  min-width: 5em;
+}

@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "name": "Two Stage Double Loop",
+  "published": false,
+  "savedAt": "2026-08-15T00:00:00+00:00",
+  "document": {
+    "version": 3,
+    "name": "Two Stage Double Loop",
+    "settings": {
+      "purpose": "Two independent revision cycles in series: an engineer's changelog graded on accuracy, then a customer rewrite graded on readability."
+    },
+    "nodes": [
+      {
+        "id": "in1",
+        "type": "input.text",
+        "title": "Request",
+        "data": {},
+        "position": { "x": 40, "y": 220 }
+      },
+      {
+        "id": "draft1",
+        "type": "agent.llm",
+        "title": "Changelog",
+        "data": {
+          "systemPrompt": "Write one changelog entry for the change the user describes, for an engineering audience.\n\nExactly one line, in the form `- <verb in past tense> <what changed>`. Name the component and the observable behaviour. No version number, no issue id, no adjectives about quality.\n\nWhen you are given feedback on a previous attempt, treat it as the specification: fix exactly what it names and change nothing else."
+        },
+        "position": { "x": 340, "y": 220 }
+      },
+      {
+        "id": "grader1",
+        "type": "route.grader",
+        "title": "Accuracy review",
+        "data": {
+          "criteria": "- Exactly one line, starting with '- ' and a past-tense verb.\n- It names a component and an observable behaviour, not a feeling about the work.\n- No version numbers, no issue ids, no words like 'improved', 'better', 'seamless'.\n- If it falls short, say which of these rules it broke and how, specifically enough that the next attempt can fix it without guessing.",
+          "rulesMode": "extend",
+          "maxAttempts": 3
+        },
+        "position": { "x": 640, "y": 220 }
+      },
+      {
+        "id": "polish1",
+        "type": "agent.llm",
+        "title": "Customer rewrite",
+        "data": {
+          "systemPrompt": "You are given an engineering changelog line. Rewrite it for a customer who does not know the codebase.\n\nExactly two sentences. Sentence one says what the customer will notice. Sentence two says what they need to do, or says that they need to do nothing. Never name a class, file, module or internal component. Never use the word 'bug'.\n\nWhen you are given feedback on a previous attempt, treat it as the specification: fix exactly what it names and keep the rest."
+        },
+        "position": { "x": 940, "y": 220 }
+      },
+      {
+        "id": "grader2",
+        "type": "route.grader",
+        "title": "Readability review",
+        "data": {
+          "criteria": "- Exactly two sentences — count them.\n- No internal component, class, file or module name appears.\n- The word 'bug' does not appear.\n- The second sentence tells the reader what to do, or explicitly tells them nothing is needed.\n- If it falls short, name the rule it broke and the exact words that broke it.",
+          "rulesMode": "extend",
+          "maxAttempts": 3
+        },
+        "position": { "x": 1240, "y": 220 }
+      },
+      {
+        "id": "out1",
+        "type": "output.formatted",
+        "title": "Release note",
+        "data": {},
+        "position": { "x": 1540, "y": 220 }
+      }
+    ],
+    "edges": [
+      {
+        "source": { "nodeId": "in1", "portId": "text" },
+        "target": { "nodeId": "draft1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "draft1", "portId": "result" },
+        "target": { "nodeId": "grader1", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "revise" },
+        "target": { "nodeId": "draft1", "portId": "feedback" }
+      },
+      {
+        "source": { "nodeId": "grader1", "portId": "pass" },
+        "target": { "nodeId": "polish1", "portId": "prompt" }
+      },
+      {
+        "source": { "nodeId": "polish1", "portId": "result" },
+        "target": { "nodeId": "grader2", "portId": "candidate" }
+      },
+      {
+        "source": { "nodeId": "grader2", "portId": "revise" },
+        "target": { "nodeId": "polish1", "portId": "feedback" }
+      },
+      {
+        "source": { "nodeId": "grader2", "portId": "pass" },
+        "target": { "nodeId": "out1", "portId": "result" }
+      }
+    ]
+  }
+}

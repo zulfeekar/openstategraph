@@ -1,0 +1,85 @@
+{
+  "version": 3,
+  "name": "{{name}}",
+  "settings": {},
+  "nodes": [
+    { "id": "in1", "type": "input.text", "data": {}, "position": { "x": 40, "y": 260 } },
+    {
+      "id": "router1",
+      "type": "route.classifier",
+      "title": "Triage",
+      "data": {
+        "branches": [
+          { "id": "b-question", "name": "question" },
+          { "id": "b-smalltalk", "name": "smalltalk" }
+        ],
+        "fallback": "question",
+        "rules": "question: anything the user actually wants answered — facts, how-to, analysis, a request to do something.\nsmalltalk: greetings, thanks, goodbyes, and anything with no question in it."
+      },
+      "position": { "x": 340, "y": 260 }
+    },
+    {
+      "id": "agent1",
+      "type": "agent.llm",
+      "title": "Answerer",
+      "data": {
+        "systemPrompt": "Answer the user's question directly and completely. Say plainly when you do not know something rather than guessing."
+      },
+      "position": { "x": 700, "y": 140 }
+    },
+    {
+      "id": "grader1",
+      "type": "route.grader",
+      "title": "Quality gate",
+      "data": {
+        "criteria": "- The answer must address the question that was actually asked.\n- Every factual claim must carry a citation or be marked as uncertain — never invented.",
+        "rulesMode": "extend",
+        "maxAttempts": 2
+      },
+      "position": { "x": 1060, "y": 140 }
+    },
+    {
+      "id": "agent2",
+      "type": "agent.llm",
+      "title": "Greeter",
+      "data": {
+        "systemPrompt": "Reply in one short, friendly sentence, and invite the user to ask their question."
+      },
+      "position": { "x": 700, "y": 420 }
+    },
+    { "id": "out1", "type": "output.formatted", "title": "Answer", "data": {},
+      "position": { "x": 1420, "y": 140 } },
+    { "id": "out2", "type": "output.formatted", "title": "Greeting", "data": {},
+      "position": { "x": 1420, "y": 420 } }
+  ],
+  "edges": [
+    {
+      "source": { "nodeId": "in1", "portId": "text" },
+      "target": { "nodeId": "router1", "portId": "question" }
+    },
+    {
+      "source": { "nodeId": "router1", "portId": "branch:b-question" },
+      "target": { "nodeId": "agent1", "portId": "prompt" }
+    },
+    {
+      "source": { "nodeId": "router1", "portId": "branch:b-smalltalk" },
+      "target": { "nodeId": "agent2", "portId": "prompt" }
+    },
+    {
+      "source": { "nodeId": "agent1", "portId": "result" },
+      "target": { "nodeId": "grader1", "portId": "candidate" }
+    },
+    {
+      "source": { "nodeId": "grader1", "portId": "pass" },
+      "target": { "nodeId": "out1", "portId": "result" }
+    },
+    {
+      "source": { "nodeId": "grader1", "portId": "revise" },
+      "target": { "nodeId": "agent1", "portId": "feedback" }
+    },
+    {
+      "source": { "nodeId": "agent2", "portId": "result" },
+      "target": { "nodeId": "out2", "portId": "result" }
+    }
+  ]
+}
