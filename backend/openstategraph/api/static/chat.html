@@ -699,7 +699,7 @@ $("newconv").onclick = () => {
 // Minimal markdown: headings, bold, code fences, inline code, tables, lists.
 // Deliberately no raw HTML passthrough — everything is escaped first.
 function md(text) {
-  const esc = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const esc = (s) => s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
   const lines = esc(text).split("\n");
   let out = [], inCode = false, inTable = false, inList = false;
@@ -1650,7 +1650,7 @@ async function stream(path, body, el, signal) {
    * this flag is what turns that silence into an honest line instead of a
    * turn that just stops. */
   let ended = null;
-  const esc2 = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const esc2 = (s) => s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   // Whether Stop, right now, CANCELS the step in charge or merely walks away
   // from it (`async-first/07`). The server says so per node on every frame
   // that names an active one, because it is a property of the node and not of
@@ -2043,7 +2043,7 @@ function noteStopped(el, cancellable) {
   replyOf(el).appendChild(note);
   el.scrollIntoView({ block: "end" });
 }
-const esc = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const esc = (s) => s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 // The Architect's ephemeral-first contract (ticket 69): composing returns a
 // document; SAVING is a human act. When an answer carries a workflow JSON
