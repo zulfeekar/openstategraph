@@ -78,6 +78,15 @@ STRANGER_PATH_ENDS_AT = "## The CLI at a glance"
 #: exactly one question — *can I put my own UI on it?* — and the page's answer
 #: was a "Where to read next" row that went via the adoption page. A shorter
 #: page that never answers the question a reader came with is not cheaper.
+#: 263 → 278 on 2026-09-07 for the second film, and it is the cheapest fifteen
+#: lines on this page. § Two surfaces, one API told a reader that `/chat` is
+#: the customer-facing app and then described `POST /api/runs/stream` — so the
+#: sentence that matters most to somebody deciding whether to put this in front
+#: of their own users was a claim with nothing behind it. Eighteen seconds of
+#: the thing running is the evidence, and it sits in the section that makes the
+#: claim rather than in the pitch, where it would have been a second film
+#: nobody could tell apart from the first.
+#:
 #: 241 → 263 on 2026-09-07 for § The idea, and this budget is again the one
 #: that decides it. The section is the mapping a reader needs before any other
 #: sentence on the page means anything — canvas is a `StateGraph`, an Agent
@@ -93,7 +102,7 @@ STRANGER_PATH_ENDS_AT = "## The CLI at a glance"
 #: seconds answers "what is this" faster than any eleven lines of prose can,
 #: and the reader who watches it arrives at § Install already knowing what they
 #: are installing.
-STRANGER_PATH_CEILING = 263
+STRANGER_PATH_CEILING = 278
 
 #: The whole page. 829 lines on 2026-09-05 before `docs-onramp/01`, 305 after.
 #: The budget above the recorded figure is small on purpose — the failure this
@@ -108,6 +117,9 @@ STRANGER_PATH_CEILING = 263
 #: that is stated rather than dressed up: this is a straight raise, and the
 #: next section that wants one has to make its own case here.
 #:
+#: 389 → 404 on 2026-09-07, the same fifteen lines of the second film passing
+#: through both budgets. The argument is made at `STRANGER_PATH_CEILING`.
+#:
 #: 367 → 389 on 2026-09-07, the same twenty-two lines of § The idea passing
 #: through both budgets because they sit inside the stranger's path. The
 #: argument is made at `STRANGER_PATH_CEILING`; it is not made twice here.
@@ -120,7 +132,7 @@ STRANGER_PATH_CEILING = 263
 #: the section order below is untouched: the film belongs to the pitch, not
 #: between the pitch and the first command. The next raise still has to argue
 #: for itself; "the last one was allowed" is not the argument.
-LINE_CEILING = 389
+LINE_CEILING = 404
 
 #: In order, from the top. A prefix, not the full list.
 OPENING_SECTIONS = (

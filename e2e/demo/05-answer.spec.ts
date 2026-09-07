@@ -10,7 +10,7 @@ import { defineScene, beat, hideInspector, reachAndClick } from './support/scene
  * Everything before `cut()` is setup the viewer should not watch, and the film
  * joins at the send.
  */
-const { test, expect, cut } = defineScene({ order: '05', name: 'answer', speed: 1 });
+const { test, expect, cut } = defineScene({ film: 'demo', order: '05', name: 'answer', speed: 1 });
 
 const QUESTION = 'How many customers are in the database?';
 

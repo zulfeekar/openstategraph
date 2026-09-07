@@ -1,7 +1,7 @@
 import { defineScene, beat, hideInspector, reachAndClick } from './support/scene';
 
 /** Scene 3 — a real package opens. Fourteen nodes, nineteen links, no setup. */
-const { test, expect } = defineScene({ order: '03', name: 'open', speed: 2 });
+const { test, expect } = defineScene({ film: 'demo', order: '03', name: 'open', speed: 2 });
 
 test('opening a package draws the whole workflow', async ({ stage: page }) => {
   await page.goto('/');

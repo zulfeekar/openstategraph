@@ -37,8 +37,10 @@ workflow.graph          # a langgraph CompiledStateGraph. Yours now.
 
 https://github.com/user-attachments/assets/ad5d9a2a-3853-45ff-9905-a814e2991abd
 
-Forty seconds: a workflow built in one drag, a live question answered off a SQL
-database, the run timeline of every superstep, and a patrol reading the run back.
+**The editor, at `/`.** Forty seconds: a workflow built in one drag, a live
+question answered off a SQL database, the run timeline of every superstep, and
+a patrol reading that run back. The other surface — the one your customer sees
+— is [further down](#two-surfaces-one-api).
 
 ---
 
@@ -209,6 +211,19 @@ card. Every verb is also an MCP tool. Full page:
 editor** — where a developer draws the workflow. **`/chat` is the
 customer-facing app** — small on purpose: a customer types a question and reads
 the answer.
+
+<!-- The second film. Same mechanism as the one in the pitch: a bare URL on its
+     own line, hosted on GitHub's CDN rather than in this repository. It is a
+     separate film rather than a seventh scene of the first because the two
+     answer different questions, and a reader who came for this one should not
+     have to sit through forty seconds of node editing to reach it. -->
+
+https://github.com/user-attachments/assets/61f14dca-3a46-4bc3-85b0-07bc7dbe8daf
+
+**The customer-facing app, at `/chat`.** Eighteen seconds, real time: a question
+with no workflow named, the router picking one, the flow drawing itself while it
+runs, and the answer with the SQL behind it. No node, no port, no superstep
+appears on screen.
 
 Neither is privileged. Both are ordinary clients of the API at `/api`, and so
 is anything you write. The call you want is **`POST /api/runs/stream`**: it

@@ -1,7 +1,7 @@
 import { defineScene, beat, hideInspector } from './support/scene';
 
 /** Scene 1 — the left pane. What this thing is made of, in ten seconds. */
-const { test, expect } = defineScene({ order: '01', name: 'tour', speed: 3 });
+const { test, expect } = defineScene({ film: 'demo', order: '01', name: 'tour', speed: 3 });
 
 test('the palette scrolls through packages, tools and node families', async ({
   stage: page,

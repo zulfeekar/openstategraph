@@ -1,7 +1,9 @@
-# The product film
+# The product films
 
-Five scenes, recorded from the real editor against a real run, then stitched
-into one file for the landing page.
+Two films, recorded from the real editor and the real customer app against real
+runs. They are separate on purpose: `demo` is for somebody deciding whether to
+build with this, `chat` is for somebody deciding what their own customer would
+get. One stitched film answers both badly.
 
 ## Record
 
@@ -21,11 +23,15 @@ Record one scene again after a change:
 
     ./scripts/demo/stitch.sh
 
-The script reads `demo-out/scenes/`, applies the speed in each file name, joins
-the scenes, and writes `demo-out/demo.mp4`, `demo-out/demo.webm`,
-`demo-out/poster.jpg` and `demo-out/chapters.md`.
+For each directory under `demo-out/scenes/`, the script applies the speed in
+each file name, joins that film's scenes, and writes `<film>.mp4`,
+`<film>.webm`, `<film>-poster.jpg` and `<film>-chapters.md`.
 
 ## The scenes
+
+A scene declares its film and lands in `demo-out/scenes/<film>/`. Every
+directory found there becomes a film, so adding a third is a spec rather than
+an edit to the stitch script.
 
 | File | Speed | Shows |
 | --- | --- | --- |
@@ -35,6 +41,7 @@ the scenes, and writes `demo-out/demo.mp4`, `demo-out/demo.webm`,
 | `04-ask` | 2x | The chat takes a typed question |
 | `05-answer` | 1x | The live answer, then the run timeline |
 | `06-patrol` | 1.5x | A patrol reads that run back and files real cards |
+| `07-chat` | 1x | **film `chat`** — the same question from `/chat`, the surface a customer sees. Real time: eighteen seconds, and every one of them is the thing being sold |
 
 Scene 6 depends on scene 5. A patrol reads recorded runs, so there has to be
 one. The findings in the film are real and come from the run scene 5 makes.
@@ -53,7 +60,8 @@ Copy the three output files into `site/media/` and paste
 
     mkdir -p site/media
     cp demo-out/demo.mp4 demo-out/demo.webm site/media/
-    cp demo-out/poster.jpg site/media/demo-poster.jpg
+    cp demo-out/chat.mp4 demo-out/chat.webm site/media/
+    cp demo-out/demo-poster.jpg demo-out/chat-poster.jpg site/media/
 
 The chapter times in `embed.html` come from `demo-out/chapters.md`. Update them
 when a scene changes length.
