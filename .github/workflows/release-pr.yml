@@ -47,15 +47,54 @@ jobs:
       - name: Bump the version and date the changelog
         run: python scripts/prepare_release.py "${{ inputs.version }}"
 
-      - name: Read the release notes back
-        id: notes
+      - name: Write the PR body to a file
+        # Not a `body:` string and not `$GITHUB_OUTPUT` either — both route the
+        # whole changelog section through a YAML expression, which becomes one
+        # environment variable handed to every process `create-pull-request`
+        # spawns. That variable is the release notes for whatever accumulated
+        # in `## Unreleased`, and nothing here caps its size: v0.3.0's section
+        # measured 190 KB, 2,886 lines, and the action's underlying `node`
+        # process failed to start at all — "Argument list too long", a plain
+        # OS `E2BIG` on the combined environment, not a GitHub Actions limit
+        # and not this workflow's syntax. A file has no such ceiling.
         run: |
           set -euo pipefail
+          body_file="$RUNNER_TEMP/release-pr-body.md"
+          # The heredoc is indented to match the surrounding YAML, for the
+          # same reason every other step here is — but a heredoc preserves
+          # leading whitespace literally, and four or more leading spaces is
+          # GitHub's own rule for "this is a code block". Left as typed, the
+          # whole PR body would render as one unreadable block. The `sed`
+          # below strips exactly the ten spaces this file's own indentation
+          # puts there — verified against the actual generated file, not
+          # assumed from counting columns by eye.
           {
-            echo 'body<<CHANGELOG_EOF'
+            cat <<'HEADER'
+          Merging this pull request starts the release train for
+          **v${{ inputs.version }}**. It does not publish anything by itself.
+
+          What happens on merge (`.github/workflows/release.yml`):
+
+          1. the tag `v${{ inputs.version }}` is created from the merge commit;
+          2. the wheel and sdist are built and `twine check`ed;
+          3. they are uploaded to **TestPyPI**;
+          4. a **rehearsal** installs `openstategraph==${{ inputs.version }}`
+             *from TestPyPI* into an empty venv outside any checkout and drives
+             the real CLI and `load_workflow`;
+          5. only if that passes does the PyPI publish job start — and it waits
+             on the `pypi` environment for a **human approval**.
+
+          Before merging, check that the two edits below are the only ones, and
+          that the notes read the way you want them to on the PyPI page.
+
+          <details><summary>Release notes for v${{ inputs.version }}</summary>
+
+          HEADER
             python scripts/changelog_section.py "${{ inputs.version }}"
-            echo 'CHANGELOG_EOF'
-          } >> "$GITHUB_OUTPUT"
+            printf '\n</details>\n'
+          } | sed 's/^          //' > "$body_file"
+          echo "body_file=$body_file" >> "$GITHUB_OUTPUT"
+        id: notes
 
       - uses: peter-evans/create-pull-request@v7
         with:
@@ -63,26 +102,4 @@ jobs:
           title: "chore: release v${{ inputs.version }}"
           commit-message: "chore: release v${{ inputs.version }}"
           labels: release
-          body: |
-            Merging this pull request starts the release train for
-            **v${{ inputs.version }}**. It does not publish anything by itself.
-
-            What happens on merge (`.github/workflows/release.yml`):
-
-            1. the tag `v${{ inputs.version }}` is created from the merge commit;
-            2. the wheel and sdist are built and `twine check`ed;
-            3. they are uploaded to **TestPyPI**;
-            4. a **rehearsal** installs `openstategraph==${{ inputs.version }}`
-               *from TestPyPI* into an empty venv outside any checkout and drives
-               the real CLI and `load_workflow`;
-            5. only if that passes does the PyPI publish job start — and it waits
-               on the `pypi` environment for a **human approval**.
-
-            Before merging, check that the two edits below are the only ones, and
-            that the notes read the way you want them to on the PyPI page.
-
-            <details><summary>Release notes for v${{ inputs.version }}</summary>
-
-            ${{ steps.notes.outputs.body }}
-
-            </details>
+          body-path: ${{ steps.notes.outputs.body_file }}
