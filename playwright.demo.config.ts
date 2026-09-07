@@ -48,7 +48,8 @@ export default defineConfig({
       OLLAMA_ENDPOINT: '',
       OPENSTATEGRAPH_KANBAN_URL: '',
       OPENSTATEGRAPH_STATE_DIR: '/private/tmp/osg-demo-state',
-      OPENSTATEGRAPH_WORKFLOWS_ROOT: `${process.cwd()}/workflows`,
+      // A copy, never the tracked tree. `globalSetup` says why.
+      OPENSTATEGRAPH_WORKFLOWS_ROOT: '/private/tmp/osg-demo-workflows',
     },
   },
   outputDir: 'demo-out/raw',
