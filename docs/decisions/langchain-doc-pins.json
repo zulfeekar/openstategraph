@@ -82,12 +82,12 @@
     },
     "/oss/python/deepagents/rag.mdx": {
       "sweep_group": 1,
-      "bytes": 60264,
+      "bytes": 60283,
       "first_heading": "# Retrieval Augmented Generation (RAG) with Deep Agents",
-      "read": "2026-08-31",
+      "read": "2026-09-07",
       "verdict_section": "### `/oss/python/deepagents/rag.mdx`",
       "pinned": true,
-      "note": "a different file from /oss/python/deepagents/retrieval.mdx, which ticket 36 sweeps. watch 2026-08-31: +88 bytes vs the verdicted 60176; the four-pattern list, the rubric beta note and the offload mechanism all still read as verdicted, so no verdict moved. See special-agents-2026-08.md ## Watch - 2026-08-31"
+      "note": "a different file from /oss/python/deepagents/retrieval.mdx, which ticket 36 sweeps. watch 2026-08-31: +88 bytes vs the verdicted 60176; the four-pattern list, the rubric beta note and the offload mechanism all still read as verdicted, so no verdict moved. See special-agents-2026-08.md ## Watch - 2026-08-31. watch 2026-09-07: +19 bytes vs 60264; heading stable, section list identical, rubric note unmoved - prose editing, no verdict moved. Second consecutive small positive drift on this page; a third is worth a closer read than a section-list comparison"
     },
     "/oss/python/deepagents/async-subagents.mdx": {
       "sweep_group": 1,
@@ -217,11 +217,12 @@
 
     "/oss/python/langgraph/graph-api.mdx": {
       "sweep_group": 4,
-      "bytes": 52181,
+      "bytes": 58424,
       "first_heading": "# Graph API overview",
-      "read": "2026-08-14",
+      "read": "2026-09-07",
       "verdict_section": "### `/oss/python/langgraph/graph-api.mdx`",
-      "pinned": true
+      "pinned": true,
+      "note": "watch 2026-09-07: 52181 -> 58424 bytes (+6243). Two new sections, `### Untracked values` (UntrackedValue - a state field excluded from the checkpoint, with a `guard` flag for same-superstep multiple writers) and `### Type utilities` (GraphNode and siblings). Verdict unmoved: a kind of state channel is the same category as a reducer, which this map already routes to config, and neither section constructs a graph shape, a port or a node class. Both are TypeScript-only on this Python path - no Python code block on the page imports UntrackedValue - so the page does not establish the capability exists in Python and no verdict may be built on it from here. See special-agents-2026-08.md ## Watch - 2026-09-07"
     },
     "/oss/python/langgraph/functional-api.mdx": {
       "sweep_group": 4,
@@ -259,12 +260,12 @@
     },
     "/oss/python/langgraph/sql-agent.mdx": {
       "sweep_group": 4,
-      "bytes": 10672,
-      "first_heading": "In this tutorial we will build a custom agent that can answer questions about a SQL database using LangGraph.",
-      "read": "2026-08-31",
+      "bytes": 35319,
+      "first_heading": "# Build a custom SQL agent",
+      "read": "2026-09-07",
       "verdict_section": "### `/oss/python/langgraph/sql-agent.mdx`",
       "pinned": true,
-      "note": "watch 2026-08-31: 35319 -> 10672 bytes, and the first line is no longer an H1 - the served document now begins at the intro paragraph and stops after \"## 1. Select an LLM\". Every mechanism the verdict cites (the predetermined tool call, should_continue, interrupt with accept/edit/response) is absent from what the MCP serves, so the verdict can no longer be re-checked against its own source. first_heading records what head -1 actually returns, which is not a heading; that is the honest value under the scheme, not a transcription slip. Ticket organisms-first-class/92. Earlier: watch 2026-08-27 saw -10 bytes vs the verdicted 35329"
+      "note": "watch 2026-09-07: back to 35319 bytes and the H1 is restored - byte-exact to the value the 2026-08-27 watch recorded, with sections 1-6 and StateGraph/should_continue/interrupt all present again, so the verdict is re-checkable against its own source and ticket 27's accept/edit/response citation resolves. A byte-exact return to a previously observed value is not an upstream edit; that is evidence for the serving-artifact reading, but it is MCP-side evidence, which is the one thing ticket 92's Done-when ruled out - the fetch outside the MCP was never performed. Earlier: watch 2026-08-31: 35319 -> 10672 bytes, and the first line was no longer an H1 - the served document now begins at the intro paragraph and stops after \"## 1. Select an LLM\". Every mechanism the verdict cites (the predetermined tool call, should_continue, interrupt with accept/edit/response) is absent from what the MCP serves, so the verdict can no longer be re-checked against its own source. first_heading records what head -1 actually returns, which is not a heading; that is the honest value under the scheme, not a transcription slip. Ticket organisms-first-class/92. Earlier: watch 2026-08-27 saw -10 bytes vs the verdicted 35329"
     },
     "/oss/python/langgraph/thinking-in-langgraph.mdx": {
       "sweep_group": 4,

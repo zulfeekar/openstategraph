@@ -1812,3 +1812,105 @@ swept page". That is now false for one pinned path, and the pin records what
 manifest that quietly keeps the old heading would report this page as
 byte-changed and heading-stable, which is a smaller event than the one that
 happened. Ticket 92 carries whether the scheme should say so in words.
+
+---
+
+## Watch — 2026-09-07
+
+Third run of the weekly watcher. All 31 `"pinned": true` paths in
+`langchain-doc-pins.json` refetched via the docs-langchain MCP
+(`wc -c` + `head -1`); all 3 `version_pins` re-checked against current doc text.
+Three paths moved; the other 28 reproduced their recorded bytes and first line
+exactly.
+
+- `/oss/python/deepagents/rag.mdx` — **changed**: 60264 → 60283 bytes (+19). Heading unchanged.
+- `/oss/python/langgraph/graph-api.mdx` — **changed**: 52181 → 58424 bytes (+6243). Heading unchanged.
+- `/oss/python/langgraph/sql-agent.mdx` — **changed**: 10672 → 35319 bytes (+24,647). **The H1 is back**: `# Build a custom SQL agent`.
+- `version_pins.stream_events_version` ("v3") — no drift; both event-streaming pages still pass `version="v3"` at every call site (8 in the deepagents page, 13 in the langgraph one, and no other version string appears).
+- `version_pins.deepagents_async_subagents` ("0.5.0 (preview)") — no drift; the page still reads "Async subagents are a preview feature available in `deepagents` 0.5.0."
+- `version_pins.deepagents_rag_rubric` (">=0.6.5 (beta)") — no drift; `rag.mdx` still reads "Grading rubrics require `deepagents>=0.6.5` and are currently in beta."
+
+**`/oss/python/langgraph/sql-agent.mdx` came back, and it came back at the exact
+byte it left from.** 35,319 — not near it, *it*: the same number the 2026-08-27
+watch recorded, before last week's collapse to 10,672. The H1 is restored, the
+section list runs `## 1. Select an LLM` through `## 6. Implement human-in-the-loop
+review` to `## Next steps`, and the three mechanisms whose absence made last
+week's event verdict-relevant are all present again — `StateGraph` ×3,
+`should_continue` ×4, `interrupt` ×16.
+
+Ticket 92 asked exactly one question — *did the page shrink, or did the MCP start
+serving one chunk of it?* — and warned in the same breath about "a next watch
+reporting a 'restoration' that is nothing of the kind". So the claim is made
+narrowly. **A byte-exact return to a previously observed value is not an upstream
+edit.** An editor who deleted 70% of a tutorial and restored it a week later
+would have to land on the same count to the byte, having touched nothing else in
+between; the MCP serving a whole document where it had served one chunk lands
+there by construction. That is evidence for the serving-artifact reading, and it
+is the reading the ticket's own shape argument already favoured — but it is
+still MCP-side evidence, which is the one thing that ticket's "Done when" ruled
+out. Recorded here, dated, for whoever holds it: the check the ticket asked for
+(a fetch outside the MCP) was never performed and this run did not perform it
+either. What has changed is that it is no longer urgent — the verdict on this
+path is re-checkable against its own source again, which is what the pins
+manifest exists for. Ticket 27's `accept` / `edit` / `response` citation
+resolves once more.
+
+The pin therefore records **35,319 and the H1** with `read: 2026-09-07` — which
+also restores `_about.fingerprint.first_heading`'s claim that the first line is
+an H1 on every pinned path. That claim is true again by luck rather than by
+design, so ticket 92's second finding is untouched by this run: a scheme should
+describe what it measures.
+
+**`/oss/python/langgraph/graph-api.mdx` (+6243) — the verdict stands, and here
+is what arrived.** Two sections that no group-4 research note mentions and that
+the verdict section does not describe: **`### Untracked values`** and **`###
+Type utilities`**. `UntrackedValue` is a state field that exists during
+execution and is **excluded from the checkpoint** — reset or unavailable on
+resume, for database connections, rebuildable caches and large objects — with a
+`guard` flag that defaults to throwing when two nodes write it in the same
+super-step and, at `guard: false`, keeps the last write. `Type utilities`
+(`GraphNode` and siblings) is typing sugar for node functions declared outside
+the builder.
+
+Judged against this path's verdict — **config**, with `Command(graph=Command.
+PARENT)` the one flagged mechanism candidate — **neither moves it.**
+`UntrackedValue` is a *kind of state channel*, which is the same category as a
+reducer, and this map already routes that category to config; its `guard` is
+the multiple-writer question `CLAUDE.md` answers with "a state key more than one
+node type can write needs a named reducer", answered a second way rather than a
+new way. It constructs no graph shape, needs no port, needs no node class. No
+ticket filed.
+
+**One thing about those two sections is worth writing down rather than
+swallowing.** Both are **TypeScript-only on a Python path** — every example
+imports from `@langchain/langgraph` and builds a `StateSchema` with `zod`, and
+`UntrackedValue` appears nowhere in a Python code block on this page (the only
+`langgraph.managed` imports here are the pre-existing `RemainingSteps` ones).
+So this page does not establish that `UntrackedValue` exists in Python at all,
+and no verdict may be built on it from here. That is the reason no ticket
+carries it: a ticket asserting a Python capability on TypeScript-only evidence
+would be the invented fact this document's first rule forbids. Someone wanting
+that capability on the canvas — it is ticket 34's ground, beside `cache_policy`
+and `RemainingSteps` — starts by confirming the Python API exists.
+
+The rest of the page re-read as verdicted: `recursion_limit` still a standalone
+`config` key that must not go inside `configurable`, still counting super-steps,
+still with the same version-gated default the verdict recorded; `RemainingSteps`
+still the proactive guard; `Runtime` still carrying `stream_writer`,
+`heartbeat` and `control`; node caching still present. Nothing touched ports,
+edges, middleware order, or the runtime/framework/harness taxonomy.
+
+**`/oss/python/deepagents/rag.mdx` (+19) — no verdict moved.** Nineteen bytes,
+heading stable, section list identical to the one the 2026-08-31 watch re-read
+(the four patterns, `## Delegation strategy`, `## Synthesis`), and the rubric
+note still reads `deepagents>=0.6.5` and beta at the same line. Prose editing.
+This is the second consecutive watch to report a small positive drift on this
+page and the second to find nothing structural in it; a third would be worth a
+closer read than a section-list comparison.
+
+**The 2026-08-27 five-file coincidence stays open and gained nothing.** None of
+the five SQL-provider-setup pages moved this week — `langchain/sql-agent.mdx`
+holds at 40,476, and the three multi-agent walkthroughs at their recorded bytes.
+`langgraph/sql-agent.mdx` is the one member that did move, and it moved by
+returning to the value that watch itself recorded, which is not a second edit
+stacked on the family.
