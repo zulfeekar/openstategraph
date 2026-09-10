@@ -286,6 +286,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.detect.outputs.version }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           python scripts/changelog_section.py "$VERSION" > /tmp/notes.md
@@ -295,7 +296,36 @@ jobs:
             echo
             echo "Install: \`pip install openstategraph==$VERSION\`"
             echo "· [PyPI](https://pypi.org/project/openstategraph/$VERSION/)"
-            echo "· [full changelog](https://github.com/${{ github.repository }}/blob/v$VERSION/CHANGELOG.md)"
+            echo "· [full changelog](https://github.com/$REPO/blob/v$VERSION/CHANGELOG.md)"
           } >> /tmp/notes.md
+          # GitHub refuses a release body over 125,000 characters, flatly, with
+          # no truncation of its own — unlike a PR body, which it silently cuts
+          # mid-word. `v0.3.0` measured 190,942 here and the API call failed
+          # outright, discovered only by running this job by hand once the
+          # automated `pypi` job had already published the version by the time
+          # `public` caught up. A changelog section this size is not a one-off:
+          # it accumulates between cuts, exactly as `CLAUDE.md`'s own argument
+          # for keeping it prose says it should, and a version with a long list
+          # of changes (a first release, a major bump) will do this again.
+          # Below the limit, the notes travel in full, as they always have; at
+          # or over it, the release carries a summary and the same link every
+          # version already gets — never a silent, mid-sentence cut.
+          if [ "$(wc -c < /tmp/notes.md)" -ge 120000 ]; then
+            {
+              echo "The release notes for v$VERSION are long enough that GitHub"
+              echo "refuses to store them here (they exceed its 125,000-character"
+              echo "limit on a release body). Read them in the changelog itself:"
+              echo
+              # No anchor fragment: guessing GitHub's heading-slug format, or
+              # using today's date instead of the section's own dated heading,
+              # is exactly the kind of claim that looks right once and is wrong
+              # the next time nobody is looking. The plain file link always
+              # resolves; the reader finds "## $VERSION" themselves.
+              echo "[CHANGELOG.md](https://github.com/$REPO/blob/v$VERSION/CHANGELOG.md)"
+              echo
+              echo "Install: \`pip install openstategraph==$VERSION\`"
+              echo "· [PyPI](https://pypi.org/project/openstategraph/$VERSION/)"
+            } > /tmp/notes.md
+          fi
           gh release create "v$VERSION" dist/* \
             --title "v$VERSION" --notes-file /tmp/notes.md
