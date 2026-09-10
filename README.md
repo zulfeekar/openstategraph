@@ -5,7 +5,7 @@
 <!-- The `../../` here is GitHub's own convention: it resolves against the repository root on github.com, so the badge survives a rename — a local link checker will call it broken and be wrong (stable-beta-public/33). -->
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.0rc18-informational.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-informational.svg)](CHANGELOG.md)
 
 > **Who this page is for:** you have installed nothing yet, and you want the
 > stack running. Read straight down — Install, First run, Where to read next —
@@ -50,7 +50,7 @@ a patrol reading that run back. The other surface — the one your customer sees
 globally, and point it at any project. You need **Python 3.11+**.
 
 ```bash
-uv tool install "openstategraph[server,ollama]==0.3.0rc18"
+uv tool install "openstategraph[server,ollama]"
 ```
 
 Swap `ollama` for `anthropic`, `openai` or `azure` — the extra names the vendor
@@ -62,12 +62,10 @@ not on your `PATH`: run `uv tool update-shell` and open a new terminal.
 404, the package came from TestPyPI, and the line above carried three flags
 that were the cost of that detour. It is published now, so they are gone.
 
-**The version is still named in full, and that is the one thing left to
-explain.** `0.3.0rc18` is a *pre-release*, and pip and `uv` exclude
-pre-releases from an unpinned requirement — so `uv tool install
-"openstategraph[server,ollama]"` with no `==` resolves nothing at all, which
-reads like a missing package rather than a skipped candidate. The `==` is what
-makes it resolve; the day a final release lands, it stops being necessary.
+**Nothing to pin, either.** `0.3.0` is the first final release this project
+has cut, so an unpinned install resolves it — pip and `uv` only exclude
+pre-releases from an unpinned requirement, and there is no longer one to
+exclude. Name a version only if you want an older one held in place.
 [Releasing](docs/releasing.md) says how a version gets here, and carries the
 TestPyPI rehearsal form for maintainers.
 

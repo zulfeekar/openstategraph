@@ -32,10 +32,10 @@ this page was written then. Today the backend is a distribution: one wheel, a
 four-dependency core, a set of named extras, `py.typed`, and an `openstategraph`
 console script — verified by a CI job that installs it into an empty virtualenv
 outside the checkout and runs a workflow there. Mode (b) is a first-class path;
-and the **PyPI** upload has happened: `0.3.0rc18` is on PyPI, published by
-hand, because the release train's publish job skips a pre-release by design
-(`releasing.md`, *A release candidate reaches PyPI by hand*). What is still
-outstanding is a **final** release through that gate.
+and the **PyPI** upload has happened: `0.3.0`, this project's first final
+release, is on PyPI — published by hand, because the release train's own
+`pypi` job has never run (`releasing.md` says why). What is still outstanding
+is that job itself firing on a release, not a final version existing.
 
 ---
 
@@ -47,19 +47,17 @@ canvas existed only for people who cloned the repository or ran Docker. The
 built editor now ships as package data.
 
 ```bash
-pip install "openstategraph[server,ollama]==0.3.0rc18"
+pip install "openstategraph[server,ollama]"
 openstategraph init my_demo && cd my_demo
 openstategraph serve --open
 ```
 
-> **The `==` is the only thing left in that line that needs explaining.** It
-> installs from PyPI, with no index flags — until `0.3.0rc18` it could not, and
-> this note said so. The pin is there because the shipped version is a
-> pre-release and pip excludes those from an unpinned requirement, so
-> `pip install "openstategraph[server,ollama]"` resolves nothing and reports it
-> as a package it cannot find. When a final release exists, the pin goes.
-> Building the same artifact from a checkout is still the path for changes that
-> have not shipped: the recipe is in
+> **No index flags, and nothing to pin.** It installs from PyPI — until
+> `0.3.0rc18` it could not, and this note said so. `0.3.0` is the first final
+> release this project has cut, so the plain unpinned line resolves; name a
+> version only if you want an older one held in place. Building the same
+> artifact from a checkout is still the path for changes that have not
+> shipped: the recipe is in
 > [Be honest about the install](#be-honest-about-the-install) below.
 
 That is one process serving the whole product from **one origin**:

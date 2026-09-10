@@ -153,7 +153,15 @@ class TestTheReadmeSaysWhyBeforeItAsks:
         "once published", because the package was on no index a reader could
         reach; it is "final release" now, because the package is on PyPI and
         the only thing still missing is a version without an `rc` in it.
+
+        Guarded the same way `test_a_final_release_drops_the_pin` is: once
+        `0.3.0` ships there is no pre-release left to explain, and demanding
+        "final release" in an unpinned line that final release itself made
+        correct would be requiring a page to explain a problem it no longer
+        has.
         """
+        if not is_prerelease(version()):
+            return
         text = BACKEND_README.read_text()
         offenders = [
             f"{number}: {line.strip()}"
@@ -175,11 +183,17 @@ class TestTheReadmeSaysWhyBeforeItAsks:
         so requiring the claim would be requiring a false one — the page still
         owes a reader the reason its command is not the plain two words, and
         the reason is now the pre-release.
+
+        Same guard as its sibling above: once there is no pre-release, keeping
+        the word "pre-release" in the page to satisfy this assertion would be
+        writing a false explanation for a problem the page no longer has.
         """
         text = BACKEND_README.read_text()
         assert "not on PyPI" not in text, (
             "this distribution is on PyPI; the page still says otherwise"
         )
+        if not is_prerelease(version()):
+            return
         assert "pre-release" in text, (
             "the pin is the pre-release's cost and the page never says so"
         )

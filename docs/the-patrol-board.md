@@ -355,15 +355,16 @@ repairing one extra drops the rest — which is how a team-board install lost
 editor that uses the team board that line is six extras, not one:
 
 ```bash
-uv tool install --force 'openstategraph[mcp,mssql,ollama,postgres,server,sqlite]==0.3.0rc18'
+uv tool install --force 'openstategraph[mcp,mssql,ollama,postgres,server,sqlite]==0.3.0'
 ```
 
-The version is named in full for the reason the front page gives: the shipped
-version is a pre-release, and `uv` excludes those from an unpinned requirement,
-so the same line without `==` resolves nothing and reads like a missing
-package. It names no index, and did not need to even before `0.3.0rc18` put
-this distribution on PyPI — which is exactly why this line was quietly wrong
-until then, and why the sentence that follows is the real instruction.
+The version is named in full because `--force` is a repair aimed at one
+installation's own drift, and a repair should not also change what version
+that installation lands on — a bare re-run of this line stays reproducible
+regardless of what has since shipped. It names no index, and did not need to
+even before `0.3.0rc18` put this distribution on PyPI — which is exactly why
+this line was quietly wrong until then, and why the sentence that follows is
+the real instruction.
 
 The product composes the same line for your installation, with your extras and
 your version already in it, and prints it in the refusal — so the reliable move
