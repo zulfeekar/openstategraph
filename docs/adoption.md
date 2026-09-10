@@ -32,10 +32,10 @@ this page was written then. Today the backend is a distribution: one wheel, a
 four-dependency core, a set of named extras, `py.typed`, and an `openstategraph`
 console script — verified by a CI job that installs it into an empty virtualenv
 outside the checkout and runs a workflow there. Mode (b) is a first-class path;
-and the **PyPI** upload has happened: `0.3.0rc18` is on PyPI, published by
-hand, because the release train's publish job skips a pre-release by design
-(`releasing.md`, *A release candidate reaches PyPI by hand*). What is still
-outstanding is a **final** release through that gate.
+and the **PyPI** upload has happened: `0.3.0`, this project's first final
+release, is on PyPI — published by hand, because the release train's own
+`pypi` job has never run (`releasing.md` says why). What is still outstanding
+is that job itself firing on a release, not a final version existing.
 
 ---
 

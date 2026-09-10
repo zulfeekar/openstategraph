@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -50,6 +51,14 @@ from openstategraph.bundled_skills import BUNDLED_SKILLS
 
 REPO = Path(__file__).resolve().parents[2]
 README = REPO / "README.md"
+
+
+def version() -> str:
+    return tomllib.loads((REPO / "backend" / "pyproject.toml").read_text())["project"]["version"]
+
+
+def is_prerelease(v: str) -> bool:
+    return bool(re.search(r"(rc|a|b)\d+$", v))
 
 #: `[text](target)` — the target half only.
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
@@ -204,11 +213,40 @@ class TestTheInstallLineIsTheOneThatWorks:
         reason the command is not the two plain words — and it is the word they
         would search for when `uv tool install "openstategraph[server,ollama]"`
         answers with nothing.
+
+        Guarded the same way `test_a_final_release_drops_the_pin` is
+        (`test_the_first_command_a_stranger_copies.py`): once `0.3.0` ships,
+        there is no pre-release left to explain, and this line's own
+        `is_prerelease`/`version` are duplicated locally on purpose rather
+        than imported, for the reason that file gives.
         """
+        if not is_prerelease(version()):
+            return
         text = readme()
         assert "pre-release" in text, (
             "a reader pasting an exact version deserves to be told why, in the "
             "words they would search for"
+        )
+
+    def test_a_final_release_drops_the_prerelease_explanation(self) -> None:
+        """The mirror of the test above: a stale explanation is a false one.
+
+        `0.3.0` shipped and the README kept saying `0.3.0rc18` "is a
+        *pre-release*" and that "the day a final release lands, it stops
+        being necessary" — the day had already come. This does not ban the
+        word outright: explaining what pip/uv do with pre-releases in general
+        is still true and useful once one has shipped. What it bans is the
+        two claims that only made sense before it did.
+        """
+        if is_prerelease(version()):
+            return
+        text = readme()
+        assert "is a *pre-release*" not in text, (
+            f"{version()} is a final release; the page still calls a shipped "
+            "version a pre-release"
+        )
+        assert "final release lands" not in text, (
+            "the page still promises a change that a final release already made"
         )
 
 

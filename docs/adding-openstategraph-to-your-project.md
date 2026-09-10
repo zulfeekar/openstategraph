@@ -119,7 +119,7 @@ The tool form is why the verb takes a directory. One global install, and
 workflows — the same way you run a formatter you installed once:
 
 ```bash
-uv tool install "openstategraph[server,ollama]==0.3.0"
+uv tool install "openstategraph[server,ollama]"
 
 cd ~/svc  && openstategraph .      # svc's workflows
 cd ~/app2 && openstategraph .      # app2's workflows
@@ -135,7 +135,9 @@ warning — it lets a package on *either* index satisfy a requirement, which is
 exactly the shadowing risk a second index carries. One index carries no such
 risk, which is the real argument for not naming one.
 
-The `==` stays for as long as the shipped version is a release candidate.
+**Nothing to pin, either.** `0.3.0` is the first final release this project
+has cut, so an unpinned install resolves it. Name a version only if you want
+an older one held in place.
 
 If the command installs and your shell still cannot find it, `~/.local/bin` is
 not on your `PATH`: `uv tool update-shell`, then a new terminal.
