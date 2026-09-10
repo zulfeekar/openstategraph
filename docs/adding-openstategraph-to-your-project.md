@@ -30,7 +30,7 @@ repository, for the reason §0 gives.
 ## 0. The install line
 
 ```bash
-pip install "openstategraph[ollama]==0.3.0rc18"
+pip install "openstategraph[ollama]"
 ```
 
 That is the whole thing. **`openstategraph` is on PyPI**, so there is no index
@@ -52,18 +52,12 @@ deleted because the same shape catches anyone installing a rehearsal build —
 [Releasing](releasing.md) carries that command now, and it is the only place
 that should.
 
-**The `==` is not a formality.** `0.3.0rc18` is a pre-release, and pip excludes
-pre-releases from an unpinned requirement unless nothing stable satisfies it at
-all — which is true today and will stop being true the moment a final release
-exists, silently, without changing this page. A pinned version is also a
-version a test can check, and this repository holds every documented pin
-against [`backend/pyproject.toml`](../backend/pyproject.toml).
-
-When a final release lands, the pin goes too:
-
-```bash
-pip install "openstategraph[ollama]"          # once a final release is published
-```
+**Nothing to pin, either.** `0.3.0` is the first final release this project
+has cut, so an unpinned install resolves it — pip only excludes pre-releases
+from an unpinned requirement, and there is no longer one to exclude. Name a
+version only if you want an older one held in place; this repository holds
+every documented pin against
+[`backend/pyproject.toml`](../backend/pyproject.toml).
 
 > **This note used to say the published build was older than the page, and
 > `0.3.0rc18` is the later pre-release it said would close it.** The gaps it
@@ -119,7 +113,7 @@ The tool form is why the verb takes a directory. One global install, and
 workflows — the same way you run a formatter you installed once:
 
 ```bash
-uv tool install "openstategraph[server,ollama]==0.3.0rc18"
+uv tool install "openstategraph[server,ollama]"
 
 cd ~/svc  && openstategraph .      # svc's workflows
 cd ~/app2 && openstategraph .      # app2's workflows
@@ -135,7 +129,9 @@ warning — it lets a package on *either* index satisfy a requirement, which is
 exactly the shadowing risk a second index carries. One index carries no such
 risk, which is the real argument for not naming one.
 
-The `==` stays for as long as the shipped version is a release candidate.
+**Nothing to pin, either.** `0.3.0` is the first final release this project
+has cut, so an unpinned install resolves it. Name a version only if you want
+an older one held in place.
 
 If the command installs and your shell still cannot find it, `~/.local/bin` is
 not on your `PATH`: `uv tool update-shell`, then a new terminal.

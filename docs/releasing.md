@@ -122,7 +122,7 @@ uv tool install \
   --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple/ \
   --index-strategy unsafe-best-match \
-  "openstategraph[server,ollama]==0.3.0rc18"
+  "openstategraph[server,ollama]==0.3.0"
 ```
 
 Each flag fails differently, and two of them fail silently:
@@ -566,7 +566,7 @@ gh run list --repo <owner>/<repo> --workflow pages.yml
 
 | | State |
 | --- | --- |
-| The **`pypi` job** | never run. The human gate has never been clicked — every version cut so far is a release candidate, and the job's condition skips those. `0.3.0rc18` reached PyPI by hand instead (see *A release candidate reaches PyPI by hand*), which is not this job running |
+| The **`pypi` job** | never run. The human gate has never been clicked, including for `0.3.0` — this project's first final release. Every version has reached PyPI by hand instead (see *A release candidate reaches PyPI by hand*), which is not this job running |
 | **`release-pr.yml`** (*Release PR*) | every run has failed, all at `peter-evans/create-pull-request` — see below. It has never opened a pull request |
 | `openwiki-update.yml` (*OpenWiki update*) | has fired on schedule and failed every time, for want of `secrets.OPENWIKI_API_KEY`, which is not set on the repository — see `CLAUDE.md`'s OpenWiki block for the dated account and a run id |
 | `pages.yml` (*Deploy landing page*) | every run has failed — `HttpError: Not Found` from `actions/configure-pages`. **One owner click turns it green**: Settings ▸ Pages ▸ *Build and deployment* ▸ Source: **GitHub Actions**, which is what `configure-pages` cannot find. There is nothing to fix in the workflow. See [Public repository settings §8](maintainers/public-repository-settings.md) and production-ready ticket 28 |

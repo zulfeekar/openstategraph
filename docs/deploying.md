@@ -314,15 +314,16 @@ must be resumed on the same instance.
 ### Postgres: worth doing, and not the lift
 
 ```bash
-pip install 'openstategraph[postgres]==0.3.0rc18'
+pip install 'openstategraph[postgres]==0.3.0'
 export OPENSTATEGRAPH_POSTGRES_URL="postgresql://osg:...@db.internal:5432/osg"
 ```
 
-**That line names a version on purpose.** `openstategraph` is on PyPI as of
-`0.3.0rc18`, so no index flag is needed — but the shipped version is a
-pre-release, and pip excludes pre-releases from an unpinned requirement, so a
-bare `pip install 'openstategraph[postgres]'` returns what looks like a 404.
-The pin goes away with the first final release ([Releasing](releasing.md)).
+**That line names a version because a deployment should, not because it has
+to.** `openstategraph` is on PyPI as of `0.3.0rc18`, so no index flag is
+needed, and `0.3.0` is a final release — a bare `pip install
+'openstategraph[postgres]'` resolves fine. Pin it anyway for a production
+deploy, the same reason you'd pin any other dependency
+([Releasing](releasing.md) says how a version gets here).
 
 This moves checkpoints and long-term memory into a database your operations
 team already backs up, replicates and restores, instead of a sqlite file whose

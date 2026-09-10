@@ -35,6 +35,7 @@ audience line would be a claim it exists to contradict.
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -166,7 +167,18 @@ class TestACommandThatAnswers404IsNeverUnhedged:
         identically. The pages that show the unpinned shape show it because it
         is the shape the command takes once a final release exists, which is
         exactly what the hedge has to say.
+
+        Guarded the same way `test_a_final_release_drops_the_pin` is
+        (`test_the_first_command_a_stranger_copies.py`): once a final release
+        ships, an unpinned line is not a forward-looking shape any more, it is
+        simply correct, and a hedge beside it would be explaining a problem
+        that page no longer has. `0.3.0` is that release.
         """
+        version = tomllib.loads((REPO / "backend" / "pyproject.toml").read_text())[
+            "project"
+        ]["version"]
+        if not re.search(r"(rc|a|b)\d+$", version):
+            return
         offenders = []
         for page in sorted(REPO.glob("docs/*.md")) + [
             REPO / "README.md",

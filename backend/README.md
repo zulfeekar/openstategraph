@@ -10,7 +10,7 @@ compiled LangGraph object that runs, streams, checkpoints and deploys
 anywhere Python runs, with or without this package's editor.
 
 ```bash
-pip install "openstategraph[ollama]==0.3.0rc18"
+pip install "openstategraph[ollama]"
 ```
 
 That is the line that works today, and it names no index because it needs
@@ -18,22 +18,9 @@ none: **this is on PyPI**. The `--index-url` / `--extra-index-url` pair this
 block carried until `0.3.0rc18` was the cost of a TestPyPI-only distribution,
 and that is over.
 
-The `==` is the one thing left to explain, and it is there because the version
-above is a **pre-release**. pip excludes pre-releases from an unpinned
-requirement — the same trap
-[`../docs/building-an-atom.md`](../docs/building-an-atom.md) records for a
-plugin's `>=` specifier — so `pip install "openstategraph[ollama]"` with no
-`==` resolves nothing, and pip reports that as a package it cannot find rather
-than as a candidate it skipped. The pin goes away with the first final release;
-[`../docs/releasing.md`](../docs/releasing.md) is the page that says how a
-version gets here, and holds the TestPyPI rehearsal form for maintainers.
-
-The day a **final** release lands, the pin goes too and this collapses to the
-one line it should always have been:
-
-```bash
-pip install "openstategraph[ollama]"          # once a final release is published
-```
+Nothing to pin — `0.3.0` is the first final release, so an unpinned install
+resolves it. [`../docs/releasing.md`](../docs/releasing.md) is the page that
+says how a version gets here.
 
 Either way you can install the identical artifact from a checkout —
 `pip install -e "backend[ollama]"` from the repository root, or build the
