@@ -34,15 +34,15 @@ describe('defineNode — execution override fields', () => {
   it('only an interruptible node type is offered a timeout', () => {
     const workbench = makeWorkbench();
     const offered = (type: string) =>
-      addNode(workbench, type).definition.fields.map((f) => f.key).includes('timeoutSeconds');
+      addNode(workbench, type)
+        .definition.fields.map((f) => f.key)
+        .includes('timeoutSeconds');
 
     for (const type of [TYPE.agent, TYPE.router, TYPE.grader, TYPE.orchestrator, TYPE.worker]) {
       expect(offered(type), `${type} runs asynchronously and can honour a timeout`).toBe(true);
     }
     for (const type of [TYPE.output, TYPE.textInput, TYPE.markdownFile, TYPE.formatReport]) {
-      expect(offered(type), `${type} runs synchronously — a timeout would not compile`).toBe(
-        false,
-      );
+      expect(offered(type), `${type} runs synchronously — a timeout would not compile`).toBe(false);
     }
   });
 
