@@ -355,7 +355,7 @@ repairing one extra drops the rest — which is how a team-board install lost
 editor that uses the team board that line is six extras, not one:
 
 ```bash
-uv tool install --force 'openstategraph[mcp,mssql,ollama,postgres,server,sqlite]==0.3.0'
+uv tool install --force 'openstategraph[mcp,mssql,ollama,postgres,server,sqlite]==0.4.0'
 ```
 
 The version is named in full because `--force` is a repair aimed at one
