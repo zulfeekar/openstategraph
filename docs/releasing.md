@@ -57,7 +57,7 @@ being released rather than in whoever clicked the button.
 | `backend/pyproject.toml` | **Yes. The only literal.** | `scripts/prepare_release.py`, via the Release PR |
 | `openstategraph.__version__` | Derived — `importlib.metadata` reads the installed distribution | nobody |
 | `CHANGELOG.md` heading | The same version, and the release notes | a human writes the body; the script dates the heading |
-| `package.json` | **No.** The editor is `"private": true` and is published to no registry, so its `version` describes nothing anyone can install. | nobody, until it is published — at which point it needs its own train, not a shared number |
+| `package.json` | **Not the source, but kept level with it.** The editor is `"private": true` and is published to no registry, so its `version` describes nothing anyone can install — but `test_one_product_one_version.py` requires its `major.minor.patch` to equal the wheel's, because a number no process reads is a number that drifts and leaves the next reader with two answers. | `scripts/prepare_release.py`, since 0.4.0. This row said **nobody** until then, and that was never true: the gate meant somebody had to edit it by hand at every release or the release commit went red — which is how it was found |
 
 Two literals of the same number is how `text2sql` ended up shipping
 `pyproject` 0.4.0 against `__version__` 0.3.0
@@ -122,7 +122,7 @@ uv tool install \
   --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple/ \
   --index-strategy unsafe-best-match \
-  "openstategraph[server,ollama]==0.3.0"
+  "openstategraph[server,ollama]==0.4.0"
 ```
 
 Each flag fails differently, and two of them fail silently:

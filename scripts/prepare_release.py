@@ -21,9 +21,16 @@ v0.3.0" pull request is reviewing the version bump and the release notes
 together, which is the only moment where reading them side by side is cheap.
 
 `backend/pyproject.toml` is the single source of the released version.
-`package.json` is deliberately NOT touched — the editor is `"private": true`
-and is not published to any registry, so its version number describes nothing a
-user can install. See `docs/releasing.md`.
+`package.json` **is** touched, and that sentence used to say the opposite.
+The editor is `"private": true` and publishes to no registry, so its version
+describes nothing a user can install — but `test_one_product_one_version.py`
+requires its `major.minor.patch` to match the wheel's, on the argument that a
+number no process reads is a number that drifts and leaves the next reader with
+two answers. So "nobody edits it" was never true: somebody had to, by hand, at
+every release, or CI went red on the release commit. It went red on 0.4.0,
+which is how this was found. The script does it now, and the pre-release
+suffix is deliberately not synced, exactly as that test compares only the
+release core.
 
 Run by `.github/workflows/release-pr.yml`; runnable by hand for the recovery
 paths in `docs/releasing.md`. Refuses rather than guesses: a malformed version,
@@ -113,6 +120,29 @@ def bump_pyproject(version: str) -> str:
     return old
 
 
+def bump_editor_version(version: str) -> None:
+    """`package.json`'s release core, kept level with the wheel's.
+
+    Only the `major.minor.patch` — npm's grammar cannot hold `0.4.0rc1`, and
+    `test_one_product_one_version.py` compares only the core for that reason.
+    A pre-release therefore writes the core it is a candidate for, which is
+    what the editor is about to ship with.
+    """
+    import re as _re
+
+    path = ROOT / "package.json"
+    text = path.read_text(encoding="utf-8")
+    core = _re.match(r"^(\d+\.\d+\.\d+)", version)
+    assert core, f"unparseable version {version!r}"
+    updated, count = _re.subn(
+        r'("version":\s*")[^"]+(")', rf"\g<1>{core.group(1)}\g<2>", text, count=1
+    )
+    if count != 1:
+        raise SystemExit("package.json has no version field to bump")
+    path.write_text(updated, encoding="utf-8")
+    print(f"    package.json {core.group(1)}")
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("version", help="the version to release, e.g. 0.3.0")
@@ -155,6 +185,7 @@ def main(argv: list[str]) -> int:
     if checked.returncode:
         return checked.returncode
     bump_pyproject(args.version)
+    bump_editor_version(args.version)
     bump_documented_pins(args.version)
     dated = subprocess.run([*changelog, args.version, "--set-date", args.date])
     if dated.returncode:

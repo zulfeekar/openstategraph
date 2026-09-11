@@ -1,7 +1,6 @@
 # Changelog
 
-## Unreleased
-
+## 0.4.0 — 2026-09-11
 ### Fixed
 - **A timeout on a step that could not honour one stopped the whole workflow
   compiling** (`langchain-drift-watch/01`, `02`). LangGraph accepts a per-node
