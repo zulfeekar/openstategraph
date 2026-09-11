@@ -228,6 +228,12 @@ def _resolve_child(
             # (`compile/mount_persistence.py` carries the rest).
             checkpointer=mount_checkpointer(persistence),
             store=self.services.memory_store,
+            # The child's own sink, which this mount absorbs below under the
+            # package slug — so a compile-time finding about a node inside a
+            # mounted workflow is said once, carrying the path it came from,
+            # exactly as every other absorbed finding is
+            # (`langchain-drift-watch` 01).
+            diagnostics=child_runtime.diagnostics,
             # A child of a mount is **sealed**: a graph compiled with no
             # `context_schema` inherits its caller's run context whole
             # and no argument to `invoke` can take that away, so a child

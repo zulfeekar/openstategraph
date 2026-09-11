@@ -354,6 +354,25 @@ class Finding(str, Enum):
     #:
     #: A **report**, not a failure — see `REPORT_ONLY`.
     SKILL_FILE_UNUSED = "skill_file_unused"
+    #: A node carrying a timeout whose body cannot be interrupted, as
+    #: `(node id, node type)` — `langchain-drift-watch` 01.
+    #:
+    #: LangGraph refuses `add_node(timeout=...)` for a synchronous body, and it
+    #: refuses at *compile* time, so passing one took the whole graph down
+    #: rather than the single node. The field is offered on every executable
+    #: card, so a document could be typed into a state that would not load at
+    #: all. The compiler drops the override instead and reports it here.
+    #:
+    #: The node type is a subject as well as the id because the fix depends on
+    #: it: the timeout belongs on the agent, grader, router, supervisor, worker
+    #: or mount this node feeds, and naming the type is what makes "this one
+    #: runs synchronously" checkable by a reader rather than asserted at them.
+    #:
+    #: A **report**, not a failure — see `REPORT_ONLY`. An ignored setting is
+    #: advice: refusing the document would strand every one already saved with
+    #: it, and failing `validate` would break somebody's CI over a field that
+    #: never did anything in the first place.
+    TIMEOUT_NEEDS_ASYNC_NODE = "timeout_needs_async_node"
 
 
 #: What each finding says, and how many subjects it takes.
@@ -475,6 +494,12 @@ _SENTENCES: dict[Finding, str] = {
         "reached the model. Clear that text to use the file, or clear the file "
         "reference so the document stops naming a source it does not use."
     ),
+    Finding.TIMEOUT_NEEDS_ASYNC_NODE: (
+        'Node "{0}" ({1}) sets a timeout, and a timeout can only interrupt a node '
+        "whose body runs asynchronously — this one runs synchronously, so the "
+        "timeout was not applied. Blank the field, or put the timeout on the agent, "
+        "grader, router, supervisor, worker or mounted workflow this node feeds."
+    ),
 }
 
 
@@ -585,6 +610,7 @@ REPORT_ONLY: frozenset[Finding] = frozenset(
         Finding.SKILL_SOURCE_DRIFTED,
         Finding.SKILL_FROM_SNAPSHOT,
         Finding.SKILL_FILE_UNUSED,
+        Finding.TIMEOUT_NEEDS_ASYNC_NODE,
     }
 )
 

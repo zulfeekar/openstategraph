@@ -665,6 +665,13 @@ what a finished run has to say about itself.
 second advice channel, `unchecked`, so the statement *"this build has no field
 schema for that type"* stops riding the list a developer is asked to act on.
 The argument sits on the field, where a reader meets it.
+
+
+    Grew by ten on 2026-09-11 (`langchain-drift-watch` 01): the node loop now
+    builds the body before `add_node` so it can ask whether a timeout is legal
+    for it, and records the finding when it is not. The alternative was a list
+    of async node types kept beside the decision, which is the second table
+    that produced the defect.
 """
 
 STREAMING = """
@@ -969,6 +976,11 @@ the tool missing, after the model had been paid. The value is read off
 declares — this door decides nothing about it, exactly as it decides nothing
 about the step budget one paragraph up.
 
+
+
+    Grew by six on 2026-09-11 (`langchain-drift-watch` 01): both doors that
+    compile now hand the compiler the runtime's diagnostics sink, so a
+    compile-time finding is reported here rather than lost.
 """
 
 ROUTES_WORKFLOWS = """
@@ -1033,6 +1045,11 @@ the surface they belong to (`/api/events` in `main`, both kanban streams in
 holds is a subscription and a filter. Splitting the catalogue's one stream into
 its own route module would have made `workflows.py` shorter and the endpoint
 surface harder to find, which is the trade this table exists to refuse.
+
+
+    Grew by four on 2026-09-11 (`langchain-drift-watch` 01): the preview
+    compiles the same graph a run does, so it is handed the same diagnostics
+    sink and reports what the compiler noticed.
 """
 
 RUN_SINKS = """
@@ -1403,11 +1420,11 @@ RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
     "document_checks.py": Recorded(505, DOCUMENT_CHECKS),
     "cli.py": Recorded(1822, CLI),
-    "compile/workflow_compiler.py": Recorded(1038, WORKFLOW_COMPILER),
+    "compile/workflow_compiler.py": Recorded(1048, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1040, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
-    "mcp_server.py": Recorded(990, MCP_SERVER),
-    "api/routes/workflows.py": Recorded(619, ROUTES_WORKFLOWS),
+    "mcp_server.py": Recorded(996, MCP_SERVER),
+    "api/routes/workflows.py": Recorded(623, ROUTES_WORKFLOWS),
     "run_sinks.py": Recorded(829, RUN_SINKS),
     "api/schemas.py": Recorded(573, SCHEMAS),
 }

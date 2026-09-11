@@ -557,7 +557,15 @@ class WorkflowArtifacts:
         runtime = NodeRuntime(model=None, tools=tools)
         compiler = WorkflowCompiler()
         plan = compiler.plan(document)
-        graph = compiler.build(document, RunState, runtime.factory(document))
+        graph = compiler.build(
+            document,
+            RunState,
+            runtime.factory(document),
+            # `runtime_warnings(runtime)` is this door's return value, so a
+            # compile-time finding has to be recorded where that reads it
+            # (`langchain-drift-watch` 01).
+            diagnostics=runtime.diagnostics,
+        )
         # Through the one seam, with no store and no audience: this path
         # holds no workflow library, so `mounted_documents` finds nothing to
         # load and the diagram is flat — which is the true picture of what
@@ -1011,6 +1019,10 @@ class WorkflowRuns:
                         resolved.get("settings"), slug
                     ),
                     store=self._services.memory_store,
+                    # The runtime's own sink, so this door reports what the
+                    # compiler noticed while building, like the other two
+                    # (`langchain-drift-watch` 01).
+                    diagnostics=runtime.diagnostics,
                 )
                 # Built, therefore knowable (`osg-agent-experience/48`). This
                 # door had the same defect as the other two: half a graph would

@@ -50,8 +50,9 @@ from openstategraph.compile.run_context import (
 )
 from openstategraph.compile.subagents import subagent_declaration_problems
 from openstategraph.compile.fields import _text, branch_ids_by_spelling
+from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
-from openstategraph.compile.node_doors import with_both_doors
+from openstategraph.compile.node_doors import timeout_kept_for, with_both_doors
 from openstategraph.compile.side_effects import DEFAULT_MAX_ATTEMPTS
 from openstategraph.compile.state import STEP_BUDGET_FLOOR
 from openstategraph.step_budget import read_budget_stop
@@ -2521,6 +2522,7 @@ class WorkflowCompiler:
         checkpointer: Any = None,
         store: 'BaseStore | None' = None,
         mounted: bool = False,
+        diagnostics: 'CompileDiagnostics | None' = None,
     ) -> Any:
         """Assembles the graph.
 
@@ -2620,6 +2622,25 @@ class WorkflowCompiler:
                 # 502'd the whole run (found live, ticket 61). The default is
                 # applied per node instead; an explicit override still wins.
                 overrides = {**overrides, "retry_policy": default_retry}
+            # Built before `add_node` rather than inside the call, because the
+            # body is the only thing that can answer whether a timeout is
+            # legal: LangGraph refuses `timeout=` for a synchronous one and
+            # refuses at compile time, taking the whole graph down rather than
+            # the node. A list of async node types kept here instead would be a
+            # second description of what the object already knows
+            # (`langchain-drift-watch` 01).
+            body = with_both_doors(
+                recording_attempts(
+                    node_id, node_factory(node_id, nodes[node_id], plan)
+                )
+            )
+            overrides, timeout_dropped = timeout_kept_for(body, overrides)
+            if timeout_dropped and diagnostics is not None:
+                diagnostics.record(
+                    Finding.TIMEOUT_NEEDS_ASYNC_NODE,
+                    node_id,
+                    str(nodes[node_id].get("type") or ""),
+                )
             builder.add_node(
                 safe_name(node_id),
                 # Wrapped here, beside `retry_policy` itself: the policy and
@@ -2639,11 +2660,7 @@ class WorkflowCompiler:
                 # a `def` body, so no un-migrated family is touched — and
                 # outermost so `recording_attempts`, which already knows both
                 # kinds, keeps seeing the raw body.
-                with_both_doors(
-                    recording_attempts(
-                        node_id, node_factory(node_id, nodes[node_id], plan)
-                    )
-                ),
+                body,
                 **overrides,
             )
 
