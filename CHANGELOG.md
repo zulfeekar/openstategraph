@@ -2,6 +2,50 @@
 
 ## Unreleased
 
+### Fixed
+- **A timeout on a step that could not honour one stopped the whole workflow
+  compiling** (`langchain-drift-watch/01`, `02`). LangGraph accepts a per-node
+  timeout only for a step whose body runs asynchronously, and refuses it at
+  compile time — so filling in *Timeout, seconds* on an Input, Output,
+  Guardrail, Approval, Memory, Resolver, Function or Route-check card produced a
+  document that would not load at all, with the library's own sentence and no
+  way back but editing the JSON by hand. The field was offered on every card, so
+  the setting was two clicks away on 41 of the 47 that could never use it.
+
+  **What changes for you.** Such a document now loads and runs. The timeout on
+  that step is not applied, and `openstategraph validate` says so under `Notes:`
+  — one sentence naming the node and what to do instead — while still exiting 0.
+  Your file is never rewritten: the value you typed stays where you put it until
+  you clear it. In the editor the field is now offered only on Agent, Grader,
+  Router, Supervisor, Worker and Workflow cards, where it works. Put the timeout
+  on the step that calls the tool rather than on the tool.
+
+  **Nothing that worked stops working.** Every document that loaded on 0.3.0
+  loads here unchanged, including every document carrying a blank
+  `timeoutSeconds` on every node — which is all of them, because the editor has
+  always written it. Documents that *failed* on 0.3.0 for this reason now load.
+
+- **The error handler's contract could have changed in silence.** `NodeError`
+  was imported behind a fallback that degraded it to `None` for older
+  langgraph. It is the annotation langgraph matches on to hand a failed step's
+  context to the recovery handler, so on that path a step that failed after its
+  retries would have read downstream as a step that produced nothing, with
+  nothing raised. The fallback is gone (`langchain-drift-watch/03`).
+
+### Changed
+- **`langgraph>=1.2` is now the floor**, raised from `>=1.0`
+  (`langchain-drift-watch/03`). Per-node timeouts and caching,
+  `StateGraph.set_node_defaults` and `NodeError` all arrived in 1.2, and all
+  four are features this compiler documents — so `>=1.0` described a floor the
+  product never actually supported, propped up by fallbacks no working
+  installation could reach.
+
+  **If you pin `langgraph<1.2`,** this release will not install alongside it.
+  That combination was never supported: on it, 0.3.0 has no per-node timeout, no
+  caching and no error handler, because none of those exist in the library you
+  pinned. `pip install openstategraph==0.3.0` remains available if you need to
+  stay there.
+
 ### Added
 - **A guard can read a row the run retrieved, not only count the calls**
   (`osg-agent-experience/86`). `guard.check`'s `RunSummary` answered exactly one

@@ -118,10 +118,17 @@ key no field declares. Two consequences when you write a factory:
 The reverse direction is deliberately not asserted — a declared field the
 factory ignores is often correct, since `maxRetries`, `timeoutSeconds` and
 `cacheTtlSeconds` are read by the compiler's graph assembly and a worker's
-`role` is read by the *supervisor's* factory. Those three are injected onto
-every standard node type by `defineNode` and are not any atom's to declare or
-to mirror — `EXECUTION_OVERRIDE_KEYS` is the one list, exported so a field
-contract subtracts it rather than retyping it.
+`role` is read by the *supervisor's* factory. Those three are injected by
+`defineNode` and are not any atom's to declare or to mirror —
+`EXECUTION_OVERRIDE_KEYS` is the one list, exported so a field contract
+subtracts it rather than retyping it.
+
+`maxRetries` and `cacheTtlSeconds` reach every standard node type.
+`timeoutSeconds` reaches only the types that declare `interruptible`, because
+LangGraph refuses a timeout at compile time for a body that is not `async def`
+and an atom's body is synchronous. Subtract all three from a field contract
+anyway: the key is legitimate in any node's saved `data`, since the editor
+wrote it onto every node before the distinction existed.
 
 ### Ports carry types and cardinality
 

@@ -161,6 +161,13 @@ type NodeConstructor = new (definition: INodeDefinition, init: NodeInit) => Abst
  * `resolveMiddleware()`/`resolvePrompt()` are inherited capabilities rather
  * than something each concrete type re-declares.
  *
+ * `timeout` is the one with a condition, and it is a property of the *body*
+ * rather than of the type: LangGraph refuses it at compile time for a
+ * synchronous one, so it is offered only where `NodeSpec.interruptible` says
+ * it can be honoured (`langchain-drift-watch/02`). The capability is still
+ * inherited rather than re-declared — what varies is whether the family can
+ * use it.
+ *
  * Empty string means "use the graph's default" — not `0`, which CLAUDE.md's
  * own rule against non-finite/sentinel numbers in a serialisable field
  * rules out as a stand-in for "unbounded" or "unset". `int | None` is the

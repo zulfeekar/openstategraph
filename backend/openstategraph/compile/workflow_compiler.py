@@ -1509,8 +1509,13 @@ def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:
     `set_node_defaults` (in `build`, below) already gives every node the
     same graph-wide retry policy — this is the *per-node* override the
     canvas's `maxRetries`/`timeoutSeconds`/`cacheTtlSeconds` fields expose (declared once in
-    `ModelRegistry.defineNode` on the TS side, inherited by every executable
-    node type). Per LangGraph's own docs: "Per-node values still take
+    `ModelRegistry.defineNode` on the TS side). `maxRetries` and
+    `cacheTtlSeconds` are inherited by every executable node type;
+    `timeoutSeconds` only by one that declares `interruptible`, since LangGraph
+    refuses a timeout for a synchronous body (`langchain-drift-watch` 02).
+    This function still *parses* all three from whatever a document carries —
+    the gate is `node_doors.timeout_kept_for`, applied at `add_node` where the
+    built body can be asked. Per LangGraph's own docs: "Per-node values still take
     precedence" over `set_node_defaults`, so passing these as `add_node`
     kwargs is the correct override mechanism, not a parallel one.
 
