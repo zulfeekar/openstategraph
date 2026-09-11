@@ -129,7 +129,7 @@ Measured, 2026-08-10, against `backend/pyproject.toml` at `a38df15`.
 A real `pip install --dry-run --report` of the built wheel resolves to
 **79 distributions**.
 
-A lean core of `langgraph>=1.0`, `langchain>=1.0`, `langchain-core>=1.0`,
+A lean core of `langgraph>=1.2`, `langchain>=1.0`, `langchain-core>=1.0`,
 `pydantic>=2.9` resolves to **36**. So **43 distributions — 54% of the
 closure — are things a consumer of `load_workflow` may never touch**:
 
@@ -257,7 +257,7 @@ single line.
 
 ```toml
 dependencies = [
-    "langgraph>=1.0,<2",
+    "langgraph>=1.2,<2",
     "langchain>=1.0,<2",
     "langchain-core>=1.0,<2",
     "pydantic>=2.9,<3",

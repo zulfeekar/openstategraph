@@ -189,11 +189,21 @@ def test_the_workflow_checks_its_credential_before_installing_anything() -> None
     assert "contents: read" in text, "the patrol writes nothing to this repository"
     assert "OPENSTATEGRAPH_KANBAN_URL" in text
 
-    first_run = text.index("run:")
-    assert text.index("OPENSTATEGRAPH_KANBAN_URL") < text.index("pip install"), (
+    # The *step*, not the string. An earlier version of this assertion matched
+    # the first occurrence of the variable name, which is the `env:` line and
+    # precedes everything — so deleting the whole check step left it green.
+    # A test that cannot fail is worse than no test: it is a claim with a tick
+    # beside it.
+    steps = text.split("- name:")
+    guard = [s for s in steps if "exit 1" in s and "OPENSTATEGRAPH_KANBAN_URL" in s]
+    assert guard, "no step refuses when the board credential is absent"
+
+    installs = [i for i, s in enumerate(steps) if "pip install" in s]
+    guard_at = steps.index(guard[0])
+    assert installs, "the workflow installs nothing"
+    assert guard_at < min(installs), (
         "the credential is checked after installing — the openwiki failure mode"
     )
-    assert first_run < text.index("pip install"), "something runs before the check"
 
 
 def test_the_resolve_is_deliberately_unlocked() -> None:
@@ -219,3 +229,36 @@ def test_the_resolve_is_deliberately_unlocked() -> None:
     ]
     assert installs_from_the_lock == [], installs_from_the_lock
     assert any("pip install -e" in line for line in commands), "it installs nothing"
+
+
+def test_an_empty_corpus_is_a_refusal_not_a_pass(tmp_path: pathlib.Path) -> None:
+    """The hole a reviewer found: a renamed marker made the patrol green.
+
+    pytest exits 5 for "nothing matched" and writes a report with `tests="0"`,
+    which has no failures in it — so the patrol printed `0 failure(s)` and
+    exited 0 while having checked nothing at all. That is the failure mode this
+    repository already has one live example of: a scheduled job that reads in a
+    run list exactly like one that passes.
+
+    The floor test above cannot close it, because that runs in CI rather than
+    inside the patrol.
+    """
+    patrol = _patrol()
+    empty = tmp_path / "empty.xml"
+    empty.write_text(
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<testsuites><testsuite name="pytest" errors="0" failures="0" '
+        'skipped="0" tests="0"/></testsuites>\n',
+        encoding="utf-8",
+    )
+
+    # Either signal alone is enough: pytest's own code, or the report's count.
+    assert patrol.ran_nothing(empty, 5) is True
+    assert patrol.ran_nothing(empty, 0) is True
+
+    populated = tmp_path / "junit.xml"
+    populated.write_text(JUNIT_ONE_FAILURE, encoding="utf-8")
+    assert patrol.ran_nothing(populated, 1) is False
+
+    # And a report that was never written is not silently "nothing failed".
+    assert patrol.ran_nothing(tmp_path / "absent.xml", 0) is True

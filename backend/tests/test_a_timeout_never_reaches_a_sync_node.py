@@ -216,9 +216,10 @@ def test_every_door_that_compiles_hands_the_compiler_a_sink() -> None:
     `build` takes `diagnostics` as an optional keyword so a test can compile
     without one, and that default is a trap for a *shipped* door: a compile-time
     finding is simply lost, and the surface reports a clean workflow it had
-    already noticed something about. There were five such doors when this was
-    written — the loader, the HTTP run, two MCP tools and a mount — and each one
-    had to be found by hand.
+    already noticed something about. There were eight such doors when this was
+    written — the loader, the blocking run, both streaming runs, the graph
+    preview, two MCP tools and a mount. Five is what a careful reading found;
+    this test found the other three, which is the argument for writing it.
 
     Written the way `test_a_runs_diagram_opens_its_mounts.py` is: parse every
     shipped module for the call rather than keeping a list of the doors, because

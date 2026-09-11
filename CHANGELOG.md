@@ -9,16 +9,19 @@
   compile time — so filling in *Timeout, seconds* on an Input, Output,
   Guardrail, Approval, Memory, Resolver, Function or Route-check card produced a
   document that would not load at all, with the library's own sentence and no
-  way back but editing the JSON by hand. The field was offered on every card, so
-  the setting was two clicks away on 41 of the 47 that could never use it.
+  way back but editing the JSON by hand. The field was offered on all 41
+  executable card types, so the setting was two clicks away on the 35 that could
+  never use it.
 
   **What changes for you.** Such a document now loads and runs. The timeout on
   that step is not applied, and `openstategraph validate` says so under `Notes:`
   — one sentence naming the node and what to do instead — while still exiting 0.
-  Your file is never rewritten: the value you typed stays where you put it until
-  you clear it. In the editor the field is now offered only on Agent, Grader,
-  Router, Supervisor, Worker and Workflow cards, where it works. Put the timeout
-  on the step that calls the tool rather than on the tool.
+  Your file is never rewritten: the value you typed stays where you put it, and
+  costs nothing where it is. In the editor the field is now offered only on
+  Agent, Grader, Router, Supervisor, Worker and Workflow cards, where it works —
+  so on any other card the old value is no longer shown, and the note is there
+  to tell you it is being ignored rather than to ask you to remove it. Put the
+  timeout on the step that calls the tool rather than on the tool.
 
   **Nothing that worked stops working.** Every document that loaded on 0.3.0
   loads here unchanged, including every document carrying a blank

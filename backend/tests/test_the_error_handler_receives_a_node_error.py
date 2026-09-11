@@ -28,6 +28,7 @@ import ast
 import inspect
 import pathlib
 import tomllib
+from typing import Any
 
 import pytest
 
@@ -146,3 +147,52 @@ def test_the_declared_floor_is_the_version_the_compiler_needs() -> None:
         f"langgraph is required at {floor}, but NodeError, TimeoutPolicy and "
         "CachePolicy all arrived in 1.2 and the compiler imports them outright"
     )
+
+
+@pytest.mark.library_contract
+def test_langgraph_injects_a_node_error_into_the_compiled_graph() -> None:
+    """The claim the ticket made, now actually tested.
+
+    The test above constructs a `NodeError` by hand and calls the handler, which
+    proves the handler *reads* one correctly and proves nothing about whether
+    LangGraph ever hands it one. That distinction is the whole reason the
+    fallback was dangerous: an annotation the matcher does not recognise fails
+    by the handler never being called, which no hand-constructed test can see.
+
+    So this drives a node that raises through a real compiled graph, with the
+    real `set_node_defaults` wiring, and records what the second parameter
+    actually was.
+    """
+    from langgraph.graph import END, START, StateGraph
+    from langgraph.types import RetryPolicy
+
+    from openstategraph.compile.node_runtime import RunState
+
+    seen: list[object] = []
+
+    def handler(state: dict[str, Any], error: NodeError) -> dict[str, Any]:
+        seen.append(error)
+        return {"outputs": {"n": "recovered"}}
+
+    def always_fails(state: dict[str, Any]) -> dict[str, Any]:
+        raise ConnectionError("the provider refused")
+
+    builder = StateGraph(RunState)
+    builder.set_node_defaults(
+        retry_policy=RetryPolicy(max_attempts=1),
+        error_handler=handler,  # type: ignore[arg-type]
+    )
+    builder.add_node("n", always_fails)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+
+    result = builder.compile().invoke({}, {"recursion_limit": 5})
+
+    assert seen, "the handler was never called — the annotation did not match"
+    injected = seen[0]
+    assert isinstance(injected, NodeError), (
+        f"langgraph injected {type(injected)!r}, not a NodeError — the "
+        "name-and-annotation matcher has changed"
+    )
+    assert isinstance(injected.error, ConnectionError)
+    assert result["outputs"]["n"] == "recovered"

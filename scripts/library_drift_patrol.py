@@ -97,6 +97,10 @@ def git_sha() -> str:
     return done.stdout.strip()
 
 
+#: pytest's code for "the selection matched nothing".
+NO_TESTS_COLLECTED = 5
+
+
 def run_corpus(report: pathlib.Path) -> int:
     """Run exactly the marked tests, writing a junit report. Returns pytest's code."""
     done = subprocess.run(
@@ -108,6 +112,33 @@ def run_corpus(report: pathlib.Path) -> int:
         cwd=REPO_ROOT,
     )
     return done.returncode
+
+
+def ran_nothing(report: pathlib.Path, code: int) -> bool:
+    """Whether the corpus was empty — which is a finding, not a pass.
+
+    The hole this closes: a renamed or dropped marker makes pytest exit 5 and
+    write a junit report with `tests="0"`, which has no failures in it, so the
+    patrol printed `0 failure(s)` and exited 0. A watchdog that reports success
+    when it watched nothing is worse than no watchdog, and it is the exact
+    shape of the scheduled job this repository already has one of.
+
+    Asked two ways because either alone can be wrong: pytest's own code, and
+    the report's own count. A future pytest that stops using 5, or a run that
+    dies before writing the report, is still caught by the other.
+    """
+    if code == NO_TESTS_COLLECTED:
+        return True
+    try:
+        root = ElementTree.parse(report).getroot()
+    except (OSError, ElementTree.ParseError):
+        return True
+    total = 0
+    for suite in root.iter("testsuite"):
+        total += int(suite.get("tests") or 0)
+    if total == 0:
+        total = len(list(root.iter("testcase")))
+    return total == 0
 
 
 def cards_for(
@@ -236,10 +267,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{name}=={value}")
 
     report = args.junit or (REPO_ROOT / ".drift-report.xml")
+    code = 0
     if not args.no_run:
-        run_corpus(report)
+        code = run_corpus(report)
     if not report.exists():
         print("no junit report was produced", file=sys.stderr)
+        raise SystemExit(EXIT_COULD_NOT_FILE)
+    if not args.no_run and ran_nothing(report, code):
+        print(
+            "the library_contract corpus is empty — the patrol ran nothing and "
+            "cannot say the library still agrees with this codebase. A marker "
+            "was renamed or dropped.",
+            file=sys.stderr,
+        )
         raise SystemExit(EXIT_COULD_NOT_FILE)
 
     cards = cards_for(

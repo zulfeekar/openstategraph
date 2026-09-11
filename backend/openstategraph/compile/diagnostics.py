@@ -497,8 +497,10 @@ _SENTENCES: dict[Finding, str] = {
     Finding.TIMEOUT_NEEDS_ASYNC_NODE: (
         'Node "{0}" ({1}) sets a timeout, and a timeout can only interrupt a node '
         "whose body runs asynchronously — this one runs synchronously, so the "
-        "timeout was not applied. Blank the field, or put the timeout on the agent, "
-        "grader, router, supervisor, worker or mounted workflow this node feeds."
+        "timeout was not applied and the step ran normally. The editor no longer "
+        "offers this field on a step of this kind, so the setting is left where it "
+        "is and costs nothing. Put the timeout on the agent, grader, router, "
+        "supervisor, worker or mounted workflow this step feeds."
     ),
 }
 
