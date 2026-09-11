@@ -1,0 +1,77 @@
+name: library-drift
+
+# The daily half of the drift question, and deliberately not the weekly one.
+#
+# A separate job fingerprints LangChain's documentation pages and reports when
+# one changes. It could not have found `langchain-drift-watch/01`, because
+# nothing had changed: LangGraph has refused a timeout on a synchronous node
+# since 1.2, our own test already pinned that fact, and two other places in
+# this repository contradicted it for a release. A watcher pointed at the
+# vendor is blind to a disagreement between two of our own files.
+#
+# So this runs the `library_contract` corpus — the tests that assert *our* code
+# against the installed library — on a fresh resolve with no lockfile, which is
+# what a person installing today would get. A moved version number is not a
+# finding. A red test is.
+
+on:
+  schedule:
+    # 05:00 UTC, before the working day in every timezone the maintainers are
+    # in, so a finding is on the board before anybody starts.
+    - cron: "0 5 * * *"
+  workflow_dispatch: {}
+
+# Writes nothing to this repository. The only thing it writes to is the team
+# board, through a credential.
+permissions:
+  contents: read
+
+concurrency:
+  group: library-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPENSTATEGRAPH_KANBAN_URL: ${{ secrets.OPENSTATEGRAPH_KANBAN_URL }}
+    steps:
+      # First, before anything expensive, and this order is the whole lesson of
+      # `openwiki-update.yml`: that job fires every week, has never once
+      # succeeded, and discovers its missing secret only after doing its work —
+      # so it reads in a run list exactly like a job that passes. A patrol that
+      # cannot file what it finds should not run at all.
+      - name: The board credential must exist before anything else happens
+        run: |
+          if [ -z "$OPENSTATEGRAPH_KANBAN_URL" ]; then
+            echo "::error::OPENSTATEGRAPH_KANBAN_URL is not set on this repository, so a drift finding could not be filed anywhere. Set it in Settings → Secrets → Actions. See docs/maintainers/public-repository-settings.md."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # No lockfile, deliberately. Reading `uv.lock` would answer a question
+      # nobody asked — whether the versions we already recorded still pass.
+      # The question is whether the versions a new user gets today still pass.
+      - name: Resolve the dependencies a new install would get
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "backend[all,dev]"
+
+      - name: Say what was installed
+        run: |
+          {
+            echo "### Installed"
+            echo '```'
+            pip show langgraph langchain langchain-core deepagents \
+              | grep -E '^(Name|Version)' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run the library-contract corpus and file what is red
+        run: python scripts/library_drift_patrol.py

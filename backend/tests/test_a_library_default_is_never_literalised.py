@@ -45,6 +45,7 @@ REPO = Path(__file__).resolve().parents[2]
 # --------------------------------------------------------------------------- #
 
 
+@pytest.mark.library_contract
 class TestTheLibraryFactsThisRepositoryStates:
     def test_graph_assembly_parameters_are_add_node_parameters(self) -> None:
         """CLAUDE.md — "retry, timeout and caching are graph-assembly
