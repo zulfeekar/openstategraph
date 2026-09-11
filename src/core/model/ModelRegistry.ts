@@ -125,6 +125,28 @@ export interface NodeSpec {
   readonly bindsWithoutWiring?: boolean;
   /** See `INodeDefinition.editorOnly`. Omitted means the backend runs it. */
   readonly editorOnly?: boolean;
+  /**
+   * Whether this family's compiled body is `async def`, and so can be
+   * interrupted part-way (`langchain-drift-watch/02`).
+   *
+   * It gates one thing: whether the card is offered a timeout. LangGraph
+   * refuses `add_node(timeout=...)` for a synchronous body **at compile
+   * time**, so the field was not merely ignored on such a card — a document
+   * that acquired it could not be loaded at all.
+   *
+   * Named for the property and not for the field, because it is the same
+   * question `compile/node_doors.is_interruptible` answers on the Python
+   * side: a body a stop can cancel is a body a timeout can interrupt. The two
+   * are kept in step by
+   * `backend/tests/test_the_editor_offers_timeout_only_where_the_compiler_keeps_it.py`,
+   * which builds each type and compares — so this flag cannot quietly drift
+   * from the body it describes.
+   *
+   * Omitted means synchronous, which is the safe default: a family that
+   * forgets the flag loses a field, where one that wrongly claims it would
+   * ship a document that will not compile.
+   */
+  readonly interruptible?: boolean;
 }
 
 type NodeConstructor = new (definition: INodeDefinition, init: NodeInit) => AbstractNodeModel;
@@ -138,6 +160,13 @@ type NodeConstructor = new (definition: INodeDefinition, init: NodeInit) => Abst
  * type inherits the override capability for free, exactly as
  * `resolveMiddleware()`/`resolvePrompt()` are inherited capabilities rather
  * than something each concrete type re-declares.
+ *
+ * `timeout` is the one with a condition, and it is a property of the *body*
+ * rather than of the type: LangGraph refuses it at compile time for a
+ * synchronous one, so it is offered only where `NodeSpec.interruptible` says
+ * it can be honoured (`langchain-drift-watch/02`). The capability is still
+ * inherited rather than re-declared — what varies is whether the family can
+ * use it.
  *
  * Empty string means "use the graph's default" — not `0`, which CLAUDE.md's
  * own rule against non-finite/sentinel numbers in a serialisable field
@@ -180,7 +209,11 @@ const EXECUTION_OVERRIDE_FIELDS: readonly FieldSchema[] = [
     kind: 'text',
     key: FIELD_TIMEOUT_SECONDS,
     label: 'Timeout, seconds (override)',
-    hint: 'Blank means no per-node timeout.',
+    // Says where it works as well as what it does. The field is only offered
+    // on nodes that can honour it now (`NodeSpec.interruptible`), and a
+    // developer who has seen it on other cards deserves the reason rather
+    // than a silent absence.
+    hint: 'Blank means no per-node timeout. Offered only on steps that can be interrupted part-way.',
     placeholder: 'e.g. 30',
     defaultValue: '',
     onCard: false,
@@ -221,6 +254,33 @@ export const EXECUTION_OVERRIDE_KEYS: readonly string[] = EXECUTION_OVERRIDE_FIE
 );
 
 /**
+ * The subset every standard type gets, and the one that has a condition.
+ *
+ * `timeoutSeconds` is not a property of "a node the compiler schedules" — it
+ * is a property of a node whose body can be interrupted, which is a smaller
+ * set (`langchain-drift-watch/02`). `EXECUTION_OVERRIDE_KEYS` above stays
+ * whole on purpose: it is what the field-contract tests subtract, and the key
+ * may still legitimately sit in any node's saved `data` — a document written
+ * before this distinction existed keeps its value, and the compiler reports
+ * it rather than failing.
+ */
+const ALWAYS_OFFERED = EXECUTION_OVERRIDE_FIELDS.filter((f) => f.key !== FIELD_TIMEOUT_SECONDS);
+
+/**
+ * The override keys every standard type is offered, whatever its body does.
+ *
+ * Exported for the one test that asserts a node's field list *exactly* rather
+ * than subtracting — `EXECUTION_OVERRIDE_KEYS` is still the right list to
+ * subtract, because the timeout key may legitimately sit in a saved document
+ * for any type. Derived, not retyped, for the reason that list already
+ * records: spelling it by hand is how adding a field broke four files at once.
+ */
+export const ALWAYS_OFFERED_OVERRIDE_KEYS: readonly string[] = ALWAYS_OFFERED.map((f) => f.key);
+const OFFERED_WHEN_INTERRUPTIBLE = EXECUTION_OVERRIDE_FIELDS.filter(
+  (f) => f.key === FIELD_TIMEOUT_SECONDS,
+);
+
+/**
  * Binds a spec to the concrete model class that implements it.
  *
  * The definition closes over itself so `create` can hand the instance its
@@ -231,10 +291,15 @@ export function defineNode(spec: NodeSpec, Model: NodeConstructor): INodeDefinit
   const ports = spec.ports ?? [];
   const kind = spec.kind ?? 'standard';
   // Only nodes the compiler actually schedules (`add_node`) can have a
-  // per-node retry/timeout override — a container or annotation never runs.
+  // per-node override at all — a container or annotation never runs. The
+  // timeout is narrower still: see `NodeSpec.interruptible`.
   const fields =
     kind === 'standard'
-      ? [...(spec.fields ?? []), ...EXECUTION_OVERRIDE_FIELDS]
+      ? [
+          ...(spec.fields ?? []),
+          ...ALWAYS_OFFERED,
+          ...(spec.interruptible === true ? OFFERED_WHEN_INTERRUPTIBLE : []),
+        ]
       : (spec.fields ?? []);
   const definition: INodeDefinition = {
     id: spec.id,

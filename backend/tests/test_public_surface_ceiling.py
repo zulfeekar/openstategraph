@@ -703,7 +703,14 @@ FINDING_KINDS = """**An enum of seventeen, and the ceiling is asking the wrong q
     disk wins, so the run is right and the stored copy is stale. That is not a
     new drawer either, because the split by meaning already exists and is
     `REPORT_ONLY`, which is where all three sit. The reason to change is
-    unchanged — the ways a compiled graph differs from the drawing."""
+    unchanged — the ways a compiled graph differs from the drawing.
+
+    The twenty-second is `TIMEOUT_NEEDS_ASYNC_NODE` (2026-09-11,
+    `langchain-drift-watch` 01), and it is the same argument again: a
+    compiled graph differing from the drawing, here because LangGraph
+    refuses a timeout on a synchronous node and the compiler drops it rather
+    than handing over a combination that fails the whole build.
+"""
 
 #: Every class in the shipped package over the ceiling, with the reasoning that
 #: makes each number a decision rather than an oversight. Derived list, hand
@@ -922,7 +929,7 @@ DOCUMENT_FINDING_KINDS = """**The eleventh member, and it is `Finding`'s argumen
 
 
 RECORDED: dict[str, Recorded] = {
-    "compile.diagnostics.Finding": Recorded(21, FINDING_KINDS),
+    "compile.diagnostics.Finding": Recorded(22, FINDING_KINDS),
     "document_checks.FindingClass": Recorded(11, DOCUMENT_FINDING_KINDS),
     "api.services.WorkflowServices": Recorded(14, WORKFLOW_SERVICES),
     "abc.agent.BaseAgentNode": Recorded(12, NARRATE_TOGGLE),

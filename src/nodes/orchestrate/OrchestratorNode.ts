@@ -74,6 +74,9 @@ export function createOrchestratorNode(providers: ProviderRegistry): INodeDefini
   return defineNode(
     {
       id: ORCHESTRATOR_TYPE,
+      // `async def` on the Python side, so a timeout can interrupt it —
+      // see `NodeSpec.interruptible` and `langchain-drift-watch/02`.
+      interruptible: true,
       category: CATEGORY.agent,
       label: 'Orchestrator',
       description: 'Splits an instruction into subtasks and fans them out to workers.',

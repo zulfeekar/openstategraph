@@ -50,35 +50,39 @@ from openstategraph.compile.run_context import (
 )
 from openstategraph.compile.subagents import subagent_declaration_problems
 from openstategraph.compile.fields import _text, branch_ids_by_spelling
+from openstategraph.compile.diagnostics import CompileDiagnostics, Finding
 from openstategraph.compile.node_catalogue import CATALOGUE, PortSpec
-from openstategraph.compile.node_doors import with_both_doors
+from openstategraph.compile.node_doors import timeout_kept_for, with_both_doors
 from openstategraph.compile.side_effects import DEFAULT_MAX_ATTEMPTS
 from openstategraph.compile.state import STEP_BUDGET_FLOOR
 from openstategraph.step_budget import read_budget_stop
 from openstategraph.compile.state import NO_MODEL_MARKER  # noqa: F401  (re-exported)
 
-#: `TimeoutPolicy` was added in `langgraph>=1.2`.
-try:
-    from langgraph.types import TimeoutPolicy
-except ImportError:
-    TimeoutPolicy = None  # type: ignore[misc,assignment]
-
-#: `CachePolicy` and a cache backend were added in `langgraph>=1.2`. Both
-#: halves are needed or neither is: `cache_policy` names a policy and
+#: All four arrived in `langgraph>=1.2`, which is what `pyproject.toml`
+#: requires — so they are imported outright (`langchain-drift-watch` 03).
+#:
+#: Each of these used to sit in a `try/except ImportError` falling back to
+#: `None`, for a `>=1.0` floor the product never actually supported: per-node
+#: timeout, caching, graph-wide retry defaults and the error handler are all
+#: 1.2 constructs and all four are documented features of this compiler. A
+#: fallback no installation can reach is a fallback nothing tests.
+#:
+#: `NodeError` is why that mattered rather than being merely untidy. The other
+#: two are only ever *stored*, so absent meant the feature was skipped —
+#: annoying, safe. `NodeError` is the **annotation** on the error handler's
+#: second parameter, and LangGraph injects the failure context only into a
+#: parameter both named `error` and annotated `NodeError`. Degraded to `None`
+#: it would not have raised; it would have changed the handler's contract in
+#: silence, and a node that failed after its retries would have read
+#: downstream as a node that produced nothing.
+#:
+#: `CachePolicy` and `InMemoryCache` stay named together because both halves
+#: are needed or neither is: `cache_policy` names a policy and
 #: `compile(cache=...)` supplies the store it reads, so a policy without a
 #: cache is a field that does nothing (`organisms-first-class/34`).
-try:
-    from langgraph.cache.memory import InMemoryCache
-    from langgraph.types import CachePolicy
-except ImportError:
-    CachePolicy = None  # type: ignore[misc,assignment]
-    InMemoryCache = None  # type: ignore[misc,assignment]
-
-#: `NodeError` was added in `langgraph>=1.2`; gracefully degrade if absent.
-try:
-    from langgraph.errors import NodeError
-except ImportError:
-    NodeError = None  # type: ignore[misc,assignment]
+from langgraph.cache.memory import InMemoryCache
+from langgraph.errors import NodeError
+from langgraph.types import CachePolicy, TimeoutPolicy
 
 #: Port types that carry **control flow**. Everything else is a binding.
 CONTROL_PORT_TYPES = frozenset({"text", "result"})
@@ -1505,8 +1509,13 @@ def _node_overrides(data: dict[str, Any]) -> dict[str, Any]:
     `set_node_defaults` (in `build`, below) already gives every node the
     same graph-wide retry policy — this is the *per-node* override the
     canvas's `maxRetries`/`timeoutSeconds`/`cacheTtlSeconds` fields expose (declared once in
-    `ModelRegistry.defineNode` on the TS side, inherited by every executable
-    node type). Per LangGraph's own docs: "Per-node values still take
+    `ModelRegistry.defineNode` on the TS side). `maxRetries` and
+    `cacheTtlSeconds` are inherited by every executable node type;
+    `timeoutSeconds` only by one that declares `interruptible`, since LangGraph
+    refuses a timeout for a synchronous body (`langchain-drift-watch` 02).
+    This function still *parses* all three from whatever a document carries —
+    the gate is `node_doors.timeout_kept_for`, applied at `add_node` where the
+    built body can be asked. Per LangGraph's own docs: "Per-node values still take
     precedence" over `set_node_defaults`, so passing these as `add_node`
     kwargs is the correct override mechanism, not a parallel one.
 
@@ -2521,6 +2530,7 @@ class WorkflowCompiler:
         checkpointer: Any = None,
         store: 'BaseStore | None' = None,
         mounted: bool = False,
+        diagnostics: 'CompileDiagnostics | None' = None,
     ) -> Any:
         """Assembles the graph.
 
@@ -2593,33 +2603,41 @@ class WorkflowCompiler:
         default_retry = RetryPolicy(
             max_attempts=DEFAULT_MAX_ATTEMPTS, initial_interval=1.0, backoff_factor=2.0
         )
-        has_graph_defaults = hasattr(builder, "set_node_defaults")
-        if has_graph_defaults:
-            builder.set_node_defaults(
-                retry_policy=default_retry,
-                # langgraph's published `StateNode` union does not include the
-                # `(state, error: NodeError)` shape it accepts at runtime via
-                # its name+annotation matcher — a gap in the library's types,
-                # not in ours. `test_node_overrides` proves the handler really
-                # fires, so the ignore is narrow and covered.
-                error_handler=_error_handler_for(  # type: ignore[arg-type]
-                    {safe_name(node_id): node_id for node_id in plan.nodes}
-                ),
-            )
+        builder.set_node_defaults(
+            retry_policy=default_retry,
+            # langgraph's published `StateNode` union does not include the
+            # `(state, error: NodeError)` shape it accepts at runtime via its
+            # name+annotation matcher — a gap in the library's types, not in
+            # ours. `test_node_overrides` proves the handler really fires, so
+            # the ignore is narrow and covered.
+            error_handler=_error_handler_for(  # type: ignore[arg-type]
+                {safe_name(node_id): node_id for node_id in plan.nodes}
+            ),
+        )
 
         wants_cache = False
         for node_id in plan.nodes:
             overrides = _node_overrides(nodes[node_id].get("data") or {})
             wants_cache = wants_cache or "cache_policy" in overrides
-            if not has_graph_defaults and "retry_policy" not in overrides:
-                # `langgraph<1.2` has no graph-wide defaults, and the earlier
-                # fallback comment here claimed `_node_overrides` covered it —
-                # it does not: overrides only exist when a card sets
-                # `maxRetries`. That left every node retry-less, so one
-                # transient Ollama 500 emptied a fan-out worker's result or
-                # 502'd the whole run (found live, ticket 61). The default is
-                # applied per node instead; an explicit override still wins.
-                overrides = {**overrides, "retry_policy": default_retry}
+            # Built before `add_node` rather than inside the call, because the
+            # body is the only thing that can answer whether a timeout is
+            # legal: LangGraph refuses `timeout=` for a synchronous one and
+            # refuses at compile time, taking the whole graph down rather than
+            # the node. A list of async node types kept here instead would be a
+            # second description of what the object already knows
+            # (`langchain-drift-watch` 01).
+            body = with_both_doors(
+                recording_attempts(
+                    node_id, node_factory(node_id, nodes[node_id], plan)
+                )
+            )
+            overrides, timeout_dropped = timeout_kept_for(body, overrides)
+            if timeout_dropped and diagnostics is not None:
+                diagnostics.record(
+                    Finding.TIMEOUT_NEEDS_ASYNC_NODE,
+                    node_id,
+                    str(nodes[node_id].get("type") or ""),
+                )
             builder.add_node(
                 safe_name(node_id),
                 # Wrapped here, beside `retry_policy` itself: the policy and
@@ -2639,11 +2657,7 @@ class WorkflowCompiler:
                 # a `def` body, so no un-migrated family is touched — and
                 # outermost so `recording_attempts`, which already knows both
                 # kinds, keeps seeing the raw body.
-                with_both_doors(
-                    recording_attempts(
-                        node_id, node_factory(node_id, nodes[node_id], plan)
-                    )
-                ),
+                body,
                 **overrides,
             )
 

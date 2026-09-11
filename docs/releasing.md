@@ -552,7 +552,7 @@ prediction.
 run on a pull request. So the gates on this page describe observed behaviour,
 not intent.
 
-Five things have never once succeeded, and they are named rather than implied.
+Six things have never once succeeded, and they are named rather than implied.
 **No run count is given, and that is deliberate.** Every number this table
 once carried had drifted by the time somebody checked it — `openwiki-update`
 said zero when it had run, `pages.yml` said six and `CLAUDE.md` said four when
@@ -571,6 +571,7 @@ gh run list --repo <owner>/<repo> --workflow pages.yml
 | `openwiki-update.yml` (*OpenWiki update*) | has fired on schedule and failed every time, for want of `secrets.OPENWIKI_API_KEY`, which is not set on the repository — see `CLAUDE.md`'s OpenWiki block for the dated account and a run id |
 | `pages.yml` (*Deploy landing page*) | every run has failed — `HttpError: Not Found` from `actions/configure-pages`. **One owner click turns it green**: Settings ▸ Pages ▸ *Build and deployment* ▸ Source: **GitHub Actions**, which is what `configure-pages` cannot find. There is nothing to fix in the workflow. See [Public repository settings §8](maintainers/public-repository-settings.md) and production-ready ticket 28 |
 | `issues-to-board.yml` (*Issues to board*) | never run. It fires on `issues` and `issue_comment`, and it is the newest workflow here (`team-board-and-gap-reports/05`). It needs `secrets.OPENSTATEGRAPH_KANBAN_URL`, which is not set — so its first run will fail the way `openwiki-update.yml` does, except that it says which variable was empty. It installs the **released** `openstategraph[postgres]` from PyPI rather than checking this repository out, so it cannot work at all until a release carrying `openstategraph.github_issue_bridge` is on PyPI |
+| `library-drift.yml` (*library-drift*) | never run. Added 2026-09-11 (`langchain-drift-watch/05`) and scheduled daily. It reads the same `secrets.OPENSTATEGRAPH_KANBAN_URL`, which is not set — but unlike the two rows above it **refuses in its first step**, before installing anything, naming the variable. That ordering is the point: `openwiki-update.yml` finds out after doing its work, so in a run list it reads exactly like a job that passes |
 
 `docs-freshness` used to carry `if: github.event_name == 'pull_request'`,
 which in a repository that pushes straight to `main` meant it had fired once

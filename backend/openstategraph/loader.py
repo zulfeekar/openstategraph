@@ -1008,6 +1008,11 @@ def load_workflow(
         runtime.factory(document),
         checkpointer=checkpointer,
         store=services.memory_store,
+        # The runtime's own sink, never a second one: `runtime_warnings` below
+        # already reads it, so a finding the compiler records reaches
+        # `.warnings`, `validate` and the developer channel by the same route
+        # every other finding takes (`langchain-drift-watch` 01).
+        diagnostics=runtime.diagnostics,
     )
 
     warnings = list(plan.warnings) + runtime_warnings(runtime)

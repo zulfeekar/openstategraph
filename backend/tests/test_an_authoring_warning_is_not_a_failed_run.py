@@ -316,6 +316,14 @@ class TestEveryProducerHasASide:
             Finding.SKILL_SOURCE_DRIFTED,
             Finding.SKILL_FROM_SNAPSHOT,
             Finding.SKILL_FILE_UNUSED,
+            # The eleventh, and a report for the plainest reason on this list:
+            # the setting it names could be typed onto a card that could never
+            # honour it, so the value is the platform's mistake rather than the
+            # author's (`langchain-drift-watch` 01). Exiting 1 would fail a
+            # working graph in somebody's CI over a field that never did
+            # anything — and it would fail *every* document saved before the
+            # field was withdrawn, since the editor wrote it onto every node.
+            Finding.TIMEOUT_NEEDS_ASYNC_NODE,
         }
     )
 

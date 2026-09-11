@@ -84,6 +84,9 @@ export function createAgentNode(providers: ProviderRegistry): INodeDefinition {
   return defineNode(
     {
       id: 'agent.llm',
+      // `async def` on the Python side, so a timeout can interrupt it —
+      // see `NodeSpec.interruptible` and `langchain-drift-watch/02`.
+      interruptible: true,
       category: CATEGORY.agent,
       label: 'AI Agent',
       description: 'Runs an LLM with tool calling.',

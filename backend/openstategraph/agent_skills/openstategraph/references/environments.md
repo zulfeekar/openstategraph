@@ -53,7 +53,7 @@ The tool path is unaffected: the developer can draw, validate, compile and use
 the board today regardless of what their project pins.
 
 The library path shares their resolver, and this package requires
-**`langgraph>=1.0,<2`**.
+**`langgraph>=1.2,<2`**.
 
 - **They pin LangGraph 1.x.** `pip install openstategraph` into their
   environment succeeds and shares the pin. Nothing special to do.

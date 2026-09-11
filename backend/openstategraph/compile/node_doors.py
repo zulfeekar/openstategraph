@@ -229,3 +229,33 @@ def with_both_doors(node: Any) -> Any:
     if inspect.iscoroutinefunction(node):
         return both_doors(node)
     return node
+
+
+def timeout_kept_for(
+    body: Any, overrides: dict[str, Any]
+) -> tuple[dict[str, Any], bool]:
+    """`overrides` as LangGraph will accept them, and whether a timeout was dropped.
+
+    **Asked of the built body, never of a node type.** LangGraph refuses
+    `add_node(timeout=...)` for a synchronous body — at compile time, so the
+    refusal takes the whole graph down rather than the one node — and
+    `is_interruptible` already answers the question that decides it. A list of
+    async families kept beside this decision would be a second description of
+    something the object itself knows, which is how the defect this repairs
+    arrived: the compiler passed a timeout for every node while the constraint
+    sat pinned in a test nobody had pointed at our own code
+    (`langchain-drift-watch` 01).
+
+    Dropping rather than raising is deliberate and is the migration path.
+    Documents carrying the setting exist and cannot be loaded at all today;
+    refusing them here would strand every one of them, and the field was
+    offered on cards that could never honour it, so the value is the platform's
+    mistake rather than the author's. The caller reports it.
+
+    Returns `overrides` unchanged, and `False`, when there is nothing to drop —
+    so the common path allocates nothing new.
+    """
+    if "timeout" not in overrides or is_interruptible(body):
+        return overrides, False
+    kept = {key: value for key, value in overrides.items() if key != "timeout"}
+    return kept, True

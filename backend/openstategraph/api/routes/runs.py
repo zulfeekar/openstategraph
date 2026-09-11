@@ -251,6 +251,11 @@ def run_workflow(
                 # this way, from the same per-workflow cache.
                 checkpointer=services.checkpointer_for(document.get("settings"), slug),
                 store=services.memory_store,
+                # The runtime's own sink, so a compile-time finding reaches the
+                # developer channel by the route every other finding takes. A
+                # door that compiled without one reported nothing it noticed
+                # while compiling (`langchain-drift-watch` 01).
+                diagnostics=runtime.diagnostics,
             )
             # Built, therefore knowable: whether anything in this graph — or
             # anything it mounts — will reach a model. `osg-agent-experience/48`:
@@ -548,6 +553,9 @@ async def run_workflow_stream(
             document,
             RunState,
             runtime.factory(document),
+            # The runtime's own sink, so a compile-time finding reaches this
+            # door's developer channel (`langchain-drift-watch` 01).
+            diagnostics=runtime.diagnostics,
             # `async_capable`, on the two async doors only: this handler
             # drives `graph.astream()`, whose loop calls the saver's *async*
             # four, and `SqliteSaver` — the server's default — raises
@@ -677,6 +685,9 @@ async def resume_workflow_stream(
             document,
             RunState,
             runtime.factory(document),
+            # The runtime's own sink, so a compile-time finding reaches this
+            # door's developer channel (`langchain-drift-watch` 01).
+            diagnostics=runtime.diagnostics,
             # `async_capable`, on the two async doors only: this handler
             # drives `graph.astream()`, whose loop calls the saver's *async*
             # four, and `SqliteSaver` — the server's default — raises

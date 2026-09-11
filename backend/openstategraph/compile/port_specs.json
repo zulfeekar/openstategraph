@@ -7,6 +7,11 @@
     "criteriaMode",
     "instructions"
   ],
+  "execution_override_keys": [
+    "cacheTtlSeconds",
+    "maxRetries",
+    "timeoutSeconds"
+  ],
   "port_types": [
     {
       "id": "feedback",
@@ -256,18 +261,18 @@
           "defaultValue": ""
         },
         {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
           "key": "cacheTtlSeconds",
           "kind": "text",
           "label": "Cache result for, seconds",
           "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout. Offered only on steps that can be interrupted part-way.",
           "required": false,
           "defaultValue": ""
         }
@@ -376,8 +381,7 @@
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
-        "reportTitle",
-        "timeoutSeconds"
+        "reportTitle"
       ],
       "fields": [
         {
@@ -393,14 +397,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -469,8 +465,7 @@
         "cacheTtlSeconds",
         "check",
         "maxAttempts",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -494,14 +489,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -571,8 +558,7 @@
         "blockedMessage",
         "cacheTtlSeconds",
         "maxRetries",
-        "policy",
-        "timeoutSeconds"
+        "policy"
       ],
       "fields": [
         {
@@ -617,14 +603,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -692,8 +670,7 @@
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
-        "message",
-        "timeoutSeconds"
+        "message"
       ],
       "fields": [
         {
@@ -709,14 +686,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -760,8 +729,7 @@
         "content",
         "filename",
         "instruction",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -785,14 +753,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -836,8 +796,7 @@
         "instruction",
         "maxRetries",
         "skillDescription",
-        "skillName",
-        "timeoutSeconds"
+        "skillName"
       ],
       "fields": [
         {
@@ -869,14 +828,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -918,8 +869,7 @@
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
-        "prompt",
-        "timeoutSeconds"
+        "prompt"
       ],
       "fields": [
         {
@@ -935,14 +885,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -999,8 +941,7 @@
         "cacheTtlSeconds",
         "maxRetries",
         "retention",
-        "segment",
-        "timeoutSeconds"
+        "segment"
       ],
       "fields": [
         {
@@ -1032,14 +973,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -1185,18 +1118,18 @@
           "defaultValue": ""
         },
         {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
           "key": "cacheTtlSeconds",
           "kind": "text",
           "label": "Cache result for, seconds",
           "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout. Offered only on steps that can be interrupted part-way.",
           "required": false,
           "defaultValue": ""
         }
@@ -1334,18 +1267,18 @@
           "defaultValue": ""
         },
         {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
           "key": "cacheTtlSeconds",
           "kind": "text",
           "label": "Cache result for, seconds",
           "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout. Offered only on steps that can be interrupted part-way.",
           "required": false,
           "defaultValue": ""
         }
@@ -1380,8 +1313,7 @@
       "field_keys": [
         "cacheTtlSeconds",
         "format",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -1411,14 +1343,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -1461,8 +1385,7 @@
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
-        "text",
-        "timeoutSeconds"
+        "text"
       ],
       "fields": [
         {
@@ -1478,14 +1401,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -1543,7 +1458,6 @@
         "catalogue",
         "maxRetries",
         "quantity",
-        "timeoutSeconds",
         "whenUndecided"
       ],
       "fields": [
@@ -1576,14 +1490,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -1641,7 +1547,6 @@
         "maxEntries",
         "maxRetries",
         "source",
-        "timeoutSeconds",
         "whenUncovered"
       ],
       "fields": [
@@ -1674,14 +1579,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -1750,8 +1647,7 @@
         "branches",
         "cacheTtlSeconds",
         "check",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -1784,14 +1680,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -2008,18 +1896,18 @@
           "defaultValue": ""
         },
         {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
           "key": "cacheTtlSeconds",
           "kind": "text",
           "label": "Cache result for, seconds",
           "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout. Offered only on steps that can be interrupted part-way.",
           "required": false,
           "defaultValue": ""
         }
@@ -2190,18 +2078,18 @@
           "defaultValue": ""
         },
         {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
           "key": "cacheTtlSeconds",
           "kind": "text",
           "label": "Cache result for, seconds",
           "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout. Offered only on steps that can be interrupted part-way.",
           "required": false,
           "defaultValue": ""
         }
@@ -2235,8 +2123,7 @@
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
-        "maxRows",
-        "timeoutSeconds"
+        "maxRows"
       ],
       "fields": [
         {
@@ -2252,14 +2139,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -2300,8 +2179,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -2309,14 +2187,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -2357,8 +2227,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -2366,14 +2235,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -2420,7 +2281,6 @@
         "maxRows",
         "pins",
         "serverHostname",
-        "timeoutSeconds",
         "token"
       ],
       "fields": [
@@ -2482,14 +2342,6 @@
           "defaultValue": ""
         },
         {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
           "key": "cacheTtlSeconds",
           "kind": "text",
           "label": "Cache result for, seconds",
@@ -2527,7 +2379,6 @@
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
-        "timeoutSeconds",
         "to"
       ],
       "fields": [
@@ -2544,14 +2395,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -2592,8 +2435,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -2601,14 +2443,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -2650,8 +2484,7 @@
       "field_keys": [
         "cacheTtlSeconds",
         "maxRetries",
-        "servers",
-        "timeoutSeconds"
+        "servers"
       ],
       "fields": [
         {
@@ -2698,14 +2531,6 @@
           "defaultValue": ""
         },
         {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
           "key": "cacheTtlSeconds",
           "kind": "text",
           "label": "Cache result for, seconds",
@@ -2746,8 +2571,7 @@
         "connection",
         "maxRetries",
         "maxRows",
-        "pins",
-        "timeoutSeconds"
+        "pins"
       ],
       "fields": [
         {
@@ -2792,14 +2616,6 @@
           "defaultValue": ""
         },
         {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
           "key": "cacheTtlSeconds",
           "kind": "text",
           "label": "Cache result for, seconds",
@@ -2836,8 +2652,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -2845,14 +2660,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -2893,8 +2700,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -2902,14 +2708,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -2950,8 +2748,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -2959,14 +2756,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3007,8 +2796,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -3016,14 +2804,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3064,8 +2844,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -3073,14 +2852,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3123,7 +2894,6 @@
         "cacheTtlSeconds",
         "maxRetries",
         "subreddit",
-        "timeoutSeconds",
         "topicLimit"
       ],
       "fields": [
@@ -3148,14 +2918,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3196,8 +2958,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -3205,14 +2966,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3254,8 +3007,7 @@
       "field_keys": [
         "cacheTtlSeconds",
         "database",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -3272,14 +3024,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3321,8 +3065,7 @@
       "field_keys": [
         "cacheTtlSeconds",
         "database",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -3339,14 +3082,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3389,8 +3124,7 @@
         "cacheTtlSeconds",
         "database",
         "maxRetries",
-        "maxRows",
-        "timeoutSeconds"
+        "maxRows"
       ],
       "fields": [
         {
@@ -3415,14 +3149,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3463,8 +3189,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -3472,14 +3197,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3520,8 +3237,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -3529,14 +3245,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3577,8 +3285,7 @@
       "editor_only": false,
       "field_keys": [
         "cacheTtlSeconds",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -3586,14 +3293,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3637,8 +3336,7 @@
         "cacheTtlSeconds",
         "language",
         "maxChars",
-        "maxRetries",
-        "timeoutSeconds"
+        "maxRetries"
       ],
       "fields": [
         {
@@ -3670,14 +3368,6 @@
           "kind": "text",
           "label": "Max retries (override)",
           "hint": "Blank uses the workflow default (3 attempts).",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
           "required": false,
           "defaultValue": ""
         },
@@ -3796,18 +3486,18 @@
           "defaultValue": ""
         },
         {
-          "key": "timeoutSeconds",
-          "kind": "text",
-          "label": "Timeout, seconds (override)",
-          "hint": "Blank means no per-node timeout.",
-          "required": false,
-          "defaultValue": ""
-        },
-        {
           "key": "cacheTtlSeconds",
           "kind": "text",
           "label": "Cache result for, seconds",
           "hint": "Blank means never cached. Only safe when the same input must give the same result.",
+          "required": false,
+          "defaultValue": ""
+        },
+        {
+          "key": "timeoutSeconds",
+          "kind": "text",
+          "label": "Timeout, seconds (override)",
+          "hint": "Blank means no per-node timeout. Offered only on steps that can be interrupted part-way.",
           "required": false,
           "defaultValue": ""
         }

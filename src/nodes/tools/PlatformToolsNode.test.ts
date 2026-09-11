@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeWorkbench } from '@core/testing/fixtures';
 import conciergeEnvelope from '../../../workflows/concierge/workflow.json';
 import { PLATFORM_TOOL_NODES } from './PlatformToolsNode';
-import { EXECUTION_OVERRIDE_KEYS } from '../../core/model/ModelRegistry';
+import { ALWAYS_OFFERED_OVERRIDE_KEYS } from '../../core/model/ModelRegistry';
 
 describe('platform tool nodes', () => {
   it('the concierge document survives an editor round-trip intact', () => {
@@ -76,13 +76,14 @@ describe('platform tool nodes', () => {
       // A key the Python half reads that no field declares is a control
       // reaching nothing — the defect `test_data_key_contract.py` exists for.
       const fields = new Map(youtube?.definition.fields?.map((f) => [f.key, f]) ?? []);
-      // The execution-override keys are injected onto every node type by
-      // `ModelRegistry` and read by graph assembly, not by the tool.
+      // The execution-override keys are injected by `ModelRegistry` and read
+      // by graph assembly, not by the tool. A tool node's body is synchronous,
+      // so it is not offered the timeout — `langchain-drift-watch/02`.
       expect([...fields.keys()]).toEqual([
         'language',
         'allowAutoCaptions',
         'maxChars',
-        ...EXECUTION_OVERRIDE_KEYS,
+        ...ALWAYS_OFFERED_OVERRIDE_KEYS,
       ]);
       expect(fields.get('language')?.defaultValue).toBe('en');
       expect(fields.get('allowAutoCaptions')?.defaultValue).toBe(true);

@@ -37,6 +37,9 @@ export function createWorkerNode(providers: ProviderRegistry): INodeDefinition {
   return defineNode(
     {
       id: WORKER_TYPE,
+      // `async def` on the Python side, so a timeout can interrupt it —
+      // see `NodeSpec.interruptible` and `langchain-drift-watch/02`.
+      interruptible: true,
       category: CATEGORY.agent,
       label: 'Worker',
       description: 'Runs one subtask dispatched by an orchestrator.',

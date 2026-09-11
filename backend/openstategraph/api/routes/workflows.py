@@ -996,7 +996,14 @@ def compiled_graph(
     compiler = WorkflowCompiler()
     try:
         graph = compiler.build(
-            document, RunState, runtime.factory(document), store=services.memory_store
+            document,
+            RunState,
+            runtime.factory(document),
+            store=services.memory_store,
+            # The preview compiles the same graph a run would, so it notices
+            # the same things and must have somewhere to say them
+            # (`langchain-drift-watch` 01).
+            diagnostics=runtime.diagnostics,
         )
         mermaid_text = workflow_mermaid(
             graph,

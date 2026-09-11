@@ -1021,7 +1021,7 @@ workflow in-process you need:
 
 | Package | Why |
 | --- | --- |
-| `langgraph>=1.0` | the graph the compiler targets |
+| `langgraph>=1.2` | the graph the compiler targets |
 | `langchain>=1.0`, `langchain-core>=1.0` | `create_agent`, messages, tools |
 | `deepagents>=0.7` | only if a node uses the Deep Agents tier |
 | `pydantic>=2.9` | tool argument schemas — the single source of truth |

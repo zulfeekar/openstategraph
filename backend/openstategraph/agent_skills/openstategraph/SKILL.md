@@ -240,7 +240,7 @@ subagents? Run the loop inline. `references/subagents.md`.
 Three starting points — a fresh folder, an existing project, an existing LangGraph
 codebase — settled by one fact: the tool installs into its own environment and
 shares nothing with the project's pins, while the *library* shares them and
-requires `langgraph>=1.0,<2`. Read `references/environments.md` first.
+requires `langgraph>=1.2,<2`. Read `references/environments.md` first.
 
 ## 13. Where this came from
 

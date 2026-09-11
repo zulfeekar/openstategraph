@@ -12,19 +12,51 @@ import { addNode, makeWorkbench, TYPE } from '@core/testing/fixtures';
  * node file individually.
  */
 describe('defineNode — execution override fields', () => {
-  it('every standard node type gets maxRetries and timeoutSeconds fields', () => {
+  it('every standard node type gets maxRetries and cacheTtlSeconds fields', () => {
     const workbench = makeWorkbench();
-    const agent = addNode(workbench, TYPE.agent);
-    const keys = agent.definition.fields.map((f) => f.key);
-    expect(keys).toContain('maxRetries');
-    expect(keys).toContain('timeoutSeconds');
+    for (const type of [TYPE.agent, TYPE.output, TYPE.textInput]) {
+      const keys = addNode(workbench, type).definition.fields.map((f) => f.key);
+      expect(keys, type).toContain('maxRetries');
+      expect(keys, type).toContain('cacheTtlSeconds');
+    }
   });
 
-  it('both default to blank — inherit the workflow default, not a bogus number', () => {
+  /**
+   * `langchain-drift-watch/02`. A timeout is the one override that is not a
+   * property of every executable node: LangGraph refuses `add_node(timeout=)`
+   * for a synchronous body, and refuses at *compile* time, so offering the
+   * field on a card that cannot honour it produced a document that would not
+   * load at all. Six families have an `async def` body; the rest do not.
+   *
+   * Offering it anyway and ignoring it would be the other failure — a field
+   * that silently does nothing is a promise the platform cannot keep.
+   */
+  it('only an interruptible node type is offered a timeout', () => {
+    const workbench = makeWorkbench();
+    const offered = (type: string) =>
+      addNode(workbench, type)
+        .definition.fields.map((f) => f.key)
+        .includes('timeoutSeconds');
+
+    for (const type of [TYPE.agent, TYPE.router, TYPE.grader, TYPE.orchestrator, TYPE.worker]) {
+      expect(offered(type), `${type} runs asynchronously and can honour a timeout`).toBe(true);
+    }
+    for (const type of [TYPE.output, TYPE.textInput, TYPE.markdownFile, TYPE.formatReport]) {
+      expect(offered(type), `${type} runs synchronously — a timeout would not compile`).toBe(false);
+    }
+  });
+
+  it('the overrides a node is offered default to blank, never a bogus number', () => {
     const workbench = makeWorkbench();
     const agent = addNode(workbench, TYPE.agent);
     expect(agent.data['maxRetries']).toBe('');
     expect(agent.data['timeoutSeconds']).toBe('');
+
+    // And a node not offered the timeout has no value for it at all, rather
+    // than a blank one that reads as "set to nothing".
+    const output = addNode(workbench, TYPE.output);
+    expect(output.data['maxRetries']).toBe('');
+    expect(output.data['timeoutSeconds']).toBeUndefined();
   });
 
   it('a container node (kind "container") does not get the override fields', () => {
@@ -33,6 +65,7 @@ describe('defineNode — execution override fields', () => {
     const keys = group.definition.fields.map((f) => f.key);
     expect(keys).not.toContain('maxRetries');
     expect(keys).not.toContain('timeoutSeconds');
+    expect(keys).not.toContain('cacheTtlSeconds');
   });
 
   it('accepts a positive integer for maxRetries and rejects everything else', () => {
@@ -50,6 +83,7 @@ describe('defineNode — execution override fields', () => {
 
   it('accepts a positive number for timeoutSeconds and rejects everything else', () => {
     const workbench = makeWorkbench();
+    // An agent, because it is one of the types still offered the field.
     const agent = addNode(workbench, TYPE.agent);
     const schema = agent.definition.fields.find((f) => f.key === 'timeoutSeconds')!;
 

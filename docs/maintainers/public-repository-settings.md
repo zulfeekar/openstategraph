@@ -165,7 +165,7 @@ and losing every time.
 | `OPENWIKI_API_KEY` | `openwiki-update.yml` | the scheduled wiki refresh fires and fails, every time, in about 40 seconds. It is the standing example |
 | `TEST_PYPI_API_TOKEN` | `release.yml` ▸ `testpypi` | the rehearsal cannot upload, so the human gate is never reached |
 | `PYPI_API_TOKEN` | `release.yml` ▸ `pypi` | the publish step fails after the human has already approved it |
-| `OPENSTATEGRAPH_KANBAN_URL` | `issues-to-board.yml` | every issue a user files stays on GitHub only. The run fails naming this variable rather than dying obscurely, but nothing is copied to the board and no closed issue is told what shipped. It is the team board's Postgres URL — **not** `OPENSTATEGRAPH_POSTGRES_URL`, which is the checkpointer's |
+| `OPENSTATEGRAPH_KANBAN_URL` | `issues-to-board.yml`, `library-drift.yml` | every issue a user files stays on GitHub only. The run fails naming this variable rather than dying obscurely, but nothing is copied to the board and no closed issue is told what shipped. It is the team board's Postgres URL — **not** `OPENSTATEGRAPH_POSTGRES_URL`, which is the checkpointer's. `library-drift.yml` reads the same secret and **refuses in its first step** when it is absent, before installing anything: a daily patrol that cannot file what it finds is the `openwiki-update.yml` failure mode, a scheduled job that looks like it passes |
 | `GITHUB_TOKEN` | `triage.yml`, `issues-to-board.yml` | nothing — **you do not set this one.** GitHub provides it per run; it is listed because it appears in a workflow and the census is derived, and because it is the one secret a fork's pull request *does* receive |
 
 | Variable | Read by | Breaks if unset |

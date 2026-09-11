@@ -185,6 +185,22 @@ class TestTheInverses:
 class TestTheClassificationIsReadFromOnePlace:
     def test_every_finding_is_on_exactly_one_side(self) -> None:
         """The command derives its two headings from `REPORT_ONLY`, so a new
-        member is classified once, in `diagnostics.py`, and not again here."""
-        assert REPORT_ONLY < set(Finding)
-        assert len(set(Finding)) == 21
+        member is classified once, in `diagnostics.py`, and not again here.
+
+        The count used to be a literal on the next line, which is the thing
+        this docstring already forbade: a new member was classified in
+        `diagnostics.py` and then failed *here*, at a number carrying no
+        argument and teaching nothing. `TIMEOUT_NEEDS_ASYNC_NODE` is the member
+        that found it (`langchain-drift-watch` 01).
+
+        What the two headings actually depend on is the **partition**, so the
+        partition is what is asserted. The member count is pinned once, beside
+        its reasoning, in `test_public_surface_ceiling.py`.
+        """
+        reports = set(REPORT_ONLY)
+        failures = set(Finding) - reports
+
+        assert reports < set(Finding), "REPORT_ONLY names something that is not a Finding"
+        assert failures, "every finding became a report — `validate` could never fail"
+        assert reports | failures == set(Finding)
+        assert not reports & failures

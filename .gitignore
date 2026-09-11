@@ -81,3 +81,9 @@ supabase/.temp/
 
 # The recording rig writes here. The published copies live in site/media/.
 demo-out/
+
+# The drift patrol's junit report — a run artifact of one machine, written at
+# the repository root by `scripts/library_drift_patrol.py` when no `--junit`
+# path is given. Untracked files come back on the next careless `git add`,
+# which is what the `.coverage` rule above already records.
+.drift-report.xml

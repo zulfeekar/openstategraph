@@ -118,6 +118,9 @@ export function createGraderNode(providers: ProviderRegistry): INodeDefinition {
   return defineNode(
     {
       id: GRADER_TYPE,
+      // `async def` on the Python side, so a timeout can interrupt it —
+      // see `NodeSpec.interruptible` and `langchain-drift-watch/02`.
+      interruptible: true,
       category: CATEGORY.agent,
       label: 'Grader',
       description: 'Checks an answer, and sends it back with feedback if it falls short.',
