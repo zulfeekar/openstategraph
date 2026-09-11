@@ -672,6 +672,14 @@ The argument sits on the field, where a reader meets it.
     for it, and records the finding when it is not. The alternative was a list
     of async node types kept beside the decision, which is the second table
     that produced the defect.
+
+
+    And shrank by fifteen the same day (`langchain-drift-watch` 03): three
+    `try/except ImportError` blocks degrading langgraph constructs to `None`,
+    and the `hasattr(builder, "set_node_defaults")` branch behind them, came
+    out with the `>=1.0` floor they served. The net of the two tickets is five
+    lines, which is the honest figure for adding a decision and deleting a
+    version fork.
 """
 
 STREAMING = """
@@ -1420,7 +1428,7 @@ RECORDED: dict[str, Recorded] = {
     "compile/node_runtime.py": Recorded(583, NODE_RUNTIME),
     "document_checks.py": Recorded(505, DOCUMENT_CHECKS),
     "cli.py": Recorded(1822, CLI),
-    "compile/workflow_compiler.py": Recorded(1048, WORKFLOW_COMPILER),
+    "compile/workflow_compiler.py": Recorded(1033, WORKFLOW_COMPILER),
     "api/streaming.py": Recorded(1040, STREAMING),
     "prebuilt_mcp.py": Recorded(758, PREBUILT_MCP),
     "mcp_server.py": Recorded(996, MCP_SERVER),

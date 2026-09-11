@@ -143,17 +143,30 @@ class TestCompilerAppliesTheOverride:
         assert calls["count"] == 3
 
 
-def test_every_node_gets_the_default_retry_policy_without_graph_defaults() -> None:
-    """Ticket 61: on langgraph<1.2 (no `set_node_defaults`) the default retry
-    policy must still reach every `add_node`, or a transient provider 500
-    silently empties a worker's result."""
+def test_the_default_retry_policy_is_set_graph_wide_and_an_override_wins() -> None:
+    """Ticket 61, restated for the floor this product actually supports.
+
+    The original asserted the fallback path: on `langgraph<1.2` there is no
+    `set_node_defaults`, so the default retry had to reach every `add_node`
+    itself, or a transient provider 500 silently emptied a worker's result.
+    That floor is gone — `langchain-drift-watch` 03 raised the requirement to
+    `>=1.2`, because every construct this compiler documents arrived there and
+    a fallback no installation can reach is a fallback nothing tests.
+
+    What still has to hold is the behaviour the ticket was about, so that is
+    what is asserted now: every node gets the default, and a card that sets
+    `maxRetries` still beats it. Deleting the test with the branch would have
+    dropped the protection along with the dead premise.
+    """
     from openstategraph.compile.workflow_compiler import WorkflowCompiler
 
     seen: dict[str, object] = {}
+    defaults: dict[str, object] = {}
 
     class SpyBuilder:
-        # Deliberately no set_node_defaults attribute.
         def __init__(self, *_a, **_k): ...
+        def set_node_defaults(self, **kwargs):
+            defaults.update(kwargs)
         def add_node(self, name, fn, **kwargs):
             seen[name] = kwargs.get("retry_policy")
         def add_edge(self, *_a, **_k): ...
@@ -179,6 +192,11 @@ def test_every_node_gets_the_default_retry_policy_without_graph_defaults() -> No
     finally:
         wc.StateGraph = original  # type: ignore[misc]
 
-    assert seen["in1"] is not None, "default retry must apply when no override"
-    assert getattr(seen["in1"], "max_attempts", None) == 3
+    # The graph-wide default is declared once, where the library reads it.
+    assert getattr(defaults.get("retry_policy"), "max_attempts", None) == 3
+    assert defaults.get("error_handler") is not None, "no handler for an exhausted node"
+
+    # A node with nothing to say inherits it rather than carrying a copy.
+    assert seen["in1"] is None, "the default is graph-wide, not restated per node"
+    # And a card that set one still beats it.
     assert getattr(seen["out1"], "max_attempts", None) == 5, "explicit override wins"

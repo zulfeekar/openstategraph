@@ -34,8 +34,19 @@ classifiers = [
 # extra below and is already imported lazily at its one call site. Upper bounds
 # are deliberate: LangChain's published policy reserves breaking changes for
 # majors, so `<2` is a promise we can rely on rather than a guess.
+#
+# The langgraph *lower* bound is 1.2 and not 1.0, since
+# `langchain-drift-watch` 03. Per-node `timeout` and `cache_policy`,
+# `StateGraph.set_node_defaults` and `NodeError` all arrived in 1.2, and all
+# four are documented features of this compiler — so `>=1.0` described a floor
+# the product never actually supported. It was held up by three
+# `try/except ImportError` blocks degrading to `None`, which no supported
+# installation could ever reach and therefore nothing tested. One of them was
+# worse than untidy: `NodeError` is the *annotation* LangGraph matches on to
+# inject a failed node's context, so degrading it would have changed the error
+# handler's contract in silence rather than raising.
 dependencies = [
-    "langgraph>=1.0,<2",
+    "langgraph>=1.2,<2",
     "langchain>=1.0,<2",
     "langchain-core>=1.0,<2",
     "pydantic>=2.9,<3",
