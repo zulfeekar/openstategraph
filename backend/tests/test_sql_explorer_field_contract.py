@@ -39,26 +39,51 @@ SPECS = REPO / "backend" / "openstategraph" / "compile" / "port_specs.json"
 #: `test_the_injected_set_is_what_the_generated_catalogue_shows` below derives
 #: the same set from `port_specs.json` and fails if the two part company. A
 #: list in a comment has no way to fail; this one now does.
+#:
+#: All three are still *excluded* here, and that is right even though only two
+#: reach a tool card now: `langchain-drift-watch/02` withdrew `timeoutSeconds`
+#: from the types whose bodies cannot honour it, and a tool's body is
+#: synchronous. Excluding a key a card does not carry costs nothing; failing to
+#: exclude one it does carry is the defect this set exists for.
 INJECTED = frozenset({"maxRetries", "timeoutSeconds", "cacheTtlSeconds"})
 
 
 def test_the_injected_set_is_what_the_generated_catalogue_shows() -> None:
-    """`INJECTED` must be exactly the keys every standard node type carries.
+    """`INJECTED` must be exactly the keys graph assembly owns.
 
-    "Standard" is read off the catalogue rather than asserted: a node type
-    that carries `maxRetries` is one `defineNode` treated as executable, and
-    the keys *all* of those share are precisely the injected ones.
+    "Standard" is read off the catalogue rather than asserted: a node type that
+    carries `maxRetries` is one `defineNode` treated as executable.
+
+    Two claims, because the set split in two. Until
+    `langchain-drift-watch/02` every injected key was on every standard type,
+    so the intersection *was* the whole set. `timeoutSeconds` is now offered
+    only where the body can honour it, so the intersection is the always-offered
+    part and the catalogue's own `execution_override_keys` is the whole — the
+    list the compiler treats as legitimate in any node's `data`, which is what
+    this file means by "injected".
     """
     import functools
 
-    catalogue = json.loads(SPECS.read_text())["node_types"]
+    payload = json.loads(SPECS.read_text())
+    catalogue = payload["node_types"]
     standard = [
         set(entry["field_keys"])
         for entry in catalogue
         if "maxRetries" in (entry.get("field_keys") or [])
     ]
     assert len(standard) > 1, "expected many standard node types in the catalogue"
-    assert functools.reduce(set.intersection, standard) == set(INJECTED)
+
+    # The whole set, generated from the editor's own list.
+    assert set(payload["execution_override_keys"]) == set(INJECTED)
+
+    # And the part every standard type still carries.
+    always = functools.reduce(set.intersection, standard)
+    assert always == set(INJECTED) - {"timeoutSeconds"}
+
+    # The remaining one is offered to some and not all — gated, not gone.
+    offered = [e["type"] for e in catalogue if "timeoutSeconds" in (e.get("field_keys") or [])]
+    assert offered, "`timeoutSeconds` reaches no card at all"
+    assert len(offered) < len(standard), "`timeoutSeconds` is back on every card"
 
 #: What each tool's `configure()` actually reads. Taken from the source, not
 #: from the card, so the two are independent statements that must agree.

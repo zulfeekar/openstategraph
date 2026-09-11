@@ -323,8 +323,21 @@ def unknown_fields(context: CheckContext) -> Iterable[DocumentFinding]:
 
     `legacy_data_keys` still passes — a key the editor deliberately reads for
     migration is not an unknown one.
+
+    So do `execution_override_keys`, and that one was learned the hard way.
+    `maxRetries`, `timeoutSeconds` and `cacheTtlSeconds` are `add_node`
+    parameters owned by graph assembly, not fields of any node type; the editor
+    injects them and stores them blank, so **every document ever saved carries
+    all three on every node**. When `langchain-drift-watch/02` withdrew the
+    timeout from the cards that cannot honour it, this check read it on all of
+    them as a key nothing declares, and `validate` failed every shipped package
+    and every user document with exit 1 — a far worse break than the defect
+    being fixed, which only ever stopped a document somebody had typed a number
+    into. The set is generated from the editor's own list for the reason the
+    artifact records beside it: a hand-kept exclusion list here would be the
+    third declaration these contracts exist to prevent.
     """
-    legacy = CATALOGUE.legacy_data_keys
+    legacy = CATALOGUE.legacy_data_keys | CATALOGUE.execution_override_keys
     for node_id, node_type, data in _typed_nodes(context):
         declared = CATALOGUE.field_keys.get(node_type, frozenset()) | legacy
         for key in sorted(data):

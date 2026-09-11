@@ -289,6 +289,9 @@ export function createRouterNode(providers: ProviderRegistry): INodeDefinition {
   return defineNode(
     {
       id: ROUTER_TYPE,
+      // `async def` on the Python side, so a timeout can interrupt it —
+      // see `NodeSpec.interruptible` and `langchain-drift-watch/02`.
+      interruptible: true,
       category: CATEGORY.agent,
       label: 'Router',
       description: ROUTER_DESCRIPTION,

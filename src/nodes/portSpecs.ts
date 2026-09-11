@@ -1,5 +1,5 @@
 import { Registry } from '@core/kernel/Registry';
-import { ModelRegistry } from '@core/model/ModelRegistry';
+import { EXECUTION_OVERRIDE_KEYS, ModelRegistry } from '@core/model/ModelRegistry';
 import { CredentialStore, ProviderRegistry } from '@core/providers/ProviderRegistry';
 import { defaultsFrom } from '@core/model/contracts/fields';
 import type { FieldSchema, FieldValue, NodeData } from '@core/model/contracts/fields';
@@ -282,6 +282,23 @@ export interface NodeCatalogueArtifact {
    * prevent — and worse, an easy place to silence a real defect.
    */
   readonly legacy_data_keys: readonly string[];
+  /**
+   * The keys `defineNode` injects, which belong to graph assembly rather than
+   * to any node type.
+   *
+   * Emitted for the same reason as `legacy_data_keys` above, and learned the
+   * same way. `langchain-drift-watch/02` withdrew `timeoutSeconds` from the
+   * cards that cannot honour it — and every document ever saved carries that
+   * key on every node, because it used to be injected everywhere and stored
+   * blank. Without this list the data-key contract read all of them as keys
+   * nothing declares, and `validate` failed every shipped package and every
+   * user document with exit 1: a far worse break than the defect being fixed.
+   *
+   * So these are legitimate in any node's `data` whatever the cards offer, and
+   * the Python side reads that fact from here rather than keeping its own
+   * copy.
+   */
+  readonly execution_override_keys: readonly string[];
   readonly port_types: readonly GeneratedPortType[];
   readonly node_types: readonly GeneratedNodeType[];
   /** Namespaces whose members are minted per workflow package. */
@@ -507,6 +524,7 @@ export function buildPortSpecArtifact(): NodeCatalogueArtifact {
       'GENERATED FILE — DO NOT EDIT. The TypeScript node catalogue is authoritative; ' +
       `run \`${PORT_SPEC_GENERATE_COMMAND}\` after changing a node type or a port.`,
     legacy_data_keys: [LEGACY_RULES_MODE_KEY, LEGACY_SKILL_BODY_KEY].sort(),
+    execution_override_keys: [...EXECUTION_OVERRIDE_KEYS].sort(),
     port_types: portTypes,
     node_types: nodeTypes,
     dynamic_type_prefixes: typePrefixes(registry),

@@ -19,9 +19,17 @@ below answers all three:
 - **Costs** — does it change anything in the world, does it touch the network,
   and does it need anything you have not set up yet.
 
-Three fields are on **every** card here and are not repeated below:
-`maxRetries`, `timeoutSeconds` and `cacheTtlSeconds`. They are graph-assembly
-settings, not tool settings — blank means "use the workflow default".
+Two fields are on **every** card here and are not repeated below:
+`maxRetries` and `cacheTtlSeconds`. They are graph-assembly settings, not tool
+settings — blank means "use the workflow default".
+
+There is no timeout on a tool card, and the absence is deliberate. LangGraph
+accepts `add_node(timeout=...)` only for a step whose body runs
+asynchronously, and refuses it at compile time for one that does not — so on a
+card that cannot honour it the field was not merely ignored, it stopped the
+whole workflow compiling. It is offered on agents, routers, graders,
+supervisors, workers and mounted workflows. Put the timeout on the step that
+calls the tool rather than on the tool.
 
 **Only one card on this page changes anything.** Email Send sends mail.
 Everything else reads.
@@ -35,8 +43,8 @@ Everything else reads.
 Searches the web and hands back titles, URLs and snippets. Follow it with Web
 Fetch on whichever result looks right.
 
-**Configured with:** nothing of its own — only `maxRetries`, `timeoutSeconds`
-and `cacheTtlSeconds`.
+**Configured with:** nothing of its own — only `maxRetries` and
+`cacheTtlSeconds`.
 
 **Refuses.** An empty query gets *"Give a non-empty query."* A search that
 found nothing gets *"No results for '…'."*
@@ -58,8 +66,8 @@ TAVILY_API_KEY in .env (see .env.example)."* At most six results come back.
 
 Reads one public web page and returns its readable text.
 
-**Configured with:** nothing of its own — only `maxRetries`, `timeoutSeconds`
-and `cacheTtlSeconds`.
+**Configured with:** nothing of its own — only `maxRetries` and
+`cacheTtlSeconds`.
 
 **Refuses.** Anything that is not http or https: *"Only http(s) URLs are
 fetchable, got '…'"*. Any host that resolves to a private, loopback,
@@ -135,8 +143,8 @@ believes. Use Web Search plus Web Fetch instead, or write the tool —
 Tells the agent who it is talking to: the user's email, the session id and the
 thread id of this run.
 
-**Configured with:** nothing of its own — only `maxRetries`, `timeoutSeconds`
-and `cacheTtlSeconds`.
+**Configured with:** nothing of its own — only `maxRetries` and
+`cacheTtlSeconds`.
 
 **Refuses.** It takes **no arguments at all**, and that is the refusal. The
 identity comes from the run, never from the conversation, so nothing said in a
@@ -243,8 +251,8 @@ scripts/fetch_chinook.sh to download it."*
 Every table in the database, with a row count for each. This is what an agent
 calls first, so it stops guessing table names.
 
-**Configured with:** nothing of its own — only `maxRetries`, `timeoutSeconds`
-and `cacheTtlSeconds`.
+**Configured with:** nothing of its own — only `maxRetries` and
+`cacheTtlSeconds`.
 
 **Refuses.** Nothing. It takes no arguments.
 
@@ -256,8 +264,8 @@ The columns, types, primary key **and foreign keys** of one table. The foreign
 keys are the point: almost every interesting question here needs a join, and a
 model with no foreign keys guesses at them.
 
-**Configured with:** nothing of its own — only `maxRetries`, `timeoutSeconds`
-and `cacheTtlSeconds`.
+**Configured with:** nothing of its own — only `maxRetries` and
+`cacheTtlSeconds`.
 
 **Refuses.** A table that does not exist, and it hands back the whole list so
 the agent can correct itself: *"Unknown table '…'. Available: …"*. The name is

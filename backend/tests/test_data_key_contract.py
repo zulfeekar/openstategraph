@@ -48,6 +48,7 @@ from typing import Any, Callable
 import pytest
 
 from conftest import drive_node
+from openstategraph.compile.node_catalogue import CATALOGUE
 from openstategraph.compile import node_runtime
 from openstategraph.compile.node_catalogue import load_catalogue
 from openstategraph.compile.node_runtime import NodeRuntime
@@ -428,6 +429,13 @@ class TestEveryKeyWeShipIsAKeySomethingReads:
                 known = declared.get(node["type"])
                 if known is None:
                     continue  # a workflow-scoped type that does not ship in the catalogue
+                # The `add_node` overrides belong to graph assembly, not to a
+                # node type, and the editor writes all three onto every node it
+                # saves — so they are legitimate on any card whatever that card
+                # currently offers. Read from the catalogue rather than named
+                # here, for the reason this file is about
+                # (`langchain-drift-watch` 02).
+                known = known | CATALOGUE.execution_override_keys
                 for key in (node.get("data") or {}):
                     if key not in known:
                         offences.append(

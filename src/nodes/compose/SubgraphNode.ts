@@ -57,6 +57,9 @@ export class SubgraphNodeModel extends AbstractNodeModel {
 export const subgraphNode: INodeDefinition = defineNode(
   {
     id: SUBGRAPH_TYPE,
+    // `async def` on the Python side, so a timeout can interrupt it —
+    // see `NodeSpec.interruptible` and `langchain-drift-watch/02`.
+    interruptible: true,
     category: CATEGORY.compose,
     label: 'Workflow',
     // Isolation is the thing a reader cannot guess and the thing that decides

@@ -159,6 +159,11 @@ class NodeCatalogue:
     #: data-key contract can tell a deliberate compatibility read from a field
     #: nobody can write.
     legacy_data_keys: frozenset[str] = frozenset()
+    #: Keys `defineNode` injects onto every standard type — graph-assembly
+    #: parameters, not fields of any node type, so they are legitimate in any
+    #: node's `data` whatever the cards currently offer
+    #: (`langchain-drift-watch` 02).
+    execution_override_keys: frozenset[str] = frozenset()
 
     @property
     def node_types(self) -> frozenset[str]:
@@ -346,6 +351,7 @@ def load_catalogue(path: Path | None = None) -> NodeCatalogue:
         nodes=nodes,
         port_types=tuple(payload.get("port_types") or ()),
         legacy_data_keys=frozenset(payload.get("legacy_data_keys") or ()),
+        execution_override_keys=frozenset(payload.get("execution_override_keys") or ()),
         type_prefixes=tuple(payload.get("dynamic_type_prefixes") or ()),
     )
 
