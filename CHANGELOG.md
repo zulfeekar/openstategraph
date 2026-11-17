@@ -26,6 +26,15 @@
   (GHSA-fc5q-39xc-vjpf, a ReDoS). It is a build-time dependency of `vite` and
   `eslint` and is not part of the wheel or the built editor.
 
+### Changed
+- **The `[deep]` extra now asks for `deepagents>=0.7.5,<0.7.14`**, not
+  `>=0.7,<1`. Every 0.7.x release was tested. Releases before 0.7.5 and from
+  0.7.14 on change the harness in ways this version does not handle: a new
+  middleware in the stack, and a new `read_file` result that the run's findings
+  no longer recognise, so the finding was dropped without a word. The old range
+  let a fresh install pick those releases. A wider range waits for the work
+  that supports them.
+
 ### Documentation
 - **`docs/cli.md` describes all three headings `validate` prints.** It named
   `PROBLEMS FOUND:` and `Notes:` only. It now says what `Not checked:` means,

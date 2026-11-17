@@ -1023,7 +1023,7 @@ workflow in-process you need:
 | --- | --- |
 | `langgraph>=1.2.14` | the graph the compiler targets |
 | `langchain>=1.0`, `langchain-core>=1.0` | `create_agent`, messages, tools |
-| `deepagents>=0.7` | only if a node uses the Deep Agents tier |
+| `deepagents>=0.7.5,<0.7.14` | only if a node uses the Deep Agents tier. Newer releases change the harness in ways this version does not yet handle |
 | `pydantic>=2.9` | tool argument schemas — the single source of truth |
 | one provider package | `langchain-ollama`, `langchain-anthropic` or `langchain-openai` — whichever your `model` names |
 

@@ -91,7 +91,16 @@ openai = ["langchain-openai>=1.0,<2"]
 ollama = ["langchain-ollama>=1.0,<2"]
 # Only a document containing an `agent.deep` node needs this — 52 distributions
 # on its own, including the Google GenAI SDK and cryptography.
-deep = ["deepagents>=0.7,<1"]
+#
+# The range is the measured one, not the semver hope. Every 0.7.x release was
+# run against the tests that pin the harness's own behaviour (the slot order in
+# `test_deep_agent_slot_facts.py`, the `read_file` result shape in
+# `test_harness_findings_against_the_real_harness.py`): 0.7.0-0.7.4 and
+# 0.7.14 onwards each fail some of them, 0.7.5-0.7.13 pass all of them. The
+# library moved inside a minor series, so `<1` promised users versions nobody
+# here had run. Widen it only together with the work that makes the newer
+# harness pass those tests.
+deep = ["deepagents>=0.7.5,<0.7.14"]
 # Only a document containing a `tool.mssql-query` node needs this
 # (`osg-agent-experience/34`). `prebuilt_mssql` imports it lazily at one seam,
 # so the unconfigured path — which is the whole of the first pass, there being
