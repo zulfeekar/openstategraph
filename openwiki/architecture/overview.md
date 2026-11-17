@@ -50,9 +50,10 @@ file that knows the whole node catalogue is
 | --- | --- |
 | [`abc/`](../../backend/openstategraph/abc) | the entity ladders — agent, router, grader, orchestrator, tool, prompt, middleware slot table |
 | [`compile/workflow_compiler.py`](../../backend/openstategraph/compile/workflow_compiler.py) | document → `CompiledPlan` → `StateGraph` |
-| [`compile/node_runtime.py`](../../backend/openstategraph/compile/node_runtime.py) | `RunState` + a builder per node type |
+| [`compile/node_runtime.py`](../../backend/openstategraph/compile/node_runtime.py) | `NodeRuntime`: the node-type registry and the `node_factory` the compiler calls; re-exports `RunState` from [`compile/state.py`](../../backend/openstategraph/compile/state.py) |
+| [`compile/nodes/`](../../backend/openstategraph/compile/nodes) | one module per node family — the builder bodies |
 | [`api/main.py`](../../backend/openstategraph/api/main.py) | the app factory — middleware, lifespan, and the routers it includes |
-| [`api/routes/`](../../backend/openstategraph/api/routes) | the handlers, one module per subject: `workflows`, `runs`, `system`, `providers`, `threads`, `chat_ui`, `examples`, `mcp`, `site`, `demo` |
+| [`api/routes/`](../../backend/openstategraph/api/routes) | the handlers, one module per subject: `workflows`, `runs`, `system`, `providers`, `threads`, `chat_ui`, `examples`, `mcp`, `site`, `demo`, `kanban`, `recordings` |
 | [`api/deps.py`](../../backend/openstategraph/api/deps.py) | how a handler reaches the app's assembly — `Services`, `PrincipalId`, `GraphFactory` |
 | [`api/workflow_store.py`](../../backend/openstategraph/api/workflow_store.py) | file-backed CRUD + `validate_package` |
 | [`api/capability_discovery.py`](../../backend/openstategraph/api/capability_discovery.py) | tools / functions / skills / middlewares discovered per package |
@@ -72,6 +73,9 @@ file that knows the whole node catalogue is
 | [`prebuilt_mcp.py`](../../backend/openstategraph/prebuilt_mcp.py) | `tool.mcp` | tools reached over an MCP server |
 | [`prebuilt_email.py`](../../backend/openstategraph/prebuilt_email.py) | `tool.email-send` | outbound email |
 | [`prebuilt_session.py`](../../backend/openstategraph/prebuilt_session.py) | `tool.session-identity` | who the run is for, as the server decided it |
+| [`prebuilt_mssql.py`](../../backend/openstategraph/prebuilt_mssql.py) | `tool.mssql-query` | one read-only T-SQL statement against a warehouse |
+| [`prebuilt_databricks.py`](../../backend/openstategraph/prebuilt_databricks.py) | `tool.databricks-query` | one read-only `SELECT` against a Databricks SQL warehouse |
+| [`prebuilt_warehouse.py`](../../backend/openstategraph/prebuilt_warehouse.py) | — | the base the two warehouse dialects above share |
 
 ## HTTP surface
 

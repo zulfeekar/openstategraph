@@ -45,8 +45,14 @@ classifiers = [
 # worse than untidy: `NodeError` is the *annotation* LangGraph matches on to
 # inject a failed node's context, so degrading it would have changed the error
 # handler's contract in silence rather than raising.
+#
+# The patch floors (1.2.14 here, 3.1.2 for the SQLite saver, 3.1.3 for the
+# Postgres saver) are security floors, raised in 0.4.1: those are the first
+# releases that fix the SDK streaming-identifier redirect and the store
+# namespace escape through `.` in labels. A user who installs the wheel gets a
+# patched LangGraph, not only a user who installs from our lockfile.
 dependencies = [
-    "langgraph>=1.2,<2",
+    "langgraph>=1.2.14,<2",
     "langchain>=1.0,<2",
     "langchain-core>=1.0,<2",
     "pydantic>=2.9,<3",
@@ -117,7 +123,7 @@ databricks = ["databricks-sql-connector>=3.4,<5"]
 # OPENSTATEGRAPH_MEMORY_PATH degraded to in-memory in every install that
 # existed before this extra (ticket 04 makes that degradation loud).
 sqlite = [
-    "langgraph-checkpoint-sqlite>=3.1",
+    "langgraph-checkpoint-sqlite>=3.1.2",
 ]
 # The editor's HTTP API (`openstategraph.api.main`) — never on the consumer path.
 #
@@ -192,7 +198,7 @@ mcp = ["mcp>=1.25,<2", "langchain-mcp-adapters>=0.3.0,<0.4"]
 # is still in-process, and `openstategraph.deployment` refuses more than one
 # worker whether or not this is installed.
 postgres = [
-    "langgraph-checkpoint-postgres>=3.1,<4",
+    "langgraph-checkpoint-postgres>=3.1.3,<4",
     "psycopg[binary]>=3.2",
     "psycopg-pool>=3.2",
 ]

@@ -28,12 +28,19 @@ builder the compiler can run.
    and the `INodeExecutor` for canvas preview. Use `defineNode()` from
    [`ModelRegistry.ts`](../../src/core/model/ModelRegistry.ts).
    [`RedditSearchNode.ts`](../../src/nodes/tools/RedditSearchNode.ts) is a
-   complete example in ~90 lines.
+   complete example in ~90 lines. Set `interruptible: true` on the spec only
+   if the compiled body is `async def`: it is what offers the card a timeout,
+   and LangGraph refuses a timeout on a synchronous body.
 2. Register it in [`src/nodes/index.ts`](../../src/nodes/index.ts) — the only
    file that knows the full catalogue. Workflow-scoped types register through
    [`workflowScoped.ts`](../../src/nodes/workflowScoped.ts) instead.
-3. **Backend** — add a `_builder` entry keyed by the type in
-   [`NodeRuntime._builders`](../../backend/openstategraph/compile/node_runtime.py).
+3. **Backend** — put the builder in a family module under
+   [`compile/nodes/`](../../backend/openstategraph/compile/nodes) and add one
+   `registry.register("<type>", ...)` line to
+   [`NodeRuntime._register_node_types`](../../backend/openstategraph/compile/node_runtime.py).
+   A family shipped from outside this repository uses the
+   `openstategraph.node_families` entry-point group instead and edits nothing
+   here (see [`building-an-atom.md`](../../docs/building-an-atom.md)).
 4. Regenerate the port table — `npm run generate:ports`. The ports you declared
    in step 1 are what decides whether an incoming edge is control flow or a
    binding, and the compiler reads them from the **generated**
@@ -42,13 +49,13 @@ builder the compiler can run.
    [`workflow_compiler.py`](../../backend/openstategraph/compile/workflow_compiler.py)
    is just `CATALOGUE.port_specs`). There is nothing to hand-write on the Python
    side, and two gates are meant to fail a stale copy — `src/nodes/portSpecs.test.ts` and
-   CI's `generated-port-specs` job (that CI job has never actually run; see
-   [Testing](../testing.md)). Ports missing from the catalogue do not
+   CI's `generated-port-specs` job in
+   [`ci.yml`](../../.github/workflows/ci.yml). Ports missing from the catalogue do not
    crash; the node compiles as opaque, with control-flow edges only.
 5. If the type should be composable by the Workflow Architect, add it to
    `KNOWN_NODE_TYPES` in
    [`prebuilt_architect.py`](../../backend/openstategraph/prebuilt_architect.py) — a
-   test pins that set against `_builders`.
+   test pins that set against `_builders`, the registry's read-only view.
 
 ## Add a tool
 

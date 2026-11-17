@@ -570,7 +570,7 @@ gh run list --repo <owner>/<repo> --workflow pages.yml
 | **`release-pr.yml`** (*Release PR*) | every run has failed, all at `peter-evans/create-pull-request` — see below. It has never opened a pull request |
 | `openwiki-update.yml` (*OpenWiki update*) | has fired on schedule and failed every time, for want of `secrets.OPENWIKI_API_KEY`, which is not set on the repository — see `CLAUDE.md`'s OpenWiki block for the dated account and a run id |
 | `pages.yml` (*Deploy landing page*) | every run has failed — `HttpError: Not Found` from `actions/configure-pages`. **One owner click turns it green**: Settings ▸ Pages ▸ *Build and deployment* ▸ Source: **GitHub Actions**, which is what `configure-pages` cannot find. There is nothing to fix in the workflow. See [Public repository settings §8](maintainers/public-repository-settings.md) and production-ready ticket 28 |
-| `issues-to-board.yml` (*Issues to board*) | never run. It fires on `issues` and `issue_comment`, and it is the newest workflow here (`team-board-and-gap-reports/05`). It needs `secrets.OPENSTATEGRAPH_KANBAN_URL`, **which has been set since 2026-09-07** — this row said it was not until 2026-09-11, and two separate sessions repeated that claim from here rather than running `gh secret list`, which answers it in a second. It installs the **released** `openstategraph[postgres]` from PyPI rather than checking this repository out, so it cannot work at all until a release carrying `openstategraph.github_issue_bridge` is on PyPI |
+| `issues-to-board.yml` (*Issues to board*) | has run, on `issue_comment` events. It fires on `issues` and `issue_comment` (`team-board-and-gap-reports/05`). It needs `secrets.OPENSTATEGRAPH_KANBAN_URL`, **which has been set since 2026-09-07** — this row said it was not until 2026-09-11, and two separate sessions repeated that claim from here rather than running `gh secret list`, which answers it in a second. It installs the **released** `openstategraph[postgres]` from PyPI rather than checking this repository out, so it cannot work at all until a release carrying `openstategraph.github_issue_bridge` is on PyPI |
 | `library-drift.yml` (*library-drift*) | never run. Added 2026-09-11 (`langchain-drift-watch/05`) and scheduled daily. It reads the same `secrets.OPENSTATEGRAPH_KANBAN_URL`, which **is** set. It still **refuses in its first step**, before installing anything, naming the variable, if it ever goes missing. That ordering is the point: `openwiki-update.yml` finds out after doing its work, so in a run list it reads exactly like a job that passes |
 
 `docs-freshness` used to carry `if: github.event_name == 'pull_request'`,
@@ -663,3 +663,23 @@ Inter installed cannot agree with a developer who has it. The job now compares
 the *graph* each committed picture draws, through `scripts/diagram_gate.py`,
 and installs neither node nor chromium (`workflow-gallery` 80). Nothing local
 could have found that — it needed the job to actually run.
+
+### Carrying work to the public repository
+
+The public repository does not share history with the private one. Public
+`main` started as one squashed commit, so a plain push from private `main` is
+rejected. `scripts/release_to_public.sh` is the bridge, and it runs in an order
+that lets CI catch a defect before the public sees it:
+
+1. Push `main` to the `beta` remote.
+2. Wait for CI there. If it fails, nothing is carried.
+3. Cherry-pick, with `-x`, each commit that is not yet on the local
+   `public-demo` branch. The `(cherry picked from commit …)` lines on that
+   branch are the record of what has been carried, so no list is kept anywhere
+   else.
+4. Push `public-demo` to the `public` remote's `main`.
+
+Run it from a clean `main`. It refuses a dirty tree and never stashes, because
+another session may own those changes. `--dry-run` stops before any push or
+cherry-pick. The remote and branch names can be changed with `BETA_REMOTE`,
+`PUBLIC_REMOTE`, `SOURCE_BRANCH` and `BRIDGE_BRANCH`.

@@ -22,7 +22,7 @@ TypeScript with no excuse for untested logic.
 | --- | --- | --- |
 | Frontend unit | `npm test` (`vitest run`) | beside the source, `*.test.ts(x)` |
 | Full frontend gate | `npm run verify` (tsc + eslint + prettier + vitest) | — |
-| Backend unit | `cd backend && pytest` | [`backend/tests/`](../backend/tests) and `workflows/<slug>/tests/` |
+| Backend unit | `python3 -m pytest -q`, from the repo root | [`backend/tests/`](../backend/tests) and `workflows/chinook-assistant/tests/` |
 | Browser E2E | `npx playwright test` | [`e2e/canvas.smoke.spec.ts`](../e2e/canvas.smoke.spec.ts) |
 
 CI runs all three as separate jobs
@@ -55,6 +55,18 @@ backend.
   `backend/tests/test_collection_policy.py`.
 - **Live-network tests are opt-in.** Mark them `@pytest.mark.live`; the default
   run is `-m "not live"` and must pass offline.
+- **Library-contract tests carry `@pytest.mark.library_contract`.** They assert
+  this codebase against the installed `langgraph`/`langchain`, live beside the
+  code they protect, and run in the default gate too. `-m library_contract` is
+  the only thing that gathers them. The daily
+  [`library-drift.yml`](../.github/workflows/library-drift.yml) job runs that
+  corpus on a fresh resolve with no lockfile, through
+  [`scripts/library_drift_patrol.py`](../scripts/library_drift_patrol.py), and
+  files each failure as a card on the team board.
+  `backend/tests/test_the_drift_patrol_files_what_it_finds.py` asserts a floor,
+  so a renamed marker cannot make the patrol pass by finding nothing.
+- **`asyncio_mode = auto`.** A bare `async def test_...` runs under
+  `pytest-asyncio` (from `backend[dev]`) with no decorator.
 - Test directories deliberately have **no `__init__.py`** — two roots would
   otherwise collide on a package named `tests`.
 - `norecursedirs` excludes `data`, `scratch`, `output` and `templates` —

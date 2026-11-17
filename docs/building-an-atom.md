@@ -603,13 +603,11 @@ dependencies = ["openstategraph>=0.3"]   # see the note below on pre-releases
 acme = "acme_osg_tools:TOOLS"          # a list of BaseTool subclasses
 ```
 
-> **`>=0.3` does not match today's version.** The shipped version is still a
-> release candidate, and pip excludes pre-releases from a plain `>=` specifier — so a
-> plugin declaring that dependency resolves to nothing until a final `0.3.0`
-> is published. Until then use `openstategraph>=0.3.0rc1` (naming a
-> pre-release in the specifier turns pre-release matching on) or install both
-> from a checkout. The line above is written as the shape it takes after the
-> first release, for the same reason `adoption.md`'s headline install is.
+> **`>=0.3` matches the final releases on PyPI.** pip leaves pre-releases out
+> of a plain `>=` specifier, so this line skips release candidates. To test a
+> plugin against one, name it in the specifier (for example
+> `openstategraph>=0.5.0rc1`), which turns pre-release matching on, or install
+> both from a checkout.
 
 The right-hand side may resolve to any of three things, because a plugin
 author should not have to guess which one we take:
