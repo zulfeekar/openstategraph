@@ -1021,9 +1021,9 @@ workflow in-process you need:
 
 | Package | Why |
 | --- | --- |
-| `langgraph>=1.2` | the graph the compiler targets |
+| `langgraph>=1.2.14` | the graph the compiler targets |
 | `langchain>=1.0`, `langchain-core>=1.0` | `create_agent`, messages, tools |
-| `deepagents>=0.7` | only if a node uses the Deep Agents tier |
+| `deepagents>=0.7.5,<0.7.14` | only if a node uses the Deep Agents tier. Newer releases change the harness in ways this version does not yet handle |
 | `pydantic>=2.9` | tool argument schemas — the single source of truth |
 | one provider package | `langchain-ollama`, `langchain-anthropic` or `langchain-openai` — whichever your `model` names |
 
@@ -1035,30 +1035,30 @@ needed if you run the MCP transport.
 
 ### Be honest about the install
 
-**The wheel is real; the PyPI upload has not happened yet.** From 0.3.0 the
-backend is a proper distribution — `hatchling`, `LICENSE`, `py.typed`,
-classifiers, a console script, a lean core and named extras — built, `twine
-check`-clean, and proven by CI's `clean-install` job, which installs it into an
-empty virtualenv **outside** the checkout and runs a workflow there.
+**The wheel is real, and it is on PyPI.** From 0.3.0 the backend is a proper
+distribution — `hatchling`, `LICENSE`, `py.typed`, classifiers, a console
+script, a lean core and named extras — built, `twine check`-clean, and proven
+by CI's `clean-install` job, which installs it into an empty virtualenv
+**outside** the checkout and runs a workflow there.
 
-**`0.3.0rc1` has already been through the train**: tagged on the remote, built,
-uploaded to **TestPyPI**, and installed from that index into an empty
-virtualenv outside any checkout by the `rehearsal` job. What is outstanding is
-the **`pypi` job**, which waits on a required reviewer in a GitHub environment
-— an approval, not a `twine upload` anybody types. See
-[Releasing](releasing.md). So the command that will be the headline is written
-here as the shape it takes, clearly flagged:
+Final releases are on PyPI, so the plain line works with no index flags:
 
 ```bash
-pip install "openstategraph[ollama]"     # ← after the first release
+pip install "openstategraph[ollama]"
 ```
 
-Until that release ships, install exactly the same artifact from a checkout:
+Releases reach PyPI through the release train. Its **`pypi`** job waits for a
+required reviewer in a GitHub environment, and 0.4.0 was the first final
+release it published. Earlier release candidates were uploaded by hand. See
+[Releasing](releasing.md).
+
+To use a change that has not been released yet, install the same artifact from
+a checkout:
 
 ```bash
 # Build the wheel and install it anywhere — this is the artifact CI verifies.
-# The filename carries whatever `backend/pyproject.toml` says the version is
-# (0.3.0rc1 today), so glob it rather than typing it.
+# The filename carries whatever `backend/pyproject.toml` says the version is,
+# so glob it rather than typing it.
 python3 -m build /path/to/openstategraph/backend
 pip install "$(echo /path/to/openstategraph/backend/dist/openstategraph-*.whl)[ollama]"
 

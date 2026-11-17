@@ -66,12 +66,33 @@ literal port ids `approved`/`rejected`.
 ## Graph-assembly parameters
 
 `retry_policy`, `timeout`, `error_handler` and `cache_policy` are `add_node` /
-`set_node_defaults` concerns, never node-family concerns. `build` sets a
-graph-wide default (`max_attempts=3`, exponential backoff) and
-`_node_overrides()` applies the canvas's per-node
-`maxRetries` / `timeoutSeconds`. `_default_error_handler` writes the failure
-into `outputs[node]` so an exhausted node still produces evidence instead of
-aborting the run.
+`set_node_defaults` concerns, never node-family concerns. `build` calls
+`set_node_defaults` with only `retry_policy` (`max_attempts=3`, exponential
+backoff) and `error_handler`, and `_node_overrides()` applies the canvas's
+per-node `maxRetries` / `timeoutSeconds` / `cacheTtlSeconds`.
+`_default_error_handler` writes the failure into `outputs[node]` so an
+exhausted node still produces evidence instead of aborting the run.
+
+**A timeout reaches only a body that can be interrupted.** LangGraph refuses
+`add_node(timeout=...)` for a synchronous body, at compile time, so one such
+timeout used to fail the whole graph. `build` now builds each body first and
+asks it:
+[`node_doors.timeout_kept_for`](../../backend/openstategraph/compile/node_doors.py)
+drops the timeout when `is_interruptible(body)` is false, and the compiler
+records `Finding.TIMEOUT_NEEDS_ASYNC_NODE` (a report, not a failure — see
+[`diagnostics.py`](../../backend/openstategraph/compile/diagnostics.py)). Every
+door that builds a graph — run, stream, resume, preview, `load_workflow`, a
+mount's child and both MCP doors — passes `diagnostics=runtime.diagnostics`, so
+the finding reaches `validate` and the developer channel. The editor side is
+`NodeSpec.interruptible` in
+[`ModelRegistry.ts`](../../src/core/model/ModelRegistry.ts): only agent,
+grader, router, supervisor, worker and workflow cards are offered the field.
+[`test_the_editor_offers_timeout_only_where_the_compiler_keeps_it.py`](../../backend/tests/test_the_editor_offers_timeout_only_where_the_compiler_keeps_it.py)
+keeps the two sides in step.
+
+`TimeoutPolicy`, `CachePolicy`, `InMemoryCache` and `NodeError` are imported
+outright. All of them arrived in langgraph 1.2, and `backend/pyproject.toml`
+now requires `langgraph>=1.2.14,<2`. The old `try/except ImportError` fallbacks are gone.
 
 A **recovered** retry is reported rather than swallowed: the wrapper the
 compiler installs beside `retry_policy` records the attempt number (read from
@@ -88,17 +109,30 @@ server.
 
 ## Node builders
 
-`NodeRuntime._builders` (in `node_runtime.py`) is a registry keyed by node
-type, so adding a node type is a registration:
+`NodeRuntime._register_node_types()` (in `node_runtime.py`) fills a
+`NodeTypeRegistry` keyed by node type, so adding a built-in node type is one
+`registry.register(...)` line. The bodies live one module per family under
+[`compile/nodes/`](../../backend/openstategraph/compile/nodes).
+`NodeRuntime._builders` is now a read-only dict view of that registry, kept for
+the tests that walk it.
 
-`input.text`, `input.markdown`, `input.skill`, `agent.llm`, `route.classifier`,
-`route.grader`, `human.approval`, `guard.policy`, `memory.segment`,
-`orchestrate.supervisor`, `orchestrate.worker`, `function.format_report`,
-`output.formatted`.
+Registered there: `input.text`; the static text sources (`input.markdown`,
+`input.skill`, …, from `STATIC_TEXT_NODE_TYPES`); `agent.llm`,
+`route.classifier`, `route.check`, `route.grader`, `human.approval`,
+`guard.policy`, `guard.check`, `resolve.vocabulary`, `resolve.source`,
+`memory.segment`, `orchestrate.supervisor`, `orchestrate.worker`,
+`function.format_report`, `output.formatted`, `output.static`; every type in
+`MOUNT_NODE_TYPES` (`workflow.subgraph` — it was joined by `team.workflow`
+until schema v3 collapsed the two into it); and a `function.` namespace for any
+`function.<name>` discovered in the package. An exact registration beats the
+namespace, so a package cannot shadow the built-in `format_report`.
 
-Resolved after the registry, by convention: `workflow.subgraph` (`_subgraph`
-— it was joined by `team.workflow` until schema v3 collapsed the two into it),
-any `function.<name>` discovered in the package, and finally a passthrough.
+A family from outside the repository registers through the
+`openstategraph.node_families` entry-point group
+([`compile/node_families.py`](../../backend/openstategraph/compile/node_families.py)).
+Built-ins are checked first and cannot be shadowed, and the `function.` and
+`workflow.` prefixes are reserved. A type nothing implements falls to
+`_passthrough`, which reports itself rather than quietly forwarding.
 
 `NodeRuntime` is constructed once per request in `runtime_for()`
 ([`api/routes/runs.py`](../../backend/openstategraph/api/routes/runs.py)) so run, stream and resume
@@ -114,7 +148,7 @@ that silently loses its tools answers confidently from parametric knowledge.
 
 ## State
 
-`RunState` (in `node_runtime.py`) is the shared schema. Any key more than one
+`RunState` (in [`compile/state.py`](../../backend/openstategraph/compile/state.py), re-exported by `node_runtime.py`) is the shared schema. Any key more than one
 node type can write carries a **named reducer** — `merge_decisions`,
 `keep_max`, `keep_latest_nonempty` — because concurrent writers in one
 superstep otherwise raise `InvalidUpdateError`.

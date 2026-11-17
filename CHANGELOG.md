@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.4.1 — unreleased
+### Security
+- **The wheel now requires patched LangGraph releases.** The floors are
+  `langgraph>=1.2.14`, `langgraph-checkpoint-sqlite>=3.1.2` and
+  `langgraph-checkpoint-postgres>=3.1.3`. These are the first releases that fix
+  two advisories: SDK streaming identifiers that were not encoded and could
+  redirect an authenticated request, and store namespace labels containing `.`
+  that could reach another namespace. Before this, `pip install openstategraph`
+  could still resolve an affected LangGraph, even though the lockfile did not.
+- **The backend lockfile moves every flagged package to a fixed release.**
+  `pyjwt` 2.15.1 (forged HMAC tokens through an empty `oct` key, and OKP key
+  confusion), `certifi` 2026.10.23 (drops the compromised emSign roots),
+  `oauthlib` 4.0.1 (client-id confusion in token grants and the device flow),
+  `pyasn1` 0.6.5 (four quadratic-time decoding denials of service), `filelock`
+  4.2.11 (symlink, stale-lock and permission defects), `urllib3` 2.8.0 and
+  `langgraph-sdk` 0.4.14. `oauthlib` 4 needs `databricks-sql-connector` 4.9.0,
+  which the `[databricks]` extra already allows.
+- **The editor's npm dependencies are patched.** `vite` 8.3.8, `vitest` and
+  `@vitest/coverage-v8` 4.1.12 (manual-mock code injection), `dompurify`
+  3.4.18 (sanitizer bypasses; it ships in the editor through `mermaid`), `minimatch` 11.0.9, `brace-expansion` 5.0.13 and `source-map-js`
+  1.2.2. `katex` is forced to 0.18 through an npm `overrides` entry, because
+  `mermaid` 11 still asks for 0.16 (prototype-pollution trust bypass).
+- **One advisory stays open: `picomatch`.** No fixed release exists yet
+  (GHSA-fc5q-39xc-vjpf, a ReDoS). It is a build-time dependency of `vite` and
+  `eslint` and is not part of the wheel or the built editor.
+
+### Changed
+- **The `[deep]` extra now asks for `deepagents>=0.7.5,<0.7.14`**, not
+  `>=0.7,<1`. Every 0.7.x release was tested. Releases before 0.7.5 and from
+  0.7.14 on change the harness in ways this version does not handle: a new
+  middleware in the stack, and a new `read_file` result that the run's findings
+  no longer recognise, so the finding was dropped without a word. The old range
+  let a fresh install pick those releases. A wider range waits for the work
+  that supports them.
+
+### Documentation
+- **`docs/cli.md` describes all three headings `validate` prints.** It named
+  `PROBLEMS FOUND:` and `Notes:` only. It now says what `Not checked:` means,
+  and names the note an older document gets for a timeout on a step that
+  cannot be interrupted (the 0.4.0 fix).
+- **The install pages no longer say PyPI is still to come.** `docs/adoption.md`
+  said the PyPI upload had not happened and called `0.3.0rc1` the current
+  version. `docs/building-an-atom.md` said `openstategraph>=0.3` matched
+  nothing until a final 0.3.0. Both now say the final releases are on PyPI, and
+  how to opt in to a release candidate.
+- **`docs/releasing.md` no longer says the board secret is unset**, and no
+  longer says *Issues to board* has never run. Both were stale.
+- **`docs/releasing.md` documents `scripts/release_to_public.sh`**: the order
+  it runs in, why it cherry-picks rather than pushes, and its `--dry-run`.
+- **The internal wiki (`openwiki/`) catches up with 0.4.0 and the node-family
+  split.** The compile-seam page now says a timeout reaches only a body that
+  can be interrupted, that the compiler drops any other one and reports it, and
+  that the library imports the 1.2 constructs outright. The node-builder list and the "add a node
+  type" recipe name `_register_node_types`, the `compile/nodes/` modules and the
+  `openstategraph.node_families` entry point instead of the old `_builders`
+  table. The testing page covers the `library_contract` marker and the daily
+  `library-drift.yml` patrol. The workflow catalogue lists every package
+  tracked under `workflows/`. The overview lists the `kanban` and `recordings`
+  routes and the warehouse tool modules. A claim that the `generated-port-specs`
+  CI job had never run is removed.
+- **Every page that quotes the `langgraph` floor now says `>=1.2.14,<2`**, to
+  match `backend/pyproject.toml`: `docs/adoption.md`,
+  `docs/adding-openstategraph-to-your-project.md`, the bundled skill's
+  `SKILL.md` and `references/environments.md`, and two wiki pages.
+
 ## 0.4.0 — 2026-09-11
 ### Fixed
 - **A timeout on a step that could not honour one stopped the whole workflow

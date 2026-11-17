@@ -290,6 +290,18 @@ Findings appear under `PROBLEMS FOUND:` and move the exit code. Anything under
 `Notes:` does not: a note cannot fail your CI, so it is kept out of the list
 that can.
 
+One note you may see on an older document: a timeout set on a step that cannot
+be interrupted. LangGraph accepts a per-node timeout only for a step whose body
+runs asynchronously — an agent, grader, router, supervisor, worker or mounted
+workflow. On any other step the compiler drops the timeout, the step runs
+normally, and the note names the node. Your file is not changed. Since 0.4.0
+the editor offers the field only on the steps that can use it.
+
+A third heading, `Not checked:`, lists what this build could not check rather
+than anything wrong with the document. The usual case is a `tool.*` or
+`function.*` type that a package's own Python defines: there is no static field
+schema to check its `data` against. It does not move the exit code either.
+
 ### `graph`
 
 ```

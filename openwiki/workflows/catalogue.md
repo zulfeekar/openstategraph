@@ -16,11 +16,10 @@ type: page
 # Shipped workflows
 
 > **This page is generated, and the table below was corrected by hand.**
-> OpenWiki last refreshed it while eight more packages existed; `workflows/`
-> now holds exactly three. Rows naming deleted directories were removed rather
-> than left to the next refresh, because a link to a directory that is not
-> there is the failure this table exists to prevent. If a refresh reintroduces
-> them, the tree is right and the page is wrong.
+> It once listed packages that had been deleted, and then only three. The rows
+> now match the directories tracked under `workflows/` (`git ls-files
+> workflows`). If a refresh disagrees with the tree, the tree is right and the
+> page is wrong.
 
 All live under [`workflows/`](../../workflows). Run any of them by opening the
 slug in the editor and using Chat, or by POSTing its `workflow.json` document
@@ -31,6 +30,12 @@ to `/api/runs/stream` with `workflow_slug: <slug>`.
 | [`chinook-assistant`](../../workflows/chinook-assistant) | the one visible example: a five-intent router in front of a SQL analyst (three Chinook tools + a grader loop, rules from a wired skill file), a tool-less front desk, and a web researcher. Also ships `graph.py`/`agents.py` — hand-written code beside a compiled document |
 | [`concierge`](../../workflows/concierge) | **hidden** gateway: routes every /chat message to a specialist workflow, with read-only platform + web tools on its own branch |
 | [`workflow-architect`](../../workflows/workflow-architect) | **hidden**: composes a new workflow document from a description, grading each draft with `tool.validate-workflow` |
+| [`classifier-router-qa`](../../workflows/classifier-router-qa) | a workspace copy of the gallery routing example that has since been edited: the tracked document has no input and no router, only two `agent.llm` nodes with web-search and web-fetch tools and two outputs. Its `AGENTS.md` still describes the original three-branch router. The gallery original is the routing example |
+| [`morning-brief`](../../workflows/morning-brief) | a workspace copy of the gallery example: three parallel workers, each with a different tool (web, handbook `knowledge/`, platform listing), joined into one report |
+| [`skill-driven-rubric`](../../workflows/skill-driven-rubric) | a workspace copy of the gallery example: an agent and a grader that both read their rules from one skill file |
+| [`support-triage`](../../workflows/support-triage) | a workspace copy of the gallery example: classify, answer on the matching desk, grade, then a person approves before the reply is sent |
+| [`ops-desk`](../../workflows/ops-desk) | a single `workflow.json`: a router in front of the music database, the handbook, and a drafted reply behind `human.approval`, with mounts and `tool.session-identity` |
+| [`workflow-2026`](../../workflows/workflow-2026) | a small scaffold-style package: one agent with `tool.platform-ls` and `tool.platform-describe-workflow`, answering questions about the platform itself |
 
 Each package's own `AGENTS.md` is the authoritative per-workflow note; the
 table above is an index, not a replacement.

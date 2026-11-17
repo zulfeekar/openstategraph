@@ -485,11 +485,15 @@ def memory_tools(settings: MemorySettings | None = None) -> list[BaseTool]:
     # The args schema is built rather than inferred, because the offered set is
     # a runtime value. `Literal` over the allowed labels renders inline, so the
     # model sees the closed set with no `$ref` for a provider to mishandle.
+    # Typed `Any` on purpose: a `Literal` built at runtime is a value to the
+    # type checker, not a type, and pydantic 2.14 began rejecting it where
+    # `create_model` expects one.
+    scope_type: Any = Literal[tuple(s.value for s in allowed)]  # type: ignore[misc]
     save_args: type[BaseModel] = create_model(
         "SaveMemoryArgs",
         fact=(str, Field(description="The fact to remember, in one sentence.")),
         scope=(
-            Literal[tuple(s.value for s in allowed)],  # type: ignore[misc]
+            scope_type,
             Field(default=allowed[0].value, description=MemoryScope.__doc__),
         ),
     )

@@ -27,6 +27,13 @@ Two processes, two languages:
 | Runtime (FastAPI + LangGraph) | `uvicorn openstategraph.api.main:app --port 8000 --app-dir backend` | 8000 |
 | Both, supervised | [`scripts/dev.sh`](../scripts/dev.sh) (`stop`, plus [`scripts/status.sh`](../scripts/status.sh)) | — |
 
+Without a checkout, the published wheel carries the built editor and the
+runtime in one process:
+`pip install "openstategraph[server,ollama]"`, then
+`openstategraph init my_demo && cd my_demo` and `openstategraph serve --open`.
+The library half requires `langgraph>=1.2.14,<2`
+([`backend/pyproject.toml`](../backend/pyproject.toml)).
+
 Full run instructions, prerequisites and environment variables live in
 [`README.md`](../README.md); the architectural rules live in
 [`CLAUDE.md`](../CLAUDE.md). This wiki explains the parts a coding agent has

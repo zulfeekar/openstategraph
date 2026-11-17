@@ -45,7 +45,8 @@ Two rules the agent ladder enforces:
   relationship is data, so it is a preset, not inheritance.
 
 Retry/timeout/caching deliberately do **not** live on any of these bases; they
-are [graph-assembly parameters](compile-seam.md).
+are [graph-assembly parameters](compile-seam.md). A timeout is the one with a
+condition: it reaches only a node whose body is `async def`.
 
 ### Tools wrap LangChain, never subclass it
 

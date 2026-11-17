@@ -810,7 +810,7 @@ def _believable(entry: Any) -> ToolNote | None:
     if entry.get("kind") not in _NOTE_KINDS:
         return None
     try:
-        return cast(ToolNote, TypeAdapter(ToolNote).validate_python(dict(entry)))
+        return TypeAdapter[ToolNote](ToolNote).validate_python(dict(entry))
     except ValidationError:
         return None
 
