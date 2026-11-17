@@ -69,7 +69,7 @@ exclude. Name a version only if you want an older one held in place.
 [Releasing](docs/releasing.md) says how a version gets here, and carries the
 TestPyPI rehearsal form for maintainers.
 
-**The wheel carries the canvas.** The built editor ships as package data — 110
+**The wheel carries the canvas.** The built editor ships as package data — 108
 files, 1.6 MB of a 4.95 MB wheel, and the browser payload with Mermaid is 55%
 of the download — so one process serves the editor at `/`, the chat surface at
 `/chat` and the API under `/api`, from one origin. No clone, no Docker, no
