@@ -122,7 +122,7 @@ uv tool install \
   --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple/ \
   --index-strategy unsafe-best-match \
-  "openstategraph[server,ollama]==0.4.0"
+  "openstategraph[server,ollama]==0.4.1"
 ```
 
 Each flag fails differently, and two of them fail silently:

@@ -5,7 +5,7 @@
 <!-- The `../../` here is GitHub's own convention: it resolves against the repository root on github.com, so the badge survives a rename — a local link checker will call it broken and be wrong (stable-beta-public/33). -->
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.4.0-informational.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.4.1-informational.svg)](CHANGELOG.md)
 
 > **Who this page is for:** you have installed nothing yet, and you want the
 > stack running. Read straight down — Install, First run, Where to read next —
@@ -69,7 +69,7 @@ exclude. Name a version only if you want an older one held in place.
 [Releasing](docs/releasing.md) says how a version gets here, and carries the
 TestPyPI rehearsal form for maintainers.
 
-**The wheel carries the canvas.** The built editor ships as package data — 110
+**The wheel carries the canvas.** The built editor ships as package data — 108
 files, 1.6 MB of a 4.95 MB wheel, and the browser payload with Mermaid is 55%
 of the download — so one process serves the editor at `/`, the chat surface at
 `/chat` and the API under `/api`, from one origin. No clone, no Docker, no
