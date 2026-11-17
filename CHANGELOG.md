@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.1 — unreleased
+## 0.4.1 — 2026-11-17
 ### Security
 - **The wheel now requires patched LangGraph releases.** The floors are
   `langgraph>=1.2.14`, `langgraph-checkpoint-sqlite>=3.1.2` and
