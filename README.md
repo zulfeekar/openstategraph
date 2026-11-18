@@ -6,6 +6,7 @@
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.4.1-informational.svg)](CHANGELOG.md)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/openstategraph?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/openstategraph)
 
 > **Who this page is for:** you have installed nothing yet, and you want the
 > stack running. Read straight down — Install, First run, Where to read next —
